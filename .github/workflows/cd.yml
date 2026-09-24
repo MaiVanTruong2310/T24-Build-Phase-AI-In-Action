@@ -1,8 +1,8 @@
 name: CD
 
 on:
-  # A merged PR creates a push on the target branch. CI runs for that merge
-  # commit, and this workflow deploys only after that CI run succeeds.
+  # Merge PR tạo ra một push vào nhánh đích. CI chạy (và push image) cho commit đó,
+  # workflow này chỉ deploy sau khi CI thành công.
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -13,44 +13,32 @@ permissions:
 
 concurrency:
   group: deploy-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: true
+  cancel-in-progress: false # không huỷ deploy đang chạy dở
 
 jobs:
-  deploy-development:
-    name: Deploy to development EC2
+  deploy:
+    name: Deploy to ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'development' }} EC2
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'develop'
-    runs-on: self-hosted
-    environment: development
+      (github.event.workflow_run.head_branch == 'main' ||
+       github.event.workflow_run.head_branch == 'develop')
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'development' }}
     env:
-      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_HOST: ${{ github.event.workflow_run.head_branch == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       REMOTE_USER: ubuntu
-      DEPLOY_ENV: development
+      DEPLOY_ENV: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'development' }}
+      COMPOSE_OVERRIDE: ${{ github.event.workflow_run.head_branch == 'main' && 'prod' || 'dev' }}
+      IMAGE_REPO: ${{ vars.DOCKERHUB_REPO }}
+      RELEASE_ID: ${{ github.event.workflow_run.head_sha }}
 
     steps:
       - name: Checkout tested commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Package application
-        shell: bash
-        run: |
-          set -euo pipefail
-          tar -czf deployment.tar.gz \
-            --exclude='./.git' \
-            --exclude='./.venv' \
-            --exclude='./.pytest_cache' \
-            --exclude='./.ruff_cache' \
-            --exclude='./__pycache__' \
-            --exclude='./.ai-log' \
-            --exclude='./data' \
-            --exclude='./.env' \
-            --exclude='./deployment.tar.gz' \
-            .
 
       - name: Configure SSH
         shell: bash
@@ -61,13 +49,16 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
-      - name: Upload package
+      - name: Upload compose files
         shell: bash
         run: |
           set -euo pipefail
-          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
-            deployment.tar.gz \
-            "$REMOTE_USER@$EC2_HOST:/tmp/ai20k-agent-${{ github.event.workflow_run.head_sha }}.tar.gz"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes"
+          ssh $SSH_OPTS "$REMOTE_USER@$EC2_HOST" \
+            "mkdir -p ~/ai20k-agent/releases/$RELEASE_ID"
+          scp $SSH_OPTS \
+            docker-compose.yml "docker-compose.${COMPOSE_OVERRIDE}.yml" \
+            "$REMOTE_USER@$EC2_HOST:ai20k-agent/releases/$RELEASE_ID/"
 
       - name: Deploy and verify
         shell: bash
@@ -75,153 +66,70 @@ jobs:
           set -euo pipefail
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             "$REMOTE_USER@$EC2_HOST" bash -s -- \
-            "${{ github.event.workflow_run.head_sha }}" "$DEPLOY_ENV" <<'REMOTE_SCRIPT'
+            "$RELEASE_ID" "$DEPLOY_ENV" "$COMPOSE_OVERRIDE" "$IMAGE_REPO" <<'REMOTE_SCRIPT'
           set -euo pipefail
 
           RELEASE_ID="$1"
           DEPLOY_ENV="$2"
+          COMPOSE_OVERRIDE="$3"
+          IMAGE_REPO="$4"
+
           APP_DIR="$HOME/ai20k-agent"
           RELEASE_DIR="$APP_DIR/releases/$RELEASE_ID"
-          ARCHIVE="/tmp/ai20k-agent-${RELEASE_ID}.tar.gz"
 
-          ENV_FILE="$APP_DIR/.env.dev"
-          test -f "$ENV_FILE" || {
-            echo "Missing $ENV_FILE. Create the development environment file on this EC2 instance first."
+          test -f "$APP_DIR/.env" || {
+            echo "Missing $APP_DIR/.env. Create the environment file on this EC2 instance first."
             exit 1
           }
+          mkdir -p "$APP_DIR/data"
 
-          mkdir -p "$RELEASE_DIR" "$APP_DIR/data"
-          tar -xzf "$ARCHIVE" -C "$RELEASE_DIR"
+          PREV_TAG=$(cat "$APP_DIR/.current_tag" 2>/dev/null || true)
+
+          export IMAGE_REPO
+          export IMAGE_TAG="$RELEASE_ID"
+          export APP_ENV_FILE="$APP_DIR/.env"
+          export APP_DATA_PATH="$APP_DIR/data"
+          export APP_ENV="$DEPLOY_ENV"
 
           compose() {
-            APP_ENV_FILE="$ENV_FILE" \
-            APP_DATA_PATH="$APP_DIR/data" \
-            APP_ENV="$DEPLOY_ENV" \
             docker compose \
-              --env-file "$ENV_FILE" \
               --project-name ai20k-agent \
+              --env-file "$APP_DIR/.env" \
               --file "$RELEASE_DIR/docker-compose.yml" \
-              --file "$RELEASE_DIR/docker-compose.dev.yml" \
+              --file "$RELEASE_DIR/docker-compose.${COMPOSE_OVERRIDE}.yml" \
               "$@"
           }
 
-          compose up -d --build --remove-orphans
+          echo ">> Pull ${IMAGE_REPO}:${IMAGE_TAG}"
+          compose pull backend
 
-          ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
+          echo ">> Start services"
+          compose up -d --no-build --remove-orphans
 
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error http://127.0.0.1:8000/health; then
-              rm -f "$ARCHIVE"
+              echo
+              echo "$RELEASE_ID" > "$APP_DIR/.current_tag"
+              ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
+              # Giữ lại 5 release gần nhất, dọn image dangling
+              ls -1dt "$APP_DIR"/releases/* | tail -n +6 | xargs -r rm -rf
+              docker image prune -f >/dev/null
+              echo "Deploy OK: $RELEASE_ID"
               exit 0
             fi
             sleep 3
           done
 
-          compose logs --tail=100
+          echo "Health check FAILED"
+          compose logs --tail=100 || true
+
+          if [ -n "$PREV_TAG" ]; then
+            echo ">> Rollback về $PREV_TAG"
+            IMAGE_TAG="$PREV_TAG" compose up -d --no-build backend
+          fi
           exit 1
           REMOTE_SCRIPT
 
-  deploy-production:
-    name: Deploy to production EC2
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main'
-    runs-on: self-hosted
-    environment: production
-    env:
-      EC2_HOST: ${{ secrets.EC2_HOST_PROD }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      REMOTE_USER: ubuntu
-      DEPLOY_ENV: production
-
-    steps:
-      - name: Checkout tested commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Package application
-        shell: bash
-        run: |
-          set -euo pipefail
-          tar -czf deployment.tar.gz \
-            --exclude='./.git' \
-            --exclude='./.venv' \
-            --exclude='./.pytest_cache' \
-            --exclude='./.ruff_cache' \
-            --exclude='./__pycache__' \
-            --exclude='./.ai-log' \
-            --exclude='./data' \
-            --exclude='./.env' \
-            --exclude='./deployment.tar.gz' \
-            .
-
-      - name: Configure SSH
-        shell: bash
-        run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
-
-      - name: Upload package
-        shell: bash
-        run: |
-          set -euo pipefail
-          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
-            deployment.tar.gz \
-            "$REMOTE_USER@$EC2_HOST:/tmp/ai20k-agent-${{ github.event.workflow_run.head_sha }}.tar.gz"
-
-      - name: Deploy and verify
-        shell: bash
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
-            "$REMOTE_USER@$EC2_HOST" bash -s -- \
-            "${{ github.event.workflow_run.head_sha }}" "$DEPLOY_ENV" <<'REMOTE_SCRIPT'
-          set -euo pipefail
-
-          RELEASE_ID="$1"
-          DEPLOY_ENV="$2"
-          APP_DIR="$HOME/ai20k-agent"
-          RELEASE_DIR="$APP_DIR/releases/$RELEASE_ID"
-          ARCHIVE="/tmp/ai20k-agent-${RELEASE_ID}.tar.gz"
-
-          ENV_FILE="$APP_DIR/.env.prod"
-          test -f "$ENV_FILE" || {
-            echo "Missing $ENV_FILE. Create the production environment file on this EC2 instance first."
-            exit 1
-          }
-
-          mkdir -p "$RELEASE_DIR" "$APP_DIR/data"
-          tar -xzf "$ARCHIVE" -C "$RELEASE_DIR"
-
-          compose() {
-            APP_ENV_FILE="$ENV_FILE" \
-            APP_DATA_PATH="$APP_DIR/data" \
-            APP_ENV="$DEPLOY_ENV" \
-            docker compose \
-              --env-file "$ENV_FILE" \
-              --project-name ai20k-agent \
-              --file "$RELEASE_DIR/docker-compose.yml" \
-              --file "$RELEASE_DIR/docker-compose.prod.yml" \
-              "$@"
-          }
-
-          compose up -d --build --remove-orphans
-
-          ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
-
-          for attempt in $(seq 1 20); do
-            if curl --fail --silent --show-error http://127.0.0.1:8000/health; then
-              rm -f "$ARCHIVE"
-              exit 0
-            fi
-            sleep 3
-          done
-
-          compose logs --tail=100
-          exit 1
-          REMOTE_SCRIPT
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
