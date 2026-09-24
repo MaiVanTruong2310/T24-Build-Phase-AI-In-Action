@@ -23,7 +23,7 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       (github.event.workflow_run.head_branch == 'main' ||
        github.event.workflow_run.head_branch == 'develop')
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'development' }}
     env:
       EC2_HOST: ${{ github.event.workflow_run.head_branch == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST }}
