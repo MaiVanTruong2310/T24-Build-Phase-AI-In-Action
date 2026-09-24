@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-
     image: ${IMAGE_REPO:-ai20k-agent}:${IMAGE_TAG:-local}
     ports:
       - "127.0.0.1:8000:8000"
@@ -23,11 +22,12 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
         ]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -37,11 +37,17 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai20k_app} -d ${POSTGRES_DB:-ai20k}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-ai20k_app} -d ${POSTGRES_DB:-ai20k}"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:
