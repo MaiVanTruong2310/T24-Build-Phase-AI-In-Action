@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   lint-and-test:
@@ -30,3 +30,6 @@ jobs:
         env:
           APP_ENV: test
           OPENAI_API_KEY: test-key
+
+      - name: Build Docker image
+        run: docker build --tag ai20k-agent:ci .

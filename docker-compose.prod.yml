@@ -1,0 +1,10 @@
+services:
+  backend:
+    environment:
+      APP_ENV: production
+    restart: always
+
+  postgres:
+    # PostgreSQL is available to backend through the Compose network only.
+    # It is intentionally not published on the production EC2 host.
+    restart: always
