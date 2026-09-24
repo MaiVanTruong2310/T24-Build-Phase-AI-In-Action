@@ -1,0 +1,12 @@
+services:
+  backend:
+    environment:
+      APP_ENV: development
+    restart: unless-stopped
+
+  postgres:
+    # Only the EC2 host itself can access PostgreSQL directly.
+    # Local development can use an SSH tunnel to this port.
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
