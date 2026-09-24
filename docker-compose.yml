@@ -30,7 +30,8 @@ services:
       start_period: 40s
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg17
+    container_name: postgres-pgvector
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ai20k}
       POSTGRES_USER: ${POSTGRES_USER:-ai20k_app}
