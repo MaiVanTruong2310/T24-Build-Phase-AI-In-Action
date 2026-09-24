@@ -16,7 +16,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy installed packages from builder
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /opt/venv /opt/venv
 ENV PATH=/root/.local/bin:$PATH
 
 # Security: run as non-root user
