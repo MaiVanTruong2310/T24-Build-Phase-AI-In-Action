@@ -1,110 +1,185 @@
-# Architecture Document
+# Architecture
 
 ## System Overview
 
-[Tóm tắt 2-3 câu về kiến trúc hệ thống]
+Ứng dụng hỗ trợ người bệnh tìm thông tin và đặt lịch khám qua Patient App/Web; nhân viên xử lý các yêu cầu cần can thiệp trên Staff Dashboard. FastAPI quản lý nghiệp vụ và dữ liệu, còn LangGraph điều phối hội thoại, RAG, kiểm tra an toàn và chuyển tiếp HITL khi độ tin cậy thấp hoặc phát hiện tình huống khẩn cấp.
 
 ## Architecture Diagram
 
 ```mermaid
-graph TB
-    subgraph Frontend
-        UI[React/Next.js UI]
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '22px', 'primaryColor': '#ffffff'}}}%%
+flowchart LR
+    subgraph FE["1️⃣ FRONTEND LAYER"]
+        direction TB
+        PA["Patient Web/App"]
+        SD["Staff Dashboard"]
     end
 
-    subgraph Backend[FastAPI Backend]
-        API[API Routes]
-        Agent[LangGraph Agent]
-        LLM[LLM Service]
-        Tools[Agent Tools]
+    subgraph BE["2️⃣ BACKEND LAYER (FastAPI)"]
+        direction TB
+        SVC["Core Services<br/>(Auth·Patient·Clinic·Appointment·<br/>Conversation·HITL·Notification)"]
+        DATA["Data Layer<br/>(PostgreSQL·pgvector·Redis·Kafka·Storage)"]
+
+        subgraph BK["Booking Workflow"]
+            direction LR
+            B1["Search"] --> B2["Hold"] --> B3["Confirm"] --> B4["HITL approval"] --> B5["Confirmed"] --> B6["Reminder"]
+        end
     end
 
-    subgraph Data[Data Layer]
-        DB[(Database)]
-        Vector[Vector Store]
+    subgraph AG["3️⃣ AGENT LAYER (LangGraph)"]
+        direction TB
+        subgraph FLOW["Xử lý hội thoại"]
+            direction LR
+            F1["Intent Detection"] --> F2["Safety Check"] --> F3["Thu thập thông tin"] --> F4["RAG Retrieval"] --> F5["Reasoning"] --> F6{"Confidence"}
+        end
+        HI["High confidence"]
+        LO["Low confidence"]
+        EM["Emergency"]
+        TL["Agent Tools"]
     end
 
-    UI -->|HTTP/REST| API
-    API --> Agent
-    Agent --> LLM
-    Agent --> Tools
-    Agent --> Vector
-    Tools --> DB
-    API --> DB
+    subgraph OBS["OBSERVABILITY"]
+        direction TB
+        OB["Prometheus · Grafana · Loki · Tempo · Langfuse"]
+    end
+
+    PA -->|"REST API"| SVC
+    PA <-->|"WebSocket"| SVC
+    SD -->|"REST API"| SVC
+    SD <-->|"WebSocket"| SVC
+    SVC --> DATA
+    SVC -->|"Redis"| DATA
+    SVC -->|"Kafka"| Notify(["Notification"])
+    Notify -.-> PA
+    SVC --> BK
+    BK <-->|"REST API"| FLOW
+    F6 -->|"Cao"| HI
+    F6 -->|"Thấp"| LO
+    F2 -->|"Khẩn cấp"| EM
+    HI --> TL
+    HI -->|"REST API"| SD
+    LO -->|"REST API"| SD
+    EM --> TL
+    EM -->|"REST API"| SD
+    TL -->|"REST API"| SVC
+    BE -.-> OBS
+    AG -.-> OBS
+    OBS -.-> SD
 ```
 
 ## Components
 
-### 1. Frontend (React/Next.js)
-- **Purpose:** [mô tả]
-- **Key Features:** [danh sách]
-- **State Management:** [approach]
+### Frontend
 
-### 2. Backend (FastAPI)
-- **Purpose:** [mô tả]
+- **Purpose:** Cung cấp giao diện cho hai nhóm người dùng — bệnh nhân (đặt lịch, chat tư vấn) và điều phối viên (duyệt lịch, xử lý HITL, chat takeover)
+- **Key Features:**
+  - Patient App: Chat với AI, đặt/đổi/huỷ lịch, xem hồ sơ, nhận nhắc lịch
+  - Staff Dashboard: HITL Queue, duyệt lịch, chat takeover, xử lý escalation
+  - Kết nối real-time qua WebSocket cho chat và cập nhật trạng thái lịch hẹn
+- **State Management:** Global store (Redux/Zustand hoặc tương đương) cho session người dùng và trạng thái chat; server state (React Query/SWR) cho dữ liệu lịch hẹn, hồ sơ, đồng bộ qua REST + realtime update qua WebSocket
+
+### Backend (FastAPI)
+
+- **Purpose:** Là lớp duy nhất ghi dữ liệu và thực thi nghiệp vụ.
 - **API Design:** RESTful
-- **Authentication:** [JWT/None]
+- **Authentication:** JWT
 
 ### 3. AI Agent (LangGraph)
-- **Agent Type:** [ReAct / Plan-and-Execute / Custom]
-- **State:** [mô tả state schema]
-- **Nodes:** [danh sách nodes]
-- **Tools:** [danh sách tools]
+
+- **Agent Type:** Plan-and-Execute
+- **State:** session_id, patient_id,
+  conversation_history: [...],
+  intent, is_emergency: bool,
+  collected_info: {...},
+  retrieved_context: [...],
+  confidence_score: float,
+  suggested_specialty, suggested_doctor, suggested_slots: [...],
+  hitl_required: bool
+- **Nodes:** Intent Detection → Safety/Emergency Check → Thu thập thông tin → RAG Retrieval → Reasoning → Confidence Check → (High: Suggest) / (Low: Handoff to HITL) / (Emergency: Alert)
+- **Tools:** search_specialties, search_doctors, get_available_slots, hold_slot, create_appointment, reschedule_appointment, cancel_appointment, create_human_support_request
 - **Flow:**
 
 ```mermaid
-graph LR
-    START --> A[Node A]
-    A --> B{Decision}
-    B -->|Yes| C[Node C]
-    B -->|No| D[Node D]
-    C --> E[END]
-    D --> E
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '22px'}}}%%
+flowchart LR
+    Start(["Bệnh nhân gửi tin nhắn"]) --> Intent["Intent Detection<br/>Nhận diện ý định"]
+    Intent --> Safety{"Safety/Emergency<br/>Check"}
+
+    Safety -->|"Khẩn cấp"| Emg["Khuyến nghị cấp cứu<br/>Cảnh báo nhân viên y tế"]
+    Emg -->|"RestAPI API"| HITL1["Staff Dashboard:<br/>Escalation"]
+
+    Safety -->|"An toàn"| Gather["Thu thập thông tin<br/>Hỏi triệu chứng/nhu cầu"]
+    Gather --> RAG["RAG Retrieval<br/>Tìm kiếm tri thức y khoa"]
+    RAG --> Reason["Reasoning<br/>Chọn chuyên khoa/bác sĩ"]
+    Reason --> Confidenceidence{"Confidenceidence Check<br/>Đánh giá độ tin cậy"}
+
+    Confidence -->|"Cao"| Suggest["Trả kết quả:<br/>Gợi ý chuyên khoa/bác sĩ/slot"]
+    Suggest -->|"RestAPI API"| ToolCall["Agent Tool API<br/>(gọi Backend)"]
+
+    Confidence -->|"Thấp"| HandOff["Tạo HITL Task"]
+    HandOff -->|"RestAPI API"| HITL2["Staff Dashboard:<br/>HITL Queue"]
+    HandOff -->|"WebSocket"| Waiting["Chờ điều phối viên<br/>tiếp quản"]
+
+    HITL2 -->|"WebSocket (chat takeover)"| Waiting
+    Waiting --> Reply(["Phản hồi bệnh nhân"])
+    ToolCall --> Reply
+    HITL1 -->|"WebSocket"| Reply
+
+    ToolCall -->|"Kafka (thông báo)"| Notify(["Gửi nhắc lịch/thông báo"])
 ```
 
-### 4. Database
-- **Type:** [PostgreSQL / SQLite]
-- **Tables:** [danh sách]
-- **Migrations:** Alembic
+### Data & Infrastructure
 
-### 5. Vector Store
-- **Type:** [ChromaDB / FAISS / Pinecone]
-- **Embeddings:** [model]
-- **Purpose:** [RAG / similarity search]
+- PostgreSQL là nguồn dữ liệu nghiệp vụ; pgvector lưu embedding và phục vụ RAG.
+- Redis dùng cho cache và trạng thái ngắn hạn; Kafka xử lý thông báo bất đồng bộ; Object Storage lưu tài liệu.
+- Alembic quản lý migration; Prometheus/Grafana, Loki/Tempo và Langfuse phục vụ quan sát hệ thống.
 
-## Data Flow
+## Core Data Flow
 
-1. User gửi request từ Frontend
-2. API route nhận và validate input
-3. Agent xử lý qua LangGraph pipeline
-4. LLM generate response
-5. Tools thực thi actions (nếu cần)
-6. Response trả về Frontend
+1. Client gửi yêu cầu tới FastAPI qua REST hoặc WebSocket.
+2. Backend xác thực, validate và chuyển hội thoại cho LangGraph.
+3. Agent kiểm tra intent và an toàn, truy xuất context cần thiết rồi phân nhánh theo confidence: high confidence thì gợi ý; low confidence thì không gợi ý và chuyển điều phối viên hoặc trả message an toàn.
+4. Agent tools gọi lại backend; backend cập nhật PostgreSQL/pgvector và phát sự kiện thông báo khi cần.
+5. Kết quả được trả về client; trạng thái chat/HITL được cập nhật qua WebSocket.
 
-## Deployment Architecture
+## Booking Flow
+
+`Search → Suggest → Patient agrees → HITL coordinator approval → Confirmed → Reminder`
+
+## Deployment
 
 ```mermaid
-graph LR
-    subgraph Docker
-        FE[Frontend Container]
-        BE[Backend Container]
-        DB_C[Database Container]
+flowchart LR
+    subgraph CI["CI/CD"]
+        direction TB
+        GHA["GitHub Actions<br/>"]
     end
-    FE --> BE --> DB_C
+
+    GHA -->|"Backend image"| REG["Container Registry"]
+    REG --> EC2["EC2<br/>Docker Compose"]
+    EC2 --> API["FastAPI container"]
+    EC2 --> PG["PostgreSQL + pgvector"]
+
+    GHA -->|"Frontend build"| VC["Vercel<br/>Deploy"]
+    VC --> FE["Frontend (hosted on Vercel)"]
+    FE -->|"REST API"| API
 ```
+
+Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển khai image đã kiểm thử lên EC2, có health check và rollback. Redis, Kafka, Object Storage và frontend được tích hợp theo môi trường triển khai tương ứng.
 
 ## Security
 
-- API keys stored in `.env` (never commit)
-- Input validation via Pydantic
-- Rate limiting on API endpoints
-- CORS configured for frontend domain
+- Không commit secret; dùng `.env`/secret store theo môi trường.
+- Validate input bằng Pydantic, phân quyền theo vai trò và giới hạn CORS.
+- Không để agent truy cập trực tiếp database; mọi thao tác đi qua Agent Tool API.
+- Tách dữ liệu nhạy cảm khỏi log; audit các thao tác đặt lịch, HITL và escalation.
 
 ## Design Decisions
 
-| Decision | Choice | Reason |
-|----------|--------|--------|
-| Framework | FastAPI | Async, auto-docs, type-safe |
-| Agent | LangGraph | Flexible state management |
-| Database | [choice] | [reason] |
-| Frontend | Next.js | [reason] |
+| Decision            | Choice                                | Reason                                              |
+| ------------------- | ------------------------------------- | --------------------------------------------------- |
+| API                 | FastAPI                               | Async, type-safe, tự sinh OpenAPI                   |
+| Agent orchestration | LangGraph                             | State rõ ràng, branching và HITL                    |
+| Primary database    | PostgreSQL + pgvector                 | Dữ liệu quan hệ và vector search trong một nền tảng |
+| Cache / events      | Redis + Kafka                         | Giảm độ trễ và xử lý notification bất đồng bộ       |
+| Deployment          | Docker Compose + EC2 + GitHub Actions | Đơn giản cho MVP, có CI/CD và rollback              |
