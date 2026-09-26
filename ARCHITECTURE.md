@@ -75,7 +75,7 @@ flowchart LR
   - Patient App: Chat với AI, đặt/đổi/huỷ lịch, xem hồ sơ, nhận nhắc lịch
   - Staff Dashboard: HITL Queue, duyệt lịch, chat takeover, xử lý escalation
   - Kết nối real-time qua WebSocket cho chat và cập nhật trạng thái lịch hẹn
-- **State Management:** Global store (Redux/Zustand hoặc tương đương) cho session người dùng và trạng thái chat; server state (React Query/SWR) cho dữ liệu lịch hẹn, hồ sơ, đồng bộ qua REST + realtime update qua WebSocket
+- **State Management:**  Global store (Redux) cho session người dùng và trạng thái chat
 
 ### Backend (FastAPI)
 
