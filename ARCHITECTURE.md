@@ -104,18 +104,18 @@ flowchart LR
     Intent --> Safety{"Safety/Emergency<br/>Check"}
 
     Safety -->|"Khẩn cấp"| Emg["Khuyến nghị cấp cứu<br/>Cảnh báo nhân viên y tế"]
-    Emg -->|"RestAPI API"| HITL1["Staff Dashboard:<br/>Escalation"]
+    Emg -->|"RestAPI"| HITL1["Staff Dashboard:<br/>Escalation"]
 
     Safety -->|"An toàn"| Gather["Thu thập thông tin<br/>Hỏi triệu chứng/nhu cầu"]
     Gather --> RAG["RAG Retrieval<br/>Tìm kiếm tri thức y khoa"]
     RAG --> Reason["Reasoning<br/>Chọn chuyên khoa/bác sĩ"]
-    Reason --> Confidenceidence{"Confidenceidence Check<br/>Đánh giá độ tin cậy"}
+    Reason --> Confidence{"Confidence Check<br/>Đánh giá độ tin cậy"}
 
     Confidence -->|"Cao"| Suggest["Trả kết quả:<br/>Gợi ý chuyên khoa/bác sĩ/slot"]
-    Suggest -->|"RestAPI API"| ToolCall["Agent Tool API<br/>(gọi Backend)"]
+    Suggest -->|"RestAPI"| ToolCall["Agent Tool API<br/>(gọi Backend)"]
 
     Confidence -->|"Thấp"| HandOff["Tạo HITL Task"]
-    HandOff -->|"RestAPI API"| HITL2["Staff Dashboard:<br/>HITL Queue"]
+    HandOff -->|"RestAPI"| HITL2["Staff Dashboard:<br/>HITL Queue"]
     HandOff -->|"WebSocket"| Waiting["Chờ điều phối viên<br/>tiếp quản"]
 
     HITL2 -->|"WebSocket (chat takeover)"| Waiting
