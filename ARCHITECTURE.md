@@ -7,7 +7,6 @@
 ## Architecture Diagram
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '22px', 'primaryColor': '#ffffff'}}}%%
 flowchart LR
     subgraph FE["1️⃣ FRONTEND LAYER"]
         direction TB
@@ -100,7 +99,6 @@ flowchart LR
 - **Flow:**
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '22px'}}}%%
 flowchart LR
     Start(["Bệnh nhân gửi tin nhắn"]) --> Intent["Intent Detection<br/>Nhận diện ý định"]
     Intent --> Safety{"Safety/Emergency<br/>Check"}
