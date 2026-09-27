@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  IMAGE: ${{ vars.DOCKERHUB_REPO }}
+
+jobs:
+  lint-and-test:
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: ruff check src/ tests/
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+        env:
+          APP_ENV: test
+          OPENAI_API_KEY: test-key
+          JWT_SECRET_KEY: test-secret-key-with-at-least-32-bytes
+
+      - name: Build Docker image
+        run: docker build --tag ai20k-agent:ci .
+
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Tag and push image
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_NAME" = "main" ]; then ENV_TAG=production; else ENV_TAG=development; fi
+          docker tag ai20k-agent:ci "$IMAGE:$GITHUB_SHA"
+          docker tag ai20k-agent:ci "$IMAGE:$ENV_TAG"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:$ENV_TAG"
+
+      - name: Docker logout
+        if: always() && github.event_name == 'push'
+        run: docker logout
+
+  deploy:
+    needs: lint-and-test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.yml,docker-compose.prod.yml,docker-compose.dev.yml"
+          target: "/opt/app"
+
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GITHUB_SHA,GITHUB_REF_NAME
+          script: |
+            set -euo pipefail
+            cd /opt/app
+
+            if [ "$GITHUB_REF_NAME" = "main" ]; then
+              OVERRIDE=docker-compose.prod.yml
+              ENV_TAG=production
+            else
+              OVERRIDE=docker-compose.dev.yml
+              ENV_TAG=development
+            fi
+
+            cat > .env <<EOF
+            IMAGE_REPO=${{ vars.DOCKERHUB_REPO }}
+            IMAGE_TAG=${GITHUB_SHA}
+            APP_ENV=${ENV_TAG}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+            JWT_ALGORITHM=HS256
+            JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
+            JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
+            OTP_EXPIRE_MINUTES=5
+            OTP_MAX_ATTEMPTS=5
+            POSTGRES_DB=${{ vars.POSTGRES_DB || 'ai20k' }}
+            POSTGRES_USER=${{ vars.POSTGRES_USER || 'ai20k_app' }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            DATABASE_URL=postgresql+psycopg://${{ vars.POSTGRES_USER || 'ai20k_app' }}:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/${{ vars.POSTGRES_DB || 'ai20k' }}
+            LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}
+            LANGCHAIN_PROJECT=ai20k-agent
+            LANGCHAIN_TRACING_V2=true
+            AI_LOG_SERVER=https://ai-logs.note.transformerlabs.ai/api/ingest
+            AI_LOG_API_KEY=${{ secrets.AI_LOG_API_KEY }}
+            AI_LOG_DIR=.ai-log
+            EOF
+            chmod 600 .env
+
+            docker compose -f docker-compose.yml -f "$OVERRIDE" pull
+            docker compose -f docker-compose.yml -f "$OVERRIDE" up -d --remove-orphans
+
+            # đợi healthcheck rồi dọn image cũ
+            sleep 15
+            docker compose -f docker-compose.yml -f "$OVERRIDE" ps
+            docker image prune -f
