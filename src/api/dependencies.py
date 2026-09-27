@@ -26,14 +26,14 @@ async def get_current_user(
     except (KeyError, ValueError) as exc:
         raise AuthenticationError("INVALID_TOKEN", "Invalid access token") from exc
     user = await UserRepository(session).get_by_id(user_id)
-    await session.rollback()
+
     if user is None or user.status != "active":
         raise AuthenticationError("INVALID_TOKEN", "User is not active")
     return user
 
 
-async def require_coordinator(user: User = Depends(get_current_user)) -> User:
-    """Require the coordinator role."""
-    if user.role != "coordinator":
+async def require_staff(user: User = Depends(get_current_user)) -> User:
+    """Require the staff role."""
+    if user.role != "staff":
         raise AuthorizationError()
     return user

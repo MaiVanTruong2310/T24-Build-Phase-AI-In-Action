@@ -94,7 +94,7 @@ def test_error_response_has_unified_envelope():
     assert response.data is None
 
 
-@pytest.mark.parametrize("status", [400, 404, 429, 408, 401, 403])
+@pytest.mark.parametrize("status", [400, 404, 409, 429, 408, 401, 403])
 def test_error_response_supports_public_client_error_codes(status):
     """Error payloads expose only one of the supported HTTP error codes."""
     response = error_response(status, "Request failed", status)

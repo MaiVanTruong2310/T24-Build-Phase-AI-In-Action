@@ -11,7 +11,7 @@ from src.db.base import Base
 
 
 class User(Base):
-    """Application user with patient or coordinator access."""
+    """Application user with patient or staff access."""
 
     __tablename__ = "users"
 

@@ -33,12 +33,20 @@ class AuthorizationError(AppError):
         super().__init__("FORBIDDEN", message, 403)
 
 
+class NotFoundError(AppError):
+    """Raised when a requested resource does not exist or is not public."""
+
+    def __init__(self, message: str = "Resource not found") -> None:
+        """Initialize a not-found error."""
+        super().__init__("NOT_FOUND", message, 404)
+
+
 class ConflictError(AppError):
     """Raised when a resource conflicts with current state."""
 
     def __init__(self, code: str, message: str) -> None:
         """Initialize a conflict with a stable application code."""
-        super().__init__(code, message, 400)
+        super().__init__(code, message, 409)
 
 
 class RateLimitError(AppError):
