@@ -12,6 +12,7 @@ def should_continue(state: AgentState) -> str:
 
 
 def build_graph() -> StateGraph:
+    """Build the LangGraph workflow used by the agent runtime."""
     graph = StateGraph(AgentState)
 
     # Add nodes

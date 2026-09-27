@@ -61,3 +61,10 @@ out/
 .ai-log/archive/
 
 AGENT.md
+task/*
+docs-spec/*
+planning/*
+specs/*
+VMEC-01 — Đặc tả build hệ thống.html
+frontend/node_modules
+frontend/UI
