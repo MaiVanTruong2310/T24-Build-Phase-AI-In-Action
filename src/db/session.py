@@ -1,7 +1,7 @@
 """Async SQLAlchemy engine and session factory for PostgreSQL."""
 
+from collections.abc import AsyncIterator
 from functools import lru_cache
-from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
