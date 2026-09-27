@@ -182,15 +182,19 @@ class CatalogService:
             await self._ensure_code_available(Doctor, request.code)
             if request.license_number:
                 await self._ensure_license_available(request.license_number)
-            await self._validate_assignments(request.specialty_ids, request.facility_ids, request.service_ids)
-            values = request.model_dump(exclude={"specialty_ids", "facility_ids", "service_ids"})
-            value = Doctor(**values)
+            await self._validate_assignments(request.specialty_ids, request.facilities, request.service_ids)
+            values = request.model_dump(exclude={"specialty_ids", "facilities", "service_ids"})
+            # Initialize assignment collections on a new ORM instance. Without
+            # this, assigning ``doctor.specialties`` below can trigger a
+            # synchronous lazy-load of an unloaded relationship, which is not
+            # allowed by SQLAlchemy's async session and raises MissingGreenlet.
+            value = Doctor(specialties=[], facilities=[], services=[], **values)
             self.session.add(value)
             await self.session.flush()
             await self.catalog.replace_doctor_assignments(
                 value,
                 specialty_ids=request.specialty_ids,
-                facility_ids=request.facility_ids,
+                facilities=request.facilities,
                 service_ids=request.service_ids,
             )
             await self.session.flush()
@@ -203,17 +207,17 @@ class CatalogService:
             value = await self._required(self.catalog.get_doctor(resource_id), "Doctor not found")
             updates = request.model_dump(exclude_unset=True)
             specialty_ids = updates.pop("specialty_ids", None)
-            facility_ids = updates.pop("facility_ids", None)
+            facilities = updates.pop("facilities", None)
             service_ids = updates.pop("service_ids", None)
             if "license_number" in updates and updates["license_number"]:
                 await self._ensure_license_available(updates["license_number"], exclude_id=value.id)
-            await self._validate_assignments(specialty_ids, facility_ids, service_ids)
+            await self._validate_assignments(specialty_ids, facilities, service_ids)
             for field, item in updates.items():
                 setattr(value, field, item)
             await self.catalog.replace_doctor_assignments(
                 value,
                 specialty_ids=specialty_ids,
-                facility_ids=facility_ids,
+                facilities=facilities,
                 service_ids=service_ids,
             )
             await self.session.flush()
@@ -474,7 +478,7 @@ class CatalogService:
     async def _validate_assignments(
         self,
         specialty_ids: list[UUID] | None,
-        facility_ids: list[UUID] | None,
+        facilities: list[DoctorFacilityAssignment] | None,
         service_ids: list[UUID] | None,
     ) -> None:
         """Ensure every supplied doctor assignment points to an active resource."""
@@ -482,8 +486,8 @@ class CatalogService:
             value = await self.catalog.get_specialty(resource_id)
             if value is None or value.status != "active":
                 raise NotFoundError("Specialty assignment not found")
-        for resource_id in facility_ids or []:
-            value = await self.catalog.get_facility(resource_id)
+        for assignment in facilities or []:
+            value = await self.catalog.get_facility(assignment.facility_id)
             if value is None or value.status != "active":
                 raise NotFoundError("Facility assignment not found")
         for resource_id in service_ids or []:

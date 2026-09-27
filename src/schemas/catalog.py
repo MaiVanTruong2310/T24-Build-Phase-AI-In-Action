@@ -78,6 +78,10 @@ class ServiceCreate(CatalogBase):
     """Create a medical service."""
 
     duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+    price: float | None = Field(default=None, ge=0)
+    original_price: float | None = Field(default=None, ge=0)
+    category: str | None = Field(default=None, max_length=100)
+    features: list[str] | None = Field(default=None)
 
 
 class ServiceUpdate(BaseModel):
@@ -86,6 +90,10 @@ class ServiceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+    price: float | None = Field(default=None, ge=0)
+    original_price: float | None = Field(default=None, ge=0)
+    category: str | None = Field(default=None, max_length=100)
+    features: list[str] | None = Field(default=None)
     status: CatalogStatus | None = None
 
 
@@ -99,6 +107,12 @@ class ServiceResponse(BaseModel):
     name: str
     description: str | None
     duration_minutes: int | None
+    price: float | None
+    original_price: float | None
+    category: str | None
+    features: list[str] | None
+    patient_count: int | None
+    satisfaction_rate: float | None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -116,8 +130,12 @@ class DoctorCreate(BaseModel):
     status: CatalogStatus = "active"
     review_status: ReviewStatus = "approved"
     booking_enabled: bool = True
+    avatar_url: str | None = Field(default=None, max_length=500)
+    gender: str | None = Field(default=None, max_length=16)
+    title: str | None = Field(default=None, max_length=64)
+    date_of_birth: date | None = None
     specialty_ids: list[UUID] = Field(default_factory=list)
-    facility_ids: list[UUID] = Field(default_factory=list)
+    facilities: list["DoctorFacilityAssignment"] = Field(default_factory=list)
     service_ids: list[UUID] = Field(default_factory=list)
 
 
@@ -132,8 +150,12 @@ class DoctorUpdate(BaseModel):
     status: CatalogStatus | None = None
     review_status: ReviewStatus | None = None
     booking_enabled: bool | None = None
+    avatar_url: str | None = Field(default=None, max_length=500)
+    gender: str | None = Field(default=None, max_length=16)
+    title: str | None = Field(default=None, max_length=64)
+    date_of_birth: date | None = None
     specialty_ids: list[UUID] | None = None
-    facility_ids: list[UUID] | None = None
+    facilities: list["DoctorFacilityAssignment"] | None = None
     service_ids: list[UUID] | None = None
 
 
@@ -141,6 +163,18 @@ class DoctorReviewRequest(BaseModel):
     """Set the publication review state of a doctor."""
 
     review_status: ReviewStatus
+
+
+class DoctorFacilityResponse(BaseModel):
+    """Facility assignment representation for a doctor."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    facility_id: UUID
+    department: str | None
+    room: str | None
+    active_from: date | None
+    active_to: date | None
 
 
 class DoctorResponse(BaseModel):
@@ -158,8 +192,12 @@ class DoctorResponse(BaseModel):
     status: str
     review_status: str
     booking_enabled: bool
+    avatar_url: str | None
+    gender: str | None
+    title: str | None
+    date_of_birth: date | None
     specialty_ids: list[UUID] = Field(default_factory=list)
-    facility_ids: list[UUID] = Field(default_factory=list)
+    facilities: list[DoctorFacilityResponse] = Field(default_factory=list)
     service_ids: list[UUID] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

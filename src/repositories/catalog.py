@@ -1,6 +1,7 @@
 """Persistence operations for the medical catalog bounded context."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -215,7 +216,7 @@ class CatalogRepository:
         doctor: Doctor,
         *,
         specialty_ids: list[UUID] | None = None,
-        facility_ids: list[UUID] | None = None,
+        facilities: list[Any] | None = None,
         service_ids: list[UUID] | None = None,
     ) -> None:
         """Replace supplied assignment collections while preserving omitted ones."""
@@ -225,10 +226,23 @@ class CatalogRepository:
                 DoctorSpecialty(doctor_id=doctor.id, specialty_id=value, is_primary=index == 0)
                 for index, value in enumerate(dict.fromkeys(specialty_ids))
             ]
-        if facility_ids is not None:
+        if facilities is not None:
             await self.session.execute(delete(DoctorFacility).where(DoctorFacility.doctor_id == doctor.id))
+            seen = set()
+            unique_facilities = []
+            for f in facilities:
+                if f.facility_id not in seen:
+                    seen.add(f.facility_id)
+                    unique_facilities.append(f)
             doctor.facilities = [
-                DoctorFacility(doctor_id=doctor.id, facility_id=value) for value in dict.fromkeys(facility_ids)
+                DoctorFacility(
+                    doctor_id=doctor.id, 
+                    facility_id=f.facility_id,
+                    department=f.department,
+                    room=f.room,
+                    active_from=f.active_from,
+                    active_to=f.active_to
+                ) for f in unique_facilities
             ]
         if service_ids is not None:
             await self.session.execute(delete(DoctorService).where(DoctorService.doctor_id == doctor.id))
