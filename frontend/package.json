@@ -13,6 +13,7 @@
     "@reduxjs/toolkit": "^2.8.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "fp-ts": "^2.16.11",
     "lucide-react": "^0.468.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

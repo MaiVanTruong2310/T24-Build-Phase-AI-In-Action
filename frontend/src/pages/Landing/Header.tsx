@@ -1,6 +1,18 @@
-import { Bell, Settings, PlusSquare, Search } from 'lucide-react'
+import React from 'react'
+import { Bell, Settings, PlusSquare, Search, User, LogOut } from 'lucide-react'
+import { Link, NavLink } from 'react-router-dom'
+import { useSelector, useDispatch } from 'react-redux'
+import type { RootState } from '../../app/store'
+import { logout } from '../../features/auth/authSlice'
 
 export function Header() {
+  const dispatch = useDispatch();
+  const { user } = useSelector((state: RootState) => state.auth);
+
+  const handleLogout = () => {
+    dispatch(logout());
+  };
+
   return (
     <div className="bg-white">
       {/* Top bar */}
@@ -38,13 +50,35 @@ export function Header() {
               <button className="text-slate-400 hover:text-slate-600 transition-colors">
                 <Settings className="w-5 h-5" />
               </button>
-              <div className="flex items-center gap-2 ml-2">
-                <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Avatar" className="w-8 h-8 rounded-full border border-slate-200" />
-                <div className="leading-tight hidden lg:block">
-                  <p className="text-xs font-bold text-slate-900">Nguyễn Văn An</p>
-                  <p className="text-[10px] text-slate-500">Bệnh nhân</p>
+              {user ? (
+                <div 
+                  className="flex items-center gap-2 ml-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors group"
+                  onClick={handleLogout}
+                  title="Đăng xuất"
+                >
+                  <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Avatar" className="w-8 h-8 rounded-full border border-slate-200 group-hover:hidden" />
+                  <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
+                    <LogOut className="w-4 h-4" />
+                  </div>
+                  <div className="leading-tight hidden lg:block">
+                    <p className="text-xs font-bold text-slate-900">{user.name || 'Người dùng'}</p>
+                    <p className="text-[10px] text-slate-500">Bệnh nhân</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center gap-3 ml-2 pl-2 border-l border-slate-200">
+                  <Link to="/register" className="text-sm font-semibold text-slate-600 hover:text-sky-700 transition-colors hidden sm:block">
+                    Đăng ký
+                  </Link>
+                  <Link 
+                    to="/login"
+                    className="text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 px-4 py-1.5 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <User className="w-4 h-4" />
+                    <span className="hidden sm:inline">Đăng nhập</span>
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -54,25 +88,30 @@ export function Header() {
       <div className="border-b border-slate-200 bg-slate-50/50">
         <div className="max-w-7xl mx-auto px-6 h-12 flex items-center justify-between overflow-x-auto">
           <nav className="flex items-center gap-6 shrink-0">
-            <a href="#" className="text-sm font-bold text-sky-700 border-b-2 border-sky-700 h-12 flex items-center shrink-0">
-              Trang Chủ
-            </a>
-            <a href="#" className="text-sm font-medium text-slate-600 hover:text-sky-700 transition-colors h-12 flex items-center shrink-0">
-              Tư vấn AI & Bác sĩ
-            </a>
-            <a href="#" className="text-sm font-medium text-slate-600 hover:text-sky-700 transition-colors h-12 flex items-center shrink-0">
-              Đặt lịch khám
-            </a>
-            <a href="#" className="text-sm font-medium text-slate-600 hover:text-sky-700 transition-colors h-12 flex items-center shrink-0">
-              Lịch hẹn & Tiến trình
-            </a>
-            <a href="#" className="text-sm font-medium text-slate-600 hover:text-sky-700 transition-colors h-12 flex items-center shrink-0">
-              Hồ sơ bệnh án
-            </a>
+            {[
+              { to: '/', label: 'Trang Chủ', end: true },
+              { to: '/patient', label: 'Tư vấn AI & Bác sĩ', end: true },
+              { to: '/patient/appointments', label: 'Đặt lịch khám', end: true },
+              { to: '/patient/progress', label: 'Lịch hẹn & Tiến trình', end: false },
+              { to: '/patient/records', label: 'Hồ sơ bệnh án', end: false }
+            ].map(item => (
+              <NavLink 
+                key={item.label}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => `text-sm h-12 flex items-center shrink-0 transition-colors border-b-2 ${
+                  isActive 
+                    ? 'font-bold text-sky-700 border-sky-700' 
+                    : 'font-medium text-slate-600 border-transparent hover:text-sky-700 hover:border-sky-300'
+                }`}
+              >
+                {item.label}
+              </NavLink>
+            ))}
           </nav>
-          <button className="shrink-0 ml-6 text-xs font-semibold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors">
+          <Link to="/staff/queue" className="shrink-0 ml-6 text-xs font-semibold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors">
             Chuyển sang Bản Điều Phối Viên
-          </button>
+          </Link>
         </div>
       </div>
     </div>

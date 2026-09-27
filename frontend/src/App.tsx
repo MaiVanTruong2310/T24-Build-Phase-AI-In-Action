@@ -1,9 +1,15 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import { PatientLayout, RootLayout, StaffLayout, AuthLayout } from './layouts'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { ForgotPassword } from './pages/ForgotPassword'
+import EmergencyCoordinator from './pages/EmergencyCoordinator'
+import AppointmentBooking from './pages/AppointmentBooking'
+import DoctorManagement from './pages/DoctorManagement'
+import CreateDoctor from './pages/DoctorManagement/Create'
+import ServiceManagement from './pages/ServiceManagement'
+import CreateService from './pages/ServiceManagement/Create'
 
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
@@ -34,19 +40,23 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <Placeholder title="Khu bệnh nhân" description="Khu vực dành cho bệnh nhân và người nhà." /> },
           { path: 'departments', element: <Placeholder title="Tìm khoa khám" description="Page tìm kiếm và điều hướng khoa khám sẽ được bổ sung sau." /> },
-          { path: 'appointments', element: <Placeholder title="Lịch hẹn" description="Page lịch hẹn sẽ được bổ sung sau." /> }
-        ]
-      },
-      {
-        path: 'staff',
-        element: <StaffLayout />,
-        children: [
-          { index: true, element: <Placeholder title="Khu nhân viên" description="Khu vực dành cho nhân viên tiếp đón và y tế." /> },
-          { path: 'queue', element: <Placeholder title="Điều phối hàng đợi" description="Page điều phối hàng đợi sẽ được bổ sung sau." /> },
-          { path: 'patients', element: <Placeholder title="Quản lý bệnh nhân" description="Page quản lý bệnh nhân sẽ được bổ sung sau." /> },
-          { path: 'monitoring', element: <Placeholder title="Giám sát hệ thống" description="Page giám sát hệ thống sẽ được bổ sung sau." /> }
+          { path: 'appointments', element: <AppointmentBooking /> }
         ]
       }
+    ]
+  },
+  {
+    path: 'staff',
+    element: <StaffLayout />,
+    children: [
+      { index: true, element: <Navigate to="queue" replace /> },
+      { path: 'queue', element: <EmergencyCoordinator /> },
+      { path: 'doctors', element: <DoctorManagement /> },
+      { path: 'doctors/create', element: <CreateDoctor /> },
+      { path: 'services', element: <ServiceManagement /> },
+      { path: 'services/create', element: <CreateService /> },
+      { path: 'patients', element: <Placeholder title="Quản lý bệnh nhân" description="Page quản lý bệnh nhân sẽ được bổ sung sau." /> },
+      { path: 'monitoring', element: <Placeholder title="Giám sát hệ thống" description="Page giám sát hệ thống sẽ được bổ sung sau." /> }
     ]
   }
 ])
