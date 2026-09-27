@@ -4,11 +4,11 @@ import json
 import pytest
 from fastapi.exceptions import RequestValidationError
 
-from src.api.endpoints.auth import logout, send_otp
+from src.api.endpoints.auth import forgot_password, logout, reset_password, send_otp
 from src.api.handlers import app_error_handler, validation_error_handler
 from src.api.response import error_response, success_response
 from src.core.exceptions import AuthenticationError
-from src.schemas.auth import OtpSendRequest, RefreshTokenRequest
+from src.schemas.auth import ForgotPasswordRequest, OtpSendRequest, RefreshTokenRequest, ResetPasswordRequest
 
 
 class FakeAuthService:
@@ -22,6 +22,15 @@ class FakeAuthService:
     async def logout(self, refresh_token: str) -> None:
         """Accept the refresh token as the logout credential."""
         self.logout_token = refresh_token
+
+    async def request_password_reset(self, email: str | None, phone: str | None) -> str:
+        """Return a deterministic reset OTP for endpoint testing."""
+        del email, phone
+        return "123456"
+
+    async def reset_password(self, email: str | None, phone: str | None, code: str, new_password: str) -> None:
+        """Accept a valid reset request for endpoint testing."""
+        self.reset_request = email, phone, code, new_password
 
 
 def test_success_response_has_unified_envelope():
@@ -55,6 +64,24 @@ def test_logout_endpoint_uses_refresh_token_without_access_token():
 
     assert response.message == "Logout successful"
     assert service.logout_token == "r" * 32
+
+
+def test_password_reset_endpoints_use_unified_response_envelope():
+    """Forgot and reset password endpoints return the expected envelope data."""
+    service = FakeAuthService()
+
+    forgot_response = asyncio.run(forgot_password(ForgotPasswordRequest(email="user@example.com"), service))
+    reset_response = asyncio.run(
+        reset_password(
+            ResetPasswordRequest(email="user@example.com", code="123456", new_password="new-password"),
+            service,
+        )
+    )
+
+    assert forgot_response.data is not None
+    assert forgot_response.data.otp == "123456"
+    assert reset_response.data is None
+    assert service.reset_request == ("user@example.com", None, "123456", "new-password")
 
 
 def test_error_response_has_unified_envelope():

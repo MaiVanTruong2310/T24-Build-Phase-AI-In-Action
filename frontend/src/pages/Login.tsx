@@ -24,6 +24,8 @@ export function Login() {
   
   const { loading, error, user } = useSelector((state: RootState) => state.auth)
 
+  const [validationError, setValidationError] = useState('')
+
   useEffect(() => {
     if (user) {
       if (user.role === 'staff') {
@@ -36,6 +38,18 @@ export function Login() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    setValidationError('')
+
+    if (username.length < 7) {
+      setValidationError('Tên đăng nhập (Email/SĐT) quá ngắn.')
+      return
+    }
+
+    if (password.length < 8 || password.length > 128) {
+      setValidationError('Mật khẩu phải có độ dài từ 8 đến 128 ký tự.')
+      return
+    }
+
     await dispatch(loginUser({ username, password }))
   }
 
@@ -59,10 +73,10 @@ export function Login() {
           Chào mừng bạn quay lại. Vui lòng đăng nhập để tiếp tục chăm sóc sức khỏe.
         </p>
 
-        {error && (
+        {(error || validationError) && (
           <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600 flex items-start gap-2">
             <div className="mt-0.5">⚠️</div>
-            <p>{error}</p>
+            <p>{validationError || error}</p>
           </div>
         )}
 

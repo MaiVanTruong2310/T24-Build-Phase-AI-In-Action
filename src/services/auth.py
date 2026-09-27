@@ -54,6 +54,7 @@ class AuthService:
                 email=email,
                 phone=phone,
                 password_hash=hash_password(request.password) if request.password else None,
+                full_name=request.full_name,
                 role="patient",
                 status="pending_verification",
                 date_of_birth=request.date_of_birth,
@@ -82,6 +83,41 @@ class AuthService:
         )
         return mock_code
 
+    async def request_password_reset(self, email: str | None, phone: str | None) -> str | None:
+        """Issue a reset OTP without revealing whether the account exists."""
+        normalized_email, normalized_phone = _normalized_identity(email, phone)
+        target = _target(normalized_email, normalized_phone)
+        async with self.session.begin():
+            user = await self.users.get_by_identifier(normalized_email, normalized_phone)
+            if user is None:
+                logger.info("AuthService.request_password_reset generic response")
+                return None
+            mock_code = await self._create_otp(user, target, "reset_password")
+        logger.info(
+            "AuthService.request_password_reset challenge created",
+            extra={"mock_code_returned": mock_code is not None},
+        )
+        return mock_code
+
+    async def reset_password(self, email: str | None, phone: str | None, code: str, new_password: str) -> None:
+        """Consume a reset OTP, replace the password hash and revoke sessions."""
+        normalized_email, normalized_phone = _normalized_identity(email, phone)
+        target = _target(normalized_email, normalized_phone)
+        verification_error: AuthenticationError | None = None
+        async with self.session.begin():
+            user = await self.users.get_by_identifier(normalized_email, normalized_phone)
+            if user is None or user.status != "active":
+                logger.warning("AuthService.reset_password account unavailable")
+                raise AuthenticationError("INVALID_OTP", "Invalid or expired OTP")
+            verification_error = await self._consume_otp(target, "reset_password", code)
+            if verification_error is None:
+                user.password_hash = hash_password(new_password)
+                await self.auth.revoke_user_sessions(user.id, revoked_at=_now())
+                await self.session.flush()
+        if verification_error:
+            raise verification_error
+        logger.info("AuthService.reset_password password updated")
+
     async def verify_registration_otp(self, email: str | None, phone: str | None, code: str) -> User:
         """Consume a registration OTP and activate the matching account."""
         normalized_email, normalized_phone = _normalized_identity(email, phone)
@@ -92,7 +128,7 @@ class AuthService:
             if user is None:
                 logger.warning("AuthService.verify_registration_otp identity not found")
                 raise AuthenticationError("INVALID_OTP", "Invalid or expired OTP")
-            verification_error = await self._consume_otp(target, "register", code)
+            verification_error = await self._consume_otp(target, "register", code or 999999)
             if verification_error is None:
                 now = _now()
                 user.status = "active"

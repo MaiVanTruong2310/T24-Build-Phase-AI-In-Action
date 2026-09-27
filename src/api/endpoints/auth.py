@@ -10,12 +10,14 @@ from src.api.response import success_response
 from src.db.dependencies import get_db_session
 from src.models.user import User
 from src.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     OtpSendRequest,
     OtpSendResponse,
     OtpVerifyRequest,
     RefreshTokenRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     SessionResponse,
     TokenResponse,
     UpdateProfileRequest,
@@ -61,6 +63,26 @@ async def verify_otp(
     """Verify a registration OTP and activate the account."""
     user = await service.verify_registration_otp(request.email, request.phone, request.code)
     return success_response(UserResponse.model_validate(user), "OTP verified")
+
+
+@router.post("/forgot-password", response_model=ApiResponse[OtpSendResponse])
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    service: AuthService = Depends(get_auth_service),
+) -> ApiResponse[OtpSendResponse]:
+    """Issue a password-reset OTP without revealing account existence."""
+    otp = await service.request_password_reset(request.email, request.phone)
+    return success_response(OtpSendResponse(otp=otp), "If the account exists, an OTP was sent")
+
+
+@router.post("/reset-password", response_model=ApiResponse[None])
+async def reset_password(
+    request: ResetPasswordRequest,
+    service: AuthService = Depends(get_auth_service),
+) -> ApiResponse[None]:
+    """Reset the password after validating the reset OTP."""
+    await service.reset_password(request.email, request.phone, request.code, request.new_password)
+    return success_response(None, "Password reset successful")
 
 
 @router.post("/login", response_model=ApiResponse[TokenResponse])

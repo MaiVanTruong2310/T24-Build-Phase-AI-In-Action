@@ -1,23 +1,137 @@
-import { useState, FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Loader2, Phone } from 'lucide-react'
+import { useState, FormEvent, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
+import { AppDispatch, RootState } from '../app/store'
+import { registerUser, verifyOtp, resetRegisterSuccess } from '../features/auth/authSlice'
+import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Loader2, Phone, Key } from 'lucide-react'
 
 export function Register() {
-  const [loading, setLoading] = useState(false)
+  const [formData, setFormData] = useState({
+    full_name: '',
+    phone: '',
+    date_of_birth: '',
+    gender: '',
+    citizen_id: '',
+    health_insurance_code: '',
+    password: '',
+    confirm_password: ''
+  })
+  const [otpCode, setOtpCode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [validationError, setValidationError] = useState('')
+
+  const dispatch = useDispatch<AppDispatch>()
+  const navigate = useNavigate()
+  
+  const { loading, error, registerSuccess } = useSelector((state: RootState) => state.auth)
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    })
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false)
-    }, 1500)
+    setValidationError('')
+
+    if (formData.password) {
+      if (formData.password.length < 8 || formData.password.length > 128) {
+        setValidationError('Mật khẩu phải có độ dài từ 8 đến 128 ký tự.')
+        return
+      }
+      if (formData.password !== formData.confirm_password) {
+        setValidationError('Mật khẩu xác nhận không khớp.')
+        return
+      }
+    }
+
+    if (!formData.full_name || !formData.phone || !formData.date_of_birth || !formData.gender) {
+      setValidationError('Vui lòng điền đầy đủ các trường bắt buộc (*).')
+      return
+    }
+
+    const payload = {
+      full_name: formData.full_name,
+      phone: formData.phone,
+      date_of_birth: formData.date_of_birth,
+      gender: formData.gender,
+      ...(formData.password && { password: formData.password }),
+      ...(formData.citizen_id && { citizen_id: formData.citizen_id }),
+      ...(formData.health_insurance_code && { health_insurance_code: formData.health_insurance_code }),
+    }
+
+    await dispatch(registerUser(payload))
+  }
+
+  const handleVerifyOtp = async (e: FormEvent) => {
+    e.preventDefault()
+    setValidationError('')
+    if (!otpCode || otpCode.length !== 6) {
+      setValidationError('Vui lòng nhập mã OTP 6 chữ số.')
+      return
+    }
+
+    const res = await dispatch(verifyOtp({ phone: formData.phone, code: otpCode }))
+    if (verifyOtp.fulfilled.match(res)) {
+      alert('Xác thực thành công! Vui lòng đăng nhập.')
+      dispatch(resetRegisterSuccess())
+      navigate('/login')
+    }
+  }
+
+  if (registerSuccess) {
+    return (
+      <div className="w-full max-w-md mx-auto">
+        <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold text-slate-900 mb-3">Xác thực tài khoản</h2>
+            <p className="text-sm text-slate-500">
+              Vui lòng nhập mã OTP vừa được gửi đến số điện thoại <b>{formData.phone}</b>
+            </p>
+          </div>
+
+          {(error || validationError) && (
+            <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600 flex items-start gap-2">
+              <div className="mt-0.5">⚠️</div>
+              <p>{validationError || error}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleVerifyOtp} className="space-y-6">
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-900 block">Mã xác thực (OTP)</label>
+              <div className="relative">
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  placeholder="Nhập 6 chữ số"
+                  className="w-full pl-10 pr-4 py-3 text-center tracking-[0.5em] font-bold text-lg rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all bg-white"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || otpCode.length !== 6}
+              className="w-full bg-sky-700 hover:bg-sky-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Xác nhận OTP'}
+            </button>
+          </form>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="w-full max-w-2xl">
+    <div className="w-full max-w-2xl mx-auto">
       <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-xs font-semibold mb-4">
@@ -52,6 +166,13 @@ export function Register() {
           </span>
         </div>
 
+        {(error || validationError) && (
+          <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600 flex items-start gap-2">
+            <div className="mt-0.5">⚠️</div>
+            <p>{validationError || error}</p>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Section 1 */}
           <div>
@@ -65,7 +186,7 @@ export function Register() {
                 <label className="text-sm font-semibold text-slate-900">Họ và tên <span className="text-red-500">*</span></label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input type="text" placeholder="Nguyễn Văn A" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" />
+                  <input type="text" name="full_name" value={formData.full_name} onChange={handleChange} placeholder="Nguyễn Văn A" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" disabled={loading} />
                 </div>
               </div>
               
@@ -78,18 +199,18 @@ export function Register() {
                 </div>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input type="text" placeholder="0912 345 678" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" />
+                  <input type="text" name="phone" value={formData.phone} onChange={handleChange} placeholder="0912 345 678" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" disabled={loading} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-semibold text-slate-900">Ngày sinh <span className="text-red-500">*</span></label>
-                  <input type="date" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm text-slate-500 bg-white" />
+                  <input type="date" name="date_of_birth" value={formData.date_of_birth} onChange={handleChange} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm text-slate-500 bg-white" disabled={loading} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-semibold text-slate-900">Giới tính <span className="text-red-500">*</span></label>
-                  <select className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm text-slate-500 bg-white">
+                  <select name="gender" value={formData.gender} onChange={handleChange} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm text-slate-500 bg-white" disabled={loading}>
                     <option value="">Chọn giới tính</option>
                     <option value="male">Nam</option>
                     <option value="female">Nữ</option>
@@ -114,7 +235,7 @@ export function Register() {
                 <label className="text-sm font-semibold text-slate-900">Số CCCD / Mã định danh cá nhân</label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input type="text" placeholder="12 chữ số" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" />
+                  <input type="text" name="citizen_id" value={formData.citizen_id} onChange={handleChange} placeholder="12 chữ số" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" disabled={loading} />
                 </div>
               </div>
 
@@ -125,7 +246,7 @@ export function Register() {
                 </div>
                 <div className="relative">
                   <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input type="text" placeholder="Gồm 15 ký tự - liên thông thanh toán" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" />
+                  <input type="text" name="health_insurance_code" value={formData.health_insurance_code} onChange={handleChange} placeholder="Gồm 15 ký tự - liên thông thanh toán" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" disabled={loading} />
                 </div>
               </div>
             </div>
@@ -140,32 +261,34 @@ export function Register() {
             
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-900">Mật khẩu <span className="text-red-500">*</span></label>
+                <label className="text-sm font-semibold text-slate-900">
+                  Mật khẩu <span className="text-xs text-slate-400 font-normal ml-1">(Tùy chọn)</span>
+                </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input 
                     type={showPassword ? "text" : "password"} 
-                    placeholder="Nhập ít nhất 8 ký tự" 
+                    name="password" value={formData.password} onChange={handleChange}
+                    placeholder="Nhập 8 đến 128 ký tự" 
                     className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" 
+                    disabled={loading}
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>Độ bảo mật mật khẩu:</span>
-                  <span>Chưa nhập</span>
-                </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-900">Xác nhận lại mật khẩu <span className="text-red-500">*</span></label>
+                <label className="text-sm font-semibold text-slate-900">Xác nhận lại mật khẩu</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input 
                     type={showConfirmPassword ? "text" : "password"} 
+                    name="confirm_password" value={formData.confirm_password} onChange={handleChange}
                     placeholder="Nhập lại mật khẩu vừa tạo" 
                     className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white" 
+                    disabled={loading}
                   />
                   <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -196,16 +319,6 @@ export function Register() {
               </>
             )}
           </button>
-
-          <div className="bg-emerald-50 rounded-xl p-4 flex gap-3 border border-emerald-100">
-            <ShieldCheck className="w-6 h-6 text-emerald-600 shrink-0" />
-            <div>
-              <h4 className="text-xs font-bold text-emerald-800 mb-0.5">Cam kết bảo mật y tế số Quốc Gia</h4>
-              <p className="text-[11px] text-emerald-600/90 leading-relaxed">
-                Dữ liệu cá nhân & hồ sơ sức khỏe điện tử (EHR) được mã hóa tuân thủ quy chuẩn của Bộ Y Tế.
-              </p>
-            </div>
-          </div>
         </form>
 
         <div className="mt-8 text-center text-sm">

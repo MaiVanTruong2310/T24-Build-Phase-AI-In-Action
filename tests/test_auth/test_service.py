@@ -8,6 +8,7 @@ import pytest
 
 from src.config import Settings, get_settings
 from src.core.exceptions import AuthenticationError
+from src.core.security import hash_refresh_token, verify_password
 from src.models.auth import OtpChallenge, RefreshSession
 from src.models.user import User
 from src.schemas.auth import LoginRequest, RegisterRequest
@@ -224,6 +225,49 @@ def test_send_otp_generates_random_six_digit_code_when_not_configured():
     assert code is not None
     assert len(code) == 6
     assert code.isdigit()
+
+
+def test_password_reset_request_returns_mock_otp_for_existing_account():
+    """An existing account receives a reset OTP with the dedicated purpose."""
+    service, _, auth, _ = build_service()
+    user = asyncio.run(service.register(RegisterRequest(email="user@example.com", password="old-password")))
+    user.status = "active"
+
+    code = asyncio.run(service.request_password_reset("user@example.com", None))
+
+    assert code == "123456"
+    assert auth.otp_challenges[-1].purpose == "reset_password"
+
+
+def test_password_reset_request_hides_unknown_account():
+    """An unknown account gets the same empty result without an OTP challenge."""
+    service, _, auth, _ = build_service()
+
+    code = asyncio.run(service.request_password_reset("missing@example.com", None))
+
+    assert code is None
+    assert auth.otp_challenges == []
+
+
+def test_reset_password_changes_hash_and_revokes_sessions():
+    """A valid reset OTP changes the password and revokes active sessions."""
+    service, _, auth, _ = build_service()
+    user = asyncio.run(service.register(RegisterRequest(email="user@example.com", password="old-password")))
+    user.status = "active"
+    session = RefreshSession(
+        user_id=user.id,
+        token_hash=hash_refresh_token("refresh-token-for-test"),
+        expires_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    asyncio.run(auth.create_refresh_session(session))
+    asyncio.run(service.request_password_reset("user@example.com", None))
+
+    asyncio.run(service.reset_password("user@example.com", None, "123456", "new-password"))
+
+    assert user.password_hash is not None
+    assert verify_password("new-password", user.password_hash)
+    assert not verify_password("old-password", user.password_hash)
+    assert session.revoked_at is not None
 
 
 def test_verify_registration_otp_persists_failed_attempt_and_activates_user():

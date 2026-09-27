@@ -11,6 +11,7 @@ class RegisterRequest(BaseModel):
     email: str | None = Field(default=None, min_length=3, max_length=320)
     phone: str | None = Field(default=None, min_length=7, max_length=32)
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    full_name: str | None = Field(default=None, max_length=200)
     date_of_birth: date | None = None
     gender: Literal["male", "female", "other", "unspecified"] | None = None
     citizen_id: str | None = Field(default=None, pattern=r"^\d{12}$")
@@ -47,6 +48,36 @@ class OtpSendResponse(BaseModel):
     """Return the OTP only when the configured delivery provider is a mock."""
 
     otp: str | None = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Identify the account that should receive a password-reset OTP."""
+
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "ForgotPasswordRequest":
+        """Require an email or phone without exposing account existence."""
+        if not self.email and not self.phone:
+            raise ValueError("email or phone is required")
+        return self
+
+
+class ResetPasswordRequest(BaseModel):
+    """Verify a reset OTP and provide the replacement password."""
+
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "ResetPasswordRequest":
+        """Require an email or phone for password reset."""
+        if not self.email and not self.phone:
+            raise ValueError("email or phone is required")
+        return self
 
 
 class LoginRequest(BaseModel):
