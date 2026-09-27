@@ -1,18 +1,45 @@
+import asyncio
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.api.endpoints.auth import router as auth_router
+from src.api.endpoints.auth import user_router
+from src.api.handlers import (
+    app_error_handler,
+    http_error_handler,
+    unexpected_error_handler,
+    validation_error_handler,
+)
 from src.api.routes import router
 from src.config import get_settings
+from src.core.exceptions import AppError
+from src.core.logging import get_logger
+from src.db.session import initialize_database
+
+logger = get_logger(__name__)
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Log application startup and shutdown around the FastAPI lifespan."""
     settings = get_settings()
-    print(f"Starting {settings.app_name} in {settings.app_env} mode")
+    logger.info("Starting %s in %s mode", settings.app_name, settings.app_env)
+    if settings.database_auto_create:
+        try:
+            await initialize_database()
+        except Exception:
+            logger.exception("main.lifespan database initialization failed")
+            raise
     yield
-    print("Shutting down...")
+    logger.info("Shutting down")
 
 
 app = FastAPI(
@@ -32,8 +59,15 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(user_router, prefix="/api/v1")
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.add_exception_handler(StarletteHTTPException, http_error_handler)
+app.add_exception_handler(Exception, unexpected_error_handler)
 
 
 @app.get("/health")
 async def health():
+    """Return a lightweight service health response."""
     return {"status": "ok", "env": settings.app_env}
