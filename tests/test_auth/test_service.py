@@ -338,8 +338,9 @@ def test_expired_refresh_token_is_rejected(monkeypatch):
         get_settings.cache_clear()
 
 
-def test_logout_revokes_session_by_refresh_token():
+def test_logout_revokes_session_by_refresh_token(monkeypatch):
     """Logout revokes the session without requiring an access-token user lookup."""
+    configure_security_environment(monkeypatch)
     service, _, auth, _ = build_service()
     user = asyncio.run(service.register(RegisterRequest(email="user@example.com", password="correct-password")))
     user.status = "active"
