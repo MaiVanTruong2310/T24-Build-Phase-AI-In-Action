@@ -1,11 +1,12 @@
 """RBAC and API-surface tests for the medical catalog."""
 
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import pytest
 
 from src.api.dependencies import get_current_user
-from src.api.endpoints.catalog import get_catalog_service
+from src.api.endpoints.catalog import _availability_window, get_catalog_service
 from src.main import app
 
 
@@ -53,3 +54,19 @@ async def test_staff_can_access_staff_catalog(client):
 
     assert response.status_code == 200
     assert response.json()["data"] == []
+
+
+def test_availability_window_uses_business_timezone_for_date_range():
+    """A date range is converted from Vietnam local midnights to UTC."""
+    starts_from, starts_to = _availability_window(date(2026, 9, 28), date(2026, 9, 29), None)
+
+    assert starts_from == datetime(2026, 9, 27, 17, tzinfo=UTC)
+    assert starts_to == datetime(2026, 9, 29, 17, tzinfo=UTC)
+
+
+def test_availability_window_for_selected_date_covers_one_local_day():
+    """A selected Vietnam date covers exactly that local calendar day."""
+    starts_from, starts_to = _availability_window(None, None, date(2026, 9, 28))
+
+    assert starts_from == datetime(2026, 9, 27, 17, tzinfo=UTC)
+    assert starts_to == datetime(2026, 9, 28, 17, tzinfo=UTC)

@@ -1,6 +1,19 @@
-import { FileText, ShieldCheck, BadgeCheck, ArrowRight, ArrowLeft, Phone } from 'lucide-react';
+import { FileText, ShieldCheck, BadgeCheck, ArrowRight, ArrowLeft, Phone, Loader2 } from 'lucide-react';
 
-export function BookingSummary() {
+interface Props {
+  specialtyName: string;
+  doctorName: string;
+  date: string;
+  slotTime: string;
+  type: string;
+  price: number;
+  onBook: () => void;
+  isBooking: boolean;
+}
+
+export function BookingSummary({ specialtyName, doctorName, date, slotTime, type, price, onBook, isBooking }: Props) {
+  const finalPrice = price * 0.2; // Assuming 80% BHYT coverage
+
   return (
     <>
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 sticky top-6 overflow-hidden">
@@ -11,7 +24,7 @@ export function BookingSummary() {
           </h3>
           <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-1 rounded">Tự động lưu</span>
         </div>
-        
+
         <div className="p-6">
           <div className="mb-6">
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">NGƯỜI KHÁM</div>
@@ -39,34 +52,34 @@ export function BookingSummary() {
           <div className="space-y-3 mb-6">
             <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
               <div className="text-slate-500">Chuyên khoa:</div>
-              <div className="font-bold text-slate-900">Tim Mạch Can Thiệp</div>
+              <div className="font-bold text-slate-900">{specialtyName || 'Chưa chọn'}</div>
             </div>
             <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
               <div className="text-slate-500">Bác sĩ khám:</div>
-              <div className="font-bold text-sky-700">BS. CKII Lê Hoàng Nam</div>
+              <div className="font-bold text-sky-700">{doctorName || 'Chưa chọn'}</div>
             </div>
             <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
               <div className="text-slate-500">Thời gian hẹn:</div>
-              <div className="font-bold text-slate-900">14:15 - Thứ Tư, 24/10/2023</div>
+              <div className="font-bold text-slate-900">{slotTime ? `${slotTime} - Ngày ${date}` : 'Chưa chọn'}</div>
             </div>
             <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
               <div className="text-slate-500">Hình thức:</div>
-              <div className="font-bold text-slate-900">Khám Trực Tiếp (P.304)</div>
+              <div className="font-bold text-slate-900">{type === 'offline' ? 'Khám Trực Tiếp (P.304)' : 'Khám Video Từ Xa'}</div>
             </div>
           </div>
 
           <div className="border-t border-slate-100 pt-4 mb-6">
             <div className="flex justify-between text-sm mb-2 text-slate-600">
               <span>Phí khám lâm sàng:</span>
-              <span>350.000 VNĐ</span>
+              <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price)}</span>
             </div>
             <div className="flex justify-between text-sm mb-4 text-emerald-600 font-medium">
               <span>Giảm trừ BHYT điện tử (80%):</span>
-              <span>-280.000 VNĐ</span>
+              <span>-{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price * 0.8)}</span>
             </div>
             <div className="flex justify-between items-end mt-4">
               <span className="font-bold text-slate-900">Tạm tính thanh toán:</span>
-              <span className="text-2xl font-bold text-sky-700">70.000 VNĐ</span>
+              <span className="text-2xl font-bold text-sky-700">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(finalPrice)}</span>
             </div>
           </div>
 
@@ -75,8 +88,16 @@ export function BookingSummary() {
             <span className="leading-relaxed"><strong className="font-bold">Bảo đảm chuyên môn HITL:</strong> Yêu cầu đặt lịch sẽ được chuyển ngay đến Bàn Điều Phối Y Tế duyệt và phân phòng trong vòng 15 phút.</span>
           </div>
 
-          <button className="w-full bg-sky-700 hover:bg-sky-800 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-md shadow-sky-700/20 mb-3">
-            Xác nhận đặt lịch hẹn ngay <ArrowRight className="w-4 h-4" />
+          <button
+            onClick={onBook}
+            disabled={isBooking || !doctorName || !slotTime}
+            className="w-full bg-sky-700 hover:bg-sky-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-md shadow-sky-700/20 mb-3"
+          >
+            {isBooking ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Đang xử lý...</>
+            ) : (
+              <>Xác nhận đặt lịch hẹn ngay <ArrowRight className="w-4 h-4" /></>
+            )}
           </button>
           <button className="w-full py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center gap-2">
             <ArrowLeft className="w-4 h-4" /> Quay lại trang tư vấn AI

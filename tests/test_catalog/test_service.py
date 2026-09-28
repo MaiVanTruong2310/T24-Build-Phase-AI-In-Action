@@ -9,7 +9,7 @@ import pytest
 
 from src.core.exceptions import ConflictError
 from src.models.catalog import DoctorSchedule
-from src.schemas.catalog import BulkScheduleImportRequest, DoctorScheduleUpdate
+from src.schemas.catalog import BulkScheduleImportRequest, DoctorScheduleUpdate, ScheduleCancellationRequest
 from src.services.catalog import CatalogService
 
 
@@ -100,7 +100,12 @@ def test_bulk_import_keeps_valid_records_when_one_record_is_malformed():
 def test_schedule_update_rejects_stale_optimistic_lock_version():
     """A stale schedule version is rejected as a conflict before mutation."""
     starts_at = datetime.now(UTC)
-    schedule = SimpleNamespace(version=3, starts_at=starts_at, ends_at=starts_at + timedelta(hours=1))
+    schedule = SimpleNamespace(
+        version=3,
+        status="available",
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=1),
+    )
     service = CatalogService(FakeSession())
     service.catalog = FakeCatalog(schedule)
 
@@ -108,7 +113,29 @@ def test_schedule_update_rejects_stale_optimistic_lock_version():
         asyncio.run(
             service.update_schedule(
                 uuid4(),
-                DoctorScheduleUpdate(expected_version=2, capacity=4),
+                DoctorScheduleUpdate(
+                    expected_version=2,
+                    starts_at=starts_at,
+                    ends_at=starts_at + timedelta(hours=1),
+                    capacity=4,
+                    status="available",
+                ),
+                uuid4(),
+            )
+        )
+
+
+def test_cancel_schedule_rejects_a_schedule_that_is_already_cancelled():
+    """Cancellation is a terminal state and repeated requests conflict."""
+    schedule = SimpleNamespace(status="cancelled")
+    service = CatalogService(FakeSession())
+    service.catalog = FakeCatalog(schedule)
+
+    with pytest.raises(ConflictError, match="Schedule is already cancelled"):
+        asyncio.run(
+            service.cancel_schedule(
+                uuid4(),
+                ScheduleCancellationRequest(reason="Doctor unavailable"),
                 uuid4(),
             )
         )

@@ -15,11 +15,13 @@ const AFTERNOON_SLOTS = [
   { id: 'a4', time: '16:00', status: 'available', slots: 1 },
 ];
 
+type AppointmentType = 'offline' | 'telehealth';
+
 interface Props {
   selectedDate: string;
   onSelectDate: (d: string) => void;
-  selectedType: string;
-  onSelectType: (t: string) => void;
+  selectedType: AppointmentType;
+  onSelectType: (t: AppointmentType) => void;
   selectedSlot: string;
   onSelectSlot: (s: string) => void;
 }

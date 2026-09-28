@@ -1,20 +1,14 @@
-import { HeartPulse, Brain, Ear, Stethoscope, CheckCircle2, ChevronRight } from 'lucide-react';
+import { HeartPulse, CheckCircle2, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
-
-const SPECIALTIES = [
-  { id: 'tm', name: 'Tim Mạch Can Thiệp', desc: 'Khớp 98% biểu hiện tức ngực', icon: HeartPulse },
-  { id: 'hh', name: 'Nội Hô Hấp', desc: 'Khó thở, ho kéo dài', icon: Brain }, // Brain placeholder
-  { id: 'tmh', name: 'Tai Mũi Họng', desc: 'Viêm xoang, amidan, họng hạt', icon: Ear },
-  { id: 'tk', name: 'Nội Thần Kinh', desc: 'Chóng mặt, tiền đình, mất ngủ', icon: Brain },
-  { id: 'th', name: 'Tiêu Hóa - Gan Mật', desc: 'Trào ngược, đại tràng, đau dạ dày', icon: Stethoscope },
-];
+import { Specialty } from '../api';
 
 interface Props {
+  specialties: Specialty[];
   selectedId: string;
   onSelect: (id: string) => void;
 }
 
-export function SpecialtySelector({ selectedId, onSelect }: Props) {
+export function SpecialtySelector({ specialties, selectedId, onSelect }: Props) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -25,9 +19,11 @@ export function SpecialtySelector({ selectedId, onSelect }: Props) {
         <span className="text-[10px] font-semibold text-sky-600 bg-sky-50 px-2 py-0.5 rounded">Tự động gợi ý từ AI</span>
       </div>
       <div className="space-y-2">
-        {SPECIALTIES.map(item => {
+        {specialties.length === 0 && <p className="text-sm text-slate-500 p-2">Đang tải...</p>}
+        {specialties.map(item => {
           const isSelected = item.id === selectedId;
-          const Icon = item.icon;
+          const Icon = HeartPulse; // Can map icons based on code later
+
           return (
             <button
               key={item.id}
@@ -43,7 +39,7 @@ export function SpecialtySelector({ selectedId, onSelect }: Props) {
                 </div>
                 <div>
                   <div className={clsx("font-semibold text-sm transition-colors", isSelected ? "text-sky-900" : "text-slate-800")}>{item.name}</div>
-                  <div className={clsx("text-[11px] mt-0.5 transition-colors", isSelected ? "text-sky-700" : "text-slate-500")}>{item.desc}</div>
+                  <div className={clsx("text-[11px] mt-0.5 transition-colors", isSelected ? "text-sky-700" : "text-slate-500")}>{item.description}</div>
                 </div>
               </div>
               {isSelected ? (
