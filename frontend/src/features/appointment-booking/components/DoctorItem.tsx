@@ -1,0 +1,49 @@
+import React from 'react';
+import { Star } from 'lucide-react';
+import clsx from 'clsx';
+import { Doctor } from './types';
+
+interface DoctorItemProps {
+  doctor: Doctor;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}
+
+export const DoctorItem = React.memo(({ doctor, isSelected, onSelect }: DoctorItemProps) => {
+  return (
+    <div 
+      onClick={() => onSelect(doctor.id)}
+      className={clsx(
+        "flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all duration-200",
+        isSelected 
+          ? "border-sky-500 bg-sky-50 ring-1 ring-sky-500" 
+          : "border-slate-200 bg-white hover:border-sky-300 hover:shadow-sm"
+      )}
+    >
+      <img 
+        src={doctor.avatar} 
+        alt={doctor.name} 
+        className="w-16 h-16 rounded-full object-cover border border-slate-200"
+      />
+      <div className="flex-1">
+        <h4 className="font-bold text-slate-900">{doctor.title} {doctor.name}</h4>
+        <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center text-amber-500 text-xs font-semibold">
+            <Star className="w-3.5 h-3.5 fill-current mr-0.5" />
+            {doctor.rating.toFixed(1)}
+          </div>
+          <span className="text-slate-300 text-xs">•</span>
+          <span className="text-xs text-slate-500">Chuyên gia Y tế</span>
+        </div>
+      </div>
+      <div className="shrink-0 flex items-center justify-center">
+        <div className={clsx(
+          "w-5 h-5 rounded-full border flex items-center justify-center transition-colors",
+          isSelected ? "border-sky-500 bg-sky-500" : "border-slate-300"
+        )}>
+          {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
+        </div>
+      </div>
+    </div>
+  );
+});

@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, XCircle, AlertTriangle, FileText } from 'lucide-react'
 
 export function Comparison() {
   return (

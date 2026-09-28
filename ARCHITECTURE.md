@@ -142,7 +142,7 @@ flowchart LR
 
 ## Booking Flow
 
-`Search → Suggest → Patient agrees → HITL coordinator approval → Confirmed → Reminder`
+`Search → Suggest → Patient agrees → HITL staff approval → Confirmed → Reminder`
 
 ## Deployment
 

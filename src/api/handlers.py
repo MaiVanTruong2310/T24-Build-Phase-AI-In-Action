@@ -12,7 +12,7 @@ from src.core.exceptions import AppError
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_CLIENT_ERROR_CODES = frozenset({400, 401, 403, 404, 408, 429})
+SUPPORTED_CLIENT_ERROR_CODES = frozenset({400, 401, 403, 404, 408, 409, 429})
 
 
 def _public_error_code(status: int) -> int:

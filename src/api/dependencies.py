@@ -26,14 +26,20 @@ async def get_current_user(
     except (KeyError, ValueError) as exc:
         raise AuthenticationError("INVALID_TOKEN", "Invalid access token") from exc
     user = await UserRepository(session).get_by_id(user_id)
-    await session.rollback()
+    # SQLAlchemy starts an implicit read transaction for ``session.get``.
+    # Staff write services open their own explicit transaction on this same
+    # request-scoped session, so close the read-only transaction first. The
+    # session factory uses ``expire_on_commit=False``, so the loaded user
+    # remains available after this read-only commit.
+    await session.commit()
+
     if user is None or user.status != "active":
         raise AuthenticationError("INVALID_TOKEN", "User is not active")
     return user
 
 
-async def require_coordinator(user: User = Depends(get_current_user)) -> User:
-    """Require the coordinator role."""
-    if user.role != "coordinator":
+async def require_staff(user: User = Depends(get_current_user)) -> User:
+    """Require the staff role."""
+    if user.role != "staff":
         raise AuthorizationError()
     return user
