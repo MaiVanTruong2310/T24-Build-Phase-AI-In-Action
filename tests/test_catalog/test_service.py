@@ -44,9 +44,18 @@ class FakeCatalog:
     def __init__(self, schedule):
         self.schedule = schedule
 
-    async def get_schedule(self, schedule_id):
+    async def get_schedule(self, schedule_id, *, for_update=False):
         del schedule_id
+        del for_update
         return self.schedule
+
+    async def lock_doctor(self, doctor_id):
+        del doctor_id
+        return SimpleNamespace(status="active")
+
+    async def get_facility(self, facility_id):
+        del facility_id
+        return SimpleNamespace(status="active")
 
     async def add_audit_event(self, event):
         del event
@@ -130,6 +139,8 @@ def test_schedule_update_rejects_stale_optimistic_lock_version():
     """A stale schedule version is rejected as a conflict before mutation."""
     starts_at = datetime.now(UTC)
     schedule = SimpleNamespace(
+        doctor_id=uuid4(),
+        facility_id=uuid4(),
         version=3,
         status="available",
         starts_at=starts_at,
@@ -146,6 +157,43 @@ def test_schedule_update_rejects_stale_optimistic_lock_version():
                     expected_version=2,
                     starts_at=starts_at,
                     ends_at=starts_at + timedelta(hours=1),
+                    capacity=4,
+                    status="available",
+                ),
+                uuid4(),
+            )
+        )
+
+
+def test_schedule_update_rejects_update_when_owner_is_inactive():
+    """An existing schedule cannot be changed after its doctor is deactivated."""
+    starts_at = datetime.now(UTC)
+    schedule = SimpleNamespace(
+        id=uuid4(),
+        version=3,
+        status="available",
+        doctor_id=uuid4(),
+        facility_id=uuid4(),
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=1),
+    )
+
+    class InactiveOwnerCatalog(FakeCatalog):
+        async def lock_doctor(self, doctor_id):
+            del doctor_id
+            return SimpleNamespace(status="inactive")
+
+    service = CatalogService(FakeSession())
+    service.catalog = InactiveOwnerCatalog(schedule)
+
+    with pytest.raises(ConflictError, match="Doctor is not active"):
+        asyncio.run(
+            service.update_schedule(
+                schedule.id,
+                DoctorScheduleUpdate(
+                    expected_version=3,
+                    starts_at=starts_at + timedelta(hours=2),
+                    ends_at=starts_at + timedelta(hours=3),
                     capacity=4,
                     status="available",
                 ),

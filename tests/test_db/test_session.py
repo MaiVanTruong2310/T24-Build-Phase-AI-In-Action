@@ -8,6 +8,10 @@ from src.db import session as database_session
 class FakeConnection:
     """Minimal async connection used to verify SQLAlchemy sync callbacks."""
 
+    async def execute(self, statement) -> None:
+        """Accept the PostgreSQL extension bootstrap statement."""
+        assert "btree_gist" in str(statement)
+
     async def run_sync(self, callback) -> None:
         """Execute the metadata callback with a fake synchronous connection."""
         callback(object())

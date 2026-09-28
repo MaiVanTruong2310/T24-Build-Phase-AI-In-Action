@@ -12,13 +12,15 @@ from src.models.catalog import Doctor, DoctorSchedule, Facility
 class ScheduleRepositoryMixin:
     """Schedule queries composed into the catalog repository."""
 
-    async def get_schedule(self, schedule_id: UUID) -> DoctorSchedule | None:
+    async def get_schedule(self, schedule_id: UUID, *, for_update: bool = False) -> DoctorSchedule | None:
         """Fetch a schedule with its doctor and facility."""
         statement = (
             select(DoctorSchedule)
             .options(selectinload(DoctorSchedule.doctor), selectinload(DoctorSchedule.facility))
             .where(DoctorSchedule.id == schedule_id)
         )
+        if for_update:
+            statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def get_schedule_by_external_identity(
@@ -35,6 +37,11 @@ class ScheduleRepositoryMixin:
         )
         if for_update:
             statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def lock_doctor(self, doctor_id: UUID) -> Doctor | None:
+        """Lock a doctor row so schedule conflict checks serialize per doctor."""
+        statement = select(Doctor).where(Doctor.id == doctor_id).with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def find_schedule_conflict(

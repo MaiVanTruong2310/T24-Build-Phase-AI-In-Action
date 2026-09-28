@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from src.core.exceptions import ConflictError, NotFoundError
 from src.models.catalog import DoctorSchedule
@@ -24,62 +25,72 @@ class ScheduleServiceMixin:
 
     async def create_schedule(self, request: DoctorScheduleCreate, actor_id: UUID) -> DoctorSchedule:
         """Create a schedule after validating its doctor and facility."""
-        async with self.session.begin():
-            await self._validate_schedule_owners(request.doctor_id, request.facility_id)
-            if request.source_system and request.external_schedule_id:
-                existing = await self.catalog.get_schedule_by_external_identity(
-                    request.source_system, request.external_schedule_id
+        try:
+            async with self.session.begin():
+                await self._validate_schedule_owners(request.doctor_id, request.facility_id, lock_doctor=True)
+                if request.source_system and request.external_schedule_id:
+                    existing = await self.catalog.get_schedule_by_external_identity(
+                        request.source_system, request.external_schedule_id
+                    )
+                    if existing:
+                        raise ConflictError("SCHEDULE_EXISTS", "Schedule already exists")
+                conflict = await self.catalog.find_schedule_conflict(
+                    doctor_id=request.doctor_id,
+                    starts_at=request.starts_at,
+                    ends_at=request.ends_at,
                 )
-                if existing:
-                    raise ConflictError("SCHEDULE_EXISTS", "Schedule already exists")
-            conflict = await self.catalog.find_schedule_conflict(
-                doctor_id=request.doctor_id,
-                starts_at=request.starts_at,
-                ends_at=request.ends_at,
-            )
-            if conflict:
-                raise ConflictError(
-                    "SCHEDULE_TIME_CONFLICT",
-                    "Doctor already has a schedule overlapping this time range",
+                if conflict:
+                    raise ConflictError(
+                        "SCHEDULE_TIME_CONFLICT",
+                        "Doctor already has a schedule overlapping this time range",
+                    )
+                value = DoctorSchedule(
+                    **request.model_dump(),
+                    created_by=actor_id,
+                    updated_by=actor_id,
                 )
-            value = DoctorSchedule(
-                **request.model_dump(),
-                created_by=actor_id,
-                updated_by=actor_id,
-            )
-            self.session.add(value)
-            await self.session.flush()
-            await self._audit(actor_id, "doctor_schedule", value.id, "created", {"version": value.version})
+                self.session.add(value)
+                await self.session.flush()
+                await self._audit(actor_id, "doctor_schedule", value.id, "created", {"version": value.version})
+        except IntegrityError as exc:
+            self._raise_schedule_integrity_error(exc)
         return await self._required(self.catalog.get_schedule(value.id), "Schedule not found")
 
     async def update_schedule(self, schedule_id: UUID, request: DoctorScheduleUpdate, actor_id: UUID) -> DoctorSchedule:
         """Replace mutable schedule fields with optimistic locking."""
-        async with self.session.begin():
-            value = await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
-            if value.version != request.expected_version:
-                raise ConflictError("VERSION_MISMATCH", "Schedule version is stale")
-            if value.status == "cancelled":
-                raise ConflictError("SCHEDULE_ALREADY_CANCELLED", "Cancelled schedule cannot be updated")
-            updates = request.model_dump(exclude={"expected_version"})
-            if updates["ends_at"] <= updates["starts_at"]:
-                raise ConflictError("INVALID_SCHEDULE", "Schedule end must be after start")
-            conflict = await self.catalog.find_schedule_conflict(
-                doctor_id=value.doctor_id,
-                starts_at=updates["starts_at"],
-                ends_at=updates["ends_at"],
-                exclude_schedule_id=value.id,
-            )
-            if conflict:
-                raise ConflictError(
-                    "SCHEDULE_TIME_CONFLICT",
-                    "Doctor already has a schedule overlapping this time range",
+        try:
+            async with self.session.begin():
+                current = await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
+                await self._validate_schedule_owners(current.doctor_id, current.facility_id, lock_doctor=True)
+                value = await self._required(
+                    self.catalog.get_schedule(schedule_id, for_update=True), "Schedule not found"
                 )
-            for field, item in updates.items():
-                setattr(value, field, item)
-            value.updated_by = actor_id
-            value.version += 1
-            await self.session.flush()
-            await self._audit(actor_id, "doctor_schedule", value.id, "updated", {"version": value.version})
+                if value.version != request.expected_version:
+                    raise ConflictError("VERSION_MISMATCH", "Schedule version is stale")
+                if value.status == "cancelled":
+                    raise ConflictError("SCHEDULE_ALREADY_CANCELLED", "Cancelled schedule cannot be updated")
+                updates = request.model_dump(exclude={"expected_version"})
+                if updates["ends_at"] <= updates["starts_at"]:
+                    raise ConflictError("INVALID_SCHEDULE", "Schedule end must be after start")
+                conflict = await self.catalog.find_schedule_conflict(
+                    doctor_id=value.doctor_id,
+                    starts_at=updates["starts_at"],
+                    ends_at=updates["ends_at"],
+                    exclude_schedule_id=value.id,
+                )
+                if conflict:
+                    raise ConflictError(
+                        "SCHEDULE_TIME_CONFLICT",
+                        "Doctor already has a schedule overlapping this time range",
+                    )
+                for field, item in updates.items():
+                    setattr(value, field, item)
+                value.updated_by = actor_id
+                value.version += 1
+                await self.session.flush()
+                await self._audit(actor_id, "doctor_schedule", value.id, "updated", {"version": value.version})
+        except IntegrityError as exc:
+            self._raise_schedule_integrity_error(exc)
         return await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
 
     async def list_schedules(
@@ -187,7 +198,7 @@ class ScheduleServiceMixin:
 
     async def _upsert_schedule(self, record: ScheduleImportRecord, actor_id: UUID) -> tuple[DoctorSchedule, bool]:
         """Create or update one imported schedule within the caller transaction."""
-        await self._validate_schedule_owners(record.doctor_id, record.facility_id)
+        await self._validate_schedule_owners(record.doctor_id, record.facility_id, lock_doctor=True)
         value = await self.catalog.get_schedule_by_external_identity(
             record.source_system, record.external_schedule_id, for_update=True
         )
@@ -224,14 +235,30 @@ class ScheduleServiceMixin:
         await self._audit(actor_id, "doctor_schedule", value.id, "imported", {"version": value.version})
         return await self._required(self.catalog.get_schedule(value.id), "Schedule not found"), False
 
-    async def _validate_schedule_owners(self, doctor_id: UUID, facility_id: UUID) -> None:
+    async def _validate_schedule_owners(
+        self, doctor_id: UUID, facility_id: UUID, *, lock_doctor: bool = False
+    ) -> None:
         """Ensure schedule owners exist and are active."""
-        doctor = await self.catalog.get_doctor(doctor_id)
+        doctor = (
+            await self.catalog.lock_doctor(doctor_id)
+            if lock_doctor
+            else await self.catalog.get_doctor(doctor_id)
+        )
         facility = await self.catalog.get_facility(facility_id)
         if doctor is None or doctor.status != "active":
             raise ConflictError("DOCTOR_INACTIVE", "Doctor is not active")
         if facility is None or facility.status != "active":
             raise ConflictError("FACILITY_INACTIVE", "Facility is not active")
+
+    @staticmethod
+    def _raise_schedule_integrity_error(exc: IntegrityError) -> None:
+        """Convert the database overlap guard into the public conflict error."""
+        if "excl_doctor_schedule_time" in str(exc.orig):
+            raise ConflictError(
+                "SCHEDULE_TIME_CONFLICT",
+                "Doctor already has a schedule overlapping this time range",
+            ) from exc
+        raise exc
 
 
 def _import_record_label(payload: object, index: int) -> str:

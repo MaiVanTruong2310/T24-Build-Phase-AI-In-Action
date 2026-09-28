@@ -22,6 +22,7 @@ def test_catalog_metadata_contains_required_tables_and_constraints():
     schedule = Base.metadata.tables["doctor_schedules"]
     assert {constraint.name for constraint in schedule.constraints} >= {
         "uq_schedule_external_identity",
+        "excl_doctor_schedule_time",
         "ck_schedule_time_order",
         "ck_schedule_capacity_nonnegative",
     }

@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator
 from functools import lru_cache
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -54,5 +55,6 @@ async def initialize_database() -> None:
     table_names = sorted(Base.metadata.tables)
     logger.info("database.initialize_database creating missing tables", extra={"table_count": len(table_names)})
     async with engine.begin() as connection:
+        await connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist"))
         await connection.run_sync(Base.metadata.create_all)
     logger.info("database.initialize_database tables ready", extra={"table_count": len(table_names)})

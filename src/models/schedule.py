@@ -6,8 +6,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.base import Base
@@ -23,6 +24,13 @@ class DoctorSchedule(Base):
     __tablename__ = "doctor_schedules"
     __table_args__ = (
         UniqueConstraint("source_system", "external_schedule_id", name="uq_schedule_external_identity"),
+        ExcludeConstraint(
+            ("doctor_id", "="),
+            (text("tstzrange(starts_at, ends_at, '[)')"), "&&"),
+            where=text("status <> 'cancelled'"),
+            using="gist",
+            name="excl_doctor_schedule_time",
+        ),
         CheckConstraint("ends_at > starts_at", name="ck_schedule_time_order"),
         CheckConstraint("capacity >= 0", name="ck_schedule_capacity_nonnegative"),
     )
