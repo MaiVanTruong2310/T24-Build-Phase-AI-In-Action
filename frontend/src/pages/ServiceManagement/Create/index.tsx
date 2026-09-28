@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Save, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, Save } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ServiceFormSection } from './ServiceFormSection';
 import { PreviewSidebar } from './PreviewSidebar';

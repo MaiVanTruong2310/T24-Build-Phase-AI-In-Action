@@ -10,7 +10,7 @@ interface Props {
   specialties: Specialty[];
 }
 
-export function OrganizationSection({ form, errors, onChange, specialties }: Props) {
+export function OrganizationSection({ form, onChange, specialties }: Props) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
       <div className="flex items-center justify-between mb-6">

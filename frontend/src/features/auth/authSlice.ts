@@ -1,4 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
+import type { RootState } from '../../app/store'
 
 export interface User {
   id: string;
@@ -25,6 +26,10 @@ const initialState: AuthState = {
 }
 
 const API_BASE = '/api/v1';
+type RegistrationPayload = Record<string, string | boolean | null | undefined>;
+
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback;
 
 const translateError = (msg: string | undefined | null): string => {
   if (!msg) return 'Đã xảy ra lỗi.';
@@ -42,7 +47,7 @@ export const loginUser = createAsyncThunk(
     try {
       const isEmail = credentials.username.includes('@');
       
-      const payload: any = {
+      const payload: Record<string, string> = {
         [isEmail ? 'email' : 'phone']: credentials.username,
       };
 
@@ -93,8 +98,8 @@ export const loginUser = createAsyncThunk(
         token: token,
         refresh_token: refresh_token
       } as User;
-    } catch (err: any) {
-      return rejectWithValue(err.message || 'Đăng nhập thất bại');
+    } catch (err: unknown) {
+      return rejectWithValue(getErrorMessage(err, 'Đăng nhập thất bại'));
     }
   }
 )
@@ -103,7 +108,7 @@ export const logoutUser = createAsyncThunk(
   'auth/logoutUser',
   async (_, { getState, rejectWithValue }) => {
     try {
-      const state = getState() as any;
+      const state = getState() as RootState;
       const refresh_token = state.auth.user?.refresh_token || localStorage.getItem('refresh_token');
       
       localStorage.removeItem('access_token');
@@ -124,15 +129,15 @@ export const logoutUser = createAsyncThunk(
         console.warn('Logout API failed');
       }
       return true;
-    } catch (err: any) {
-      return rejectWithValue(err.message || 'Đăng xuất thất bại');
+    } catch (err: unknown) {
+      return rejectWithValue(getErrorMessage(err, 'Đăng xuất thất bại'));
     }
   }
 )
 
 export const registerUser = createAsyncThunk(
   'auth/registerUser',
-  async (userData: any, { rejectWithValue }) => {
+  async (userData: RegistrationPayload, { rejectWithValue }) => {
     try {
       const response = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
@@ -149,8 +154,8 @@ export const registerUser = createAsyncThunk(
       }
 
       return data.data;
-    } catch (err: any) {
-      return rejectWithValue(err.message || 'Đăng ký thất bại');
+    } catch (err: unknown) {
+      return rejectWithValue(getErrorMessage(err, 'Đăng ký thất bại'));
     }
   }
 )
@@ -159,7 +164,7 @@ export const verifyOtp = createAsyncThunk(
   'auth/verifyOtp',
   async (data: { email?: string; phone?: string; code: string }, { rejectWithValue }) => {
     try {
-      const payload: any = { purpose: 'register', code: data.code };
+      const payload: Record<string, string> = { purpose: 'register', code: data.code };
       if (data.email) payload.email = data.email;
       if (data.phone) payload.phone = data.phone;
       
@@ -173,8 +178,8 @@ export const verifyOtp = createAsyncThunk(
         throw new Error(translateError(resData.message) || 'Xác thực OTP thất bại');
       }
       return resData.data;
-    } catch (err: any) {
-      return rejectWithValue(err.message || 'Xác thực OTP thất bại');
+    } catch (err: unknown) {
+      return rejectWithValue(getErrorMessage(err, 'Xác thực OTP thất bại'));
     }
   }
 )
@@ -193,8 +198,8 @@ export const requestPasswordReset = createAsyncThunk(
       const data = await response.json();
       if (!response.ok) throw new Error(translateError(data.message) || 'Yêu cầu thất bại');
       return data.data;
-    } catch (err: any) {
-      return rejectWithValue(err.message);
+    } catch (err: unknown) {
+      return rejectWithValue(getErrorMessage(err, 'Yêu cầu thất bại'));
     }
   }
 )
@@ -204,7 +209,7 @@ export const resetPassword = createAsyncThunk(
   async (data: { username: string; code: string; new_password: string }, { rejectWithValue }) => {
     try {
       const isEmail = data.username.includes('@');
-      const payload: any = { code: data.code, new_password: data.new_password };
+      const payload: Record<string, string> = { code: data.code, new_password: data.new_password };
       if (isEmail) payload.email = data.username;
       else payload.phone = data.username;
 
@@ -216,8 +221,8 @@ export const resetPassword = createAsyncThunk(
       const resData = await response.json();
       if (!response.ok) throw new Error(translateError(resData.message) || 'Đặt lại mật khẩu thất bại');
       return resData.data;
-    } catch (err: any) {
-      return rejectWithValue(err.message);
+    } catch (err: unknown) {
+      return rejectWithValue(getErrorMessage(err, 'Đặt lại mật khẩu thất bại'));
     }
   }
 )

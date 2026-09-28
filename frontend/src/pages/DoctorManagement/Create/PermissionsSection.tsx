@@ -8,7 +8,7 @@ interface Props {
   onChange: (field: keyof DoctorForm, value: string | boolean) => void;
 }
 
-export function PermissionsSection({ form, errors, onChange }: Props) {
+export function PermissionsSection({ form, onChange }: Props) {
   const isLevel1 = form.permissionLevel === 'level1';
   const isLevel2 = form.permissionLevel === 'level2';
   const isLevel3 = form.permissionLevel === 'level3';

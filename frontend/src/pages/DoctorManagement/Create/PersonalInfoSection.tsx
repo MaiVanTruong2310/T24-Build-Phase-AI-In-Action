@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, User, FileBadge2, CreditCard, Phone, Mail, Building, Briefcase } from 'lucide-react';
+import { Camera, User, FileBadge2, CreditCard, Phone, Mail } from 'lucide-react';
 import { DoctorForm, FieldErrors } from './FormTypes';
 
 interface Props {

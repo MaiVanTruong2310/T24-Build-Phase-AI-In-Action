@@ -136,7 +136,17 @@ class DoctorCreate(BaseModel):
     date_of_birth: date | None = None
     specialty_ids: list[UUID] = Field(default_factory=list)
     facilities: list["DoctorFacilityAssignment"] = Field(default_factory=list)
+    facility_ids: list[UUID] | None = None
     service_ids: list[UUID] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def normalize_facility_ids(self) -> "DoctorCreate":
+        """Accept the public facility_ids contract and normalize it internally."""
+        if self.facility_ids is not None:
+            if self.facilities:
+                raise ValueError("Provide either facility_ids or facilities, not both")
+            self.facilities = [DoctorFacilityAssignment(facility_id=facility_id) for facility_id in self.facility_ids]
+        return self
 
 
 class DoctorUpdate(BaseModel):
@@ -156,7 +166,17 @@ class DoctorUpdate(BaseModel):
     date_of_birth: date | None = None
     specialty_ids: list[UUID] | None = None
     facilities: list["DoctorFacilityAssignment"] | None = None
+    facility_ids: list[UUID] | None = None
     service_ids: list[UUID] | None = None
+
+    @model_validator(mode="after")
+    def normalize_facility_ids(self) -> "DoctorUpdate":
+        """Accept the public facility_ids contract and normalize it internally."""
+        if self.facility_ids is not None:
+            if self.facilities:
+                raise ValueError("Provide either facility_ids or facilities, not both")
+            self.facilities = [DoctorFacilityAssignment(facility_id=facility_id) for facility_id in self.facility_ids]
+        return self
 
 
 class DoctorReviewRequest(BaseModel):
@@ -198,6 +218,7 @@ class DoctorResponse(BaseModel):
     date_of_birth: date | None
     specialty_ids: list[UUID] = Field(default_factory=list)
     facilities: list[DoctorFacilityResponse] = Field(default_factory=list)
+    facility_ids: list[UUID] = Field(default_factory=list)
     service_ids: list[UUID] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

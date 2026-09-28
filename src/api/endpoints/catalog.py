@@ -280,13 +280,17 @@ def _doctor_response(value: Doctor) -> DoctorResponse:
         title=value.title,
         date_of_birth=value.date_of_birth,
         specialty_ids=[item.specialty_id for item in value.specialties],
-        facilities=[DoctorFacilityAssignment(
-            facility_id=item.facility_id,
-            department=item.department,
-            room=item.room,
-            active_from=item.active_from,
-            active_to=item.active_to
-        ) for item in value.facilities],
+        facilities=[
+            DoctorFacilityAssignment(
+                facility_id=item.facility_id,
+                department=item.department,
+                room=item.room,
+                active_from=item.active_from,
+                active_to=item.active_to,
+            )
+            for item in value.facilities
+        ],
+        facility_ids=[item.facility_id for item in value.facilities],
         service_ids=[item.service_id for item in value.services],
         created_at=value.created_at,
         updated_at=value.updated_at,

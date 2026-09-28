@@ -236,13 +236,14 @@ class CatalogRepository:
                     unique_facilities.append(f)
             doctor.facilities = [
                 DoctorFacility(
-                    doctor_id=doctor.id, 
+                    doctor_id=doctor.id,
                     facility_id=f.facility_id,
                     department=f.department,
                     room=f.room,
                     active_from=f.active_from,
-                    active_to=f.active_to
-                ) for f in unique_facilities
+                    active_to=f.active_to,
+                )
+                for f in unique_facilities
             ]
         if service_ids is not None:
             await self.session.execute(delete(DoctorService).where(DoctorService.doctor_id == doctor.id))

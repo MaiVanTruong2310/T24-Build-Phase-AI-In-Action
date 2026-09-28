@@ -183,7 +183,7 @@ class CatalogService:
             if request.license_number:
                 await self._ensure_license_available(request.license_number)
             await self._validate_assignments(request.specialty_ids, request.facilities, request.service_ids)
-            values = request.model_dump(exclude={"specialty_ids", "facilities", "service_ids"})
+            values = request.model_dump(exclude={"specialty_ids", "facilities", "facility_ids", "service_ids"})
             # Initialize assignment collections on a new ORM instance. Without
             # this, assigning ``doctor.specialties`` below can trigger a
             # synchronous lazy-load of an unloaded relationship, which is not
@@ -208,6 +208,7 @@ class CatalogService:
             updates = request.model_dump(exclude_unset=True)
             specialty_ids = updates.pop("specialty_ids", None)
             facilities = updates.pop("facilities", None)
+            updates.pop("facility_ids", None)
             service_ids = updates.pop("service_ids", None)
             if "license_number" in updates and updates["license_number"]:
                 await self._ensure_license_available(updates["license_number"], exclude_id=value.id)

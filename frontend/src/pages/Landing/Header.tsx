@@ -1,5 +1,5 @@
 import React from 'react'
-import { Bell, Settings, PlusSquare, Search, User, LogOut } from 'lucide-react'
+import { Bell, Settings, PlusSquare, User, LogOut } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import type { RootState } from '../../app/store'
@@ -61,7 +61,7 @@ export function Header() {
                     <LogOut className="w-4 h-4" />
                   </div>
                   <div className="leading-tight hidden lg:block">
-                    <p className="text-xs font-bold text-slate-900">{user.name || 'Người dùng'}</p>
+                    <p className="text-xs font-bold text-slate-900">{user.full_name || 'Người dùng'}</p>
                     <p className="text-[10px] text-slate-500">Bệnh nhân</p>
                   </div>
                 </div>

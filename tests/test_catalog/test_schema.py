@@ -91,4 +91,6 @@ def test_doctor_update_carries_all_catalog_assignments():
 
     assert request.specialty_ids == [specialty_id]
     assert request.facility_ids == [facility_id]
+    assert request.facilities is not None
+    assert request.facilities[0].facility_id == facility_id
     assert request.service_ids == [service_id]

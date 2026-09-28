@@ -12,7 +12,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
     localStorage.removeItem('refresh_token');
   };
 
-  let token = getAccessToken();
+  const token = getAccessToken();
 
   const headers = new Headers(options.headers || {});
   if (token) {
@@ -46,7 +46,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
           clearTokens();
           window.dispatchEvent(new Event('auth:unauthorized'));
         }
-      } catch (e) {
+      } catch {
         clearTokens();
         window.dispatchEvent(new Event('auth:unauthorized'));
       }
