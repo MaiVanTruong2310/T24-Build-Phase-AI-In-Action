@@ -22,9 +22,11 @@ def test_catalog_metadata_contains_required_tables_and_constraints():
     schedule = Base.metadata.tables["doctor_schedules"]
     assert {constraint.name for constraint in schedule.constraints} >= {
         "uq_schedule_external_identity",
+        "excl_doctor_schedule_time",
         "ck_schedule_time_order",
         "ck_schedule_capacity_nonnegative",
     }
+    assert {"created_by", "updated_by", "cancellation_reason"}.issubset(schedule.c.keys())
 
 
 def test_catalog_routes_are_mounted_under_api_v1():
@@ -45,6 +47,11 @@ def test_catalog_routes_are_mounted_under_api_v1():
         ("GET", "/api/v1/doctors"),
         ("GET", "/api/v1/doctors/{doctor_id}"),
         ("GET", "/api/v1/doctors/{doctor_id}/availability"),
+        ("GET", "/api/v1/staff/schedules"),
+        ("POST", "/api/v1/staff/schedules"),
+        ("PUT", "/api/v1/staff/schedules/{schedule_id}"),
+        ("POST", "/api/v1/staff/schedules/import"),
+        ("DELETE", "/api/v1/staff/schedules/{schedule_id}/cancel"),
         ("POST", "/api/v1/staff/doctors"),
         ("PATCH", "/api/v1/staff/doctors/{doctor_id}"),
         ("PATCH", "/api/v1/staff/doctors/{doctor_id}/toggle-booking"),
@@ -56,6 +63,7 @@ def test_catalog_routes_are_mounted_under_api_v1():
         "/api/v1/staff/specialties",
         "/api/v1/staff/facilities",
         "/api/v1/staff/services",
+        "/api/v1/staff/schedules",
         "/api/v1/staff/doctors",
     )
     actual = {

@@ -2,15 +2,15 @@ import React from 'react'
 import { Bell, Settings, PlusSquare, User, LogOut } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
-import type { RootState } from '../../app/store'
-import { logout } from '../../features/auth/authSlice'
+import type { RootState, AppDispatch } from '../../app/store'
+import { logoutUser } from '../../features/auth/authSlice'
 
 export function Header() {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
 
   const handleLogout = () => {
-    dispatch(logout());
+    dispatch(logoutUser());
   };
 
   return (

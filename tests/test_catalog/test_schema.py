@@ -12,6 +12,7 @@ from src.schemas.catalog import (
     DoctorScheduleCreate,
     DoctorScheduleUpdate,
     DoctorUpdate,
+    ScheduleCancellationRequest,
     ScheduleImportRecord,
 )
 
@@ -30,11 +31,28 @@ def test_schedule_requires_positive_time_range():
 
 
 def test_schedule_update_accepts_version_and_capacity():
-    """Optimistic locking version is required for updates."""
-    request = DoctorScheduleUpdate(expected_version=3, capacity=4)
+    """PUT updates require the complete mutable schedule representation."""
+    starts_at = datetime.now(UTC)
+    request = DoctorScheduleUpdate(
+        expected_version=3,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=1),
+        capacity=4,
+        status="available",
+    )
 
     assert request.expected_version == 3
     assert request.capacity == 4
+
+
+def test_schedule_cancellation_requires_non_blank_reason():
+    """Cancellation requires a trimmed, non-empty reason."""
+    request = ScheduleCancellationRequest(reason="  Doctor unavailable  ")
+
+    assert request.reason == "Doctor unavailable"
+
+    with pytest.raises(ValidationError):
+        ScheduleCancellationRequest(reason="   ")
 
 
 def test_schedule_import_requires_external_identity():

@@ -10,6 +10,8 @@ import DoctorManagement from './pages/DoctorManagement'
 import CreateDoctor from './pages/DoctorManagement/Create'
 import ServiceManagement from './pages/ServiceManagement'
 import CreateService from './pages/ServiceManagement/Create'
+import ScheduleApprove from './pages/ScheduleApprove'
+import DoctorSchedule from './pages/DoctorSchedule'
 
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
@@ -55,6 +57,8 @@ const router = createBrowserRouter([
       { path: 'doctors/create', element: <CreateDoctor /> },
       { path: 'services', element: <ServiceManagement /> },
       { path: 'services/create', element: <CreateService /> },
+      { path: 'appointments/approve/:id', element: <ScheduleApprove /> },
+      { path: 'doctor-schedule', element: <DoctorSchedule /> },
       { path: 'patients', element: <Placeholder title="Quản lý bệnh nhân" description="Page quản lý bệnh nhân sẽ được bổ sung sau." /> },
       { path: 'monitoring', element: <Placeholder title="Giám sát hệ thống" description="Page giám sát hệ thống sẽ được bổ sung sau." /> }
     ]
