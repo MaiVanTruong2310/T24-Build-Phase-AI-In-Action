@@ -32,6 +32,16 @@ class ScheduleServiceMixin:
                 )
                 if existing:
                     raise ConflictError("SCHEDULE_EXISTS", "Schedule already exists")
+            conflict = await self.catalog.find_schedule_conflict(
+                doctor_id=request.doctor_id,
+                starts_at=request.starts_at,
+                ends_at=request.ends_at,
+            )
+            if conflict:
+                raise ConflictError(
+                    "SCHEDULE_TIME_CONFLICT",
+                    "Doctor already has a schedule overlapping this time range",
+                )
             value = DoctorSchedule(
                 **request.model_dump(),
                 created_by=actor_id,
@@ -53,6 +63,17 @@ class ScheduleServiceMixin:
             updates = request.model_dump(exclude={"expected_version"})
             if updates["ends_at"] <= updates["starts_at"]:
                 raise ConflictError("INVALID_SCHEDULE", "Schedule end must be after start")
+            conflict = await self.catalog.find_schedule_conflict(
+                doctor_id=value.doctor_id,
+                starts_at=updates["starts_at"],
+                ends_at=updates["ends_at"],
+                exclude_schedule_id=value.id,
+            )
+            if conflict:
+                raise ConflictError(
+                    "SCHEDULE_TIME_CONFLICT",
+                    "Doctor already has a schedule overlapping this time range",
+                )
             for field, item in updates.items():
                 setattr(value, field, item)
             value.updated_by = actor_id
@@ -155,12 +176,32 @@ class ScheduleServiceMixin:
         await self.get_schedule(schedule_id, public_only=False)
         return await self.catalog.list_audit_events(schedule_id, limit=limit)
 
+    async def schedule_activity(self, *, doctor_id: UUID, starts_from: datetime, starts_to: datetime, limit: int = 100):
+        """Return audit activity for a doctor's schedules in a time window."""
+        return await self.catalog.list_schedule_audit_events(
+            doctor_id=doctor_id,
+            starts_from=starts_from,
+            starts_to=starts_to,
+            limit=limit,
+        )
+
     async def _upsert_schedule(self, record: ScheduleImportRecord, actor_id: UUID) -> tuple[DoctorSchedule, bool]:
         """Create or update one imported schedule within the caller transaction."""
         await self._validate_schedule_owners(record.doctor_id, record.facility_id)
         value = await self.catalog.get_schedule_by_external_identity(
             record.source_system, record.external_schedule_id, for_update=True
         )
+        conflict = await self.catalog.find_schedule_conflict(
+            doctor_id=record.doctor_id,
+            starts_at=record.starts_at,
+            ends_at=record.ends_at,
+            exclude_schedule_id=value.id if value else None,
+        )
+        if conflict:
+            raise ConflictError(
+                "SCHEDULE_TIME_CONFLICT",
+                "Doctor already has a schedule overlapping this time range",
+            )
         if value is None:
             value = DoctorSchedule(
                 **record.model_dump(exclude={"expected_version"}),

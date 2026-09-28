@@ -11,9 +11,14 @@ from src.models.catalog import Doctor
 from src.models.user import User
 from src.schemas.catalog import (
     DoctorCreate,
-    DoctorFacilityAssignment,
+    DoctorFacilityResponse,
     DoctorResponse,
+    DoctorServiceResponse,
+    DoctorSpecialtyResponse,
     DoctorUpdate,
+    FacilityResponse,
+    ServiceResponse,
+    SpecialtyResponse,
 )
 from src.schemas.common import ApiResponse
 from src.services.catalog import CatalogService
@@ -40,7 +45,7 @@ async def list_doctors(
         offset=offset,
         limit=limit,
     )
-    return success_response([_doctor_response(value) for value in values], "Doctors retrieved")
+    return success_response([_doctor_response(value, public_only=True) for value in values], "Doctors retrieved")
 
 
 @router.get("/doctors/{doctor_id}", response_model=ApiResponse[DoctorResponse])
@@ -51,7 +56,7 @@ async def get_doctor(
 ) -> ApiResponse[DoctorResponse]:
     """Get one public doctor."""
     value = await service.get_doctor(doctor_id, public_only=True)
-    return success_response(_doctor_response(value), "Doctor retrieved")
+    return success_response(_doctor_response(value, public_only=True), "Doctor retrieved")
 
 
 @staff_router.post("/doctors", response_model=ApiResponse[DoctorResponse], status_code=status.HTTP_201_CREATED)
@@ -89,8 +94,21 @@ async def staff_toggle_booking(
     return success_response(_doctor_response(value), "Doctor booking setting updated")
 
 
-def _doctor_response(value: Doctor) -> DoctorResponse:
+def _doctor_response(value: Doctor, *, public_only: bool = False) -> DoctorResponse:
     """Map an ORM doctor with loaded assignments to its API response."""
+    specialties = [
+        item
+        for item in value.specialties
+        if not public_only or item.specialty is None or item.specialty.status == "active"
+    ]
+    facilities = [
+        item
+        for item in value.facilities
+        if not public_only or item.facility is None or item.facility.status == "active"
+    ]
+    services = [
+        item for item in value.services if not public_only or item.service is None or item.service.status == "active"
+    ]
     return DoctorResponse(
         id=value.id,
         code=value.code,
@@ -106,19 +124,36 @@ def _doctor_response(value: Doctor) -> DoctorResponse:
         gender=value.gender,
         title=value.title,
         date_of_birth=value.date_of_birth,
-        specialty_ids=[item.specialty_id for item in value.specialties],
+        specialty_ids=[item.specialty_id for item in specialties],
+        specialties=[
+            DoctorSpecialtyResponse(
+                specialty_id=item.specialty_id,
+                is_primary=item.is_primary,
+                specialty=SpecialtyResponse.model_validate(item.specialty) if item.specialty else None,
+            )
+            for item in specialties
+        ],
         facilities=[
-            DoctorFacilityAssignment(
+            DoctorFacilityResponse(
                 facility_id=item.facility_id,
                 department=item.department,
                 room=item.room,
                 active_from=item.active_from,
                 active_to=item.active_to,
+                facility=FacilityResponse.model_validate(item.facility) if item.facility else None,
             )
-            for item in value.facilities
+            for item in facilities
         ],
-        facility_ids=[item.facility_id for item in value.facilities],
-        service_ids=[item.service_id for item in value.services],
+        facility_ids=[item.facility_id for item in facilities],
+        service_ids=[item.service_id for item in services],
+        services=[
+            DoctorServiceResponse(
+                service_id=item.service_id,
+                active=item.active,
+                service=ServiceResponse.model_validate(item.service) if item.service else None,
+            )
+            for item in services
+        ],
         created_at=value.created_at,
         updated_at=value.updated_at,
     )

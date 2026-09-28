@@ -106,10 +106,12 @@ export const loginUser = createAsyncThunk(
 
 export const logoutUser = createAsyncThunk(
   'auth/logoutUser',
-  async (_, { getState, rejectWithValue }) => {
+  async (_, { getState }) => {
     try {
       const state = getState() as RootState;
-      const refresh_token = state.auth.user?.refresh_token || localStorage.getItem('refresh_token');
+      // Refresh tokens rotate after every successful refresh. Redux may still
+      // contain the old value, so prefer the current persisted token.
+      const refresh_token = localStorage.getItem('refresh_token') || state.auth.user?.refresh_token;
       
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
@@ -130,7 +132,8 @@ export const logoutUser = createAsyncThunk(
       }
       return true;
     } catch (err: unknown) {
-      return rejectWithValue(getErrorMessage(err, 'Đăng xuất thất bại'));
+      console.warn(getErrorMessage(err, 'Logout request failed'));
+      return true;
     }
   }
 )

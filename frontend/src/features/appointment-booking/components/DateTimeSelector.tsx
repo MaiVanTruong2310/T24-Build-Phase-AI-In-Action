@@ -1,5 +1,6 @@
 import { CalendarIcon, Building2, Video, Check, MapPin, ArrowRightLeft } from 'lucide-react';
 import clsx from 'clsx';
+import { Schedule } from '../api';
 
 const MORNING_SLOTS = [
   { id: 'm1', time: '08:00', status: 'available', slots: 1 },
@@ -24,9 +25,30 @@ interface Props {
   onSelectType: (t: AppointmentType) => void;
   selectedSlot: string;
   onSelectSlot: (s: string) => void;
+  schedules?: Schedule[];
 }
 
-export function DateTimeSelector({ selectedDate, onSelectDate, selectedType, onSelectType, selectedSlot, onSelectSlot }: Props) {
+export function DateTimeSelector({ selectedDate, onSelectDate, selectedType, onSelectType, selectedSlot, onSelectSlot, schedules }: Props) {
+  const morningSlots = schedules ? schedules.filter(s => {
+    const hour = new Date(s.starts_at).getHours();
+    return hour < 12;
+  }).map(s => ({
+    id: s.id,
+    time: new Date(s.starts_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+    status: s.status === 'available' ? 'available' : 'booked',
+    slots: s.capacity
+  })) : MORNING_SLOTS;
+
+  const afternoonSlots = schedules ? schedules.filter(s => {
+    const hour = new Date(s.starts_at).getHours();
+    return hour >= 12;
+  }).map(s => ({
+    id: s.id,
+    time: new Date(s.starts_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+    status: s.status === 'available' ? 'available' : 'booked',
+    slots: s.capacity
+  })) : AFTERNOON_SLOTS;
+
   return (
     <>
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
@@ -111,7 +133,7 @@ export function DateTimeSelector({ selectedDate, onSelectDate, selectedType, onS
               <span className="text-xs font-medium text-slate-400">Giờ làm việc: 08:00 - 11:30</span>
             </div>
             <div className="grid grid-cols-4 gap-3">
-              {MORNING_SLOTS.map(slot => {
+              {morningSlots.map(slot => {
                 const isSelected = selectedSlot === slot.id;
                 const isBooked = slot.status === 'booked';
                 return (
@@ -145,7 +167,7 @@ export function DateTimeSelector({ selectedDate, onSelectDate, selectedType, onS
               <span className="text-xs font-medium text-slate-400">Giờ làm việc: 13:30 - 17:00</span>
             </div>
             <div className="grid grid-cols-4 gap-3">
-              {AFTERNOON_SLOTS.map(slot => {
+              {afternoonSlots.map(slot => {
                 const isSelected = selectedSlot === slot.id;
                 const isBooked = slot.status === 'booked';
                 return (
@@ -193,3 +215,4 @@ export function DateTimeSelector({ selectedDate, onSelectDate, selectedType, onS
     </>
   )
 }
+

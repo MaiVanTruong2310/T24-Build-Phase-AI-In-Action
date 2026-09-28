@@ -37,6 +37,30 @@ class ScheduleRepositoryMixin:
             statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
 
+    async def find_schedule_conflict(
+        self,
+        *,
+        doctor_id: UUID,
+        starts_at: datetime,
+        ends_at: datetime,
+        exclude_schedule_id: UUID | None = None,
+    ) -> DoctorSchedule | None:
+        """Find an active schedule that overlaps the requested time range."""
+        statement = (
+            select(DoctorSchedule)
+            .where(
+                DoctorSchedule.doctor_id == doctor_id,
+                DoctorSchedule.status != "cancelled",
+                DoctorSchedule.starts_at < ends_at,
+                DoctorSchedule.ends_at > starts_at,
+            )
+            .order_by(DoctorSchedule.starts_at)
+            .limit(1)
+        )
+        if exclude_schedule_id:
+            statement = statement.where(DoctorSchedule.id != exclude_schedule_id)
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
     async def list_schedules(
         self,
         *,
@@ -65,7 +89,7 @@ class ScheduleRepositoryMixin:
         if facility_id:
             statement = statement.where(DoctorSchedule.facility_id == facility_id)
         if starts_from:
-            statement = statement.where(DoctorSchedule.starts_at >= starts_from)
+            statement = statement.where(DoctorSchedule.ends_at > starts_from)
         if starts_to:
             statement = statement.where(DoctorSchedule.starts_at < starts_to)
         if schedule_status:

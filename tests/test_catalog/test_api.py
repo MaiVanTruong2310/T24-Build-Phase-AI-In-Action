@@ -1,6 +1,6 @@
 """RBAC and API-surface tests for the medical catalog."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -70,3 +70,31 @@ def test_availability_window_for_selected_date_covers_one_local_day():
 
     assert starts_from == datetime(2026, 9, 27, 17, tzinfo=UTC)
     assert starts_to == datetime(2026, 9, 28, 17, tzinfo=UTC)
+
+
+def test_availability_window_accepts_datetime_range_with_timezone():
+    """Availability supports precise local time ranges and normalizes them to UTC."""
+    local_tz = timezone(timedelta(hours=7))
+
+    starts_from, starts_to = _availability_window(
+        datetime(2026, 9, 28, 8, 30, tzinfo=local_tz),
+        datetime(2026, 9, 28, 12, tzinfo=local_tz),
+        None,
+    )
+
+    assert starts_from == datetime(2026, 9, 28, 1, 30, tzinfo=UTC)
+    assert starts_to == datetime(2026, 9, 28, 5, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("from_value", "to_value", "selected_date", "message"),
+    [
+        (datetime(2026, 9, 28, 8, 30), None, None, "from and to must be provided together"),
+        (datetime(2026, 9, 28, 12), datetime(2026, 9, 28, 8), None, "to must be after from"),
+        (datetime(2026, 9, 28, 8), datetime(2026, 9, 28, 9), date(2026, 9, 28), "Use either date or from/to, not both"),
+    ],
+)
+def test_availability_window_rejects_ambiguous_or_invalid_ranges(from_value, to_value, selected_date, message):
+    """Availability rejects incomplete, reversed, and mixed time filters."""
+    with pytest.raises(ValueError, match=message):
+        _availability_window(from_value, to_value, selected_date)

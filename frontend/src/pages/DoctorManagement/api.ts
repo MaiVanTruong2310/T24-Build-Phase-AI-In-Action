@@ -14,7 +14,9 @@ interface DoctorApiRecord {
   avatar_url?: string | null;
   license_number?: string | null;
   specialty_ids?: string[];
-  facilities?: unknown[];
+  specialties?: Array<{ specialty?: { name: string } | null }>;
+  facilities?: Array<{ facility?: { name: string } | null }>;
+  services?: Array<{ service?: { name: string } | null }>;
   status: string;
   booking_enabled: boolean;
 }
@@ -48,8 +50,10 @@ export const fetchDoctors = (): TE.TaskEither<Error, Doctor[]> =>
         experienceYears: 0, // Fallback as not in backend
         avatarUrl: doc.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(doc.full_name)}`,
         licenseNumber: doc.license_number || '',
-        specialty: doc.specialty_ids?.length ? 'Specialty Assigned' : 'General', // Would need a separate fetch for names
-        facility: doc.facilities?.length ? 'Facility Assigned' : 'Unassigned',
+        specialty: doc.specialties?.map((item) => item.specialty?.name).filter(Boolean).join(', ')
+          || (doc.specialty_ids?.length ? 'Specialty Assigned' : 'General'),
+        facility: doc.facilities?.map((item) => item.facility?.name).filter(Boolean).join(', ')
+          || 'Unassigned',
         casesMonth: 0,
         clinicalMetric: 'N/A',
         rating: 5.0,

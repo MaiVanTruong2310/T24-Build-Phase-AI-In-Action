@@ -17,9 +17,9 @@ class DoctorRepositoryMixin:
         statement = (
             select(Doctor)
             .options(
-                selectinload(Doctor.specialties),
-                selectinload(Doctor.facilities),
-                selectinload(Doctor.services),
+                selectinload(Doctor.specialties).selectinload(DoctorSpecialty.specialty),
+                selectinload(Doctor.facilities).selectinload(DoctorFacility.facility),
+                selectinload(Doctor.services).selectinload(DoctorService.service),
             )
             .where(Doctor.id == resource_id)
         )
@@ -46,9 +46,9 @@ class DoctorRepositoryMixin:
         statement = (
             select(Doctor)
             .options(
-                selectinload(Doctor.specialties),
-                selectinload(Doctor.facilities),
-                selectinload(Doctor.services),
+                selectinload(Doctor.specialties).selectinload(DoctorSpecialty.specialty),
+                selectinload(Doctor.facilities).selectinload(DoctorFacility.facility),
+                selectinload(Doctor.services).selectinload(DoctorService.service),
             )
             .order_by(Doctor.full_name)
             .offset(offset)

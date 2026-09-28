@@ -6,7 +6,7 @@ import { DoctorCard } from '../features/appointment-booking/components/DoctorCar
 import { DateTimeSelector } from '../features/appointment-booking/components/DateTimeSelector';
 import { TriageInfo } from '../features/appointment-booking/components/TriageInfo';
 import { BookingSummary } from '../features/appointment-booking/components/BookingSummary';
-import { fetchSpecialties, Specialty, fetchDoctors, Doctor, createBooking } from '../features/appointment-booking/api';
+import { fetchSpecialties, Specialty, fetchDoctors, Doctor, createBooking, fetchAvailability, Schedule } from '../features/appointment-booking/api';
 
 export default function AppointmentBooking() {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -18,6 +18,7 @@ export default function AppointmentBooking() {
   const [selectedDate, setSelectedDate] = useState('24');
   const [selectedType, setSelectedType] = useState<'offline' | 'telehealth'>('offline');
   const [selectedSlot, setSelectedSlot] = useState('a2');
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   const [isBooking, setIsBooking] = useState(false);
 
@@ -44,6 +45,15 @@ export default function AppointmentBooking() {
       })
       .catch(console.error);
   }, [selectedSpecialty]);
+
+  useEffect(() => {
+    if (!selectedDoctorId || !selectedDate) return;
+    setSchedules([]);
+    const dateStr = `2024-10-${selectedDate.padStart(2, '0')}`;
+    fetchAvailability(selectedDoctorId, dateStr)
+      .then(data => setSchedules(data))
+      .catch(console.error);
+  }, [selectedDoctorId, selectedDate]);
 
   const handleBooking = async () => {
     if (!selectedDoctorId || !selectedSpecialty || !selectedSlot) return;
@@ -113,6 +123,7 @@ export default function AppointmentBooking() {
               onSelectType={setSelectedType}
               selectedSlot={selectedSlot}
               onSelectSlot={setSelectedSlot}
+              schedules={schedules.length > 0 ? schedules : undefined}
             />
             <TriageInfo />
           </div>
@@ -140,3 +151,4 @@ export default function AppointmentBooking() {
     </div>
   );
 }
+

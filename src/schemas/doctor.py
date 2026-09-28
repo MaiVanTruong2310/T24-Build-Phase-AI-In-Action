@@ -8,6 +8,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.schemas.catalog_types import CatalogStatus, ReviewStatus
+from src.schemas.facility import FacilityResponse
+from src.schemas.service import ServiceResponse
+from src.schemas.specialty import SpecialtyResponse
 
 
 class DoctorFacilityAssignment(BaseModel):
@@ -104,10 +107,27 @@ class DoctorFacilityResponse(BaseModel):
     room: str | None
     active_from: date | None
     active_to: date | None
+    facility: FacilityResponse | None = None
+
+
+class DoctorSpecialtyResponse(BaseModel):
+    """Specialty assignment with the resolved specialty resource."""
+
+    specialty_id: UUID
+    is_primary: bool
+    specialty: SpecialtyResponse | None = None
+
+
+class DoctorServiceResponse(BaseModel):
+    """Service assignment with the resolved service resource."""
+
+    service_id: UUID
+    active: bool
+    service: ServiceResponse | None = None
 
 
 class DoctorResponse(BaseModel):
-    """Doctor representation with assignment identifiers."""
+    """Doctor representation with assignment identifiers and resolved resources."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -126,9 +146,11 @@ class DoctorResponse(BaseModel):
     title: str | None
     date_of_birth: date | None
     specialty_ids: list[UUID] = Field(default_factory=list)
+    specialties: list[DoctorSpecialtyResponse] = Field(default_factory=list)
     facilities: list[DoctorFacilityResponse] = Field(default_factory=list)
     facility_ids: list[UUID] = Field(default_factory=list)
     service_ids: list[UUID] = Field(default_factory=list)
+    services: list[DoctorServiceResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

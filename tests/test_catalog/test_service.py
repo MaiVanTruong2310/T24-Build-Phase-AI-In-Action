@@ -9,7 +9,12 @@ import pytest
 
 from src.core.exceptions import ConflictError
 from src.models.catalog import DoctorSchedule
-from src.schemas.catalog import BulkScheduleImportRequest, DoctorScheduleUpdate, ScheduleCancellationRequest
+from src.schemas.catalog import (
+    BulkScheduleImportRequest,
+    DoctorScheduleCreate,
+    DoctorScheduleUpdate,
+    ScheduleCancellationRequest,
+)
 from src.services.catalog import CatalogService
 
 
@@ -45,6 +50,30 @@ class FakeCatalog:
 
     async def add_audit_event(self, event):
         del event
+
+    async def find_schedule_conflict(self, **kwargs):
+        del kwargs
+        return None
+
+
+class ConflictingCatalog(FakeCatalog):
+    """Catalog double returning active owners and an overlapping schedule."""
+
+    async def get_doctor(self, doctor_id):
+        del doctor_id
+        return SimpleNamespace(status="active")
+
+    async def get_facility(self, facility_id):
+        del facility_id
+        return SimpleNamespace(status="active")
+
+    async def get_schedule_by_external_identity(self, source_system, external_schedule_id):
+        del source_system, external_schedule_id
+        return None
+
+    async def find_schedule_conflict(self, **kwargs):
+        del kwargs
+        return SimpleNamespace(id=uuid4())
 
 
 def test_bulk_import_keeps_valid_records_when_one_record_is_malformed():
@@ -119,6 +148,27 @@ def test_schedule_update_rejects_stale_optimistic_lock_version():
                     ends_at=starts_at + timedelta(hours=1),
                     capacity=4,
                     status="available",
+                ),
+                uuid4(),
+            )
+        )
+
+
+def test_schedule_create_rejects_overlapping_doctor_schedule():
+    """A doctor cannot be assigned two schedules at overlapping times."""
+    starts_at = datetime.now(UTC)
+    service = CatalogService(FakeSession())
+    service.catalog = ConflictingCatalog(None)
+
+    with pytest.raises(ConflictError, match="overlapping this time range"):
+        asyncio.run(
+            service.create_schedule(
+                DoctorScheduleCreate(
+                    doctor_id=uuid4(),
+                    facility_id=uuid4(),
+                    starts_at=starts_at,
+                    ends_at=starts_at + timedelta(hours=1),
+                    capacity=5,
                 ),
                 uuid4(),
             )

@@ -3,7 +3,7 @@ import {
   Search, Bell, Settings, Flame, ArrowRightLeft, 
   LayoutDashboard, Activity, ListOrdered, MessageSquare, 
   CalendarCheck, Stethoscope, Briefcase, Users, 
-  Building2, Package, ShieldAlert, LogOut 
+  Building2, Package, ShieldAlert, LogOut, CalendarRange
 } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../app/store';
@@ -25,6 +25,7 @@ export function StaffLayout() {
     { to: '/staff/queue', label: 'HITL Queue', icon: ListOrdered, badge: 28 },
     { to: '/staff/chat', label: 'Chat Takeover', icon: MessageSquare, badge: 4 },
     { to: '/staff/appointments', label: 'Duyệt lịch hẹn', icon: CalendarCheck, badge: 12 },
+    { to: '/staff/doctor-schedule', label: 'Quản Lý Lịch Bác Sĩ', icon: CalendarRange },
     { to: '/staff/doctors', label: 'Quản Lý Bác Sĩ', icon: Stethoscope },
     { to: '/staff/specialties', label: 'Quản lý chuyên khoa', icon: Briefcase },
     { to: '/staff/patients', label: 'Quản Lý Bệnh Nhân', icon: Users },

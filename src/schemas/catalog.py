@@ -16,7 +16,9 @@ from src.schemas.doctor import (
     DoctorResponse,
     DoctorReviewRequest,
     DoctorServiceAssignment,
+    DoctorServiceResponse,
     DoctorSpecialtyAssignment,
+    DoctorSpecialtyResponse,
     DoctorUpdate,
 )
 from src.schemas.facility import FacilityCreate, FacilityResponse, FacilityUpdate
@@ -49,7 +51,9 @@ __all__ = [
     "DoctorScheduleCreate",
     "DoctorScheduleResponse",
     "DoctorScheduleUpdate",
+    "DoctorServiceResponse",
     "DoctorServiceAssignment",
+    "DoctorSpecialtyResponse",
     "DoctorSpecialtyAssignment",
     "DoctorUpdate",
     "FacilityCreate",
