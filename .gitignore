@@ -59,3 +59,12 @@ out/
 # AI logs — tracked structure, ignored content
 .ai-log/*.jsonl
 .ai-log/archive/
+
+AGENT.md
+task/*
+docs-spec/*
+planning/*
+specs/*
+VMEC-01 — Đặc tả build hệ thống.html
+frontend/node_modules
+frontend/UI
