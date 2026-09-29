@@ -12,6 +12,7 @@ import { ForgotPassword } from './pages/ForgotPassword'
 import EmergencyCoordinator from './pages/EmergencyCoordinator'
 import AppointmentBooking from './pages/AppointmentBooking'
 import AppointmentHistory from './pages/AppointmentHistory'
+import AppointmentProgress from './pages/AppointmentProgress'
 import AppointmentDetail from './pages/AppointmentDetail'
 import DoctorManagement from './pages/DoctorManagement'
 import CreateDoctor from './pages/DoctorManagement/Create'
@@ -55,6 +56,7 @@ const router = createBrowserRouter([
           { path: 'departments', element: <PatientDepartments /> },
           { path: 'appointments', element: <AppointmentBooking /> },
           { path: 'appointments/history', element: <AppointmentHistory /> },
+          { path: 'progress', element: <AppointmentProgress /> },
           { path: 'appointments/:id', element: <AppointmentDetail /> }
         ]
       }
