@@ -6,7 +6,19 @@ import { DoctorCard } from '../features/appointment-booking/components/DoctorCar
 import { DateTimeSelector } from '../features/appointment-booking/components/DateTimeSelector';
 import { TriageInfo } from '../features/appointment-booking/components/TriageInfo';
 import { BookingSummary } from '../features/appointment-booking/components/BookingSummary';
-import { fetchSpecialties, Specialty, fetchDoctors, Doctor, fetchAvailability, Schedule, fetchFacilities, Facility, fetchServices, MedicalService } from '../features/appointment-booking/api';
+import {
+  createBooking,
+  fetchSpecialties,
+  Specialty,
+  fetchDoctors,
+  Doctor,
+  fetchAvailability,
+  Schedule,
+  fetchFacilities,
+  Facility,
+  fetchServices,
+  MedicalService,
+} from '../features/appointment-booking/api';
 
 function formatLocalDate(value: Date): string {
   const year = value.getFullYear();
@@ -78,7 +90,7 @@ export default function AppointmentBooking() {
     try {
       await createBooking({
         schedule_id: selectedSlot,
-        service_id: 'srv_123',
+        service_id: selectedService,
         specialty_id: selectedSpecialty,
         encounter_type: selectedType === 'offline' ? 'in_person' : 'telehealth',
         reason: 'Đau thắt ngực nhẹ',
