@@ -235,15 +235,9 @@ class ScheduleServiceMixin:
         await self._audit(actor_id, "doctor_schedule", value.id, "imported", {"version": value.version})
         return await self._required(self.catalog.get_schedule(value.id), "Schedule not found"), False
 
-    async def _validate_schedule_owners(
-        self, doctor_id: UUID, facility_id: UUID, *, lock_doctor: bool = False
-    ) -> None:
+    async def _validate_schedule_owners(self, doctor_id: UUID, facility_id: UUID, *, lock_doctor: bool = False) -> None:
         """Ensure schedule owners exist and are active."""
-        doctor = (
-            await self.catalog.lock_doctor(doctor_id)
-            if lock_doctor
-            else await self.catalog.get_doctor(doctor_id)
-        )
+        doctor = await self.catalog.lock_doctor(doctor_id) if lock_doctor else await self.catalog.get_doctor(doctor_id)
         facility = await self.catalog.get_facility(facility_id)
         if doctor is None or doctor.status != "active":
             raise ConflictError("DOCTOR_INACTIVE", "Doctor is not active")

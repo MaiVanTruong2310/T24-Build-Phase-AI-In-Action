@@ -1,11 +1,12 @@
 """Authentication and current-user endpoints."""
 
 from datetime import UTC, datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_current_user
+from src.api.dependencies import get_current_user, require_staff
 from src.api.response import success_response
 from src.db.dependencies import get_db_session
 from src.models.user import User
@@ -160,3 +161,14 @@ async def update_me(
     """Update and return the authenticated user's profile."""
     user = await service.update_profile(current_user, request)
     return success_response(UserResponse.model_validate(user), "Profile updated")
+
+
+@user_router.get("/{user_id}", response_model=ApiResponse[UserResponse])
+async def get_user_by_id(
+    user_id: UUID,
+    _: User = Depends(require_staff),
+    service: AuthService = Depends(get_auth_service),
+) -> ApiResponse[UserResponse]:
+    """Return one user for staff-owned lookup flows."""
+    user = await service.get_user_by_id(user_id)
+    return success_response(UserResponse.model_validate(user), "User retrieved")

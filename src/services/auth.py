@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import Settings, get_settings
-from src.core.exceptions import AppError, AuthenticationError, ConflictError, RateLimitError
+from src.core.exceptions import AppError, AuthenticationError, ConflictError, NotFoundError, RateLimitError
 from src.core.logging import get_logger
 from src.core.security import (
     create_access_token,
@@ -230,11 +230,22 @@ class AuthService:
             await self.auth.revoke_session(stored.id, revoked_at=_now())
         logger.info("AuthService.revoke_session session revoked")
 
+    async def get_user_by_id(self, user_id: UUID) -> User:
+        """Find a user for authorized staff lookup flows."""
+        user = await self.users.get_by_id(user_id)
+        if user is None:
+            logger.info("AuthService.get_user_by_id user not found")
+            raise NotFoundError("User not found")
+        return user
+
     async def update_profile(self, user: User, request: UpdateProfileRequest) -> User:
         """Apply allowed profile changes and flush them in a transaction."""
         async with self.session.begin():
-            if request.full_name is not None:
-                user.full_name = request.full_name.strip() or None
+            updates = request.model_dump(exclude_unset=True)
+            if "full_name" in updates:
+                updates["full_name"] = updates["full_name"].strip() or None if updates["full_name"] else None
+            for field, value in updates.items():
+                setattr(user, field, value)
             await self.session.flush()
         logger.info("AuthService.update_profile profile updated")
         return user

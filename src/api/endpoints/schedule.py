@@ -103,7 +103,9 @@ async def staff_schedule_activity(
         starts_to=starts_to,
         limit=limit,
     )
-    return success_response([CatalogAuditResponse.model_validate(value) for value in values], "Schedule activity retrieved")
+    return success_response(
+        [CatalogAuditResponse.model_validate(value) for value in values], "Schedule activity retrieved"
+    )
 
 
 @staff_router.post(

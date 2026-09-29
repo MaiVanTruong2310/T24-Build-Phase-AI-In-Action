@@ -7,6 +7,24 @@ export interface Specialty {
   description: string;
 }
 
+export interface Facility {
+  id: string;
+  code: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+}
+
+export interface MedicalService {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  duration_minutes?: number | null;
+  price?: number | null;
+  category?: string | null;
+}
+
 export interface Doctor {
   id: string;
   code: string;
@@ -18,6 +36,8 @@ export interface Doctor {
   price?: number; // assuming additional UI field
   facilities?: DoctorFacility[];
   facility_ids?: string[];
+  specialties?: Array<{ specialty_id: string; name: string }>;
+  services?: Array<{ service_id: string; name: string }>;
 }
 
 export interface DoctorFacility {
@@ -104,16 +124,49 @@ export async function fetchSpecialties(): Promise<Specialty[]> {
   return json.data || [];
 }
 
-export async function fetchDoctors(specialtyId?: string): Promise<Doctor[]> {
-  const query = specialtyId ? `?specialty_id=${specialtyId}` : '';
-  const res = await fetchWithAuth(`/doctors${query}`);
+export async function fetchDoctors(
+  filters: { specialtyId?: string; facilityId?: string; name?: string } | string = {},
+): Promise<Doctor[]> {
+  const normalizedFilters = typeof filters === 'string' ? { specialtyId: filters } : filters;
+  const query = new URLSearchParams();
+  if (normalizedFilters.specialtyId) query.set('specialty_id', normalizedFilters.specialtyId);
+  if (normalizedFilters.facilityId) query.set('facility_id', normalizedFilters.facilityId);
+  if (normalizedFilters.name) query.set('name', normalizedFilters.name);
+  const queryString = query.toString();
+  const res = await fetchWithAuth(`/doctors${queryString ? `?${queryString}` : ''}`);
   if (!res.ok) throw new Error('Failed to fetch doctors');
+  const json = await res.json();
+  return (json.data || []).map((doctor: Record<string, unknown>) => ({
+    ...doctor,
+    specialties: ((doctor.specialties as Array<{ specialty_id: string; specialty?: { name: string } | null }> | undefined) || []).map((item) => ({
+      specialty_id: item.specialty_id,
+      name: item.specialty?.name || 'Chưa cập nhật',
+    })),
+    services: ((doctor.services as Array<{ service_id: string; service?: { name: string } | null }> | undefined) || []).map((item) => ({
+      service_id: item.service_id,
+      name: item.service?.name || 'Chưa cập nhật',
+    })),
+  })) as Doctor[];
+}
+
+export async function fetchFacilities(): Promise<Facility[]> {
+  const res = await fetchWithAuth('/facilities');
+  if (!res.ok) throw new Error('Failed to fetch facilities');
   const json = await res.json();
   return json.data || [];
 }
 
-export async function fetchAvailability(doctorId: string, date: string): Promise<Schedule[]> {
-  const res = await fetchWithAuth(`/doctors/${doctorId}/availability?date=${date}`);
+export async function fetchServices(): Promise<MedicalService[]> {
+  const res = await fetchWithAuth('/services');
+  if (!res.ok) throw new Error('Failed to fetch services');
+  const json = await res.json();
+  return json.data || [];
+}
+
+export async function fetchAvailability(doctorId: string, date: string, facilityId?: string): Promise<Schedule[]> {
+  const query = new URLSearchParams({ date });
+  if (facilityId) query.set('facility_id', facilityId);
+  const res = await fetchWithAuth(`/doctors/${doctorId}/availability?${query.toString()}`);
   if (!res.ok) throw new Error('Failed to fetch availability');
   const json = await res.json();
   return json.data || [];

@@ -12,6 +12,8 @@ import ServiceManagement from './pages/ServiceManagement'
 import CreateService from './pages/ServiceManagement/Create'
 import ScheduleApprove from './pages/ScheduleApprove'
 import DoctorSchedule from './pages/DoctorSchedule'
+import PatientProfile from './pages/PatientProfile'
+import PatientDepartments from './pages/PatientDepartments'
 
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
@@ -41,7 +43,8 @@ const router = createBrowserRouter([
         element: <PatientLayout />,
         children: [
           { index: true, element: <Placeholder title="Khu bệnh nhân" description="Khu vực dành cho bệnh nhân và người nhà." /> },
-          { path: 'departments', element: <Placeholder title="Tìm khoa khám" description="Page tìm kiếm và điều hướng khoa khám sẽ được bổ sung sau." /> },
+          { path: 'profile', element: <PatientProfile /> },
+          { path: 'departments', element: <PatientDepartments /> },
           { path: 'appointments', element: <AppointmentBooking /> }
         ]
       }
