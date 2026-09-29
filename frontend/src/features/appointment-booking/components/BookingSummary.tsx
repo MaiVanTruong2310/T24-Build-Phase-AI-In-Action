@@ -1,127 +1,152 @@
-import { FileText, ShieldCheck, BadgeCheck, ArrowRight, ArrowLeft, Phone, Loader2 } from 'lucide-react';
+import { CalendarDays, FileText, Loader2, ShieldCheck } from 'lucide-react';
 
 interface Props {
+  patientName: string;
+  patientPhone: string | null;
   specialtyName: string;
   doctorName: string;
+  facilityName: string;
   serviceName: string;
-  date: string;
-  slotTime: string;
-  type: string;
-  price: number;
+  serviceDuration: number | null;
+  bookingMode: 'group' | 'doctor_visit' | null;
+  startsAt: string;
+  endsAt: string;
+  type: 'offline' | 'telehealth';
+  price: number | null;
+  reason: string;
+  patientNote: string;
+  onReasonChange: (value: string) => void;
+  onPatientNoteChange: (value: string) => void;
   onBook: () => void;
   isBooking: boolean;
 }
 
-export function BookingSummary({ specialtyName, doctorName, serviceName, date, slotTime, type, price, onBook, isBooking }: Props) {
-  const finalPrice = price * 0.2; // Assuming 80% BHYT coverage
+function formatDateTime(value: string): string {
+  if (!value) return 'Chưa chọn';
+  return new Intl.DateTimeFormat('vi-VN', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
 
+function formatPrice(value: number | null): string {
+  if (value === null || Number.isNaN(value)) return 'Chưa cập nhật';
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts.slice(-2).map((part) => part[0]).join('').toUpperCase() || 'BN';
+}
+
+export function BookingSummary({
+  patientName,
+  patientPhone,
+  specialtyName,
+  doctorName,
+  facilityName,
+  serviceName,
+  serviceDuration,
+  bookingMode,
+  startsAt,
+  endsAt,
+  type,
+  price,
+  reason,
+  patientNote,
+  onReasonChange,
+  onPatientNoteChange,
+  onBook,
+  isBooking,
+}: Props) {
   return (
-    <>
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 sticky top-6 overflow-hidden">
-        <div className="bg-slate-50 p-5 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-sky-600" />
-            Tóm Tắt Phiếu Khám
-          </h3>
-          <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-1 rounded">Tự động lưu</span>
+    <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-slate-50 p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">Bước 5</p>
+          <h2 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-900">
+            <FileText className="h-5 w-5 text-sky-600" /> Kiểm tra thông tin
+          </h2>
         </div>
 
-        <div className="p-6">
-          <div className="mb-6">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">NGƯỜI KHÁM</div>
-            <div className="flex gap-3">
-              <div className="w-10 h-10 bg-sky-100 text-sky-700 rounded-full flex items-center justify-center font-bold shrink-0">
-                NA
-              </div>
-              <div>
-                <div className="font-bold text-slate-900 text-sm">Hồ sơ bệnh nhân hiện tại</div>
-                <div className="text-xs text-slate-500 mt-0.5">Thông tin sẽ được lấy từ hồ sơ của bạn</div>
-              </div>
+        <div className="p-5">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sky-100 font-bold text-sky-700">{initials(patientName)}</div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-slate-900">{patientName || 'Chưa cập nhật họ tên'}</p>
+              {patientPhone && <p className="mt-1 text-xs text-slate-500">{patientPhone}</p>}
             </div>
           </div>
 
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 mb-6">
-            <div className="text-xs text-slate-600 mb-2">Triệu chứng khai báo:</div>
-            <div className="text-sm font-medium text-slate-900 italic mb-3">
-              "Đau thắt ngực nhẹ, khó thở khi vận động gắng sức khoảng 3 ngày nay."
-            </div>
-            <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
-              <ShieldCheck className="w-3.5 h-3.5" /> Ưu tiên thẩm định phòng ngừa mạch vành
-            </div>
+          <dl className="mt-5 space-y-3 text-sm">
+            <SummaryRow label="Chuyên khoa" value={specialtyName} />
+            <SummaryRow label="Dịch vụ" value={serviceName} />
+            {serviceDuration !== null && <SummaryRow label="Thời lượng" value={`${serviceDuration} phút`} />}
+            <SummaryRow label="Bác sĩ" value={doctorName} accent />
+            <SummaryRow label="Cơ sở" value={facilityName} />
+            <SummaryRow label="Thời gian" value={startsAt ? `${formatDateTime(startsAt)}${endsAt ? ` – ${formatDateTime(endsAt)}` : ''}` : ''} />
+            <SummaryRow label="Hình thức" value={type === 'offline' ? 'Khám tại cơ sở' : 'Khám trực tuyến'} />
+            {bookingMode && <SummaryRow label="Loại dịch vụ" value={bookingMode === 'group' ? 'Theo sức chứa' : 'Khám riêng với bác sĩ'} />}
+          </dl>
+
+          <div className="mt-5 space-y-4 border-t border-slate-100 pt-5">
+            <label className="block text-sm font-semibold text-slate-700">
+              Lý do khám <span className="text-red-500">*</span>
+              <textarea
+                value={reason}
+                onChange={(event) => onReasonChange(event.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Mô tả ngắn triệu chứng hoặc nhu cầu khám"
+                className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              Ghi chú thêm <span className="font-normal text-slate-400">(không bắt buộc)</span>
+              <textarea
+                value={patientNote}
+                onChange={(event) => onPatientNoteChange(event.target.value)}
+                maxLength={500}
+                rows={2}
+                placeholder="Thông tin bạn muốn gửi trước cho cơ sở khám"
+                className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              />
+            </label>
           </div>
 
-          <div className="space-y-3 mb-6">
-            <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
-              <div className="text-slate-500">Chuyên khoa:</div>
-              <div className="font-bold text-slate-900">{specialtyName || 'Chưa chọn'}</div>
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-between text-sm text-slate-600">
+              <span>Phí dịch vụ tham khảo</span>
+              <span className="font-bold text-slate-900">{formatPrice(price)}</span>
             </div>
-            <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
-              <div className="text-slate-500">Bác sĩ khám:</div>
-              <div className="font-bold text-sky-700">{doctorName || 'Chưa chọn'}</div>
-            </div>
-            <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
-              <div className="text-slate-500">Dịch vụ:</div>
-              <div className="font-bold text-slate-900">{serviceName || 'Chưa chọn'}</div>
-            </div>
-            <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
-              <div className="text-slate-500">Thời gian hẹn:</div>
-              <div className="font-bold text-slate-900">{slotTime ? `${slotTime} - Ngày ${date}` : 'Chưa chọn'}</div>
-            </div>
-            <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
-              <div className="text-slate-500">Hình thức:</div>
-              <div className="font-bold text-slate-900">{type === 'offline' ? 'Khám Trực Tiếp (P.304)' : 'Khám Video Từ Xa'}</div>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-100 pt-4 mb-6">
-            <div className="flex justify-between text-sm mb-2 text-slate-600">
-              <span>Phí khám lâm sàng:</span>
-              <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price)}</span>
-            </div>
-            <div className="flex justify-between text-sm mb-4 text-emerald-600 font-medium">
-              <span>Giảm trừ BHYT điện tử (80%):</span>
-              <span>-{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price * 0.8)}</span>
-            </div>
-            <div className="flex justify-between items-end mt-4">
-              <span className="font-bold text-slate-900">Tạm tính thanh toán:</span>
-              <span className="text-2xl font-bold text-sky-700">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(finalPrice)}</span>
-            </div>
-          </div>
-
-          <div className="bg-sky-50 border border-sky-100 p-3 rounded-xl text-xs text-sky-800 flex gap-3 mb-6">
-            <BadgeCheck className="w-6 h-6 shrink-0 text-sky-600" />
-            <span className="leading-relaxed"><strong className="font-bold">Bảo đảm chuyên môn HITL:</strong> Yêu cầu đặt lịch sẽ được chuyển ngay đến Bàn Điều Phối Y Tế duyệt và phân phòng trong vòng 15 phút.</span>
+            <p className="mt-2 flex items-start gap-2 text-xs leading-5 text-slate-500">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> Chi phí cuối cùng do cơ sở khám xác nhận.
+            </p>
           </div>
 
           <button
+            type="button"
             onClick={onBook}
-            disabled={isBooking || !doctorName || !slotTime}
-            className="w-full bg-sky-700 hover:bg-sky-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-md shadow-sky-700/20 mb-3"
+            disabled={isBooking}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-sky-700 py-3.5 font-bold text-white shadow-md shadow-sky-700/20 transition-colors hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {isBooking ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Đang xử lý...</>
-            ) : (
-              <>Xác nhận đặt lịch hẹn ngay <ArrowRight className="w-4 h-4" /></>
-            )}
-          </button>
-          <button className="w-full py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center gap-2">
-            <ArrowLeft className="w-4 h-4" /> Quay lại trang tư vấn AI
+            {isBooking ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</> : <><CalendarDays className="h-4 w-4" /> Xác nhận đặt lịch</>}
           </button>
         </div>
       </div>
+    </aside>
+  );
+}
 
-      <div className="mt-6 bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-4">
-        <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
-          <Phone className="w-5 h-5" />
-        </div>
-        <div>
-          <div className="font-bold text-slate-900 text-sm">Cần hỗ trợ khẩn cấp?</div>
-          <div className="text-xs text-slate-500">Hotline lâm sàng 24/7</div>
-        </div>
-        <div className="ml-auto text-lg font-bold text-red-600">
-          1900 8866
-        </div>
-      </div>
-    </>
-  )
+function SummaryRow({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="grid grid-cols-[88px_1fr] items-start gap-3">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className={accent ? 'font-bold text-sky-700' : 'font-semibold text-slate-900'}>{value || 'Chưa chọn'}</dd>
+    </div>
+  );
 }

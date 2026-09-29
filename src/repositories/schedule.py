@@ -6,7 +6,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from src.models.catalog import Doctor, DoctorSchedule, Facility
+from src.models.catalog import Doctor, DoctorSchedule, Facility, Service
+from src.models.doctor import DoctorService
 
 
 class ScheduleRepositoryMixin:
@@ -73,6 +74,7 @@ class ScheduleRepositoryMixin:
         *,
         doctor_id: UUID | None,
         facility_id: UUID | None,
+        service_id: UUID | None,
         starts_from: datetime | None,
         starts_to: datetime | None,
         schedule_status: str | None,
@@ -95,6 +97,15 @@ class ScheduleRepositoryMixin:
             statement = statement.where(DoctorSchedule.doctor_id == doctor_id)
         if facility_id:
             statement = statement.where(DoctorSchedule.facility_id == facility_id)
+        if service_id:
+            statement = statement.join(
+                DoctorService,
+                DoctorService.doctor_id == DoctorSchedule.doctor_id,
+            ).join(Service, Service.id == DoctorService.service_id).where(
+                DoctorService.service_id == service_id,
+                DoctorService.active.is_(True),
+                Service.status == "active",
+            )
         if starts_from:
             statement = statement.where(DoctorSchedule.ends_at > starts_from)
         if starts_to:

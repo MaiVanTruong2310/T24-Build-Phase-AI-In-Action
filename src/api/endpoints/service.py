@@ -17,6 +17,8 @@ from src.services.catalog import CatalogService
 async def list_public_services(
     name: str | None = Query(default=None, max_length=200),
     category: str | None = Query(default=None, max_length=100),
+    specialty_id: UUID | None = None,
+    facility_id: UUID | None = None,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
     _: User = Depends(get_current_user),
@@ -29,6 +31,8 @@ async def list_public_services(
         limit=limit,
         name=name,
         category=category,
+        specialty_id=specialty_id,
+        facility_id=facility_id,
     )
     return success_response([ServiceResponse.model_validate(value) for value in values], "Services retrieved")
 
