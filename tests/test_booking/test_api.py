@@ -5,7 +5,26 @@ from uuid import uuid4
 import pytest
 
 from src.api.dependencies import get_current_user
+from src.db.dependencies import get_db_session
 from src.main import app
+
+
+class EmptyResult:
+    def scalars(self):
+        return self
+
+    def all(self):
+        return []
+
+
+class EmptySession:
+    async def execute(self, _statement):
+        return EmptyResult()
+
+
+async def override_db_session():
+    """Keep authorization contract tests independent of PostgreSQL configuration."""
+    yield EmptySession()
 
 
 @pytest.mark.asyncio
@@ -24,6 +43,7 @@ async def test_authenticated_roles_can_access_booking_routes(client, role):
     from types import SimpleNamespace
 
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4(), role=role, status="active")
+    app.dependency_overrides[get_db_session] = override_db_session
     try:
         response = await client.get("/api/v1/bookings")
     finally:

@@ -1,7 +1,7 @@
 """Booking capacity and ownership business-rule tests."""
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -166,3 +166,36 @@ def test_requested_time_booking_does_not_require_published_schedule():
     assert booking.schedule_id is None
     assert booking.starts_at == starts_at
     assert repository.booking.status == "pending_approval"
+
+
+def test_booking_request_normalizes_timezone_to_utc():
+    """Requested times are normalized before business-rule validation."""
+    local_start = datetime(2030, 1, 1, 9, 0, tzinfo=timezone(timedelta(hours=7)))
+    request = BookingCreate(
+        doctor_id=uuid4(),
+        facility_id=uuid4(),
+        starts_at=local_start,
+        ends_at=local_start + timedelta(minutes=30),
+        service_id=uuid4(),
+        specialty_id=uuid4(),
+        reason="Timezone check",
+    )
+
+    assert request.starts_at == datetime(2030, 1, 1, 2, 0, tzinfo=UTC)
+    assert request.starts_at.tzinfo == UTC
+
+
+def test_booking_request_rejects_naive_requested_time():
+    """Naive timestamps are rejected instead of being guessed as local time."""
+    naive_start = datetime(2030, 1, 1, 9, 0)
+
+    with pytest.raises(ValueError, match="timezone offset"):
+        BookingCreate(
+            doctor_id=uuid4(),
+            facility_id=uuid4(),
+            starts_at=naive_start,
+            ends_at=naive_start + timedelta(minutes=30),
+            service_id=uuid4(),
+            specialty_id=uuid4(),
+            reason="Timezone check",
+        )

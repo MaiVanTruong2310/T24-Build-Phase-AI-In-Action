@@ -67,6 +67,9 @@ class BookingService:
                 raise ConflictError("SPECIALTY_NOT_AVAILABLE", "Specialty is not available for this doctor")
 
             if schedule:
+                # The schedule row lock is held until this transaction commits. Every
+                # concurrent request for this schedule therefore waits before counting,
+                # making the count-and-insert decision serial for the same schedule.
                 active_count = await self.bookings.count_active_for_schedule(schedule.id)
                 if service.booking_mode == "doctor_visit" and active_count >= 1:
                     raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")

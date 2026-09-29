@@ -35,10 +35,8 @@ def upgrade() -> None:
         )
     )
 
-    op.alter_column("bookings", "doctor_id", existing_type=postgresql.UUID(as_uuid=True), nullable=False)
-    op.alter_column("bookings", "facility_id", existing_type=postgresql.UUID(as_uuid=True), nullable=False)
-    op.alter_column("bookings", "starts_at", existing_type=sa.DateTime(timezone=True), nullable=False)
-    op.alter_column("bookings", "ends_at", existing_type=sa.DateTime(timezone=True), nullable=False)
+    # Keep these columns nullable for legacy rows that cannot be resolved to a
+    # schedule. New bookings validate and always populate all four values.
     op.create_foreign_key(
         "fk_bookings_doctor_id_doctors",
         "bookings",

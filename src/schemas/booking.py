@@ -1,6 +1,6 @@
 """Booking API request and response schemas."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -32,6 +32,16 @@ class BookingCreate(BaseModel):
         if not normalized:
             raise ValueError("reason must not be blank")
         return normalized
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def normalize_datetime_to_utc(cls, value: datetime | None) -> datetime | None:
+        """Require timezone-aware input and persist all requested times as UTC."""
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("datetime must include a timezone offset")
+        return value.astimezone(UTC)
 
     @model_validator(mode="after")
     def validate_slot_request(self) -> "BookingCreate":
