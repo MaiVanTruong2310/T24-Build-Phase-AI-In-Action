@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", sans-serif;
+  --color-medicare-primary: #0284c7;
+  --color-medicare-navy: #0f172a;
+  --color-triage-critical: #dc2626;
+  --color-triage-warning: #d97706;
+  --color-triage-online: #16a34a;
+  --color-ai-cyan: #0891b2;
+}
+
+:root {
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  color: #0f172a;
+  background: #f8fafc;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}

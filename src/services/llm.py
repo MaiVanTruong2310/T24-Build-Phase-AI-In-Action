@@ -4,6 +4,7 @@ from src.config import get_settings
 
 
 def get_llm() -> ChatOpenAI:
+    """Create the configured chat model client for agent nodes."""
     settings = get_settings()
     return ChatOpenAI(
         model=settings.model_name,

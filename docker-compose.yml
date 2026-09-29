@@ -1,9 +1,10 @@
 services:
   backend:
+    image: ${IMAGE_REPO:-ai20k-agent}:${IMAGE_TAG:-local}
+    pull_policy: ${PULL_POLICY:-missing}
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE_REPO:-ai20k-agent}:${IMAGE_TAG:-local}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

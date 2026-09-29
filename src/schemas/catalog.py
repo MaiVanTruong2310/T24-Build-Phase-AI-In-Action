@@ -1,0 +1,73 @@
+"""Compatibility facade for split catalog schemas."""
+
+from src.schemas.audit import CatalogAuditResponse
+from src.schemas.catalog_types import (
+    CatalogBase,
+    CatalogStatus,
+    MutableScheduleStatus,
+    ReviewStatus,
+    ScheduleStatus,
+)
+from src.schemas.doctor import (
+    DoctorCreate,
+    DoctorFacilityAssignment,
+    DoctorFacilityResponse,
+    DoctorFacilityUpdate,
+    DoctorResponse,
+    DoctorReviewRequest,
+    DoctorServiceAssignment,
+    DoctorServiceResponse,
+    DoctorSpecialtyAssignment,
+    DoctorSpecialtyResponse,
+    DoctorUpdate,
+)
+from src.schemas.facility import FacilityCreate, FacilityResponse, FacilityUpdate
+from src.schemas.schedule import (
+    BulkImportItemResult,
+    BulkImportResponse,
+    BulkScheduleImportRequest,
+    DoctorScheduleCreate,
+    DoctorScheduleResponse,
+    DoctorScheduleUpdate,
+    ScheduleCancellationRequest,
+    ScheduleImportRecord,
+)
+from src.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
+from src.schemas.specialty import SpecialtyCreate, SpecialtyResponse, SpecialtyUpdate
+
+__all__ = [
+    "BulkImportItemResult",
+    "BulkImportResponse",
+    "BulkScheduleImportRequest",
+    "CatalogAuditResponse",
+    "CatalogBase",
+    "CatalogStatus",
+    "DoctorCreate",
+    "DoctorFacilityAssignment",
+    "DoctorFacilityResponse",
+    "DoctorFacilityUpdate",
+    "DoctorResponse",
+    "DoctorReviewRequest",
+    "DoctorScheduleCreate",
+    "DoctorScheduleResponse",
+    "DoctorScheduleUpdate",
+    "DoctorServiceResponse",
+    "DoctorServiceAssignment",
+    "DoctorSpecialtyResponse",
+    "DoctorSpecialtyAssignment",
+    "DoctorUpdate",
+    "FacilityCreate",
+    "FacilityResponse",
+    "FacilityUpdate",
+    "MutableScheduleStatus",
+    "ReviewStatus",
+    "ScheduleCancellationRequest",
+    "ScheduleImportRecord",
+    "ScheduleStatus",
+    "ServiceCreate",
+    "ServiceResponse",
+    "ServiceUpdate",
+    "SpecialtyCreate",
+    "SpecialtyResponse",
+    "SpecialtyUpdate",
+]

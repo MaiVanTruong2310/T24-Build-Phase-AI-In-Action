@@ -12,7 +12,10 @@ async def test_health(client):
 @pytest.mark.asyncio
 async def test_chat_empty_message(client):
     response = await client.post("/api/v1/chat", json={"message": ""})
-    assert response.status_code == 422  # Validation error
+    assert response.status_code == 400  # Validation error
+    payload = response.json()
+    assert payload["error"] == {"code": 400}
+    assert "details" not in payload["error"]
 
 
 @pytest.mark.asyncio

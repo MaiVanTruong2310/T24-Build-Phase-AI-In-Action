@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.local
+
+# Vite / TypeScript caches
+.vite
+*.tsbuildinfo
+AGENT.md

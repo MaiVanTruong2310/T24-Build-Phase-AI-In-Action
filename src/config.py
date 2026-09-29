@@ -26,7 +26,17 @@ class Settings(BaseSettings):
     llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
 
     # Database
-    database_url: str = "sqlite:///./data/app.db"
+    database_url: str = ""
+    database_auto_create: bool = True
+
+    # Authentication
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)
+    jwt_refresh_token_expire_days: int = Field(default=30, ge=1, le=365)
+    otp_expire_minutes: int = Field(default=5, ge=1, le=30)
+    otp_max_attempts: int = Field(default=5, ge=1, le=10)
+    mock_otp_code: str = ""
 
     # Vector Store
     chroma_persist_dir: str = "./data/chroma"
@@ -34,4 +44,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Load and cache application settings from the environment and .env file."""
     return Settings()
