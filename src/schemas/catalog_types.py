@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 CatalogStatus = Literal["active", "inactive"]
+BookingMode = Literal["group", "doctor_visit"]
 ReviewStatus = Literal["needs_review", "approved", "rejected"]
 ScheduleStatus = Literal["available", "inactive", "blocked", "cancelled"]
 MutableScheduleStatus = Literal["available", "inactive", "blocked"]

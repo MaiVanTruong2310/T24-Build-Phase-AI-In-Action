@@ -1,6 +1,7 @@
 """SQLAlchemy persistence models."""
 
 from src.models.auth import OtpChallenge, RefreshSession
+from src.models.booking import Booking
 from src.models.catalog import (
     CatalogAuditEvent,
     Doctor,
@@ -16,6 +17,7 @@ from src.models.user import User
 
 __all__ = [
     "CatalogAuditEvent",
+    "Booking",
     "Doctor",
     "DoctorFacility",
     "DoctorSchedule",

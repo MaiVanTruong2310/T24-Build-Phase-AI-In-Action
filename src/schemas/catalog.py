@@ -2,6 +2,7 @@
 
 from src.schemas.audit import CatalogAuditResponse
 from src.schemas.catalog_types import (
+    BookingMode,
     CatalogBase,
     CatalogStatus,
     MutableScheduleStatus,
@@ -39,6 +40,7 @@ __all__ = [
     "BulkImportItemResult",
     "BulkImportResponse",
     "BulkScheduleImportRequest",
+    "BookingMode",
     "CatalogAuditResponse",
     "CatalogBase",
     "CatalogStatus",

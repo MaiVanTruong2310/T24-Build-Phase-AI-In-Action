@@ -43,3 +43,10 @@ async def require_staff(user: User = Depends(get_current_user)) -> User:
     if user.role != "staff":
         raise AuthorizationError()
     return user
+
+
+async def require_patient(user: User = Depends(get_current_user)) -> User:
+    """Require a patient role for patient-owned booking endpoints."""
+    if user.role != "patient":
+        raise AuthorizationError()
+    return user

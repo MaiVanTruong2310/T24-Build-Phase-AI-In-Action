@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.catalog_types import CatalogBase, CatalogStatus
+from src.schemas.catalog_types import BookingMode, CatalogBase, CatalogStatus
 
 
 class ServiceCreate(CatalogBase):
@@ -16,6 +16,7 @@ class ServiceCreate(CatalogBase):
     original_price: float | None = Field(default=None, ge=0)
     category: str | None = Field(default=None, max_length=100)
     features: list[str] | None = Field(default=None)
+    booking_mode: BookingMode = "group"
 
 
 class ServiceUpdate(BaseModel):
@@ -28,6 +29,7 @@ class ServiceUpdate(BaseModel):
     original_price: float | None = Field(default=None, ge=0)
     category: str | None = Field(default=None, max_length=100)
     features: list[str] | None = Field(default=None)
+    booking_mode: BookingMode | None = None
     status: CatalogStatus | None = None
 
 
@@ -45,6 +47,7 @@ class ServiceResponse(BaseModel):
     original_price: float | None
     category: str | None
     features: list[str] | None
+    booking_mode: BookingMode
     patient_count: int | None
     satisfaction_rate: float | None
     status: str

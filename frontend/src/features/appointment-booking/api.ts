@@ -111,7 +111,6 @@ export interface CreateBookingPayload {
   schedule_id: string;
   service_id: string;
   specialty_id: string;
-  ai_triage_id: string;
   encounter_type: 'in_person' | 'telehealth';
   reason: string;
   patient_note?: string;

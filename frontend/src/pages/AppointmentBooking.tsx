@@ -75,8 +75,21 @@ export default function AppointmentBooking() {
   const handleBooking = async () => {
     if (!selectedDoctorId || !selectedSpecialty || !selectedService || !selectedSlot) return;
     setIsBooking(true);
-    window.setTimeout(() => setIsBooking(false), 250);
-    alert('Tính năng giữ chỗ và xác nhận lịch sẽ được mở ở Sprint 004.');
+    try {
+      await createBooking({
+        schedule_id: selectedSlot,
+        service_id: 'srv_123',
+        specialty_id: selectedSpecialty,
+        encounter_type: selectedType === 'offline' ? 'in_person' : 'telehealth',
+        reason: 'Đau thắt ngực nhẹ',
+      });
+      alert('Đặt lịch thành công!');
+    } catch (error) {
+      console.error(error);
+      alert('Có lỗi xảy ra khi đặt lịch. Vui lòng thử lại.');
+    } finally {
+      setIsBooking(false);
+    }
   };
 
   const selectedSpecialtyName = specialties.find(s => s.id === selectedSpecialty)?.name || '';
