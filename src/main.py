@@ -9,6 +9,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.endpoints.auth import router as auth_router
 from src.api.endpoints.auth import user_router
+from src.api.endpoints.booking import router as booking_router
+from src.api.endpoints.booking import staff_router as staff_booking_router
 from src.api.endpoints.catalog import router as catalog_router
 from src.api.endpoints.catalog import staff_router as catalog_staff_router
 from src.api.handlers import (
@@ -63,6 +65,8 @@ app.add_middleware(
 app.include_router(router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(user_router, prefix="/api/v1")
+app.include_router(booking_router, prefix="/api/v1")
+app.include_router(staff_booking_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(catalog_staff_router, prefix="/api/v1")
 app.add_exception_handler(AppError, app_error_handler)

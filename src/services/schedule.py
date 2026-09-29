@@ -98,6 +98,7 @@ class ScheduleServiceMixin:
         *,
         doctor_id: UUID | None,
         facility_id: UUID | None,
+        service_id: UUID | None,
         starts_from: datetime | None,
         starts_to: datetime | None,
         public_only: bool,
@@ -110,6 +111,7 @@ class ScheduleServiceMixin:
         return await self.catalog.list_schedules(
             doctor_id=doctor_id,
             facility_id=facility_id,
+            service_id=service_id,
             starts_from=starts_from,
             starts_to=starts_to,
             schedule_status=schedule_status,

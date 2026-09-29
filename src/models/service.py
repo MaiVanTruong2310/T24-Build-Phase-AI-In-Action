@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, Float, Integer, Numeric, String, Text, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, Float, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,7 @@ class Service(Base):
     """Bookable medical service."""
 
     __tablename__ = "services"
+    __table_args__ = (CheckConstraint("booking_mode IN ('group', 'doctor_visit')", name="ck_services_booking_mode"),)
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
@@ -29,6 +30,7 @@ class Service(Base):
     price: Mapped[float | None] = mapped_column(Numeric(12, 2))
     original_price: Mapped[float | None] = mapped_column(Numeric(12, 2))
     category: Mapped[str | None] = mapped_column(String(100))
+    booking_mode: Mapped[str] = mapped_column(String(20), default="group", nullable=False)
     features: Mapped[list[str] | None] = mapped_column(JSON)
     patient_count: Mapped[int | None] = mapped_column(Integer, default=0)
     satisfaction_rate: Mapped[float | None] = mapped_column(Float)

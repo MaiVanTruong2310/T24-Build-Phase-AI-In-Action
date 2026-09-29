@@ -1,8 +1,10 @@
-import { Bell, Settings, PlusSquare, LogOut, MessageSquare, Calendar, Clock, FileText, ArrowRightLeft } from 'lucide-react';
+import React from 'react';
+import { Bell, Settings, PlusSquare, LogOut, MessageSquare, Calendar, Clock, FileText, ArrowRightLeft, User } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../../app/store';
 import { logoutUser } from '../../features/auth/authSlice';
+import { getUserAvatarUrl } from '../../features/auth/session';
 
 export function Header() {
   const dispatch = useDispatch<AppDispatch>();
@@ -63,18 +65,26 @@ export function Header() {
               </button>
 
               {/* User profile */}
-              <div 
-                className="flex items-center gap-2 ml-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors group"
-                onClick={handleLogout}
-                title="Đăng xuất"
-              >
-                <img 
-                  src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150" 
-                  alt="Avatar" 
-                  className="w-8 h-8 rounded-full border border-slate-200 group-hover:hidden object-cover" 
-                />
-                <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
-                  <LogOut className="w-4 h-4" />
+          {user ? (
+            <div
+              className="flex items-center gap-2 ml-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors group"
+              onClick={handleLogout}
+              title="Đăng xuất"
+            >
+              <img 
+                src={getUserAvatarUrl(user)} 
+                alt={user.full_name} 
+                className="w-8 h-8 rounded-full border border-slate-200 group-hover:hidden object-cover" 
+              />
+              <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
+                <LogOut className="w-4 h-4" />
+              </div>
+              <div className="leading-tight hidden lg:block">
+                <p className="text-xs font-bold text-slate-900">{user.full_name || 'Người dùng'}</p>
+                <p className="text-[10px] text-slate-500">{user.role === 'staff' ? 'Nhân viên' : 'Bệnh nhân'}</p>
+              </div>
+            </div>
+              
                 </div>
                 <div className="leading-tight hidden lg:block text-left">
                   <p className="text-xs font-bold text-slate-900">{displayUser.full_name}</p>
