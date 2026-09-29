@@ -30,6 +30,7 @@ BUSINESS_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 async def doctor_availability(
     doctor_id: UUID,
     facility_id: UUID | None = None,
+    service_id: UUID | None = None,
     from_datetime: datetime | None = Query(default=None, alias="from"),
     to_datetime: datetime | None = Query(default=None, alias="to"),
     selected_date: date | None = Query(default=None, alias="date"),
@@ -46,6 +47,7 @@ async def doctor_availability(
     values = await service.list_schedules(
         doctor_id=doctor_id,
         facility_id=facility_id,
+        service_id=service_id,
         starts_from=starts_from,
         starts_to=starts_to,
         public_only=True,
@@ -61,6 +63,7 @@ async def doctor_availability(
 async def staff_list_schedules(
     doctor_id: UUID | None = None,
     facility_id: UUID | None = None,
+    service_id: UUID | None = None,
     schedule_status: ScheduleStatus | None = Query(default=None, alias="status"),
     source_system: str | None = Query(default=None, max_length=64),
     starts_from: datetime | None = Query(default=None, alias="from"),
@@ -74,6 +77,7 @@ async def staff_list_schedules(
     values = await service.list_schedules(
         doctor_id=doctor_id,
         facility_id=facility_id,
+        service_id=service_id,
         starts_from=starts_from,
         starts_to=starts_to,
         schedule_status=schedule_status,

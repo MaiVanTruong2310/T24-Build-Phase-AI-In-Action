@@ -4,6 +4,7 @@ import { Link, NavLink } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import type { RootState, AppDispatch } from '../../app/store'
 import { logoutUser } from '../../features/auth/authSlice'
+import { getUserAvatarUrl } from '../../features/auth/session'
 
 export function Header() {
   const dispatch = useDispatch<AppDispatch>();
@@ -56,13 +57,13 @@ export function Header() {
                   onClick={handleLogout}
                   title="Đăng xuất"
                 >
-                  <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Avatar" className="w-8 h-8 rounded-full border border-slate-200 group-hover:hidden" />
+                  <img src={getUserAvatarUrl(user)} alt={user.full_name} className="w-8 h-8 rounded-full border border-slate-200 group-hover:hidden" />
                   <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
                     <LogOut className="w-4 h-4" />
                   </div>
                   <div className="leading-tight hidden lg:block">
                     <p className="text-xs font-bold text-slate-900">{user.full_name || 'Người dùng'}</p>
-                    <p className="text-[10px] text-slate-500">Bệnh nhân</p>
+                    <p className="text-[10px] text-slate-500">{user.role === 'staff' ? 'Nhân viên' : 'Bệnh nhân'}</p>
                   </div>
                 </div>
               ) : (

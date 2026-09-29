@@ -24,12 +24,24 @@ class EmptyCatalogService:
 class EmptyPublicCatalogService:
     """Catalog service double for public patient catalog requests."""
 
-    async def list_services(self, *, public_only, offset, limit, name=None, category=None):
+    async def list_services(
+        self,
+        *,
+        public_only,
+        offset,
+        limit,
+        name=None,
+        category=None,
+        specialty_id=None,
+        facility_id=None,
+    ):
         assert public_only is True
         assert offset == 0
         assert limit == 50
         assert name is None
         assert category is None
+        assert specialty_id is None
+        assert facility_id is None
         return []
 
     async def get_service(self, resource_id, *, public_only):
@@ -48,6 +60,7 @@ class EmptyPublicCatalogService:
             features=[],
             patient_count=0,
             satisfaction_rate=5.0,
+            booking_mode="group",
             status="active",
             created_at=now,
             updated_at=now,

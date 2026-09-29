@@ -18,6 +18,8 @@ class MedicalServiceMixin:
         limit: int,
         name: str | None = None,
         category: str | None = None,
+        specialty_id: UUID | None = None,
+        facility_id: UUID | None = None,
     ) -> list[Service]:
         """List medical services."""
         return await self.catalog.list_services(
@@ -26,6 +28,8 @@ class MedicalServiceMixin:
             limit=limit,
             name=name,
             category=category,
+            specialty_id=specialty_id,
+            facility_id=facility_id,
         )
 
     async def get_service(self, resource_id: UUID, *, public_only: bool) -> Service:

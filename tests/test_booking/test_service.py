@@ -59,6 +59,19 @@ class FakeBookingRepository:
         assert service_id == self.service.id
         return self.service
 
+    async def get_doctor(self, doctor_id):
+        assert doctor_id == self.schedule.doctor_id
+        return SimpleNamespace(
+            id=doctor_id,
+            status="active",
+            review_status="approved",
+            booking_enabled=True,
+        )
+
+    async def get_facility(self, facility_id):
+        assert facility_id == self.schedule.facility_id
+        return SimpleNamespace(id=facility_id, status="active")
+
     async def get_specialty(self, specialty_id):
         return SimpleNamespace(id=specialty_id, status="active")
 
@@ -67,6 +80,9 @@ class FakeBookingRepository:
 
     async def has_doctor_specialty(self, doctor_id, specialty_id):
         return doctor_id == self.schedule.doctor_id
+
+    async def has_doctor_facility(self, doctor_id, facility_id):
+        return doctor_id == self.schedule.doctor_id and facility_id == self.schedule.facility_id
 
     async def count_active_for_schedule(self, schedule_id):
         assert schedule_id == self.schedule.id
@@ -89,8 +105,8 @@ def create_request(schedule, service):
     )
 
 
-def test_group_booking_uses_shared_schedule_capacity():
-    """A group service can use the remaining shared schedule capacity."""
+def test_group_booking_enters_staff_review_queue():
+    """A group booking consumes capacity while awaiting staff review."""
     schedule = make_schedule(capacity=2)
     service = SimpleNamespace(id=uuid4(), status="active", booking_mode="group")
     repository = FakeBookingRepository(schedule, service, active_count=1)
@@ -100,7 +116,7 @@ def test_group_booking_uses_shared_schedule_capacity():
     booking = asyncio.run(booking_service.create(uuid4(), create_request(schedule, service)))
 
     assert isinstance(booking, Booking)
-    assert repository.booking.status == "confirmed"
+    assert repository.booking.status == "pending_approval"
 
 
 def test_group_booking_rejects_when_shared_capacity_is_full():
@@ -125,3 +141,28 @@ def test_doctor_visit_allows_only_one_booking_per_schedule():
 
     with pytest.raises(ConflictError, match="already booked"):
         asyncio.run(booking_service.create(uuid4(), create_request(schedule, service)))
+
+
+def test_requested_time_booking_does_not_require_published_schedule():
+    """A patient can submit a requested time for staff to review and schedule."""
+    schedule = make_schedule(capacity=0)
+    service = SimpleNamespace(id=uuid4(), status="active", booking_mode="group")
+    repository = FakeBookingRepository(schedule, service, active_count=0)
+    booking_service = BookingService(FakeSession())
+    booking_service.bookings = repository
+    starts_at = schedule.starts_at + timedelta(days=1)
+    request = BookingCreate(
+        doctor_id=schedule.doctor_id,
+        facility_id=schedule.facility_id,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(minutes=30),
+        service_id=service.id,
+        specialty_id=uuid4(),
+        reason="Requested consultation",
+    )
+
+    booking = asyncio.run(booking_service.create(uuid4(), request))
+
+    assert booking.schedule_id is None
+    assert booking.starts_at == starts_at
+    assert repository.booking.status == "pending_approval"

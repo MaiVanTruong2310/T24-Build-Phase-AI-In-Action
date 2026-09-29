@@ -1,14 +1,23 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
+import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from '../../app/store'
+import { fetchWithAuth } from '../../app/apiClient'
+import {
+  clearSession,
+  publishSession,
+  readAccessToken,
+  readRefreshToken,
+  saveTokens,
+  type SessionUser,
+} from './session'
 
 export interface User {
   id: string;
-  email?: string;
-  phone?: string;
+  email?: string | null;
+  phone?: string | null;
   full_name: string;
   role: 'patient' | 'staff';
-  token: string;
-  refresh_token: string;
+  token?: string;
+  refresh_token?: string;
 }
 
 interface AuthState {
@@ -40,6 +49,52 @@ const translateError = (msg: string | undefined | null): string => {
   if (lower.includes('account is not active')) return 'Tài khoản chưa được kích hoạt.';
   return msg;
 };
+
+function toUser(profile: SessionUser, accessToken = readAccessToken(), refreshToken = readRefreshToken()): User {
+  return {
+    ...profile,
+    token: accessToken || undefined,
+    refresh_token: refreshToken || undefined,
+  };
+}
+
+function toSessionUser(profile: User): SessionUser {
+  return {
+    id: profile.id,
+    email: profile.email,
+    phone: profile.phone,
+    full_name: profile.full_name,
+    role: profile.role,
+  };
+}
+
+export const initializeAuth = createAsyncThunk(
+  'auth/initializeAuth',
+  async (_, { rejectWithValue }) => {
+    if (!readAccessToken() && !readRefreshToken()) {
+      return null;
+    }
+
+    try {
+      const response = await fetchWithAuth('/users/me');
+      if (!response.ok) {
+        return rejectWithValue('Session expired');
+      }
+
+      const payload = await response.json();
+      const profile = payload?.data as SessionUser | undefined;
+      if (!profile?.id || !profile.role) {
+        return rejectWithValue('Invalid session profile');
+      }
+
+      const user = toUser(profile);
+      publishSession(toSessionUser(user));
+      return user;
+    } catch {
+      return rejectWithValue('Unable to restore session');
+    }
+  },
+);
 
 export const loginUser = createAsyncThunk(
   'auth/loginUser',
@@ -86,10 +141,9 @@ export const loginUser = createAsyncThunk(
       }
 
       // Lưu token vào localStorage
-      localStorage.setItem('access_token', token);
-      localStorage.setItem('refresh_token', refresh_token);
+      saveTokens(token, refresh_token);
 
-      return {
+      const user = {
         id: userData.data.id,
         email: userData.data.email,
         phone: userData.data.phone,
@@ -98,6 +152,8 @@ export const loginUser = createAsyncThunk(
         token: token,
         refresh_token: refresh_token
       } as User;
+      publishSession(toSessionUser(user));
+      return user;
     } catch (err: unknown) {
       return rejectWithValue(getErrorMessage(err, 'Đăng nhập thất bại'));
     }
@@ -111,12 +167,10 @@ export const logoutUser = createAsyncThunk(
       const state = getState() as RootState;
       // Refresh tokens rotate after every successful refresh. Redux may still
       // contain the old value, so prefer the current persisted token.
-      const refresh_token = localStorage.getItem('refresh_token') || state.auth.user?.refresh_token;
+      const refresh_token = readRefreshToken() || state.auth.user?.refresh_token;
       
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-
       if (!refresh_token) {
+        clearSession();
         return true; // nothing to logout
       }
 
@@ -130,9 +184,11 @@ export const logoutUser = createAsyncThunk(
         // Even if it fails, we should clear the local state
         console.warn('Logout API failed');
       }
+      clearSession();
       return true;
     } catch (err: unknown) {
       console.warn(getErrorMessage(err, 'Logout request failed'));
+      clearSession();
       return true;
     }
   }
@@ -239,12 +295,27 @@ export const authSlice = createSlice({
       state.error = null
       state.registerSuccess = false
     },
+    sessionChanged: (state, action: PayloadAction<SessionUser | null>) => {
+      state.user = action.payload ? toUser(action.payload) : null
+      state.error = null
+    },
     resetRegisterSuccess: (state) => {
       state.registerSuccess = false
     }
   },
   extraReducers: (builder) => {
     builder
+      .addCase(initializeAuth.pending, (state) => {
+        state.loading = true
+      })
+      .addCase(initializeAuth.fulfilled, (state, action) => {
+        state.loading = false
+        state.user = action.payload
+      })
+      .addCase(initializeAuth.rejected, (state) => {
+        state.loading = false
+        state.user = null
+      })
       // Login
       .addCase(loginUser.pending, (state) => {
         state.loading = true
@@ -317,5 +388,5 @@ export const authSlice = createSlice({
   },
 })
 
-export const { logout, resetRegisterSuccess } = authSlice.actions
+export const { logout, sessionChanged, resetRegisterSuccess } = authSlice.actions
 export default authSlice.reducer

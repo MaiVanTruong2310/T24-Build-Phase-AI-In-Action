@@ -8,6 +8,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../app/store';
 import { logoutUser } from '../features/auth/authSlice';
+import { getUserAvatarUrl } from '../features/auth/session';
 
 export function StaffLayout() {
   const dispatch = useDispatch<AppDispatch>();
@@ -101,7 +102,7 @@ export function StaffLayout() {
                 onClick={handleLogout}
                 title="Đăng xuất"
               >
-                <img src="https://i.pravatar.cc/150?u=admin" alt="Admin" className="w-9 h-9 rounded-full object-cover border border-slate-200 group-hover:hidden" />
+                <img src={getUserAvatarUrl(user)} alt={user.full_name || 'Người dùng'} className="w-9 h-9 rounded-full object-cover border border-slate-200 group-hover:hidden" />
                 <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
                   <LogOut className="w-4 h-4" />
                 </div>

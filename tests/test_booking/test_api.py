@@ -1,5 +1,7 @@
 """Booking route and contract tests."""
 
+from uuid import uuid4
+
 import pytest
 
 from src.api.dependencies import get_current_user
@@ -8,7 +10,7 @@ from src.main import app
 
 @pytest.mark.asyncio
 async def test_booking_routes_require_authentication(client):
-    """Unauthenticated patients cannot access booking endpoints."""
+    """Unauthenticated users cannot access booking endpoints."""
     response = await client.get("/api/v1/bookings")
 
     assert response.status_code == 401
@@ -16,18 +18,18 @@ async def test_booking_routes_require_authentication(client):
 
 
 @pytest.mark.asyncio
-async def test_staff_cannot_access_patient_booking_routes(client):
-    """Staff requests do not bypass patient booking ownership rules."""
+@pytest.mark.parametrize("role", ["patient", "staff", "doctor"])
+async def test_authenticated_roles_can_access_booking_routes(client, role):
+    """Every authenticated role can use the common booking endpoints."""
     from types import SimpleNamespace
 
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id="staff-id", role="staff", status="active")
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4(), role=role, status="active")
     try:
         response = await client.get("/api/v1/bookings")
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 403
-    assert response.json()["error"] == {"code": 403}
+    assert response.status_code == 200
 
 
 def test_booking_routes_are_mounted_under_api_v1():
@@ -39,4 +41,10 @@ def test_booking_routes_are_mounted_under_api_v1():
         ("GET", "/api/v1/bookings"),
         ("GET", "/api/v1/bookings/{booking_id}"),
         ("POST", "/api/v1/bookings/{booking_id}/cancel"),
+    }.issubset({(method.upper(), path) for path, operations in paths.items() for method in operations})
+
+    assert {
+        ("GET", "/api/v1/staff/bookings"),
+        ("GET", "/api/v1/staff/bookings/{booking_id}"),
+        ("PATCH", "/api/v1/staff/bookings/{booking_id}/status"),
     }.issubset({(method.upper(), path) for path, operations in paths.items() for method in operations})

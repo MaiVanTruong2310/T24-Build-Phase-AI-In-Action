@@ -1,19 +1,23 @@
 """Booking API request and response schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-BookingStatus = Literal["confirmed", "cancelled"]
+BookingStatus = Literal["pending_approval", "confirmed", "rejected", "cancelled"]
 EncounterType = Literal["in_person", "telehealth"]
 
 
 class BookingCreate(BaseModel):
-    """Create a booking for one selected schedule."""
+    """Create a booking against a published schedule or request a time for staff review."""
 
-    schedule_id: UUID
+    schedule_id: UUID | None = None
+    doctor_id: UUID | None = None
+    facility_id: UUID | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
     service_id: UUID
     specialty_id: UUID
     encounter_type: EncounterType = "in_person"
@@ -29,6 +33,18 @@ class BookingCreate(BaseModel):
             raise ValueError("reason must not be blank")
         return normalized
 
+    @model_validator(mode="after")
+    def validate_slot_request(self) -> "BookingCreate":
+        """Require either a real schedule or enough data for a requested time."""
+        if self.schedule_id is None and not all(
+            (self.doctor_id, self.facility_id, self.starts_at, self.ends_at)
+        ):
+            raise ValueError("schedule_id or doctor_id, facility_id, starts_at and ends_at is required")
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValueError("ends_at must be after starts_at")
+        return self
+
+
 
 class BookingCancelRequest(BaseModel):
     """Optional reason for cancelling an owned booking."""
@@ -36,12 +52,25 @@ class BookingCancelRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class StaffBookingStatusUpdate(BaseModel):
+    """Allowed staff decision for a booking awaiting review."""
+
+    status: Literal["confirmed", "rejected"]
+    note: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str | None) -> str | None:
+        """Normalize optional staff notes and reject blank rejection notes."""
+        return value.strip() if value else None
+
+
 class BookingResponse(BaseModel):
     """Booking representation with schedule context for the client."""
 
     id: UUID
     user_id: UUID
-    schedule_id: UUID
+    schedule_id: UUID | None
     service_id: UUID
     specialty_id: UUID
     doctor_id: UUID
@@ -54,5 +83,28 @@ class BookingResponse(BaseModel):
     patient_note: str | None
     status: BookingStatus
     cancellation_reason: str | None
+    staff_note: str | None = None
+    reviewed_by: UUID | None = None
+    reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class StaffBookingResponse(BookingResponse):
+    """Booking representation enriched for staff review queues."""
+
+    patient_name: str | None
+    patient_email: str | None
+    patient_phone: str | None
+    patient_date_of_birth: date | None
+    patient_gender: str | None
+    patient_citizen_id: str | None
+    patient_health_insurance_code: str | None
+    doctor_name: str | None
+    doctor_title: str | None
+    doctor_avatar: str | None
+    specialty_name: str | None
+    service_name: str | None
+    facility_name: str | None
+    facility_address: str | None
+    room: str | None
