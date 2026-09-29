@@ -14,6 +14,7 @@ import ScheduleApprove from './pages/ScheduleApprove'
 import DoctorSchedule from './pages/DoctorSchedule'
 import PatientProfile from './pages/PatientProfile'
 import PatientDepartments from './pages/PatientDepartments'
+import PatientConsultation from './pages/PatientConsultation'
 
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
@@ -35,6 +36,9 @@ const router = createBrowserRouter([
       { path: '/forgot-password', element: <ForgotPassword /> },
     ]
   },
+  // Standalone Patient Profile Page (renders full-bleed layout with its own header & footer)
+  { path: '/patient/profile', element: <PatientProfile /> },
+  { path: '/patient/records', element: <Navigate to="/patient/profile" replace /> },
   {
     element: <RootLayout />,
     children: [
@@ -42,8 +46,9 @@ const router = createBrowserRouter([
         path: 'patient',
         element: <PatientLayout />,
         children: [
-          { index: true, element: <Placeholder title="Khu bệnh nhân" description="Khu vực dành cho bệnh nhân và người nhà." /> },
+          { index: true, element: <PatientConsultation /> },
           { path: 'profile', element: <PatientProfile /> },
+          { path: 'records', element: <PatientProfile /> },
           { path: 'departments', element: <PatientDepartments /> },
           { path: 'appointments', element: <AppointmentBooking /> }
         ]
