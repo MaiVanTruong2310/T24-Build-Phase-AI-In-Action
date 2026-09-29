@@ -5,7 +5,13 @@ from datetime import date, timedelta
 import pytest
 from pydantic import ValidationError
 
-from src.schemas.auth import ForgotPasswordRequest, OtpSendResponse, RegisterRequest, ResetPasswordRequest
+from src.schemas.auth import (
+    ForgotPasswordRequest,
+    OtpSendResponse,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UpdateProfileRequest,
+)
 
 
 def test_register_rejects_future_date_of_birth():
@@ -39,3 +45,11 @@ def test_reset_password_validates_code_and_new_password():
 
     assert request.code == "123456"
     assert request.new_password == "new-password"
+
+
+def test_profile_rejects_future_birth_date_and_invalid_citizen_id():
+    """Profile updates use the same personal-data validation as registration."""
+    with pytest.raises(ValidationError):
+        UpdateProfileRequest(date_of_birth=date.today())
+    with pytest.raises(ValidationError):
+        UpdateProfileRequest(citizen_id="12345")

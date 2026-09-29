@@ -6,27 +6,42 @@ import { DoctorCard } from '../features/appointment-booking/components/DoctorCar
 import { DateTimeSelector } from '../features/appointment-booking/components/DateTimeSelector';
 import { TriageInfo } from '../features/appointment-booking/components/TriageInfo';
 import { BookingSummary } from '../features/appointment-booking/components/BookingSummary';
-import { fetchSpecialties, Specialty, fetchDoctors, Doctor, createBooking, fetchAvailability, Schedule } from '../features/appointment-booking/api';
+import { fetchSpecialties, Specialty, fetchDoctors, Doctor, fetchAvailability, Schedule, fetchFacilities, Facility, fetchServices, MedicalService } from '../features/appointment-booking/api';
+
+function formatLocalDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 export default function AppointmentBooking() {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [selectedSpecialty, setSelectedSpecialty] = useState('');
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [selectedFacility, setSelectedFacility] = useState('');
+  const [services, setServices] = useState<MedicalService[]>([]);
+  const [selectedService, setSelectedService] = useState('');
 
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
 
-  const [selectedDate, setSelectedDate] = useState('24');
+  const [selectedDate, setSelectedDate] = useState(() => formatLocalDate(new Date()));
   const [selectedType, setSelectedType] = useState<'offline' | 'telehealth'>('offline');
-  const [selectedSlot, setSelectedSlot] = useState('a2');
+  const [selectedSlot, setSelectedSlot] = useState('');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   const [isBooking, setIsBooking] = useState(false);
 
   useEffect(() => {
-    fetchSpecialties()
-      .then(data => {
-        setSpecialties(data);
-        if (data.length > 0) setSelectedSpecialty(data[0].id);
+    Promise.all([fetchSpecialties(), fetchFacilities(), fetchServices()])
+      .then(([specialtyData, facilityData, serviceData]) => {
+        setSpecialties(specialtyData);
+        setFacilities(facilityData);
+        setServices(serviceData);
+        if (specialtyData.length > 0) setSelectedSpecialty(specialtyData[0].id);
+        if (facilityData.length > 0) setSelectedFacility(facilityData[0].id);
+        if (serviceData.length > 0) setSelectedService(serviceData[0].id);
       })
       .catch(console.error);
   }, []);
@@ -34,7 +49,7 @@ export default function AppointmentBooking() {
   useEffect(() => {
     if (!selectedSpecialty) return;
     setDoctors([]);
-    fetchDoctors(selectedSpecialty)
+    fetchDoctors({ specialtyId: selectedSpecialty || undefined, facilityId: selectedFacility || undefined })
       .then(data => {
         setDoctors(data);
         if (data.length > 0) {
@@ -44,50 +59,36 @@ export default function AppointmentBooking() {
         }
       })
       .catch(console.error);
-  }, [selectedSpecialty]);
+  }, [selectedSpecialty, selectedFacility]);
 
   useEffect(() => {
     if (!selectedDoctorId || !selectedDate) return;
     setSchedules([]);
-    const dateStr = `2024-10-${selectedDate.padStart(2, '0')}`;
-    fetchAvailability(selectedDoctorId, dateStr)
-      .then(data => setSchedules(data))
+    fetchAvailability(selectedDoctorId, selectedDate, selectedFacility || undefined)
+      .then(data => {
+        setSchedules(data);
+        setSelectedSlot(data[0]?.id || '');
+      })
       .catch(console.error);
-  }, [selectedDoctorId, selectedDate]);
+  }, [selectedDoctorId, selectedDate, selectedFacility]);
 
   const handleBooking = async () => {
-    if (!selectedDoctorId || !selectedSpecialty || !selectedSlot) return;
-
+    if (!selectedDoctorId || !selectedSpecialty || !selectedService || !selectedSlot) return;
     setIsBooking(true);
-    try {
-      await createBooking({
-        schedule_id: selectedSlot,
-        service_id: 'srv_123',
-        specialty_id: selectedSpecialty,
-        ai_triage_id: 'tri_456',
-        encounter_type: selectedType === 'offline' ? 'in_person' : 'telehealth',
-        reason: 'Đau thắt ngực nhẹ',
-      });
-      alert('Đặt lịch thành công!');
-    } catch (error) {
-      console.error(error);
-      alert('Có lỗi xảy ra khi đặt lịch. Vui lòng thử lại.');
-    } finally {
-      setIsBooking(false);
-    }
+    window.setTimeout(() => setIsBooking(false), 250);
+    alert('Tính năng giữ chỗ và xác nhận lịch sẽ được mở ở Sprint 004.');
   };
 
   const selectedSpecialtyName = specialties.find(s => s.id === selectedSpecialty)?.name || '';
   const selectedDoctor = doctors.find(d => d.id === selectedDoctorId);
   const selectedDoctorName = selectedDoctor ? `${selectedDoctor.title} ${selectedDoctor.full_name}` : '';
-  const price = selectedDoctor?.price || 350000;
+  const selectedServiceData = services.find(service => service.id === selectedService);
+  const selectedFacilityData = facilities.find(facility => facility.id === selectedFacility);
+  const price = selectedServiceData?.price || 0;
 
   const getSlotTime = (id: string) => {
-    const slots: Record<string, string> = {
-      m1: '08:00', m2: '08:45', m3: '09:30', m4: '10:15',
-      a1: '13:30', a2: '14:15', a3: '15:00', a4: '16:00'
-    };
-    return slots[id] || '';
+    const schedule = schedules.find(item => item.id === id);
+    return schedule ? new Date(schedule.starts_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
   };
 
   return (
@@ -107,6 +108,20 @@ export default function AppointmentBooking() {
               selectedId={selectedSpecialty}
               onSelect={setSelectedSpecialty}
             />
+            <label className="rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700">
+              Cơ sở khám
+              <select className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-normal" value={selectedFacility} onChange={(event) => setSelectedFacility(event.target.value)}>
+                <option value="">Tất cả cơ sở</option>
+                {facilities.map(facility => <option key={facility.id} value={facility.id}>{facility.name}</option>)}
+              </select>
+            </label>
+            <label className="rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700">
+              Dịch vụ khám
+              <select className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-normal" value={selectedService} onChange={(event) => setSelectedService(event.target.value)}>
+                <option value="">Chọn dịch vụ</option>
+                {services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}
+              </select>
+            </label>
             <DoctorCard
               doctors={doctors}
               selectedDoctorId={selectedDoctorId}
@@ -124,6 +139,7 @@ export default function AppointmentBooking() {
               selectedSlot={selectedSlot}
               onSelectSlot={setSelectedSlot}
               schedules={schedules.length > 0 ? schedules : undefined}
+              selectedFacility={selectedFacilityData}
             />
             <TriageInfo />
           </div>
@@ -133,7 +149,8 @@ export default function AppointmentBooking() {
             <BookingSummary
               specialtyName={selectedSpecialtyName}
               doctorName={selectedDoctorName}
-              date={`${selectedDate}/10/2023`}
+              serviceName={selectedServiceData?.name || ''}
+              date={selectedDate}
               slotTime={getSlotTime(selectedSlot)}
               type={selectedType}
               price={price}

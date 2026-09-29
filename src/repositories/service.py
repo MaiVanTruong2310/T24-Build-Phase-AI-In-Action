@@ -17,9 +17,22 @@ class MedicalServiceRepositoryMixin:
             statement = statement.where(Service.status == "active")
         return (await self.session.execute(statement)).scalar_one_or_none()
 
-    async def list_services(self, *, public_only: bool, offset: int, limit: int) -> list[Service]:
+    async def list_services(
+        self,
+        *,
+        public_only: bool,
+        offset: int,
+        limit: int,
+        name: str | None = None,
+        category: str | None = None,
+    ) -> list[Service]:
         """List medical services with pagination."""
-        statement = select(Service).order_by(Service.name).offset(offset).limit(limit)
+        statement = select(Service)
         if public_only:
             statement = statement.where(Service.status == "active")
+        if name:
+            statement = statement.where(Service.name.ilike(f"%{name}%"))
+        if category:
+            statement = statement.where(Service.category == category)
+        statement = statement.order_by(Service.name).offset(offset).limit(limit)
         return list((await self.session.execute(statement)).scalars().all())

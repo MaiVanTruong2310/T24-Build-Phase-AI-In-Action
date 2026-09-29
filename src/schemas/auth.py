@@ -130,4 +130,17 @@ class SessionResponse(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
+    """Patient-editable profile fields."""
+
     full_name: str | None = Field(default=None, max_length=200)
+    date_of_birth: date | None = None
+    gender: Literal["male", "female", "other", "unspecified"] | None = None
+    citizen_id: str | None = Field(default=None, pattern=r"^\d{12}$")
+    health_insurance_code: str | None = Field(default=None, min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_date_of_birth(self) -> "UpdateProfileRequest":
+        """Prevent a profile from containing a future birth date."""
+        if self.date_of_birth and self.date_of_birth >= date.today():
+            raise ValueError("date_of_birth must be in the past")
+        return self

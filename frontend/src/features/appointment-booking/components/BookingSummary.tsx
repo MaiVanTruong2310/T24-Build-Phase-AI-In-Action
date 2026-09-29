@@ -3,6 +3,7 @@ import { FileText, ShieldCheck, BadgeCheck, ArrowRight, ArrowLeft, Phone, Loader
 interface Props {
   specialtyName: string;
   doctorName: string;
+  serviceName: string;
   date: string;
   slotTime: string;
   type: string;
@@ -11,7 +12,7 @@ interface Props {
   isBooking: boolean;
 }
 
-export function BookingSummary({ specialtyName, doctorName, date, slotTime, type, price, onBook, isBooking }: Props) {
+export function BookingSummary({ specialtyName, doctorName, serviceName, date, slotTime, type, price, onBook, isBooking }: Props) {
   const finalPrice = price * 0.2; // Assuming 80% BHYT coverage
 
   return (
@@ -33,8 +34,8 @@ export function BookingSummary({ specialtyName, doctorName, date, slotTime, type
                 NA
               </div>
               <div>
-                <div className="font-bold text-slate-900 text-sm">Nguyễn Văn An</div>
-                <div className="text-xs text-slate-500 mt-0.5">Nam, 42 tuổi • BHYT: GD-4-79-11</div>
+                <div className="font-bold text-slate-900 text-sm">Hồ sơ bệnh nhân hiện tại</div>
+                <div className="text-xs text-slate-500 mt-0.5">Thông tin sẽ được lấy từ hồ sơ của bạn</div>
               </div>
             </div>
           </div>
@@ -57,6 +58,10 @@ export function BookingSummary({ specialtyName, doctorName, date, slotTime, type
             <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
               <div className="text-slate-500">Bác sĩ khám:</div>
               <div className="font-bold text-sky-700">{doctorName || 'Chưa chọn'}</div>
+            </div>
+            <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
+              <div className="text-slate-500">Dịch vụ:</div>
+              <div className="font-bold text-slate-900">{serviceName || 'Chưa chọn'}</div>
             </div>
             <div className="grid grid-cols-[100px_1fr] items-start gap-2 text-sm">
               <div className="text-slate-500">Thời gian hẹn:</div>

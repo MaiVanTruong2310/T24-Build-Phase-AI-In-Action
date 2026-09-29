@@ -2,6 +2,7 @@
 
 from datetime import UTC, date, datetime, timedelta, timezone
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -18,6 +19,39 @@ class EmptyCatalogService:
         assert offset == 0
         assert limit == 100
         return []
+
+
+class EmptyPublicCatalogService:
+    """Catalog service double for public patient catalog requests."""
+
+    async def list_services(self, *, public_only, offset, limit, name=None, category=None):
+        assert public_only is True
+        assert offset == 0
+        assert limit == 50
+        assert name is None
+        assert category is None
+        return []
+
+    async def get_service(self, resource_id, *, public_only):
+        assert resource_id
+        assert public_only is True
+        now = datetime.now(UTC)
+        return SimpleNamespace(
+            id=resource_id,
+            code="CONSULT",
+            name="General consultation",
+            description=None,
+            duration_minutes=30,
+            price=100000,
+            original_price=None,
+            category="consultation",
+            features=[],
+            patient_count=0,
+            satisfaction_rate=5.0,
+            status="active",
+            created_at=now,
+            updated_at=now,
+        )
 
 
 @pytest.mark.asyncio
@@ -54,6 +88,35 @@ async def test_staff_can_access_staff_catalog(client):
 
     assert response.status_code == 200
     assert response.json()["data"] == []
+
+
+@pytest.mark.asyncio
+async def test_authenticated_patient_can_access_public_services(client):
+    """Patients can read active services without staff permissions."""
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(role="patient", status="active")
+    app.dependency_overrides[get_catalog_service] = lambda: EmptyPublicCatalogService()
+    try:
+        response = await client.get("/api/v1/services")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+
+@pytest.mark.asyncio
+async def test_authenticated_patient_can_read_one_public_service(client):
+    """Patients can read one active service through the public detail API."""
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(role="patient", status="active")
+    app.dependency_overrides[get_catalog_service] = lambda: EmptyPublicCatalogService()
+    service_id = uuid4()
+    try:
+        response = await client.get(f"/api/v1/services/{service_id}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["data"]["id"] == str(service_id)
 
 
 def test_availability_window_uses_business_timezone_for_date_range():
