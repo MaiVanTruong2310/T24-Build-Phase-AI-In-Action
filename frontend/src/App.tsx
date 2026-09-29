@@ -23,6 +23,9 @@ import AppointmentApproval from './pages/AppointmentApproval'
 import DoctorSchedule from './pages/DoctorSchedule'
 import PatientProfile from './pages/PatientProfile'
 import PatientDepartments from './pages/PatientDepartments'
+import PatientConsultation from './pages/PatientConsultation'
+import ChatTakeover from './pages/ChatTakeover'
+import StaffDashboard from './pages/StaffDashboard'
 
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
@@ -44,6 +47,9 @@ const router = createBrowserRouter([
       { path: '/forgot-password', element: <ForgotPassword /> },
     ]
   },
+  // Standalone Patient Profile Page (renders full-bleed layout with its own header & footer)
+  { path: '/patient/profile', element: <PatientProfile /> },
+  { path: '/patient/records', element: <Navigate to="/patient/profile" replace /> },
   {
     element: <RootLayout />,
     children: [
@@ -51,8 +57,9 @@ const router = createBrowserRouter([
         path: 'patient',
         element: <PatientLayout />,
         children: [
-          { index: true, element: <Placeholder title="Khu bệnh nhân" description="Khu vực dành cho bệnh nhân và người nhà." /> },
+          { index: true, element: <PatientConsultation /> },
           { path: 'profile', element: <PatientProfile /> },
+          { path: 'records', element: <PatientProfile /> },
           { path: 'departments', element: <PatientDepartments /> },
           { path: 'appointments', element: <AppointmentBooking /> },
           { path: 'appointments/history', element: <AppointmentHistory /> },
@@ -66,8 +73,10 @@ const router = createBrowserRouter([
     path: 'staff',
     element: <StaffLayout />,
     children: [
-      { index: true, element: <Navigate to="queue" replace /> },
+      { index: true, element: <StaffDashboard /> },
+      { path: 'overview', element: <StaffDashboard /> },
       { path: 'queue', element: <EmergencyCoordinator /> },
+      { path: 'chat', element: <ChatTakeover /> },
       { path: 'doctors', element: <DoctorManagement /> },
       { path: 'doctors/create', element: <CreateDoctor /> },
       { path: 'services', element: <ServiceManagement /> },

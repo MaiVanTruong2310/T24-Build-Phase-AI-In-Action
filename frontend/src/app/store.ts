@@ -10,13 +10,16 @@ const layoutSlice = createSlice({
     toggleChat: (state) => {
       state.isChatOpen = !state.isChatOpen
     },
+    openChat: (state) => {
+      state.isChatOpen = true
+    },
     closeChat: (state) => {
       state.isChatOpen = false
     }
   }
 })
 
-export const { toggleChat, closeChat } = layoutSlice.actions
+export const { toggleChat, openChat, closeChat } = layoutSlice.actions
 
 export const store = configureStore({
   reducer: {

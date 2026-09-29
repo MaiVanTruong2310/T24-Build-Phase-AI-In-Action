@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Bell, Settings, Activity } from 'lucide-react';
 
 export const TopNav = () => (
@@ -65,9 +66,9 @@ export const TopNav = () => (
           </button>
         ))}
       </div>
-      <button className="text-sm font-semibold text-sky-600 hover:text-sky-700">
+      <Link to="/patient" className="text-sm font-semibold text-sky-600 hover:text-sky-700">
         Chuyển sang Cổng Bệnh Nhân
-      </button>
+      </Link>
     </div>
   </div>
 );
