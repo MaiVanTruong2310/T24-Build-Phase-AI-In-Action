@@ -153,7 +153,7 @@ flowchart LR
         GHA["GitHub Actions<br/>"]
     end
 
-    GHA -->|"Backend image"| REG["Container Registry"]
+    GHA -->|"Push image theo commit SHA"| REG["Docker Hub Registry"]
     REG --> EC2["EC2<br/>Docker Compose"]
     EC2 --> API["FastAPI container"]
     EC2 --> PG["PostgreSQL + pgvector"]
@@ -163,7 +163,7 @@ flowchart LR
     FE -->|"REST API"| API
 ```
 
-Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển khai image đã kiểm thử lên EC2, có health check và rollback. Redis, Kafka, Object Storage và frontend được tích hợp theo môi trường triển khai tương ứng.
+Hiện tại AWS EC2 chạy Docker Compose cho backend và PostgreSQL/pgvector. GitHub Actions build/test Docker image, push image theo commit SHA lên Docker Hub; EC2 chỉ pull image từ registry rồi khởi động bằng Compose, health check và rollback khi cần. Frontend React/Vite được deploy độc lập trên Vercel. Redis, Kafka và Object Storage được tích hợp theo môi trường triển khai tương ứng.
 
 ## Security
 
@@ -180,4 +180,4 @@ Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển k
 | Agent orchestration | LangGraph                             | State rõ ràng, branching và HITL                    |
 | Primary database    | PostgreSQL + pgvector                 | Dữ liệu quan hệ và vector search trong một nền tảng |
 | Cache / events      | Redis + Kafka                         | Giảm độ trễ và xử lý notification bất đồng bộ       |
-| Deployment          | Docker Compose + EC2 + GitHub Actions | Đơn giản cho MVP, có CI/CD và rollback              |
+| Deployment          | AWS EC2 + Docker Compose + Docker Hub + GitHub Actions + Vercel | Backend pull image đã kiểm thử; frontend deploy độc lập; có health check và rollback |
