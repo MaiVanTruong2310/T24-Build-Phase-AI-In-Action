@@ -11,7 +11,7 @@ interface Props {
 export const MatchedDoctorsCard = memo(function MatchedDoctorsCard({ doctors }: Props) {
   const dispatch = useDispatch();
 
-  const handleBookAndChat = (doctorName: string) => {
+  const handleBookAndChat = () => {
     dispatch(openChat());
   };
 
@@ -77,7 +77,7 @@ export const MatchedDoctorsCard = memo(function MatchedDoctorsCard({ doctors }: 
               {/* Action Button */}
               <button
                 type="button"
-                onClick={() => handleBookAndChat(doctor.name)}
+                onClick={handleBookAndChat}
                 className={`mt-3.5 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold shadow-sm transition active:scale-95 ${
                   isPrimary
                     ? 'bg-sky-700 text-white hover:bg-sky-800'

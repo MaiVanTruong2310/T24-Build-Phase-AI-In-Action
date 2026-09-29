@@ -5,14 +5,14 @@ import type { PatientProfileData } from './types';
  * Replace with real endpoint: GET /api/patients/:id/profile
  */
 export async function fetchPatientProfile(
-  _patientId: string
+  patientId: string = 'p-001'
 ): Promise<PatientProfileData> {
   // Simulate network latency
   await new Promise((resolve) => setTimeout(resolve, 600));
 
   return {
     patient: {
-      id: 'p-001',
+      id: patientId,
       code: 'BN-98041',
       fullName: 'Nguyễn Văn An',
       avatarUrl: '',

@@ -1,4 +1,4 @@
-import { HelpCircle, Stethoscope } from 'lucide-react';
+import { Stethoscope } from 'lucide-react';
 import { AITriageData } from '../types';
 
 interface AITriageCardProps {

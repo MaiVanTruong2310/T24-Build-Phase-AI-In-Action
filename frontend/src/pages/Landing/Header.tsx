@@ -14,12 +14,6 @@ export function Header() {
     dispatch(logoutUser());
   };
 
-  // Demo fallback user matching the screenshot
-  const displayUser = user || {
-    full_name: 'Nguyễn Văn An',
-    role: 'patient',
-  };
-
   return (
     <div className="bg-white">
       {/* ─── Top bar ────────────────────────────────────────────── */}
@@ -65,32 +59,39 @@ export function Header() {
               </button>
 
               {/* User profile */}
-          {user ? (
-            <div
-              className="flex items-center gap-2 ml-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors group"
-              onClick={handleLogout}
-              title="Đăng xuất"
-            >
-              <img 
-                src={getUserAvatarUrl(user)} 
-                alt={user.full_name} 
-                className="w-8 h-8 rounded-full border border-slate-200 group-hover:hidden object-cover" 
-              />
-              <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
-                <LogOut className="w-4 h-4" />
-              </div>
-              <div className="leading-tight hidden lg:block">
-                <p className="text-xs font-bold text-slate-900">{user.full_name || 'Người dùng'}</p>
-                <p className="text-[10px] text-slate-500">{user.role === 'staff' ? 'Nhân viên' : 'Bệnh nhân'}</p>
-              </div>
-            </div>
-              
+              {user ? (
+                <div
+                  className="flex items-center gap-2 ml-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors group"
+                  onClick={handleLogout}
+                  title="Đăng xuất"
+                >
+                  <img 
+                    src={getUserAvatarUrl(user)} 
+                    alt={user.full_name} 
+                    className="w-8 h-8 rounded-full border border-slate-200 group-hover:hidden object-cover" 
+                  />
+                  <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
+                    <LogOut className="w-4 h-4" />
+                  </div>
+                  <div className="leading-tight hidden lg:block">
+                    <p className="text-xs font-bold text-slate-900">{user.full_name || 'Người dùng'}</p>
+                    <p className="text-[10px] text-slate-500">{user.role === 'staff' ? 'Nhân viên' : 'Bệnh nhân'}</p>
+                  </div>
                 </div>
-                <div className="leading-tight hidden lg:block text-left">
-                  <p className="text-xs font-bold text-slate-900">{displayUser.full_name}</p>
-                  <p className="text-[10px] text-slate-500">Bệnh nhân</p>
+              ) : (
+                <div className="flex items-center gap-3 ml-2 pl-2 border-l border-slate-200">
+                  <Link to="/register" className="text-sm font-semibold text-slate-600 hover:text-sky-700 transition-colors hidden sm:block">
+                    Đăng ký
+                  </Link>
+                  <Link 
+                    to="/login"
+                    className="text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 px-4 py-1.5 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <User className="w-4 h-4" />
+                    <span className="hidden sm:inline">Đăng nhập</span>
+                  </Link>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

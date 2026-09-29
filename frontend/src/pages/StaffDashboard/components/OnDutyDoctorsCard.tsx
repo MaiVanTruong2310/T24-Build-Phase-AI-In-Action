@@ -23,8 +23,6 @@ export function OnDutyDoctorsCard({ doctors, onDispatchStaff }: OnDutyDoctorsCar
       {/* Doctor list */}
       <div className="space-y-2.5">
         {doctors.map((doctor) => {
-          const isReady = doctor.status === 'Sẵn sàng';
-
           return (
             <div
               key={doctor.id}

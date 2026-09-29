@@ -1,4 +1,4 @@
-import { AlertCircle, UserCheck, Video, CalendarPlus, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { UserCheck, Video, CalendarPlus, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { PatientQueueItem } from '../types';
 
 interface PatientHeaderProps {

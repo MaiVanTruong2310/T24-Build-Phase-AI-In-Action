@@ -1,4 +1,4 @@
-import { CheckSquare, Square, ShieldCheck, Check } from 'lucide-react';
+import { Square, ShieldCheck, Check } from 'lucide-react';
 import { ProtocolItem } from '../types';
 
 interface ProtocolCardProps {

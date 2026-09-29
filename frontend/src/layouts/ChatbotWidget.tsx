@@ -1,13 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  X,
   Minus,
   Maximize2,
   Minimize2,
   Send,
   Mic,
   MessageCircle,
-  Calendar,
   Sparkles,
   Bot,
 } from 'lucide-react';

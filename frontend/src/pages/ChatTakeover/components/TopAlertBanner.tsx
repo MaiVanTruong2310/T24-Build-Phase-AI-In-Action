@@ -1,4 +1,4 @@
-import { AlertTriangle, Radio, ShieldCheck, Sliders, Activity } from 'lucide-react';
+import { AlertTriangle, Radio, ShieldCheck, Sliders } from 'lucide-react';
 
 interface TopAlertBannerProps {
   urgentCount?: number;
