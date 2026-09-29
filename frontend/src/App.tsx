@@ -15,6 +15,8 @@ import DoctorSchedule from './pages/DoctorSchedule'
 import PatientProfile from './pages/PatientProfile'
 import PatientDepartments from './pages/PatientDepartments'
 import PatientConsultation from './pages/PatientConsultation'
+import ChatTakeover from './pages/ChatTakeover'
+import StaffDashboard from './pages/StaffDashboard'
 
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
@@ -59,8 +61,10 @@ const router = createBrowserRouter([
     path: 'staff',
     element: <StaffLayout />,
     children: [
-      { index: true, element: <Navigate to="queue" replace /> },
+      { index: true, element: <StaffDashboard /> },
+      { path: 'overview', element: <StaffDashboard /> },
       { path: 'queue', element: <EmergencyCoordinator /> },
+      { path: 'chat', element: <ChatTakeover /> },
       { path: 'doctors', element: <DoctorManagement /> },
       { path: 'doctors/create', element: <CreateDoctor /> },
       { path: 'services', element: <ServiceManagement /> },
