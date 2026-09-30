@@ -99,6 +99,7 @@ export const initializeAuth = createAsyncThunk(
 export const loginUser = createAsyncThunk(
   'auth/loginUser',
   async (credentials: { username: string; password?: string; otp_code?: string }, { rejectWithValue }) => {
+    let tokensSaved = false;
     try {
       const isEmail = credentials.username.includes('@');
       
@@ -126,22 +127,23 @@ export const loginUser = createAsyncThunk(
         throw new Error(translateError(data.message) || 'Đăng nhập thất bại');
       }
 
-      const token = data.data.access_token;
-      const refresh_token = data.data.refresh_token;
-      
-      const userRes = await fetch(`${API_BASE}/users/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const token = data?.data?.access_token;
+      const refresh_token = data?.data?.refresh_token;
+      if (typeof token !== 'string' || typeof refresh_token !== 'string') {
+        throw new Error('Login response did not contain valid tokens');
+      }
+
+      // Save the new pair before fetching the profile so subsequent requests
+      // cannot use a stale access token from localStorage.
+      saveTokens(token, refresh_token);
+      tokensSaved = true;
+
+      const userRes = await fetchWithAuth('/users/me');
       const userData = await userRes.json();
       
       if (!userRes.ok) {
         throw new Error(translateError(userData.message) || 'Không thể lấy thông tin người dùng');
       }
-
-      // Lưu token vào localStorage
-      saveTokens(token, refresh_token);
 
       const user = {
         id: userData.data.id,
@@ -155,6 +157,9 @@ export const loginUser = createAsyncThunk(
       publishSession(toSessionUser(user));
       return user;
     } catch (err: unknown) {
+      if (tokensSaved) {
+        clearSession();
+      }
       return rejectWithValue(getErrorMessage(err, 'Đăng nhập thất bại'));
     }
   }

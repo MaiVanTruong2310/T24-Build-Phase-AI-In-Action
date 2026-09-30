@@ -5,8 +5,24 @@ import {
   saveTokens,
 } from '../features/auth/session';
 
-const API_BASE = '/api/v1';
+// Local Vite development uses the shared development backend exposed through ngrok.
+// Set VITE_API_BASE_URL in frontend/.env.local to override this when needed.
+const LOCAL_API_ORIGIN = 'https://reclining-unlit-unused.ngrok-free.dev';
+
+function normalizeApiOrigin(value: string): string {
+  const trimmedValue = value.trim().replace(/\/$/, '');
+  if (!trimmedValue) return LOCAL_API_ORIGIN;
+  if (trimmedValue.startsWith('http://') || trimmedValue.startsWith('https://')) {
+    return trimmedValue.replace(/\/api\/v1$/, '');
+  }
+  return `http://${trimmedValue}`.replace(/\/api\/v1$/, '');
+}
+
+// API_DOMAIN_PROD/API_DOMAIN_DEV are injected by CI/CD as the backend URL.
+const API_ORIGIN = normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
+const API_BASE = `${API_ORIGIN}/api/v1`;
 const REFRESH_PATH = `${API_BASE}/auth/refresh-token`;
+const NGROK_SKIP_BROWSER_WARNING_HEADER = 'ngrok-skip-browser-warning';
 const UNAUTHORIZED_EVENT = 'auth:unauthorized';
 const REFRESH_LOCK_NAME = 'medicare-auth-refresh';
 const REFRESH_LOCK_KEY = 'medicare_auth_refresh_lock';
@@ -88,6 +104,7 @@ async function performRefresh(refreshToken: string): Promise<string | null> {
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store',
+        [NGROK_SKIP_BROWSER_WARNING_HEADER]: 'true',
       },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
@@ -168,10 +185,15 @@ async function refreshAccessToken(): Promise<string | null> {
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const fullUrl = resolveApiUrl(url);
   const headers = new Headers(options.headers || {});
-  const accessToken = readAccessToken();
+  headers.set(NGROK_SKIP_BROWSER_WARNING_HEADER, 'true');
 
-  if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
+  // An explicitly supplied token must take precedence over a stale token in
+  // localStorage, which matters immediately after a successful login.
+  if (!headers.has('Authorization')) {
+    const accessToken = readAccessToken();
+    if (accessToken) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
+    }
   }
 
   let response = await fetch(fullUrl, { ...options, headers });
@@ -189,6 +211,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
   // Rebuild headers from the original options so a stale Authorization
   // header cannot overwrite the newly rotated access token.
   const retryHeaders = new Headers(options.headers || {});
+  retryHeaders.set(NGROK_SKIP_BROWSER_WARNING_HEADER, 'true');
   retryHeaders.set('Authorization', `Bearer ${newAccessToken}`);
   response = await fetch(fullUrl, { ...options, headers: retryHeaders });
 
