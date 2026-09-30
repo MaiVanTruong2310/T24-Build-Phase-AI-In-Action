@@ -1,5 +1,6 @@
 import pytest
-from src.medical_assistant.domain.security.deobfuscator import Deobfuscator, get_deobfuscator
+
+from src.medical_assistant.domain.security.deobfuscator import get_deobfuscator
 
 
 @pytest.fixture

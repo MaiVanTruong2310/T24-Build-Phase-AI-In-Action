@@ -1,5 +1,7 @@
 import asyncio
+
 from src.medical_assistant.agent.graph import agent
+
 
 async def run_end_to_end_test():
     print("=================================================================")
@@ -17,7 +19,7 @@ async def run_end_to_end_test():
 
     # Lượt 2: Bệnh nhân trả lời câu hỏi làm rõ và muốn xem bác sĩ
     msg2 = "Đau vừa phải thôi, không sốt, không buồn nôn, muốn đặt lịch khám luôn"
-    print(f"\n-----------------------------------------------------------------")
+    print("\n-----------------------------------------------------------------")
     print(f"[Bệnh nhân]: {msg2}")
     res2 = await agent.ainvoke({"query": msg2}, config=config)
     print(f"[Agent]:\n{res2.get('response')}")

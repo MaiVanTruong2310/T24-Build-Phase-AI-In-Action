@@ -1,5 +1,6 @@
 import pytest
-from src.medical_assistant.domain.security.dlp_service import DLPService, get_dlp_service
+
+from src.medical_assistant.domain.security.dlp_service import get_dlp_service
 
 
 @pytest.fixture

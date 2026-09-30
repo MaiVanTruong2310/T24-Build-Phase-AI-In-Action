@@ -10,8 +10,8 @@ Tầng trích xuất dữ kiện lâm sàng kết hợp (Hybrid):
 from __future__ import annotations
 
 import logging
-import re
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from src.medical_assistant.domain.clinical_fact_service import (
@@ -28,35 +28,35 @@ logger = logging.getLogger(__name__)
 
 class ClinicalFactModel(BaseModel):
     """Mô hình dữ kiện lâm sàng cấu trúc chuẩn y khoa."""
-    chief_complaint: Optional[str] = Field(
+    chief_complaint: str | None = Field(
         None,
         description="Triệu chứng chính hoặc lý do khám chính (e.g. constipation, headache, abdominal_pain, chest_pain, cough, fever, dizziness, back_pain, rash, nausea, sore_throat)."
     )
-    positive_facts: List[str] = Field(
+    positive_facts: list[str] = Field(
         default_factory=list,
         description="Các triệu chứng / dấu hiệu người bệnh XÁC NHẬN CÓ (e.g. hard_stool, straining, abdominal_bloating, nausea, throbbing_pain, fever, cough, fatigue)."
     )
-    negative_facts: List[str] = Field(
+    negative_facts: list[str] = Field(
         default_factory=list,
         description="Các triệu chứng / dấu hiệu người bệnh PHỦ ĐỊNH, KHÔNG CÓ, hoặc ĐÃ HẾT (e.g. no_fever, no_vomiting, no_chest_pain, unable_to_pass_gas_denied)."
     )
-    duration_days: Optional[int] = Field(
+    duration_days: int | None = Field(
         None,
         description="Thời gian kéo dài tính theo ngày (nếu người bệnh đề cập)."
     )
-    bowel_interval_days: Optional[int] = Field(
+    bowel_interval_days: int | None = Field(
         None,
         description="Số ngày giữa các lần đi ngoài nếu liên quan đến tiêu hóa/táo bón."
     )
-    location: Optional[str] = Field(
+    location: str | None = Field(
         None,
         description="Vị trí giải phẫu cụ thể (e.g. nửa đầu phải, sau gáy, thượng vị, hạ sườn, ngực trái)."
     )
-    severity: Optional[str] = Field(
+    severity: str | None = Field(
         None,
         description="Mức độ đau / khó chịu nếu được miêu tả: mild, moderate, severe."
     )
-    qualifiers: List[str] = Field(
+    qualifiers: list[str] = Field(
         default_factory=list,
         description="Tính chất cơn đau hoặc đặc điểm: nhói, âm ỉ, quặn thắt, lan ra tay, sợ ánh sáng, lạnh run."
     )
@@ -66,7 +66,7 @@ class ClinicalFactModel(BaseModel):
         le=1.0,
         description="Độ tin cậy của việc trích xuất."
     )
-    reasoning: Optional[str] = Field(
+    reasoning: str | None = Field(
         None,
         description="Tóm tắt ngắn gọn lý do phân loại dữ kiện."
     )
@@ -90,11 +90,11 @@ QUY TẮC BẮT BUỘC:
 class LLMClinicalExtractor:
     """Bộ trích xuất dữ kiện lâm sàng kết hợp Rule + Small LLM."""
 
-    def __init__(self, rule_service: Optional[ClinicalFactService] = None):
+    def __init__(self, rule_service: ClinicalFactService | None = None):
         self.rule_service = rule_service or get_clinical_fact_service()
         self.negation_service = get_clinical_negation_service()
 
-    def should_invoke_llm(self, text: str, rule_facts: Dict[str, Any]) -> bool:
+    def should_invoke_llm(self, text: str, rule_facts: dict[str, Any]) -> bool:
         """
         Confidence Router: Quyết định xem có cần gọi LLM hay chỉ dùng Rule Engine.
         Tiêu chí tiết kiệm token:
@@ -138,9 +138,9 @@ class LLMClinicalExtractor:
     async def extract_async(
         self,
         text: str,
-        current_facts: Optional[Dict[str, Any]] = None,
+        current_facts: dict[str, Any] | None = None,
         force_llm: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Trích xuất async: Rule trước, nếu cần hoặc được yêu cầu thì chạy LLM.
         Hợp nhất kết quả để đảm bảo an toàn tuyệt đối.
@@ -216,7 +216,7 @@ class LLMClinicalExtractor:
             rule_result["llm_succeeded"] = False
             return rule_result
 
-    def extract_sync(self, text: str) -> Dict[str, Any]:
+    def extract_sync(self, text: str) -> dict[str, Any]:
         """Bản đồng bộ thuần Rule cho các luồng batch eval offline."""
         res = self.rule_service.extract(text)
         res["extraction_method"] = "RULE"
@@ -224,7 +224,7 @@ class LLMClinicalExtractor:
         return res
 
 
-_llm_extractor_instance: Optional[LLMClinicalExtractor] = None
+_llm_extractor_instance: LLMClinicalExtractor | None = None
 
 
 def get_llm_clinical_extractor() -> LLMClinicalExtractor:

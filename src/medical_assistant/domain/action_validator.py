@@ -1,6 +1,7 @@
-from typing import List, Dict, Any
+from typing import Any
 
-def has_clinical_evidence(clinical_facts: Dict[str, Any], v2_response: Any) -> bool:
+
+def has_clinical_evidence(clinical_facts: dict[str, Any], v2_response: Any) -> bool:
     """Check if there is sufficient clinical evidence to treat as a symptom report rather than a generic visit."""
     if clinical_facts.get("chief_complaint"):
         return True
@@ -14,9 +15,9 @@ def has_clinical_evidence(clinical_facts: Dict[str, Any], v2_response: Any) -> b
 
 def validate_action(
     action: str,
-    clinical_facts: Dict[str, Any],
+    clinical_facts: dict[str, Any],
     v2_response: Any,
-    allowed_actions: List[str]
+    allowed_actions: list[str]
 ) -> str:
     """Validate and safely fallback LLM actions based on clinical rules."""
     if action not in allowed_actions:

@@ -1,6 +1,6 @@
 import pytest
+
 from src.medical_assistant.domain.security.security_guardrail_service import (
-    SecurityGuardrailService,
     get_security_guardrail_service,
 )
 

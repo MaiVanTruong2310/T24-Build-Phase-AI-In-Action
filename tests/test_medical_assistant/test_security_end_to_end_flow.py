@@ -1,4 +1,5 @@
 import pytest
+
 from src.medical_assistant.agent.nodes.example_node import analyze_node, respond_node
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.guardrail_service import get_guardrail_service

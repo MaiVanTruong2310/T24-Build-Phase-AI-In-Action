@@ -8,7 +8,6 @@ Quy tắc:
 - Ngăn chặn triệt để hiện tượng Over-triage hoặc kích hoạt nhầm cờ đỏ khi người bệnh nói: "không đau ngực", "hết sốt rồi", "chưa từng ngất xỉu".
 """
 
-from typing import List, Tuple, Dict, Set, Optional
 import re
 import unicodedata
 
@@ -72,13 +71,13 @@ class ClinicalNegationService:
         no_accent = no_accent.replace("đ", "d").replace("Đ", "d")
         return no_accent
 
-    def extract_negated_scopes(self, text: str) -> List[Tuple[int, int, str]]:
+    def extract_negated_scopes(self, text: str) -> list[tuple[int, int, str]]:
         """
         Xác định tất cả các đoạn (spans) bị phủ định trong văn bản.
         Trả về danh sách: [(start_idx, end_idx, negated_substring), ...]
         Phạm vi bắt đầu từ từ phủ định và kết thúc ở ranh giới mệnh đề tiếp theo.
         """
-        scopes: List[Tuple[int, int, str]] = []
+        scopes: list[tuple[int, int, str]] = []
         if not text:
             return scopes
 
@@ -124,14 +123,14 @@ class ClinicalNegationService:
 
         return False
 
-    def partition_symptoms(self, symptoms: List[str], full_text: str) -> Dict[str, List[str]]:
+    def partition_symptoms(self, symptoms: list[str], full_text: str) -> dict[str, list[str]]:
         """
         Phân loại danh sách triệu chứng thành 2 tập:
         - positive: Người bệnh thực sự khẳng định có triệu chứng.
         - negative: Người bệnh phủ định (không có / đã hết).
         """
-        positive: List[str] = []
-        negative: List[str] = []
+        positive: list[str] = []
+        negative: list[str] = []
 
         for sym in symptoms:
             if self.is_phrase_negated(sym, full_text):
@@ -144,7 +143,7 @@ class ClinicalNegationService:
             "negative": negative
         }
 
-    def contains_any_positive(self, keywords: List[str], full_text: str) -> bool:
+    def contains_any_positive(self, keywords: list[str], full_text: str) -> bool:
         """
         Kiểm tra xem có ít nhất MỘT từ khóa xuất hiện ở dạng khẳng định (positive) trong câu hay không.
         Nếu từ khóa xuất hiện nhưng nằm trọn trong vùng phủ định ('không đau ngực') -> trả về False.
@@ -158,7 +157,7 @@ class ClinicalNegationService:
         return False
 
 
-_clinical_negation_service_instance: Optional[ClinicalNegationService] = None
+_clinical_negation_service_instance: ClinicalNegationService | None = None
 
 
 def get_clinical_negation_service() -> ClinicalNegationService:

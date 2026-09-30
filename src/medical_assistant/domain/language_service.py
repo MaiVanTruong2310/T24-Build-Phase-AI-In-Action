@@ -8,10 +8,9 @@ Provides:
 
 import re
 import unicodedata
-from typing import Dict
 
 # Bộ từ điển chuyên khoa chuẩn song ngữ Vinmec
-SPECIALTY_BILINGUAL_MAP: Dict[str, Dict[str, str]] = {
+SPECIALTY_BILINGUAL_MAP: dict[str, dict[str, str]] = {
     "TIM_MACH": {"vi": "Trung tâm Tim mạch", "en": "Cardiology Center"},
     "NOI_TIM_MACH": {"vi": "Trung tâm Tim mạch", "en": "Cardiology Center"},
     "HO_HAP": {"vi": "Nội hô hấp", "en": "Pulmonology & Respiratory Medicine"},

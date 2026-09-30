@@ -12,14 +12,12 @@ Normalizes incoming text and decodes obfuscated attack vectors:
 - Recursive unpacking (up to depth 2)
 """
 
-from dataclasses import dataclass, field
 import base64
 import codecs
 import re
 import unicodedata
+from dataclasses import dataclass, field
 from urllib.parse import unquote
-from typing import List, Optional, Set, Tuple
-
 
 # Bảng mã Morse Quốc Tế chuẩn
 MORSE_CODE_DICT = {
@@ -28,7 +26,7 @@ MORSE_CODE_DICT = {
     "-.-": "k", ".-..": "l", "--": "m", "-.": "n", "---": "o",
     ".--.": "p", "--.-": "q", ".-.": "r", "...": "s", "-": "t",
     "..-": "u", "...-": "v", ".--": "w", "-..-": "x", "-.--": "y",
-    "--..": "z", ".----": "1", "..---": "2", "...--": "3", "...-": "4",
+    "--..": "z", ".----": "1", "..---": "2", "...--": "3", "....-": "4",
     ".....": "5", "-....": "6", "--...": "7", "---..": "8", "----.": "9",
     "-----": "0", ".-.-.-": ".", "--..--": ",", "..--..": "?",
     "-.-.--": "!", "-....-": "-", "-..-.": "/", ".--.-.": "@",
@@ -88,11 +86,11 @@ LEET_MAP = {
 class DeobfuscationResult:
     original_text: str
     cleaned_text: str
-    decoded_variants: Set[str] = field(default_factory=set)
-    detected_encodings: List[str] = field(default_factory=list)
+    decoded_variants: set[str] = field(default_factory=set)
+    detected_encodings: list[str] = field(default_factory=list)
 
     @property
-    def all_text_representations(self) -> List[str]:
+    def all_text_representations(self) -> list[str]:
         """Tất cả các biến thể text có thể dùng để quét an toàn (từ gốc đến giải mã)."""
         res = [self.original_text, self.cleaned_text]
         for v in self.decoded_variants:
@@ -141,7 +139,7 @@ class Deobfuscator:
             result.append(HOMOGLYPH_MAP.get(ch, ch))
         return "".join(result)
 
-    def decode_morse(self, text: str) -> Optional[str]:
+    def decode_morse(self, text: str) -> str | None:
         """Giải mã chuỗi ký tự Morse nếu có."""
         cleaned = text.strip().replace("·", ".").replace("_", "-")
         if not self._morse_token_pattern.match(cleaned):
@@ -172,7 +170,7 @@ class Deobfuscator:
                 return res
         return None
 
-    def decode_binary(self, text: str) -> Optional[str]:
+    def decode_binary(self, text: str) -> str | None:
         """Giải mã nhị phân sang ASCII / UTF-8."""
         matches = self._binary_pattern.findall(text)
         decoded_segments = []
@@ -202,7 +200,7 @@ class Deobfuscator:
             return " ".join(decoded_segments)
         return None
 
-    def decode_hex(self, text: str) -> Optional[str]:
+    def decode_hex(self, text: str) -> str | None:
         """Giải mã Hexadecimal sang ASCII / UTF-8."""
         # 1. Thử hex có tiền tố \x hoặc 0x
         prefixed_matches = self._hex_pattern_prefixed.findall(text)
@@ -247,7 +245,7 @@ class Deobfuscator:
 
         return None
 
-    def decode_base64(self, text: str) -> Optional[str]:
+    def decode_base64(self, text: str) -> str | None:
         """Giải mã Base64 an toàn nếu chuỗi là chuỗi mã hóa hợp lệ và ra ký tự in được."""
         # Bỏ qua nếu text quá ngắn
         if len(text.strip()) < 8:
@@ -284,7 +282,7 @@ class Deobfuscator:
             return " ".join(decoded_results)
         return None
 
-    def decode_url_percent(self, text: str) -> Optional[str]:
+    def decode_url_percent(self, text: str) -> str | None:
         """Decode percent-encoded fragments without treating ordinary '%' text as encoded."""
         if len(self._percent_encoded_pattern.findall(text)) < 2:
             return None
@@ -296,7 +294,7 @@ class Deobfuscator:
             pass
         return None
 
-    def decode_unicode_escapes(self, text: str) -> Optional[str]:
+    def decode_unicode_escapes(self, text: str) -> str | None:
         """Decode explicit \\uXXXX/\\xXX fragments while leaving normal Unicode untouched."""
         if not self._unicode_escape_pattern.search(text):
             return None
@@ -436,7 +434,7 @@ class Deobfuscator:
         )
 
 
-_deobfuscator_instance: Optional[Deobfuscator] = None
+_deobfuscator_instance: Deobfuscator | None = None
 
 
 def get_deobfuscator() -> Deobfuscator:

@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -46,7 +47,7 @@ if STATIC_DIR.exists():
 async def serve_index():
     """Phục vụ giao diện Web Chatbot cho bệnh nhân & lễ tân."""
     if INDEX_FILE.exists():
-        with open(INDEX_FILE, "r", encoding="utf-8") as f:
+        with open(INDEX_FILE, encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     return HTMLResponse("<h1>Trợ Lý Y Tế AI (P-124)</h1><p>UI sẵn sàng tại /static/index.html</p>")
 

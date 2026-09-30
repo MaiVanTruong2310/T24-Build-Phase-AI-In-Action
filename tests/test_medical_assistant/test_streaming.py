@@ -9,11 +9,12 @@ if sys.platform.startswith("win"):
         pass
 
 from pathlib import Path
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from src.medical_assistant.api.routes import chat_stream
-from src.medical_assistant.domain.schemas import ChatRequest
+from src.medical_assistant.api.routes import chat_stream  # noqa: E402
+from src.medical_assistant.domain.schemas import ChatRequest  # noqa: E402
 
 
 async def main():

@@ -5,10 +5,11 @@ Hỗ trợ song ngữ (VI/EN), tìm kiếm chi tiết theo tên cơ sở hoặc 
 
 import json
 import logging
-import unicodedata
 import re
+import unicodedata
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any
+
 from src.medical_assistant.db.supabase_client import get_supabase_client
 from src.medical_assistant.domain.doctor_schedule_service import DoctorScheduleService, _load_crawled_doctors
 from src.medical_assistant.domain.facility_linking import facility_key
@@ -35,8 +36,8 @@ def _normalize_text(text: str) -> str:
 class FacilityService:
     def __init__(self, client: Any | None = None):
         self.client = client
-        self._hospital_metadata: Dict[str, Dict[str, Any]] = {}
-        self._specialty_mapping: Dict[str, List[str]] = {}
+        self._hospital_metadata: dict[str, dict[str, Any]] = {}
+        self._specialty_mapping: dict[str, list[str]] = {}
         self._load_datalake_metadata()
 
     def _get_client(self):
@@ -49,7 +50,7 @@ class FacilityService:
         hospitals_file = DATALAKE_DIR / "normalized" / "hospitals.jsonl"
         if hospitals_file.exists():
             try:
-                with open(hospitals_file, "r", encoding="utf-8") as f:
+                with open(hospitals_file, encoding="utf-8") as f:
                     for line in f:
                         if not line.strip():
                             continue
@@ -67,7 +68,7 @@ class FacilityService:
         specialties_file = DATALAKE_DIR / "rag" / "specialty_facilities.jsonl"
         if specialties_file.exists():
             try:
-                with open(specialties_file, "r", encoding="utf-8") as f:
+                with open(specialties_file, encoding="utf-8") as f:
                     for line in f:
                         if not line.strip():
                             continue
@@ -84,7 +85,7 @@ class FacilityService:
             except Exception as exc:
                 logger.warning("Could not load specialty_facilities.jsonl: %s", exc)
 
-    def fetch_active_facilities(self) -> List[Dict[str, Any]]:
+    def fetch_active_facilities(self) -> list[dict[str, Any]]:
         """
         Truy vấn toàn bộ cơ sở active từ bảng public.facilities trên Supabase.
         Có cơ chế In-Memory Cache và Fallback sang Datalake (hospitals.jsonl)
@@ -110,11 +111,11 @@ class FacilityService:
             logger.warning("Supabase facilities lookup failed: %s. Using datalake fallback.", exc)
 
         # Fallback từ Datalake normalized/hospitals.jsonl
-        fallback_facilities: List[Dict[str, Any]] = []
+        fallback_facilities: list[dict[str, Any]] = []
         hospitals_file = DATALAKE_DIR / "normalized" / "hospitals.jsonl"
         if hospitals_file.exists():
             try:
-                with open(hospitals_file, "r", encoding="utf-8") as f:
+                with open(hospitals_file, encoding="utf-8") as f:
                     for line in f:
                         if not line.strip():
                             continue
@@ -135,7 +136,7 @@ class FacilityService:
 
         return []
 
-    def _find_detail_metadata(self, facility_name: str) -> Dict[str, Any]:
+    def _find_detail_metadata(self, facility_name: str) -> dict[str, Any]:
         """Tìm URL chi tiết và chuyên khoa theo tên cơ sở."""
         norm = _normalize_text(facility_name)
         if norm in self._hospital_metadata:
@@ -151,10 +152,10 @@ class FacilityService:
 
     def get_facility_detail_response(
         self,
-        facility: Dict[str, Any],
+        facility: dict[str, Any],
         language: str = "vi",
         enable_citation: bool = True,
-    ) -> Tuple[str, List[str]]:
+    ) -> tuple[str, list[str]]:
         """Trả về Thẻ thông tin chi tiết của MỘT cơ sở bệnh viện cụ thể."""
         name = facility.get("name", "Bệnh viện Vinmec")
         address = facility.get("address", "Đang cập nhật")
@@ -225,10 +226,10 @@ class FacilityService:
         facility_query: str,
         language: str = "vi",
         enable_citation: bool = True,
-    ) -> Tuple[str, List[str]]:
+    ) -> tuple[str, list[str]]:
         """Điều hướng: Tìm và hiển thị danh sách bác sĩ thuộc cơ sở y tế cụ thể."""
         norm_q = _normalize_text(facility_query)
-        matched_docs: List[Dict[str, Any]] = []
+        matched_docs: list[dict[str, Any]] = []
         facility = None
         try:
             client = self._get_client()
@@ -332,7 +333,7 @@ class FacilityService:
         self,
         facility_query: str,
         language: str = "vi",
-    ) -> Tuple[str, List[str]]:
+    ) -> tuple[str, list[str]]:
         """Điều hướng: Hướng dẫn người dùng chọn khoa hoặc triệu chứng khi muốn đặt lịch tại 1 cơ sở."""
         fac_display = facility_query.strip().title()
         response = (
@@ -354,12 +355,12 @@ class FacilityService:
     def get_facilities_response(
         self,
         language: str = "vi",
-        region_filter: Optional[str] = None,
-        district_filter: Optional[str] = None,
-        facility_name_query: Optional[str] = None,
-        department_context: Optional[str] = None,
+        region_filter: str | None = None,
+        district_filter: str | None = None,
+        facility_name_query: str | None = None,
+        department_context: str | None = None,
         enable_citation: bool = True,
-    ) -> Tuple[str, List[str]]:
+    ) -> tuple[str, list[str]]:
         """
         Định dạng danh sách cơ sở bệnh viện & phòng khám từ Supabase thành nội dung chat.
         - Tự động gợi ý cơ sở GẦN NHẤT nếu người dùng chỉ định Quận/Huyện kèm năng lực chuyên môn đang khám.
@@ -427,7 +428,7 @@ class FacilityService:
                 else:
                     dept_intro = f" phục vụ thăm khám **{department_context}**" if department_context else ""
                     lines = [
-                        f"🏥 **Cơ sở Vinmec thuận tiện và gần nhất cho bác:**\n",
+                        "🏥 **Cơ sở Vinmec thuận tiện và gần nhất cho bác:**\n",
                         f"Với vị trí của bác tại **{district_filter}**, cơ sở y tế quốc tế gần và phù hợp nhất{dept_intro} là:\n",
                         f"🏨 **{fac_name}**",
                         f"• 📍 **Địa chỉ:** {address}",
@@ -482,8 +483,8 @@ class FacilityService:
             if matching:
                 filtered = matching
 
-        hospitals: List[Dict[str, Any]] = []
-        clinics: List[Dict[str, Any]] = []
+        hospitals: list[dict[str, Any]] = []
+        clinics: list[dict[str, Any]] = []
 
         for item in filtered:
             name = item.get("name", "")
@@ -492,7 +493,7 @@ class FacilityService:
             else:
                 hospitals.append(item)
 
-        lines: List[str] = []
+        lines: list[str] = []
         if language == "en":
             lines.append("🏥 **Vinmec International Healthcare System**\n")
             lines.append("Vinmec operates modern international hospitals and specialized clinics across Vietnam:\n")
@@ -534,7 +535,7 @@ class FacilityService:
         return "\n".join(lines).strip(), quick_replies
 
 
-_facility_service: Optional[FacilityService] = None
+_facility_service: FacilityService | None = None
 
 
 def get_facility_service() -> FacilityService:

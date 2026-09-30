@@ -5,28 +5,30 @@ Giải quyết bài toán: Bệnh nhân mô tả triệu chứng chung chung (VD
 -> Tối đa 2-3 lượt hỏi, nếu bệnh nhân không biết trả lời thì tự động dừng và điều hướng theo dữ kiện sẵn có.
 """
 
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel
+
 from src.medical_assistant.domain.language_service import detect_language
 
 
 class ProbingClarificationTree(BaseModel):
     category_key: str
-    trigger_keywords: List[str]
+    trigger_keywords: list[str]
     # Lượt 1: Hỏi vị trí và tính chất (Vị trí đau, cảm giác đau)
     turn_1_question_vi: str
     turn_1_question_en: str
-    turn_1_quick_replies_vi: List[str]
-    turn_1_quick_replies_en: List[str]
+    turn_1_quick_replies_vi: list[str]
+    turn_1_quick_replies_en: list[str]
     # Lượt 2: Hỏi triệu chứng đi kèm nguy hiểm
     turn_2_question_vi: str
     turn_2_question_en: str
-    turn_2_quick_replies_vi: List[str]
-    turn_2_quick_replies_en: List[str]
+    turn_2_quick_replies_vi: list[str]
+    turn_2_quick_replies_en: list[str]
 
 
 # Cây quyết định hỏi bệnh lâm sàng chuẩn y tế cho các triệu chứng hay gặp (Bilingual EN-VI)
-CLINICAL_PROBING_TREES: List[ProbingClarificationTree] = [
+CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
     ProbingClarificationTree(
         category_key="TAO_BON",
         trigger_keywords=[
@@ -198,12 +200,12 @@ class DynamicProbingService:
         "neck_pain": "CO_XUONG_KHOP",
     }
 
-    def find_all_probing_trees(self, text: str) -> List[ProbingClarificationTree]:
+    def find_all_probing_trees(self, text: str) -> list[ProbingClarificationTree]:
         """Return every non-negated probing tree mentioned in one utterance."""
         text_lower = text.lower()
         from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
         negation_svc = get_clinical_negation_service()
-        matches: List[ProbingClarificationTree] = []
+        matches: list[ProbingClarificationTree] = []
         seen: set[str] = set()
         for tree in CLINICAL_PROBING_TREES:
             if tree.category_key in seen:
@@ -217,11 +219,11 @@ class DynamicProbingService:
 
     def sync_probing_state(
         self,
-        clinical_facts: Optional[Dict[str, Any]],
-        existing: Optional[Dict[str, Dict[str, Any]]] = None,
-    ) -> Dict[str, Dict[str, Any]]:
+        clinical_facts: dict[str, Any] | None,
+        existing: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Keep an independent probing budget for each active complaint."""
-        synced: Dict[str, Dict[str, Any]] = {
+        synced: dict[str, dict[str, Any]] = {
             code: dict(value)
             for code, value in (existing or {}).items()
             if isinstance(value, dict)
@@ -244,8 +246,8 @@ class DynamicProbingService:
         return synced
 
     @staticmethod
-    def active_categories(probing_by_complaint: Dict[str, Dict[str, Any]]) -> List[str]:
-        categories: List[str] = []
+    def active_categories(probing_by_complaint: dict[str, dict[str, Any]]) -> list[str]:
+        categories: list[str] = []
         for item in probing_by_complaint.values():
             category = item.get("category")
             if item.get("status") == "active" and category and category not in categories:
@@ -254,9 +256,9 @@ class DynamicProbingService:
 
     @staticmethod
     def mark_multi_question_asked(
-        probing_by_complaint: Dict[str, Dict[str, Any]],
-        complaint_codes: List[str],
-    ) -> Dict[str, Dict[str, Any]]:
+        probing_by_complaint: dict[str, dict[str, Any]],
+        complaint_codes: list[str],
+    ) -> dict[str, dict[str, Any]]:
         updated = {code: dict(value) for code, value in probing_by_complaint.items()}
         for code in complaint_codes:
             if code in updated and updated[code].get("status") == "active":
@@ -267,14 +269,14 @@ class DynamicProbingService:
         return updated
 
     @staticmethod
-    def should_ask_multi_question(probing_by_complaint: Dict[str, Dict[str, Any]]) -> bool:
+    def should_ask_multi_question(probing_by_complaint: dict[str, dict[str, Any]]) -> bool:
         active = [
             item for item in probing_by_complaint.values()
             if item.get("status") == "active"
         ]
         return len(active) >= 2 and any(int(item.get("questions_asked") or 0) == 0 for item in active)
 
-    def find_probing_tree(self, text: str) -> Optional[ProbingClarificationTree]:
+    def find_probing_tree(self, text: str) -> ProbingClarificationTree | None:
         matches = self.find_all_probing_trees(text)
         return matches[0] if matches else None
 
@@ -282,10 +284,10 @@ class DynamicProbingService:
         self,
         user_message: str,
         probing_turn: int,
-        active_category: Optional[str] = None,
-        language: Optional[str] = None,
-        clinical_facts: Optional[Dict[str, Any]] = None,
-    ) -> Optional[tuple[str, List[str], str]]:
+        active_category: str | None = None,
+        language: str | None = None,
+        clinical_facts: dict[str, Any] | None = None,
+    ) -> tuple[str, list[str], str] | None:
         """
         Trả về: (Câu hỏi, Danh sách gợi ý trả lời nhanh, Category Key)
         Nếu probing_turn >= 2 hoặc người dùng nói 'không biết / thôi' -> Trả về None (dừng hỏi, chốt kết quả)

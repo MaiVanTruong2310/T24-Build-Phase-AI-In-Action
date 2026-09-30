@@ -9,6 +9,7 @@ Kiểm tra:
 
 import sys
 from pathlib import Path
+
 import pytest
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -22,9 +23,8 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
-from src.medical_assistant.agent.graph import agent
-from src.medical_assistant.domain.cache_service import get_cache_service
-from src.medical_assistant.domain.triage_service import get_triage_service
+from src.medical_assistant.agent.graph import agent  # noqa: E402
+from src.medical_assistant.domain.triage_service import get_triage_service  # noqa: E402
 
 
 @pytest.mark.asyncio

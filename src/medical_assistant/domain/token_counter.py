@@ -8,15 +8,17 @@ Tính toán chính xác:
 - Ước tính chi phí theo bảng giá mô hình chuẩn (USD & VNĐ)
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 import tiktoken
+
 from src.medical_assistant.config import get_settings
 
 
 class TokenCounter:
     """Đếm token chuẩn hóa cho các mô hình ngôn ngữ lớn (OpenAI / LangChain / Gemini)"""
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: str | None = None):
         self.settings = get_settings()
         self.model_name = model_name or self.settings.model_name or "gpt-4o-mini"
         try:
@@ -25,7 +27,7 @@ class TokenCounter:
             # Fallback sang cl100k_base nếu tên model không có trong bảng mapping trực tiếp
             self.encoding = tiktoken.get_encoding("cl100k_base")
 
-    def count_tokens(self, text: Optional[str]) -> int:
+    def count_tokens(self, text: str | None) -> int:
         """Đếm số token của một chuỗi văn bản bất kỳ"""
         if not text:
             return 0
@@ -35,7 +37,7 @@ class TokenCounter:
             # Fallback ước tính đơn giản (1 từ tiếng Việt ~ 1.5 token)
             return int(len(str(text).split()) * 1.5)
 
-    def count_messages_tokens(self, messages: List[Dict[str, str]]) -> int:
+    def count_messages_tokens(self, messages: list[dict[str, str]]) -> int:
         """Đếm token cho định dạng hội thoại nhiều lượt (ChatML / OpenAI format)"""
         num_tokens = 0
         for message in messages:
@@ -50,9 +52,9 @@ class TokenCounter:
         self,
         user_query: str,
         response_text: str,
-        context_text: Optional[str] = None,
+        context_text: str | None = None,
         is_zero_token: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Tính toán chi tiết các chỉ số token cho một lượt hội thoại.
         - user_query: câu hỏi từ bệnh nhân
@@ -92,7 +94,7 @@ class TokenCounter:
         }
 
 
-_token_counter: Optional[TokenCounter] = None
+_token_counter: TokenCounter | None = None
 
 
 def get_token_counter() -> TokenCounter:

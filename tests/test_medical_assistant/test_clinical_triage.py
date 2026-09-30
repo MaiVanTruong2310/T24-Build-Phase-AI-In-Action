@@ -20,8 +20,8 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
-from src.medical_assistant.domain.triage_service import get_triage_service
-from src.medical_assistant.domain.disease_triage import ATSLevel, UrgencyTier
+from src.medical_assistant.domain.disease_triage import ATSLevel  # noqa: E402
+from src.medical_assistant.domain.triage_service import get_triage_service  # noqa: E402
 
 
 def test_negated_gastrointestinal_warning_signs_do_not_force_ats3():

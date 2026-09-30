@@ -1,5 +1,5 @@
-from enum import Enum
-from typing import List, Optional
+from enum import Enum, StrEnum
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -12,7 +12,7 @@ class ATSLevel(int, Enum):
     LEVEL_5_NON_URGENT = 5     # Không khẩn / Gói khám / Định kỳ -> Linh hoạt (1-4 tuần)
 
 
-class UrgencyTier(str, Enum):
+class UrgencyTier(StrEnum):
     EMERGENCY_BLOCK = "EMERGENCY_BLOCK"  # Khóa đặt lịch hẹn, chuyển cấp cứu
     SAME_DAY = "SAME_DAY"                # Chỉ mở slot trong ngày hôm nay hoặc sáng mai
     WITHIN_WEEK = "WITHIN_WEEK"          # Mở slot khám trong tuần (1-7 ngày)
@@ -27,15 +27,15 @@ class AcuityProfile(BaseModel):
 
 
 class SymptomHierarchy(BaseModel):
-    red_flags: List[str] = Field(
+    red_flags: list[str] = Field(
         default_factory=list,
         description="Các triệu chứng báo động cấp tính / tối khẩn (Gặp là ép Level 1 hoặc Level 2 ngay)"
     )
-    warning_signs: List[str] = Field(
+    warning_signs: list[str] = Field(
         default_factory=list,
         description="Các dấu hiệu cảnh báo tiến triển xấu hoặc triệu chứng cấp tính (Level 3 - Khám trong ngày)"
     )
-    typical_or_mild: List[str] = Field(
+    typical_or_mild: list[str] = Field(
         default_factory=list,
         description="Các triệu chứng mạn tính hoặc mức độ nhẹ/ổn định (Level 4/5)"
     )
@@ -43,7 +43,7 @@ class SymptomHierarchy(BaseModel):
 
 class SyndromeCombination(BaseModel):
     combination_name: str = Field(..., description="Tên tổ hợp triệu chứng (VD: Đau ngực + khó thở)")
-    required_symptoms: List[str] = Field(..., min_length=2, description="Tổ hợp gồm ít nhất 2 triệu chứng")
+    required_symptoms: list[str] = Field(..., min_length=2, description="Tổ hợp gồm ít nhất 2 triệu chứng")
     severity_override: ATSLevel = Field(..., description="Cấp độ ATS khi tổ hợp này xuất hiện đồng thời")
     clinical_rationale: str = Field(default="", description="Giải thích y khoa vì sao tổ hợp này nguy hiểm")
 
@@ -55,11 +55,11 @@ class DiseaseTriageRecord(BaseModel):
     primary_specialty_name: str = Field(..., description="Tên chuyên khoa tiếp nhận")
     acuity: AcuityProfile = Field(..., description="Hồ sơ phân cấp khẩn cấp của bệnh")
     symptom_hierarchy: SymptomHierarchy = Field(..., description="Phân cấp triệu chứng 3 tầng")
-    syndrome_combinations: List[SyndromeCombination] = Field(
+    syndrome_combinations: list[SyndromeCombination] = Field(
         default_factory=list,
         description="Danh sách các tổ hợp triệu chứng đặc thù dẫn đến biến chứng nguy hiểm"
     )
-    probing_questions: List[str] = Field(
+    probing_questions: list[str] = Field(
         default_factory=list,
         description="Câu hỏi làm rõ Agent dùng khi bệnh nhân chỉ mô tả mơ hồ 1 triệu chứng"
     )
@@ -70,36 +70,36 @@ class TriageSpecialtyCandidate(BaseModel):
     name: str
     score: float = Field(ge=0.0)
     ats_level: ATSLevel
-    evidence: List[str] = Field(default_factory=list)
-    missing_information: List[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
     source: str = "deterministic_multi_symptom"
     routing_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence_strength: str = "weak"
     has_independent_evidence: bool = False
     publicly_recommended: bool = False
-    suppression_reason: Optional[str] = None
+    suppression_reason: str | None = None
 
 
 class TriageEvaluationResult(BaseModel):
     """Kết quả phân tích khi bệnh nhân nhập triệu chứng vào Agent"""
-    matched_disease_key: Optional[str] = None
-    matched_disease_name: Optional[str] = None
+    matched_disease_key: str | None = None
+    matched_disease_name: str | None = None
     ats_level: ATSLevel
     urgency_tier: UrgencyTier
     max_booking_days: int
     is_emergency: bool = False
     care_setting: str = "OUTPATIENT_CLINIC"  # EMERGENCY_DEPT hoặc OUTPATIENT_CLINIC
-    triggered_red_flags: List[str] = Field(default_factory=list)
-    triggered_rule_ids: List[str] = Field(default_factory=list)
+    triggered_red_flags: list[str] = Field(default_factory=list)
+    triggered_rule_ids: list[str] = Field(default_factory=list)
     suggested_specialty: str
-    candidate_specialties: List[TriageSpecialtyCandidate] = Field(default_factory=list)
-    recommended_specialties: List[TriageSpecialtyCandidate] = Field(default_factory=list)
-    conflict_reason: Optional[str] = None
+    candidate_specialties: list[TriageSpecialtyCandidate] = Field(default_factory=list)
+    recommended_specialties: list[TriageSpecialtyCandidate] = Field(default_factory=list)
+    conflict_reason: str | None = None
     needs_multi_symptom_clarification: bool = False
-    clarification_question: Optional[str] = None
+    clarification_question: str | None = None
     patient_guidance: str
     acuity_status: str = "DETERMINED"
-    disposition: Optional[str] = None
+    disposition: str | None = None
 
     @model_validator(mode="after")
     def derive_disposition(self):

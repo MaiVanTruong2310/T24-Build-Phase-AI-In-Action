@@ -11,13 +11,13 @@ from src.medical_assistant.domain.security.deobfuscator import (
     Deobfuscator,
     get_deobfuscator,
 )
-from src.medical_assistant.domain.security.security_guardrail_service import (
-    SecurityGuardrailService,
-    get_security_guardrail_service,
-)
 from src.medical_assistant.domain.security.dlp_service import (
     DLPService,
     get_dlp_service,
+)
+from src.medical_assistant.domain.security.security_guardrail_service import (
+    SecurityGuardrailService,
+    get_security_guardrail_service,
 )
 
 __all__ = [

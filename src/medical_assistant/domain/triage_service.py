@@ -10,24 +10,24 @@ Thực thi phân cấp triệu chứng và kiểm soát cửa sổ đặt lịch
 import json
 import re
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 
+from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
 from src.medical_assistant.domain.disease_triage import (
     ATSLevel,
-    UrgencyTier,
+    DiseaseTriageRecord,
     TriageEvaluationResult,
     TriageSpecialtyCandidate,
-    DiseaseTriageRecord,
+    UrgencyTier,
 )
-from src.medical_assistant.domain.specialty_router import get_specialty_router
 from src.medical_assistant.domain.language_service import (
     canonicalize_specialty_code,
     detect_language,
-    get_specialty_display_name,
     get_emergency_guidance,
+    get_specialty_display_name,
     get_triage_guidance,
 )
-from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
+from src.medical_assistant.domain.specialty_router import get_specialty_router
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 TRIAGED_DISEASES_PATH = ROOT_DIR / "data" / "datalake" / "normalized" / "diseases_triaged.jsonl"
@@ -60,8 +60,8 @@ class ClinicalTriageService:
         "fever": ("TONG_QUAT", "Nội tổng quát", ["duration", "temperature", "rash", "shortness_of_breath"]),
     }
     def __init__(self):
-        self.diseases: Dict[str, DiseaseTriageRecord] = {}
-        self.red_flag_rules: List[tuple[re.Pattern, str]] = []
+        self.diseases: dict[str, DiseaseTriageRecord] = {}
+        self.red_flag_rules: list[tuple[re.Pattern, str]] = []
         self._load_triaged_knowledge_base()
         self._build_fast_rules()
 
@@ -100,7 +100,7 @@ class ClinicalTriageService:
         # 2. Fallback sang file cục bộ nếu offline
         if not TRIAGED_DISEASES_PATH.exists():
             return
-        with open(TRIAGED_DISEASES_PATH, "r", encoding="utf-8") as f:
+        with open(TRIAGED_DISEASES_PATH, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     data = json.loads(line)
@@ -468,7 +468,7 @@ class ClinicalTriageService:
             for rule_id, pattern, specialty, name in raw_warning_rules
         ]
 
-    def _check_acs_combination(self, user_text: str, clean_user_text: str, negation_svc) -> Optional[Dict[str, Any]]:
+    def _check_acs_combination(self, user_text: str, clean_user_text: str, negation_svc) -> dict[str, Any] | None:
         """
         Tầng A — Rule An toàn hội chứng vành cấp (Acute Coronary Syndrome - ACS):
         Bắt tổ hợp:
@@ -567,7 +567,7 @@ class ClinicalTriageService:
 
         return None
 
-    def evaluate_symptoms(self, user_message: str, language: Optional[str] = None) -> TriageEvaluationResult:
+    def evaluate_symptoms(self, user_message: str, language: str | None = None) -> TriageEvaluationResult:
         """
         Đánh giá lâm sàng thông điệp người bệnh qua Kiến trúc An toàn 3 Tầng (Safety Engine v3):
         Tầng 1: Hard Red Flags (ATS Level 1) kết hợp Tầng A ACS
@@ -581,10 +581,10 @@ class ClinicalTriageService:
         negation_svc = get_clinical_negation_service()
 
         # Biến trạng thái An toàn
-        safety_ats: Optional[ATSLevel] = None
+        safety_ats: ATSLevel | None = None
         safety_emergency: bool = False
-        safety_rule_ids: List[str] = []
-        safety_flags: List[str] = []
+        safety_rule_ids: list[str] = []
+        safety_flags: list[str] = []
         default_safety_specialty: str = "Cấp cứu"
 
         # =========================================================================
@@ -897,7 +897,7 @@ class ClinicalTriageService:
                 )
 
         # BƯỚC 2: So khớp bệnh học & Phân tầng triệu chứng (Evidence Matching v2.1)
-        GENERIC_SPECIALTIES = {
+        GENERIC_SPECIALTIES = {  # noqa: N806
             "sức khỏe tổng quát", "đa khoa", "khoa khám bệnh", "nội tổng quát",
             "tổng quát", "chưa xác định", ""
         }
@@ -914,7 +914,7 @@ class ClinicalTriageService:
         clean_user_text = re.sub(r"[,:;.\(\)\?\!]+", " ", scoring_user_text).lower()
 
         # Từ dừng lâm sàng để loại bỏ nhiễu bigram (Bilingual EN-VI)
-        CLINICAL_STOPWORDS = {
+        CLINICAL_STOPWORDS = {  # noqa: N806
             "kèm theo", "bác sĩ", "tôi bị", "cảm thấy", "trong người", "ở vùng",
             "tính chất", "dữ dội", "nặng trịch", "liên tục", "kéo dài", "có thể",
             "triệu chứng", "khoảng", "bắt đầu", "sau khi", "khiến tôi", "làm tôi",
@@ -950,7 +950,7 @@ class ClinicalTriageService:
         ])
 
         # Từ khóa cốt lõi định danh bệnh nhân (Core Clinical Discriminators - Bilingual EN-VI)
-        CORE_DISEASE_KEYWORDS = {
+        CORE_DISEASE_KEYWORDS = {  # noqa: N806
             "cúm": "ddx-influenza",
             "flu": "ddx-influenza",
             "influenza": "ddx-influenza",
@@ -1003,7 +1003,7 @@ class ClinicalTriageService:
         }
 
         # Cụm triệu chứng lâm sàng cốt lõi (Syndrome Clusters - Bilingual EN-VI)
-        CORE_SYMPTOM_CLUSTERS = [
+        CORE_SYMPTOM_CLUSTERS = [  # noqa: N806
             ({"ho", "rát họng"}, "ddx-viral-pharyngitis", 45),
             ({"ho nhiều", "rát họng"}, "ddx-viral-pharyngitis", 45),
             ({"đau họng", "ho khan"}, "ddx-viral-pharyngitis", 40),
@@ -1189,7 +1189,6 @@ class ClinicalTriageService:
             winning_spec = max(spec_aggregated_scores.keys(), key=lambda s: spec_aggregated_scores[s])
             best_cand_in_winner = spec_best_candidate[winning_spec]
             best_match = best_cand_in_winner["record"]
-            best_score = best_cand_in_winner["score"]
             matched_flags = best_cand_in_winner["flags"]
 
             acuity = best_match.acuity
@@ -1337,7 +1336,7 @@ class ClinicalTriageService:
     def resolve_multi_symptom(
         self,
         base_result: TriageEvaluationResult,
-        clinical_facts: Dict[str, Any] | None,
+        clinical_facts: dict[str, Any] | None,
         language: str = "vi",
     ) -> TriageEvaluationResult:
         """Reconcile active complaints after the global safety gates have run.
@@ -1511,7 +1510,7 @@ class ClinicalTriageService:
 
 
 # Singleton instance để tái sử dụng
-_triage_service_instance: Optional[ClinicalTriageService] = None
+_triage_service_instance: ClinicalTriageService | None = None
 
 def get_triage_service() -> ClinicalTriageService:
     global _triage_service_instance

@@ -8,9 +8,10 @@ Enforces medical safety rules:
 5. VISIT_PURPOSE_CLARIFICATION: Clarifies generic requests to visit the hospital before clinical triage.
 """
 
-from typing import Optional, Dict, Any, Tuple, List
 import re
 import unicodedata
+from typing import Any
+
 from src.medical_assistant.domain.language_service import get_specialty_display_name
 from src.medical_assistant.domain.security.deobfuscator import get_deobfuscator
 from src.medical_assistant.domain.security.security_guardrail_service import get_security_guardrail_service
@@ -144,7 +145,7 @@ class ClinicalGuardrailService:
             re.IGNORECASE,
         )
 
-    def check_intent(self, user_query: str, current_department: Optional[str] = None, language: str = "vi") -> Optional[Dict[str, Any]]:
+    def check_intent(self, user_query: str, current_department: str | None = None, language: str = "vi") -> dict[str, Any] | None:
         """
         Kiểm tra intent an ninh mạng, de-obfuscation và an toàn y tế lâm sàng.
         Trả về dict intent hoặc None nếu là triệu chứng thông thường.
@@ -541,7 +542,7 @@ class ClinicalGuardrailService:
 
         return None
 
-    def get_visit_purpose_clarification_response(self, language: str = "vi") -> Tuple[str, List[str]]:
+    def get_visit_purpose_clarification_response(self, language: str = "vi") -> tuple[str, list[str]]:
         """Làm rõ mục đích khám trước khi kích hoạt triage hoặc tìm lịch bác sĩ."""
         if language == "en":
             quick_replies = [
@@ -568,7 +569,7 @@ class ClinicalGuardrailService:
         )
         return response, quick_replies
 
-    def get_medication_guardrail_response(self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa", language: str = "vi") -> Tuple[str, List[str]]:
+    def get_medication_guardrail_response(self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa", language: str = "vi") -> tuple[str, list[str]]:
         """Tạo câu trả lời từ chối kê đơn chuẩn an toàn y tế SAF-02 (Bilingual EN-VI)."""
         if language == "en":
             spec_en = get_specialty_display_name(suggested_dept, "en")
@@ -604,7 +605,7 @@ class ClinicalGuardrailService:
         ]
         return response, quick_replies
 
-    def get_diagnosis_guardrail_response(self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa phù hợp", language: str = "vi") -> Tuple[str, List[str]]:
+    def get_diagnosis_guardrail_response(self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa phù hợp", language: str = "vi") -> tuple[str, list[str]]:
         """Từ chối kết luận bệnh, định tuyến khám và không tự liệt kê chẩn đoán phân biệt."""
         if language == "en":
             spec_en = get_specialty_display_name(suggested_dept, "en")
@@ -641,7 +642,7 @@ class ClinicalGuardrailService:
         query: str = "",
         comparison_requested: bool = False,
         enable_citation: bool = True,
-    ) -> Tuple[str, List[str]]:
+    ) -> tuple[str, list[str]]:
         """Trả về thông tin chi tiết và chuyên môn của khoa phòng y tế (Bilingual EN-VI)."""
         spec_display = get_specialty_display_name(dept_name_query, language)
 
@@ -768,7 +769,7 @@ class ClinicalGuardrailService:
         return response, quick_replies
 
 
-_guardrail_service: Optional[ClinicalGuardrailService] = None
+_guardrail_service: ClinicalGuardrailService | None = None
 
 
 def get_guardrail_service() -> ClinicalGuardrailService:

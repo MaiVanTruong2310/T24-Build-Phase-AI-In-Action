@@ -6,7 +6,6 @@ from src.medical_assistant.domain.facility_linking import (
     workplace_department,
 )
 
-
 TIMES_CITY_ID = "026b309d-33ad-58ab-af37-9cf90c0c2c4e"
 DOCTOR_ONE_ID = "db8fc02e-8527-5b62-ac5c-3974af254e50"
 DOCTOR_TWO_ID = "11111111-1111-4111-8111-111111111111"

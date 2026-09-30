@@ -1,4 +1,5 @@
 import pytest
+
 from src.medical_assistant.agent.graph import agent
 from src.medical_assistant.domain.clinical_fact_service import get_clinical_fact_service
 from src.medical_assistant.domain.llm_clinical_extractor import get_llm_clinical_extractor

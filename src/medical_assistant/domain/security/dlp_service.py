@@ -6,17 +6,16 @@ Prevents leakage of:
 Provides automatic redaction and safety enforcement before sending any response to the user.
 """
 
-from dataclasses import dataclass, field
 import re
-from typing import Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass, field
 
 
 @dataclass
 class DLPScanResult:
     is_clean: bool
     sanitized_text: str
-    secrets_found: List[str] = field(default_factory=list)
-    pii_found: List[str] = field(default_factory=list)
+    secrets_found: list[str] = field(default_factory=list)
+    pii_found: list[str] = field(default_factory=list)
     has_leakage: bool = False
 
 
@@ -52,9 +51,9 @@ class DLPService:
     def sanitize(
         self,
         text: str,
-        allowed_user_phone: Optional[str] = None,
-        allowed_user_email: Optional[str] = None,
-        allowed_user_id: Optional[str] = None,
+        allowed_user_phone: str | None = None,
+        allowed_user_email: str | None = None,
+        allowed_user_id: str | None = None,
     ) -> DLPScanResult:
         """
         Quét và làm sạch dữ liệu nhạy cảm trong câu trả lời.
@@ -120,7 +119,7 @@ class DLPService:
         )
 
 
-_dlp_service_instance: Optional[DLPService] = None
+_dlp_service_instance: DLPService | None = None
 
 
 def get_dlp_service() -> DLPService:

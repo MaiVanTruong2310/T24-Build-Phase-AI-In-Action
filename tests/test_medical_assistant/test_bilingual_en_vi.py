@@ -9,16 +9,15 @@ Tests:
 """
 
 import pytest
-from src.medical_assistant.domain.language_service import (
-    detect_language,
-    get_specialty_display_name,
-    get_medical_disclaimer,
-)
-from src.medical_assistant.domain.triage_service import get_triage_service
-from src.medical_assistant.domain.guardrail_service import get_guardrail_service
-from src.medical_assistant.domain.cache_service import get_cache_service
+
 from src.medical_assistant.agent.nodes.example_node import analyze_node, respond_node
 from src.medical_assistant.agent.state import AgentState
+from src.medical_assistant.domain.cache_service import get_cache_service
+from src.medical_assistant.domain.guardrail_service import get_guardrail_service
+from src.medical_assistant.domain.language_service import (
+    detect_language,
+)
+from src.medical_assistant.domain.triage_service import get_triage_service
 
 
 class TestLanguageDetection:

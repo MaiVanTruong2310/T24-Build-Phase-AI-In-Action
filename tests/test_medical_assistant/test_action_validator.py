@@ -1,4 +1,5 @@
-from src.medical_assistant.domain.action_validator import validate_action, has_clinical_evidence
+from src.medical_assistant.domain.action_validator import has_clinical_evidence, validate_action
+
 
 class MockV2Response:
     def __init__(self, facts_delta, missing_facts=None, candidate_specialties=None):
@@ -11,9 +12,9 @@ class MockFactsDelta:
         self.observations = observations or []
 
 def test_has_clinical_evidence():
-    assert has_clinical_evidence({"chief_complaint": "đau đầu"}, None) == True
-    assert has_clinical_evidence({"positive_facts": ["D01"]}, None) == True
-    assert has_clinical_evidence({}, MockV2Response(MockFactsDelta())) == False
+    assert has_clinical_evidence({"chief_complaint": "đau đầu"}, None)
+    assert has_clinical_evidence({"positive_facts": ["D01"]}, None)
+    assert not has_clinical_evidence({}, MockV2Response(MockFactsDelta()))
 
 def test_validate_action():
     allowed_actions = ["ask_clarifying_question", "clarify_visit_purpose", "suggest_specialty"]

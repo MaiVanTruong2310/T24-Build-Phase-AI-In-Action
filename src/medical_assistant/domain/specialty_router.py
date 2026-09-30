@@ -14,8 +14,7 @@ Triết lý thiết kế:
 import json
 import logging
 import re
-from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ────────────────────────────────────────────────────────────────
 
 # 49 pathologies trong DDXPlus dataset mapped tới specialty code + tên chuyên khoa Vinmec
-DDXPLUS_PATHOLOGY_SPECIALTY_MAP: Dict[str, Dict[str, str]] = {
+DDXPLUS_PATHOLOGY_SPECIALTY_MAP: dict[str, dict[str, str]] = {
     # Tim mạch
     "Myocardial infarction": {"code": "TIM_MACH", "name": "Trung tâm Tim mạch"},
     "Unstable angina": {"code": "TIM_MACH", "name": "Trung tâm Tim mạch"},
@@ -105,12 +104,12 @@ DDXPLUS_PATHOLOGY_SPECIALTY_MAP: Dict[str, Dict[str, str]] = {
 }
 
 # Reverse index: lowercase pathology → specialty info
-_PATHOLOGY_INDEX: Dict[str, Dict[str, str]] = {
+_PATHOLOGY_INDEX: dict[str, dict[str, str]] = {
     k.lower(): v for k, v in DDXPLUS_PATHOLOGY_SPECIALTY_MAP.items()
 }
 
 # Bổ sung ánh xạ tên bệnh tiếng Việt phổ biến vào index
-VI_PATHOLOGY_MAP: Dict[str, Dict[str, str]] = {
+VI_PATHOLOGY_MAP: dict[str, dict[str, str]] = {
     "nhồi máu cơ tim": {"code": "TIM_MACH", "name": "Trung tâm Tim mạch"},
     "đau thắt ngực": {"code": "TIM_MACH", "name": "Trung tâm Tim mạch"},
     "suy tim": {"code": "TIM_MACH", "name": "Trung tâm Tim mạch"},
@@ -155,7 +154,7 @@ for vi_name, vi_spec in VI_PATHOLOGY_MAP.items():
     _PATHOLOGY_INDEX[vi_name] = vi_spec
 
 
-def tier1_pathology_lookup(pathology: str) -> Optional[Dict[str, str]]:
+def tier1_pathology_lookup(pathology: str) -> dict[str, str] | None:
     """Tầng 1: Tra cứu trực tiếp pathology → specialty (O(1), <1ms)."""
     if not pathology:
         return None
@@ -179,7 +178,7 @@ def tier1_pathology_lookup(pathology: str) -> Optional[Dict[str, str]]:
 
 # Specialty prototypes: mỗi chuyên khoa có một "profile" gồm keywords
 # đặc trưng (cả EN lẫn VI) để tính TF-IDF similarity
-SPECIALTY_PROTOTYPES: Dict[str, Dict[str, Any]] = {
+SPECIALTY_PROTOTYPES: dict[str, dict[str, Any]] = {
     "Trung tâm Tim mạch": {
         "code": "TIM_MACH",
         "keywords": [
@@ -266,12 +265,12 @@ SPECIALTY_PROTOTYPES: Dict[str, Dict[str, Any]] = {
 TIER2_CONFIDENCE_THRESHOLD = 0.15
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     """Tách tokens đơn giản: lowercase, split theo non-alphanum."""
     return re.findall(r'[a-zàáạảãăắằặẳẵâấầậẩẫđèéẹẻẽêếềệểễìíịỉĩòóọỏõôốồộổỗơớờợởỡùúụủũưứừựửữỳýỵỷỹ0-9]+', text.lower())
 
 
-def _compute_keyword_score(tokens: List[str], keywords: List[str]) -> float:
+def _compute_keyword_score(tokens: list[str], keywords: list[str]) -> float:
     """Tính overlap score giữa query tokens và specialty keywords."""
     if not tokens:
         return 0.0
@@ -303,7 +302,7 @@ def _compute_keyword_score(tokens: List[str], keywords: List[str]) -> float:
     return raw_score
 
 
-def tier2_semantic_route(query_text: str) -> Optional[Tuple[str, str, float]]:
+def tier2_semantic_route(query_text: str) -> tuple[str, str, float] | None:
     """
     Tầng 2: Semantic routing bằng keyword overlap scoring.
     Returns: (specialty_name, specialty_code, confidence) hoặc None.
@@ -378,7 +377,7 @@ Quy tắc:
 {{"specialty": "<tên chuyên khoa>", "confidence": <0.0-1.0>, "reasoning": "<1 dòng giải thích>"}}"""
 
 
-async def tier3_llm_route(query_text: str) -> Optional[Tuple[str, float, str]]:
+async def tier3_llm_route(query_text: str) -> tuple[str, float, str] | None:
     """
     Tầng 3: Gọi LLM để phân loại chuyên khoa.
     Returns: (specialty_name, confidence, reasoning) hoặc None.
@@ -459,8 +458,8 @@ class SpecialtyRouter:
     def route(
         self,
         query: str = "",
-        pathology: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        pathology: str | None = None,
+    ) -> dict[str, Any]:
         """
         Synchronous routing: Tầng 1 → Tầng 2.
         Không gọi LLM (phù hợp cho batch eval).
@@ -501,8 +500,8 @@ class SpecialtyRouter:
     async def route_async(
         self,
         query: str,
-        pathology: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        pathology: str | None = None,
+    ) -> dict[str, Any]:
         """
         Async routing: Tầng 1 → Tầng 2 → Tầng 3 (LLM).
         Dành cho production real-time routing.
@@ -575,7 +574,7 @@ def _get_code_for_specialty(name: str) -> str:
 
 
 # Singleton
-_router_instance: Optional[SpecialtyRouter] = None
+_router_instance: SpecialtyRouter | None = None
 
 
 def get_specialty_router() -> SpecialtyRouter:

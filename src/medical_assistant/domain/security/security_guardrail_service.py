@@ -8,25 +8,25 @@ Enforces defense against:
 5. Out-of-domain Dangerous Content (Explosives, Bio-weapons, Self-harm)
 """
 
-from dataclasses import dataclass
 import re
 import unicodedata
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+
 from src.medical_assistant.domain.security.deobfuscator import Deobfuscator, get_deobfuscator
 
 
 @dataclass
 class SecurityCheckResult:
     is_safe: bool
-    violation_type: Optional[str] = None  # PROMPT_INJECTION | SYSTEM_EXFILTRATION | PRIVILEGE_ESCALATION | CROSS_PATIENT_SNOOP | DANGEROUS_CONTENT
-    detected_technique: Optional[str] = None
-    matched_pattern: Optional[str] = None
-    safe_response: Optional[str] = None
-    quick_replies: Optional[List[str]] = None
+    violation_type: str | None = None  # PROMPT_INJECTION | SYSTEM_EXFILTRATION | PRIVILEGE_ESCALATION | CROSS_PATIENT_SNOOP | DANGEROUS_CONTENT
+    detected_technique: str | None = None
+    matched_pattern: str | None = None
+    safe_response: str | None = None
+    quick_replies: list[str] | None = None
 
 
 class SecurityGuardrailService:
-    def __init__(self, deobfuscator: Optional[Deobfuscator] = None):
+    def __init__(self, deobfuscator: Deobfuscator | None = None):
         self.deobfuscator = deobfuscator or get_deobfuscator()
 
         # 1. Prompt Injection & Jailbreak Patterns
@@ -134,7 +134,7 @@ class SecurityGuardrailService:
                     return False
         return True
 
-    def _has_security_keyword(self, folded_text: str, keywords: Tuple[str, ...]) -> bool:
+    def _has_security_keyword(self, folded_text: str, keywords: tuple[str, ...]) -> bool:
         tokens = folded_text.split()
         for keyword in keywords:
             if " " in keyword and keyword in folded_text:
@@ -148,7 +148,7 @@ class SecurityGuardrailService:
                 return True
         return False
 
-    def _extract_embedded_symptom(self, query: str) -> Optional[str]:
+    def _extract_embedded_symptom(self, query: str) -> str | None:
         """Trích xuất triệu chứng y tế hợp lệ nếu người dùng gửi prompt lai ghép (vừa có triệu chứng vừa có injection)."""
         query_lower = query.lower()
         symptom_keywords = [
@@ -325,7 +325,7 @@ class SecurityGuardrailService:
 
         return SecurityCheckResult(is_safe=True)
 
-    def _get_injection_response(self, language: str, detected_symptom: Optional[str] = None) -> Tuple[str, List[str]]:
+    def _get_injection_response(self, language: str, detected_symptom: str | None = None) -> tuple[str, list[str]]:
         if language == "en":
             if detected_symptom:
                 resp = (
@@ -360,7 +360,7 @@ class SecurityGuardrailService:
                 replies = ["Mô tả triệu chứng", "Tìm bác sĩ chuyên khoa", "Giờ làm việc bệnh viện"]
         return resp, replies
 
-    def _get_exfiltration_response(self, language: str, detected_symptom: Optional[str] = None) -> Tuple[str, List[str]]:
+    def _get_exfiltration_response(self, language: str, detected_symptom: str | None = None) -> tuple[str, list[str]]:
         if language == "en":
             resp = (
                 "🔒 **Confidentiality Notice:**\n\n"
@@ -385,7 +385,7 @@ class SecurityGuardrailService:
                 replies = ["Mô tả triệu chứng", "Xem danh sách chuyên khoa", "Bảng giá khám"]
         return resp, replies
 
-    def _get_privilege_response(self, language: str) -> Tuple[str, List[str]]:
+    def _get_privilege_response(self, language: str) -> tuple[str, list[str]]:
         if language == "en":
             resp = (
                 "⛔ **Access Denied:**\n\n"
@@ -400,7 +400,7 @@ class SecurityGuardrailService:
             replies = ["Quay lại tư vấn y tế", "Hỏi đáp thủ tục khám"]
         return resp, replies
 
-    def _get_cross_patient_response(self, language: str) -> Tuple[str, List[str]]:
+    def _get_cross_patient_response(self, language: str) -> tuple[str, list[str]]:
         if language == "en":
             resp = (
                 "🔐 **Patient Privacy Protection (HIPAA & Medical Law):**\n\n"
@@ -417,7 +417,7 @@ class SecurityGuardrailService:
             replies = ["Xem thông tin slot của tôi", "Đặt lịch khám mới"]
         return resp, replies
 
-    def _get_harmful_response(self, language: str) -> Tuple[str, List[str]]:
+    def _get_harmful_response(self, language: str) -> tuple[str, list[str]]:
         if language == "en":
             resp = (
                 "⚠️ **Emergency Safety Warning:**\n\n"
@@ -435,7 +435,7 @@ class SecurityGuardrailService:
         return resp, replies
 
 
-_security_guardrail_service_instance: Optional[SecurityGuardrailService] = None
+_security_guardrail_service_instance: SecurityGuardrailService | None = None
 
 
 def get_security_guardrail_service() -> SecurityGuardrailService:

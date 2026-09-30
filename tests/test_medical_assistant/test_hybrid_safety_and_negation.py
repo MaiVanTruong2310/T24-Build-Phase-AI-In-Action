@@ -1,8 +1,8 @@
 import pytest
+
 from src.medical_assistant.agent.graph import agent
-from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
-from src.medical_assistant.domain.triage_service import get_triage_service
 from src.medical_assistant.domain.cache_service import get_cache_service
+from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
 
 
 def test_clinical_negation_service_unit():

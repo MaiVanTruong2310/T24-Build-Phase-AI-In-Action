@@ -9,8 +9,9 @@ Rules:
 """
 
 import pytest
-from src.medical_assistant.domain.triage_service import ClinicalTriageService
+
 from src.medical_assistant.domain.disease_triage import ATSLevel
+from src.medical_assistant.domain.triage_service import ClinicalTriageService
 
 
 @pytest.fixture(scope="module")

@@ -1,8 +1,8 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
-from src.medical_assistant.agent.nodes.example_node import analyze_node, respond_node
 from src.medical_assistant.agent.nodes.doctor_node import find_doctors_node
+from src.medical_assistant.agent.nodes.example_node import analyze_node, respond_node
 from src.medical_assistant.agent.state import AgentState
 
 

@@ -4,8 +4,10 @@ Eliminates heavy external dependencies while providing connection pooling,
 timeout resilience, and async/sync compatibility for 10,000 CCU load.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any
+
 import httpx
+
 from src.medical_assistant.config import get_settings
 
 
@@ -32,7 +34,7 @@ class SupabaseRestClient:
             timeout=10.0,
         )
 
-    def select(self, table: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def select(self, table: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """
         Execute a SELECT query against Supabase PostgREST table.
         """
@@ -40,7 +42,7 @@ class SupabaseRestClient:
         response.raise_for_status()
         return response.json()
 
-    def insert(self, table: str, data: Any) -> List[Dict[str, Any]]:
+    def insert(self, table: str, data: Any) -> list[dict[str, Any]]:
         """
         Execute an INSERT query into Supabase table.
         """
@@ -57,7 +59,7 @@ class SupabaseRestClient:
         )
         response.raise_for_status()
 
-    def update(self, table: str, data: Any, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def update(self, table: str, data: Any, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """
         Execute an UPDATE (PATCH) query into Supabase table with filter params.
         """
@@ -66,8 +68,8 @@ class SupabaseRestClient:
         return response.json()
 
 
-_supabase_client: Optional[SupabaseRestClient] = None
-_supabase_admin_client: Optional[SupabaseRestClient] = None
+_supabase_client: SupabaseRestClient | None = None
+_supabase_admin_client: SupabaseRestClient | None = None
 
 
 def get_supabase_client() -> SupabaseRestClient:

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, Dict, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 
 def _normalize(text: str) -> str:
@@ -141,7 +142,7 @@ def _is_resolution(text: str, code: str) -> bool:
     )
 
 
-def _normalize_complaint(value: Any) -> Dict[str, Any] | None:
+def _normalize_complaint(value: Any) -> dict[str, Any] | None:
     if isinstance(value, str):
         code = value.strip()
         return {
@@ -173,7 +174,7 @@ def _normalize_complaint(value: Any) -> Dict[str, Any] | None:
 
 
 class ClinicalFactService:
-    def extract(self, text: str, turn_index: int | None = None) -> Dict[str, Any]:
+    def extract(self, text: str, turn_index: int | None = None) -> dict[str, Any]:
         normalized = _normalize(text)
         positive: set[str] = set()
         negative: set[str] = set()
@@ -235,7 +236,7 @@ class ClinicalFactService:
             side = "left" if "left" in normalized else "right"
             location = f"{side} abdomen"
 
-        complaints: list[Dict[str, Any]] = []
+        complaints: list[dict[str, Any]] = []
         for code, system, patterns in COMPLAINT_RULES:
             matched = next((re.search(pattern, normalized) for pattern in patterns if re.search(pattern, normalized)), None)
             is_negative = code in negative
@@ -284,7 +285,7 @@ class ClinicalFactService:
             "location": location,
         }
 
-    def merge(self, existing: Dict[str, Any] | None, new: Dict[str, Any]) -> Dict[str, Any]:
+    def merge(self, existing: dict[str, Any] | None, new: dict[str, Any]) -> dict[str, Any]:
         merged = dict(existing or {})
         positive = set(merged.get("positive_facts") or [])
         negative = set(merged.get("negative_facts") or [])
@@ -377,7 +378,7 @@ class ClinicalFactService:
         return merged
 
     @staticmethod
-    def knows_any(facts: Dict[str, Any] | None, names: Iterable[str]) -> bool:
+    def knows_any(facts: dict[str, Any] | None, names: Iterable[str]) -> bool:
         if not facts:
             return False
         known = set(facts.get("positive_facts") or []) | set(facts.get("negative_facts") or [])

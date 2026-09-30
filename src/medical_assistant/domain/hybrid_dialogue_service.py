@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, Optional, List
+from typing import Any
 
-from src.medical_assistant.infrastructure.llm import get_llm
 from src.medical_assistant.domain.hybrid_dialogue_v2_model import (
     ActionArgs,
     CandidateSpecialty,
@@ -13,6 +12,7 @@ from src.medical_assistant.domain.hybrid_dialogue_v2_model import (
     FactsDelta,
     HybridDialogueResponse,
 )
+from src.medical_assistant.infrastructure.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ Các trường reason chỉ chứa giải thích ngắn và bằng chứng cần
 
 class HybridDialogueService:
     @staticmethod
-    def _fallback_response(text: str, state: Dict[str, Any]) -> HybridDialogueResponse:
+    def _fallback_response(text: str, state: dict[str, Any]) -> HybridDialogueResponse:
         """Keep the agent usable when both LLM providers are unavailable.
 
         This is deliberately conservative: it extracts only explicit facts and
@@ -141,7 +141,7 @@ class HybridDialogueService:
         if name_match:
             patient_name = name_match.group(1).strip().title()
 
-        observations: List[FactObservation] = []
+        observations: list[FactObservation] = []
         for code in facts.get("positive_facts", []):
             observations.append(FactObservation(code=code, polarity="positive", temporality="current", subject="self", evidence=text[:240]))
         for code in facts.get("negative_facts", []):
@@ -245,10 +245,10 @@ class HybridDialogueService:
     async def process_turn_async(
         self,
         text: str,
-        state: Dict[str, Any],
-        recent_turns: List[str],
-        last_assistant_question: Optional[str],
-        allowed_actions: List[str]
+        state: dict[str, Any],
+        recent_turns: list[str],
+        last_assistant_question: str | None,
+        allowed_actions: list[str]
     ) -> tuple[HybridDialogueResponse, bool]:
         import json
         from datetime import datetime
@@ -318,7 +318,7 @@ class HybridDialogueService:
             logger.warning("Hybrid dialogue LLM unavailable; using conservative fallback: %s", type(exc).__name__)
             return self._fallback_response(text, state), False
 
-    def adapt_v2_to_v1(self, v2_response: HybridDialogueResponse) -> Dict[str, Any]:
+    def adapt_v2_to_v1(self, v2_response: HybridDialogueResponse) -> dict[str, Any]:
         positive_facts = []
         negative_facts = []
 
@@ -365,7 +365,7 @@ class HybridDialogueService:
             "corrections": [corr.model_dump() for corr in v2_response.facts_delta.corrections]
         }
 
-_hybrid_dialogue_instance: Optional[HybridDialogueService] = None
+_hybrid_dialogue_instance: HybridDialogueService | None = None
 
 def get_hybrid_dialogue_service() -> HybridDialogueService:
     global _hybrid_dialogue_instance

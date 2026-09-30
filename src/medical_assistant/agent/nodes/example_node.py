@@ -1,18 +1,17 @@
-import json
 from src.medical_assistant.agent.state import AgentState
-from src.medical_assistant.domain.triage_service import get_triage_service
-from src.medical_assistant.domain.probing_service import get_probing_service
 from src.medical_assistant.domain.cache_service import get_cache_service
-from src.medical_assistant.domain.guardrail_service import get_guardrail_service
 from src.medical_assistant.domain.clinical_fact_service import get_clinical_fact_service
-from src.medical_assistant.domain.hybrid_dialogue_service import get_hybrid_dialogue_service
 from src.medical_assistant.domain.disease_triage import ATSLevel, UrgencyTier
-from src.medical_assistant.domain.security.security_guardrail_service import get_security_guardrail_service
+from src.medical_assistant.domain.guardrail_service import get_guardrail_service
+from src.medical_assistant.domain.hybrid_dialogue_service import get_hybrid_dialogue_service
 from src.medical_assistant.domain.language_service import (
     detect_language,
-    get_specialty_display_name,
     get_medical_disclaimer,
+    get_specialty_display_name,
 )
+from src.medical_assistant.domain.probing_service import get_probing_service
+from src.medical_assistant.domain.security.security_guardrail_service import get_security_guardrail_service
+from src.medical_assistant.domain.triage_service import get_triage_service
 
 MAX_DETAILS_HISTORY = 4
 
@@ -631,7 +630,6 @@ async def respond_node(state: AgentState) -> dict:
     patient_guidance = meta.get("patient_guidance") or state.get("emergency_warning", "")
     clarification = meta.get("clarification_question")
     quick_replies = meta.get("quick_replies", [])
-    needs_more_probing = meta.get("needs_more_probing", False)
     is_emergency = state.get("is_emergency", False)
     spec_name = state.get("suggested_department_name") or "Chuyên khoa phù hợp"
     lang = state.get("language") or "vi"

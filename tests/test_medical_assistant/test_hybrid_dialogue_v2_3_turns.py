@@ -1,6 +1,8 @@
 import pytest
+
 from src.medical_assistant.agent.nodes.example_node import analyze_node, respond_node
 from src.medical_assistant.agent.state import AgentState
+
 
 @pytest.mark.asyncio
 class TestHybridDialogueV2ThreeTurns:

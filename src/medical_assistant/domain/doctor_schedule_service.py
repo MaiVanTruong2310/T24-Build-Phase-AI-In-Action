@@ -12,10 +12,10 @@ import json
 import logging
 import re
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from src.medical_assistant.db.supabase_client import get_supabase_client
@@ -52,7 +52,7 @@ SPECIALTY_ALIAS_MAP = {
 class _UnavailableDatabaseClient:
     """Offline client used when Supabase credentials are not configured."""
 
-    def select(self, table: str, params: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
+    def select(self, table: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         return []
 
 
@@ -91,7 +91,7 @@ def format_utc_to_vn_time(utc_iso_str: str) -> str:
     try:
         parsed = datetime.fromisoformat(utc_iso_str.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
         local = parsed.astimezone(VN_TZ)
         period = "Sáng" if local.hour < 12 else "Chiều"
         return f"{local.strftime('%H:%M')} ({period}) ngày {local.strftime('%d/%m/%Y')}"
@@ -124,7 +124,7 @@ class DoctorScheduleService:
             # sourced doctor profiles; only live availability is disabled.
             self.client = _UnavailableDatabaseClient()
 
-    def find_specialty_by_name(self, query_name: str) -> Optional[dict[str, Any]]:
+    def find_specialty_by_name(self, query_name: str) -> dict[str, Any] | None:
         for term in _specialty_terms(query_name):
             try:
                 rows = self.client.select(
@@ -138,7 +138,7 @@ class DoctorScheduleService:
                 return None
         return None
 
-    def find_facility(self, query: str | None) -> Optional[dict[str, Any]]:
+    def find_facility(self, query: str | None) -> dict[str, Any] | None:
         """Resolve a facility UUID, code, or display name to one active row."""
         raw = str(query or "").strip()
         if not raw:
@@ -236,7 +236,7 @@ class DoctorScheduleService:
             return []
 
         days = max(1, min(requested_days or 7, 30))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         schedule_params = {
             "select": "id,doctor_id,facility_id,starts_at,ends_at,status",
             "doctor_id": "in.(" + ",".join(str(row["id"]) for row in doctors) + ")",
@@ -357,12 +357,12 @@ class DoctorScheduleService:
 
     def get_available_doctors_and_slots(
         self,
-        specialty_name: Optional[str] = None,
+        specialty_name: str | None = None,
         limit_doctors: int = 3,
         slots_per_doctor: int = 2,
-        requested_days: Optional[int] = None,
-        preferred_period: Optional[str] = None,
-        facility_id: Optional[str] = None,
+        requested_days: int | None = None,
+        preferred_period: str | None = None,
+        facility_id: str | None = None,
     ) -> list[dict[str, Any]]:
         facility = None
         try:
@@ -382,13 +382,13 @@ class DoctorScheduleService:
         facility_query = str((facility or {}).get("name") or facility_id or "") or None
         return self._crawled_doctors(specialty_name, limit_doctors, facility_query)
 
-    def hold_slot(self, slot_id: str, available_doctors: Optional[list[dict[str, Any]]] = None) -> bool:
+    def hold_slot(self, slot_id: str, available_doctors: list[dict[str, Any]] | None = None) -> bool:
         """Legacy compatibility: never report an in-memory hold as a DB booking."""
         del slot_id, available_doctors
         return False
 
 
-_doctor_schedule_service: Optional[DoctorScheduleService] = None
+_doctor_schedule_service: DoctorScheduleService | None = None
 
 
 def get_doctor_schedule_service() -> DoctorScheduleService:

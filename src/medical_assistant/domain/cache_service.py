@@ -10,7 +10,8 @@ Tiết kiệm 100% token LLM cho các câu hỏi thường gặp:
 
 import re
 import unicodedata
-from typing import Optional, Tuple, Dict, Any, List
+
+from src.medical_assistant.domain.language_service import detect_language
 
 
 def _normalize_text(text: str) -> str:
@@ -26,18 +27,15 @@ def _normalize_text(text: str) -> str:
     return text
 
 
-from src.medical_assistant.domain.language_service import detect_language
-
-
 class FAQEntry:
     def __init__(
         self,
         key: str,
-        patterns: List[str],
+        patterns: list[str],
         response_vi: str,
         response_en: str,
-        quick_replies_vi: Optional[List[str]] = None,
-        quick_replies_en: Optional[List[str]] = None,
+        quick_replies_vi: list[str] | None = None,
+        quick_replies_en: list[str] | None = None,
     ):
         self.key = key
         self.patterns = [re.compile(p, re.IGNORECASE) for p in patterns]
@@ -52,13 +50,13 @@ class FAQEntry:
                 return True
         return False
 
-    def get_response(self, language: str = "vi") -> Tuple[str, List[str]]:
+    def get_response(self, language: str = "vi") -> tuple[str, list[str]]:
         if language == "en":
             return self.response_en, self.quick_replies_en
         return self.response_vi, self.quick_replies_vi
 
 
-FAQ_KNOWLEDGE_BASE: List[FAQEntry] = [
+FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
     # 1. Chào hỏi ban đầu
     FAQEntry(
         key="GREETING",
@@ -253,7 +251,7 @@ class ZeroTokenCacheService:
                 return True
         return False
 
-    def check_cache(self, user_query: str, language: Optional[str] = None) -> Optional[Tuple[str, List[str], str]]:
+    def check_cache(self, user_query: str, language: str | None = None) -> tuple[str, list[str], str] | None:
         """
         Kiểm tra xem câu hỏi có thuộc nhóm FAQ chính sách/giờ làm việc/chuẩn bị khám không.
         Trả về: (response_text, quick_replies, faq_key) hoặc None.
@@ -279,7 +277,7 @@ class ZeroTokenCacheService:
         return None
 
 
-_cache_service: Optional[ZeroTokenCacheService] = None
+_cache_service: ZeroTokenCacheService | None = None
 
 
 def get_cache_service() -> ZeroTokenCacheService:

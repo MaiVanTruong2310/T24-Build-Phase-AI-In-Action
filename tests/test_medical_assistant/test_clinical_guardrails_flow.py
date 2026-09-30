@@ -1,4 +1,5 @@
 import pytest
+
 from src.medical_assistant.agent.graph import agent
 
 
