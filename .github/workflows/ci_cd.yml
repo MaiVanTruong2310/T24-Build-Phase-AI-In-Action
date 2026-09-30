@@ -217,6 +217,8 @@ jobs:
             JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
             OTP_EXPIRE_MINUTES=5
             OTP_MAX_ATTEMPTS=5
+            # TEMPORARY DEMO ONLY: remove when real OTP delivery is enabled.
+            MOCK_OTP_CODE=123456
             CORS_ORIGINS=http://localhost:5173,${FRONTEND_ORIGIN}
             POSTGRES_DB=${{ vars.POSTGRES_DB || 'ai20k' }}
             POSTGRES_USER=${{ vars.POSTGRES_USER || 'ai20k_app' }}

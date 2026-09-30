@@ -2,12 +2,17 @@ import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '../app/store'
-import { registerUser, verifyOtp, resetRegisterSuccess } from '../features/auth/authSlice'
-import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Loader2, Phone, Key } from 'lucide-react'
+import { registerUser, sendOtp, verifyOtp, resetRegisterSuccess } from '../features/auth/authSlice'
+import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Loader2, Phone, Mail, Key } from 'lucide-react'
+
+// TEMPORARY DEMO ONLY: keep this disabled before enabling real OTP delivery.
+const TEMPORARY_OTP_BYPASS = true
+const TEMPORARY_OTP_CODE = '123456'
 
 export function Register() {
   const [formData, setFormData] = useState({
     full_name: '',
+    email: '',
     phone: '',
     date_of_birth: '',
     gender: '',
@@ -55,6 +60,7 @@ export function Register() {
 
     const payload = {
       full_name: formData.full_name,
+      ...(formData.email.trim() && { email: formData.email.trim() }),
       phone: formData.phone,
       date_of_birth: formData.date_of_birth,
       gender: formData.gender,
@@ -63,7 +69,35 @@ export function Register() {
       ...(formData.health_insurance_code && { health_insurance_code: formData.health_insurance_code }),
     }
 
-    await dispatch(registerUser(payload))
+    /*
+     * Original flow kept for restoration:
+     * await dispatch(registerUser(payload))
+     * The successful registration then displays the manual OTP form below.
+     */
+    const registrationResult = await dispatch(registerUser(payload))
+
+    // TEMPORARY OTP bypass: ask the mock API for the actual generated code.
+    if (TEMPORARY_OTP_BYPASS && registerUser.fulfilled.match(registrationResult)) {
+      const otpResult = await dispatch(sendOtp({ phone: formData.phone, purpose: 'register' }))
+      if (sendOtp.rejected.match(otpResult)) {
+        setValidationError('Không thể lấy OTP tự động. Bạn có thể nhập OTP thủ công.')
+        return
+      }
+
+      const returnedOtp = otpResult.payload?.otp
+      // Keep the fixed mock code only as a fallback for older deployments.
+      const generatedOtp = typeof returnedOtp === 'string' && /^\d{6}$/.test(returnedOtp)
+        ? returnedOtp
+        : TEMPORARY_OTP_CODE
+      setOtpCode(generatedOtp)
+      const verificationResult = await dispatch(verifyOtp({ phone: formData.phone, code: generatedOtp }))
+
+      if (verifyOtp.fulfilled.match(verificationResult)) {
+        alert('Đăng ký thành công! Vui lòng đăng nhập.')
+        dispatch(resetRegisterSuccess())
+        navigate('/login')
+      }
+    }
   }
 
   const handleVerifyOtp = async (e: FormEvent) => {
@@ -82,6 +116,8 @@ export function Register() {
     }
   }
 
+  // The original manual OTP screen remains as a fallback if the temporary
+  // bypass is disabled or the automatic verification fails.
   if (registerSuccess) {
     return (
       <div className="w-full max-w-md mx-auto">
@@ -190,6 +226,25 @@ export function Register() {
                 </div>
               </div>
               
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-semibold text-slate-900">Email</label>
+                  <span className="text-xs text-slate-400 font-medium">Tùy chọn</span>
+                </div>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="bacsi@example.com"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm bg-white"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-sm font-semibold text-slate-900">Số điện thoại <span className="text-red-500">*</span></label>

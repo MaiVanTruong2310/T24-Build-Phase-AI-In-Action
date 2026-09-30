@@ -49,6 +49,10 @@ Khi chạy local, có thể ghi đè bằng `VITE_API_BASE_URL` trong
 `frontend/.env.local`. Nếu giá trị không có protocol, frontend mặc định thêm
 `http://`.
 
+Tạm thời luồng đăng ký dùng mã OTP mock `123456` và luồng khôi phục mật khẩu
+tự điền OTP mock trả về từ API. Đây là bypass phục vụ demo, cần tắt trước khi
+bật OTP thật.
+
 ## Các lệnh thường dùng
 
 ```bash

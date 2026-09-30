@@ -218,6 +218,34 @@ export const registerUser = createAsyncThunk(
   }
 )
 
+export const sendOtp = createAsyncThunk(
+  'auth/sendOtp',
+  async (
+    data: { email?: string; phone?: string; purpose?: 'register' | 'login' | 'reset_password' },
+    { rejectWithValue },
+  ) => {
+    try {
+      const payload: Record<string, string> = { purpose: data.purpose || 'register' };
+      if (data.email) payload.email = data.email;
+      if (data.phone) payload.phone = data.phone;
+
+      const response = await fetchWithAuth('/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const responseData = await response.json();
+      if (!response.ok) {
+        throw new Error(translateError(responseData.message) || 'Không thể lấy mã OTP');
+      }
+
+      return responseData.data as { otp?: string | null };
+    } catch (err: unknown) {
+      return rejectWithValue(getErrorMessage(err, 'Không thể lấy mã OTP'));
+    }
+  },
+);
+
 export const verifyOtp = createAsyncThunk(
   'auth/verifyOtp',
   async (data: { email?: string; phone?: string; code: string }, { rejectWithValue }) => {
