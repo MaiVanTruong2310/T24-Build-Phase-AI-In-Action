@@ -161,7 +161,8 @@ jobs:
           if [[ "$GITHUB_REF_NAME" == "main" ]]; then
             vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
           else
-            vercel deploy --prebuilt --token="$VERCEL_TOKEN"
+            DEPLOY_URL=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+            vercel alias set "$DEPLOY_URL" ai20k-build-phase-dev.vercel.app --token="$VERCEL_TOKEN"
           fi
 
   backend_deploy:
