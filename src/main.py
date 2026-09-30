@@ -2,7 +2,7 @@ import asyncio
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -19,11 +19,12 @@ from src.api.handlers import (
     unexpected_error_handler,
     validation_error_handler,
 )
-from src.api.routes import router
 from src.config import get_settings, parse_cors_origins
 from src.core.exceptions import AppError
 from src.core.logging import get_logger
-from src.db.session import initialize_database
+from src.db.session import check_database_connection, close_database, initialize_database
+from src.medical_assistant.api.routes import router as medical_assistant_router
+from src.medical_assistant.db.supabase_client import close_supabase_clients
 
 logger = get_logger(__name__)
 
@@ -42,8 +43,12 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("main.lifespan database initialization failed")
             raise
-    yield
-    logger.info("Shutting down")
+    try:
+        yield
+    finally:
+        await close_database()
+        close_supabase_clients()
+        logger.info("Shutting down")
 
 
 app = FastAPI(
@@ -62,7 +67,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router, prefix="/api/v1")
+app.include_router(medical_assistant_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(user_router, prefix="/api/v1")
 app.include_router(booking_router, prefix="/api/v1")
@@ -79,3 +84,14 @@ app.add_exception_handler(Exception, unexpected_error_handler)
 async def health():
     """Return a lightweight service health response."""
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.get("/health/ready")
+async def readiness():
+    """Report whether the API can execute a query on its configured database."""
+    try:
+        await check_database_connection()
+    except Exception as exc:
+        logger.warning("main.readiness database unavailable: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Database is unavailable") from exc
+    return {"status": "ready", "database": "connected"}
