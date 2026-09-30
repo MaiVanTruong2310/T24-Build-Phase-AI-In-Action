@@ -34,6 +34,15 @@ def get_engine():
     return create_async_engine(
         _async_database_url(settings.database_url),
         pool_pre_ping=True,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
+        pool_timeout=settings.database_pool_timeout_seconds,
+        pool_recycle=settings.database_pool_recycle_seconds,
+        pool_use_lifo=True,
+        connect_args={
+            "connect_timeout": settings.database_connect_timeout_seconds,
+            "application_name": settings.app_name[:63],
+        },
     )
 
 
@@ -58,3 +67,16 @@ async def initialize_database() -> None:
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist"))
         await connection.run_sync(Base.metadata.create_all)
     logger.info("database.initialize_database tables ready", extra={"table_count": len(table_names)})
+
+
+async def check_database_connection() -> None:
+    """Run the smallest useful query for readiness checks."""
+    async with get_engine().connect() as connection:
+        await connection.execute(text("SELECT 1"))
+
+
+async def close_database() -> None:
+    """Release pooled PostgreSQL connections during application shutdown."""
+    settings = get_settings()
+    if settings.database_url:
+        await get_engine().dispose()
