@@ -41,6 +41,14 @@ npm run dev
 
 Sau đó mở URL Vite hiển thị trong terminal, thường là `http://localhost:5173`.
 
+Frontend gọi trực tiếp backend theo môi trường. CI/CD lấy hostname từ secret
+`EC2_HOST_DEV` khi build branch `develop` và `EC2_HOST_PROD` khi build branch
+`main`; secret chỉ cần chứa hostname/domain, không cần thêm `http://`.
+
+Khi chạy local, có thể ghi đè bằng `VITE_API_BASE_URL` trong
+`frontend/.env.local`. Nếu giá trị không có protocol, frontend mặc định thêm
+`http://`.
+
 ## Các lệnh thường dùng
 
 ```bash

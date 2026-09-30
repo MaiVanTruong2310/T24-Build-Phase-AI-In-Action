@@ -34,7 +34,6 @@ const initialState: AuthState = {
   registerSuccess: false,
 }
 
-const API_BASE = '/api/v1';
 type RegistrationPayload = Record<string, string | boolean | null | undefined>;
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
@@ -112,7 +111,7 @@ export const loginUser = createAsyncThunk(
         payload.otp_code = credentials.otp_code;
       }
 
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const response = await fetchWithAuth('/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -129,7 +128,7 @@ export const loginUser = createAsyncThunk(
       const token = data.data.access_token;
       const refresh_token = data.data.refresh_token;
       
-      const userRes = await fetch(`${API_BASE}/users/me`, {
+      const userRes = await fetchWithAuth('/users/me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -174,7 +173,7 @@ export const logoutUser = createAsyncThunk(
         return true; // nothing to logout
       }
 
-      const response = await fetch(`${API_BASE}/auth/logout`, {
+      const response = await fetchWithAuth('/auth/logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token })
@@ -198,7 +197,7 @@ export const registerUser = createAsyncThunk(
   'auth/registerUser',
   async (userData: RegistrationPayload, { rejectWithValue }) => {
     try {
-      const response = await fetch(`${API_BASE}/auth/register`, {
+      const response = await fetchWithAuth('/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -227,7 +226,7 @@ export const verifyOtp = createAsyncThunk(
       if (data.email) payload.email = data.email;
       if (data.phone) payload.phone = data.phone;
       
-      const response = await fetch(`${API_BASE}/auth/otp/verify`, {
+      const response = await fetchWithAuth('/auth/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -249,7 +248,7 @@ export const requestPasswordReset = createAsyncThunk(
     try {
       const isEmail = username.includes('@');
       const payload = isEmail ? { email: username } : { phone: username };
-      const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+      const response = await fetchWithAuth('/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -272,7 +271,7 @@ export const resetPassword = createAsyncThunk(
       if (isEmail) payload.email = data.username;
       else payload.phone = data.username;
 
-      const response = await fetch(`${API_BASE}/auth/reset-password`, {
+      const response = await fetchWithAuth('/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

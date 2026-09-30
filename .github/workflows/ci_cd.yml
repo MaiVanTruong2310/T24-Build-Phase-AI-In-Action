@@ -85,6 +85,8 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      VITE_API_BASE_URL: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
     steps:
       - uses: actions/checkout@v4
 
@@ -120,6 +122,7 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      VITE_API_BASE_URL: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
     steps:
       - uses: actions/checkout@v4
 
@@ -129,6 +132,7 @@ jobs:
           test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
           test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID secret"; exit 1; }
           test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID secret"; exit 1; }
+          test -n "$VITE_API_BASE_URL" || { echo "Missing EC2 backend host secret"; exit 1; }
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -195,9 +199,11 @@ jobs:
             if [ "$GITHUB_REF_NAME" = "main" ]; then
               OVERRIDE=docker-compose.prod.yml
               ENV_TAG=production
+              FRONTEND_ORIGIN="${{ vars.FRONTEND_PROD_URL || 'https://ai20k-build-phase.vercel.app' }}"
             else
               OVERRIDE=docker-compose.dev.yml
               ENV_TAG=development
+              FRONTEND_ORIGIN="${{ vars.FRONTEND_DEV_URL || 'https://ai20k-build-phase-dev.vercel.app' }}"
             fi
 
             cat > .env <<EOF
@@ -211,6 +217,7 @@ jobs:
             JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
             OTP_EXPIRE_MINUTES=5
             OTP_MAX_ATTEMPTS=5
+            CORS_ORIGINS=http://localhost:5173,${FRONTEND_ORIGIN}
             POSTGRES_DB=${{ vars.POSTGRES_DB || 'ai20k' }}
             POSTGRES_USER=${{ vars.POSTGRES_USER || 'ai20k_app' }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}

@@ -5,7 +5,20 @@ import {
   saveTokens,
 } from '../features/auth/session';
 
-const API_BASE = '/api/v1';
+const LOCAL_API_ORIGIN = 'http://localhost:8000';
+
+function normalizeApiOrigin(value: string): string {
+  const trimmedValue = value.trim().replace(/\/$/, '');
+  if (!trimmedValue) return LOCAL_API_ORIGIN;
+  if (trimmedValue.startsWith('http://') || trimmedValue.startsWith('https://')) {
+    return trimmedValue.replace(/\/api\/v1$/, '');
+  }
+  return `http://${trimmedValue}`.replace(/\/api\/v1$/, '');
+}
+
+// EC2_HOST_PROD/EC2_HOST_DEV are injected by CI/CD without a protocol.
+const API_ORIGIN = normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
+const API_BASE = `${API_ORIGIN}/api/v1`;
 const REFRESH_PATH = `${API_BASE}/auth/refresh-token`;
 const UNAUTHORIZED_EVENT = 'auth:unauthorized';
 const REFRESH_LOCK_NAME = 'medicare-auth-refresh';
@@ -75,8 +88,11 @@ function notifyUnauthorized(): void {
 }
 
 function resolveApiUrl(url: string): string {
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/api/')) {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
+  }
+  if (url.startsWith('/api/')) {
+    return `${API_ORIGIN}${url}`;
   }
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }
