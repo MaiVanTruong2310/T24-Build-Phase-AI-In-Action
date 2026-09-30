@@ -14,15 +14,18 @@ from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger
 from src.models.booking import Booking
 from src.models.booking_hold import BookingHold
+from src.models.catalog import CatalogAuditEvent
 from src.repositories.booking import BookingRepository
 from src.schemas.booking import (
     BookingCreate,
     BookingHoldCreate,
     BookingHoldResponse,
+    BookingRescheduleCreate,
     BookingResponse,
     StaffBookingResponse,
     StaffBookingStatusUpdate,
 )
+from src.services.notification import NotificationService
 
 logger = get_logger(__name__)
 
@@ -33,6 +36,7 @@ class BookingService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.bookings = BookingRepository(session)
+        self.notifications = NotificationService(session)
 
     async def create(self, user_id: UUID, request: BookingCreate) -> Booking:
         """Create a scheduled booking or a requested-time booking awaiting staff review."""
@@ -277,6 +281,87 @@ class BookingService:
         logger.info("BookingService.cancel booking cancelled", extra={"booking_id": str(booking_id)})
         return await self.get(user_id, booking_id)
 
+    async def reschedule(self, user_id: UUID, booking_id: UUID, request: BookingRescheduleCreate) -> Booking:
+        """Move an owned scheduled booking to a newly held slot for re-approval."""
+        async with self.session.begin():
+            booking = await self.bookings.get_for_user(booking_id, user_id, for_update=True)
+            if booking is None:
+                raise NotFoundError("Booking not found")
+            if booking.status in ("cancelled", "rejected"):
+                raise ConflictError("BOOKING_NOT_RESCHEDULABLE", "This booking cannot be rescheduled")
+            if booking.schedule_id is None:
+                raise ConflictError("BOOKING_NOT_RESCHEDULABLE", "Requested-time bookings cannot be rescheduled yet")
+            if request.schedule_id == booking.schedule_id:
+                raise ConflictError("SAME_SCHEDULE", "Choose a different schedule")
+
+            schedules = await self.bookings.get_schedules_for_update({booking.schedule_id, request.schedule_id})
+            old_schedule = schedules.get(booking.schedule_id)
+            new_schedule = schedules.get(request.schedule_id)
+            if old_schedule is None or new_schedule is None:
+                raise NotFoundError("Schedule not found")
+            self._validate_schedule(new_schedule)
+
+            hold = await self.bookings.get_hold_for_user(request.hold_id, user_id, for_update=True)
+            if hold is None:
+                raise NotFoundError("Hold not found")
+            if hold.status != "active" or hold.expires_at <= datetime.now(UTC):
+                raise ConflictError("HOLD_EXPIRED", "The booking hold has expired or was released")
+            if hold.schedule_id != new_schedule.id:
+                raise ConflictError("HOLD_SCHEDULE_MISMATCH", "Hold does not belong to this schedule")
+            if hold.service_id != booking.service_id or hold.specialty_id != booking.specialty_id:
+                raise ConflictError("HOLD_REQUEST_MISMATCH", "Hold does not match the booking request")
+
+            active_count = await self.bookings.count_reservations_for_schedule(
+                new_schedule.id,
+                exclude_hold_id=hold.id,
+                exclude_booking_id=booking.id,
+            )
+            if booking.service.booking_mode == "doctor_visit" and active_count >= 1:
+                raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
+            if booking.service.booking_mode == "group" and active_count >= new_schedule.capacity:
+                raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
+            await self._validate_catalog_relationships(new_schedule, booking.service, booking.specialty)
+
+            old_values = {
+                "schedule_id": str(booking.schedule_id),
+                "starts_at": booking.starts_at.isoformat(),
+                "ends_at": booking.ends_at.isoformat(),
+                "status": booking.status,
+            }
+            await self.notifications.discard_reminders_for_booking(booking.id)
+            booking.schedule_id = new_schedule.id
+            booking.doctor_id = new_schedule.doctor_id
+            booking.facility_id = new_schedule.facility_id
+            booking.starts_at = new_schedule.starts_at
+            booking.ends_at = new_schedule.ends_at
+            booking.hold_id = hold.id
+            booking.status = "pending_approval"
+            booking.staff_note = None
+            booking.reviewed_by = None
+            booking.reviewed_at = None
+            hold.status = "consumed"
+            hold.released_at = datetime.now(UTC)
+            self.session.add(
+                CatalogAuditEvent(
+                    actor_id=user_id,
+                    entity_type="booking",
+                    entity_id=booking.id,
+                    action="rescheduled",
+                    payload={
+                        "old": old_values,
+                        "new": {
+                            "schedule_id": str(new_schedule.id),
+                            "starts_at": new_schedule.starts_at.isoformat(),
+                            "ends_at": new_schedule.ends_at.isoformat(),
+                            "status": booking.status,
+                        },
+                    },
+                )
+            )
+            await self.session.flush()
+        logger.info("BookingService.reschedule booking moved", extra={"booking_id": str(booking_id)})
+        return await self.get(user_id, booking_id)
+
     async def list_for_staff(
         self,
         status: str | None,
@@ -304,12 +389,24 @@ class BookingService:
                 raise ConflictError("BOOKING_ALREADY_REVIEWED", "Only pending bookings can be reviewed")
             if request.status == "rejected" and not request.note:
                 raise ConflictError("REJECTION_NOTE_REQUIRED", "A rejection reason is required")
-            if request.status == "confirmed" and booking.schedule is not None:
-                self._validate_schedule(booking.schedule)
+            if request.status == "confirmed" and booking.schedule_id is not None:
+                schedule = await self.bookings.get_schedule_for_update(booking.schedule_id)
+                if schedule is None:
+                    raise ConflictError("SCHEDULE_UNAVAILABLE", "Schedule is not available")
+                self._validate_schedule(schedule)
+                active_count = await self.bookings.count_reservations_for_schedule(
+                    schedule.id,
+                    exclude_booking_id=booking.id,
+                )
+                if booking.service.booking_mode == "doctor_visit" and active_count >= 1:
+                    raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
+                if booking.service.booking_mode == "group" and active_count >= schedule.capacity:
+                    raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
             booking.status = request.status
             booking.staff_note = request.note
             booking.reviewed_by = actor_id
             booking.reviewed_at = datetime.now(UTC)
+            await self.notifications.create_for_booking_review(booking, request.status)
             await self.session.flush()
         logger.info(
             "BookingService.review booking reviewed",

@@ -29,6 +29,20 @@ class BookingRepository:
         )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
+    async def get_schedules_for_update(self, schedule_ids: set[UUID]) -> dict[UUID, DoctorSchedule]:
+        """Lock schedules in deterministic UUID order for safe rescheduling."""
+        if not schedule_ids:
+            return {}
+        statement = (
+            select(DoctorSchedule)
+            .options(selectinload(DoctorSchedule.doctor), selectinload(DoctorSchedule.facility))
+            .where(DoctorSchedule.id.in_(schedule_ids))
+            .order_by(DoctorSchedule.id)
+            .with_for_update()
+        )
+        schedules = (await self.session.execute(statement)).scalars().all()
+        return {schedule.id: schedule for schedule in schedules}
+
     async def get_service(self, service_id: UUID) -> Service | None:
         """Fetch a service by UUID."""
         return await self._one(select(Service).where(Service.id == service_id))
@@ -93,12 +107,20 @@ class BookingRepository:
             statement = statement.where(BookingHold.id != exclude_hold_id)
         return int((await self.session.execute(statement)).scalar_one())
 
-    async def count_reservations_for_schedule(self, schedule_id: UUID, *, exclude_hold_id: UUID | None = None) -> int:
+    async def count_reservations_for_schedule(
+        self,
+        schedule_id: UUID,
+        *,
+        exclude_hold_id: UUID | None = None,
+        exclude_booking_id: UUID | None = None,
+    ) -> int:
         """Count bookings and active holds, optionally excluding one hold."""
         statement = select(func.count(Booking.id)).where(
             Booking.schedule_id == schedule_id,
             Booking.status.notin_(("cancelled", "rejected")),
         )
+        if exclude_booking_id:
+            statement = statement.where(Booking.id != exclude_booking_id)
         bookings = int((await self.session.execute(statement)).scalar_one())
         return bookings + await self.count_active_holds_for_schedule(schedule_id, exclude_hold_id=exclude_hold_id)
 

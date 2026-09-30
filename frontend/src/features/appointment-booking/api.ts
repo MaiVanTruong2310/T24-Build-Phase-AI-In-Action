@@ -151,6 +151,11 @@ export interface Booking {
   updated_at: string;
 }
 
+export interface RescheduleBookingPayload {
+  schedule_id: string;
+  hold_id: string;
+}
+
 export type BookingHoldStatus = 'active' | 'released' | 'expired' | 'consumed';
 
 export interface BookingHold {
@@ -316,6 +321,20 @@ export async function createBooking(payload: CreateBookingPayload, idempotencyKe
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey || crypto.randomUUID(),
     },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw await toBookingApiError(res);
+  const json = await res.json();
+  return json.data as Booking;
+}
+
+export async function rescheduleBooking(
+  bookingId: string,
+  payload: RescheduleBookingPayload,
+): Promise<Booking> {
+  const res = await fetchWithAuth(`/bookings/${bookingId}/reschedule`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw await toBookingApiError(res);

@@ -86,6 +86,13 @@ class BookingCancelRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class BookingRescheduleCreate(BaseModel):
+    """Move an existing booking to a new held schedule for staff review."""
+
+    schedule_id: UUID
+    hold_id: UUID
+
+
 class StaffBookingStatusUpdate(BaseModel):
     """Allowed staff decision for a booking awaiting review."""
 

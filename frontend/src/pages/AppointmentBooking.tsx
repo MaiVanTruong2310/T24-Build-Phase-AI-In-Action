@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { BookingHeader } from '../features/appointment-booking/components/BookingHeader';
 import { BookingSummary } from '../features/appointment-booking/components/BookingSummary';
@@ -9,6 +9,7 @@ import { SpecialtySelector } from '../features/appointment-booking/components/Sp
 import { fetchCurrentUser, PatientProfile } from '../features/patient/api';
 import {
   BookingApiError,
+  Booking,
   BookingHold,
   createBooking,
   createBookingHold,
@@ -19,8 +20,10 @@ import {
   fetchFacilities,
   fetchServices,
   fetchSpecialties,
+  fetchBooking,
   MedicalService,
   releaseBookingHold,
+  rescheduleBooking,
   Schedule,
   Specialty,
 } from '../features/appointment-booking/api';
@@ -34,6 +37,8 @@ function formatLocalDate(value: Date): string {
 
 export default function AppointmentBooking() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rescheduleId = searchParams.get('reschedule');
   const [patient, setPatient] = useState<PatientProfile | null>(null);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [selectedSpecialty, setSelectedSpecialty] = useState('');
@@ -61,6 +66,8 @@ export default function AppointmentBooking() {
   const [availabilityError, setAvailabilityError] = useState('');
   const [reason, setReason] = useState('');
   const [patientNote, setPatientNote] = useState('');
+  const [rescheduleSource, setRescheduleSource] = useState<Booking | null>(null);
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
   const holdRef = useRef<BookingHold | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -110,6 +117,35 @@ export default function AppointmentBooking() {
   }, []);
 
   useEffect(() => {
+    if (!rescheduleId) {
+      setRescheduleSource(null);
+      return;
+    }
+    let cancelled = false;
+    setRescheduleLoading(true);
+    fetchBooking(rescheduleId)
+      .then((booking) => {
+        if (cancelled) return;
+        setRescheduleSource(booking);
+        setSelectedSpecialty(booking.specialty_id);
+        setSelectedFacility(booking.facility_id);
+        setSelectedDoctorId(booking.doctor_id);
+        setSelectedService(booking.service_id);
+        setSelectedDate(formatLocalDate(new Date(booking.starts_at)));
+        setSelectedType(booking.encounter_type === 'in_person' ? 'offline' : 'telehealth');
+        setReason(booking.reason);
+        setPatientNote(booking.patient_note || '');
+      })
+      .catch(() => setBookingError('Không thể tải lịch hẹn cần đổi. Vui lòng quay lại lịch sử.'))
+      .finally(() => {
+        if (!cancelled) setRescheduleLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rescheduleId]);
+
+  useEffect(() => {
     let cancelled = false;
     setServices([]);
     setSelectedService('');
@@ -130,7 +166,8 @@ export default function AppointmentBooking() {
       .then((data) => {
         if (cancelled) return;
         setServices(data);
-        setSelectedService(data[0]?.id || '');
+        const preferredService = rescheduleSource?.service_id;
+        setSelectedService(preferredService && data.some((item) => item.id === preferredService) ? preferredService : data[0]?.id || '');
       })
       .catch(() => {
         if (!cancelled) setCatalogError('Không thể tải dịch vụ phù hợp với chuyên khoa và cơ sở đã chọn.');
@@ -142,7 +179,7 @@ export default function AppointmentBooking() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSpecialty, selectedFacility]);
+  }, [selectedSpecialty, selectedFacility, rescheduleSource?.service_id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,7 +206,8 @@ export default function AppointmentBooking() {
       .then((data) => {
         if (cancelled) return;
         setDoctors(data);
-        setSelectedDoctorId(data[0]?.id || '');
+        const preferredDoctor = rescheduleSource?.doctor_id;
+        setSelectedDoctorId(preferredDoctor && data.some((item) => item.id === preferredDoctor) ? preferredDoctor : data[0]?.id || '');
       })
       .catch(() => {
         if (!cancelled) setBookingError('Không thể tải danh sách bác sĩ. Vui lòng thử lại.');
@@ -181,7 +219,7 @@ export default function AppointmentBooking() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSpecialty, selectedFacility, selectedService]);
+  }, [selectedSpecialty, selectedFacility, selectedService, rescheduleSource?.doctor_id]);
 
   useEffect(() => {
     const previousHold = holdRef.current;
@@ -301,19 +339,21 @@ export default function AppointmentBooking() {
     setIsBooking(true);
     setBookingError('');
     try {
-      const booking = await createBooking({
-        hold_id: hold.id,
-        schedule_id: selectedSlot,
-        doctor_id: selectedDoctorId,
-        facility_id: scheduleFacility.id,
-        starts_at: selectedSchedule.starts_at,
-        ends_at: selectedDisplayEndsAt,
-        service_id: selectedService,
-        specialty_id: selectedSpecialty,
-        encounter_type: selectedType === 'offline' ? 'in_person' : 'telehealth',
-        reason: reason.trim(),
-        patient_note: patientNote.trim() || undefined,
-      }, idempotencyKeyRef.current || (idempotencyKeyRef.current = crypto.randomUUID()));
+      const booking = rescheduleId
+        ? await rescheduleBooking(rescheduleId, { schedule_id: selectedSlot, hold_id: hold.id })
+        : await createBooking({
+            hold_id: hold.id,
+            schedule_id: selectedSlot,
+            doctor_id: selectedDoctorId,
+            facility_id: scheduleFacility.id,
+            starts_at: selectedSchedule.starts_at,
+            ends_at: selectedDisplayEndsAt,
+            service_id: selectedService,
+            specialty_id: selectedSpecialty,
+            encounter_type: selectedType === 'offline' ? 'in_person' : 'telehealth',
+            reason: reason.trim(),
+            patient_note: patientNote.trim() || undefined,
+          }, idempotencyKeyRef.current || (idempotencyKeyRef.current = crypto.randomUUID()));
       navigate(`/patient/appointments/${booking.id}`);
     } catch (error) {
       if (error instanceof BookingApiError && error.status === 409) {
@@ -425,7 +465,8 @@ export default function AppointmentBooking() {
               onReasonChange={setReason}
               onPatientNoteChange={setPatientNote}
               onBook={handleBooking}
-              isBooking={isBooking}
+              isBooking={isBooking || rescheduleLoading}
+              submitLabel={rescheduleId ? 'Gửi yêu cầu đổi lịch' : undefined}
             />
           </div>
         </div>

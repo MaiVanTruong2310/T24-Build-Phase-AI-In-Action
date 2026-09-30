@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Database
     database_url: str = ""
     database_auto_create: bool = True
+    booking_hold_cleanup_interval_seconds: int = Field(default=60, ge=5, le=3600)
 
     # Authentication
     jwt_secret_key: str = ""

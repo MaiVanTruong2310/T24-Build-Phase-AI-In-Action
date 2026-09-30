@@ -1,10 +1,11 @@
 import React from 'react';
-import { Bell, Settings, PlusSquare, LogOut, MessageSquare, Calendar, Clock, FileText, ArrowRightLeft, User } from 'lucide-react';
+import { Settings, PlusSquare, LogOut, MessageSquare, Calendar, Clock, FileText, ArrowRightLeft, User } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../../app/store';
 import { logoutUser } from '../../features/auth/authSlice';
 import { getUserAvatarUrl } from '../../features/auth/session';
+import { NotificationBell } from '../../features/notification/NotificationBell';
 
 export function Header() {
   const dispatch = useDispatch<AppDispatch>();
@@ -47,12 +48,7 @@ export function Header() {
             </div>
 
             <div className="flex items-center gap-3 sm:border-l border-slate-200 sm:pl-4">
-              <button className="relative text-slate-400 hover:text-slate-600 transition-colors p-1" title="Thông báo">
-                <Bell className="w-5 h-5" />
-                <span className="absolute -top-0.5 -right-1 w-4 h-4 bg-red-500 rounded-full border border-white text-white text-[9px] font-bold flex items-center justify-center">
-                  3
-                </span>
-              </button>
+              <NotificationBell enabled={Boolean(user)} />
 
               <button className="text-slate-400 hover:text-slate-600 transition-colors p-1" title="Cài đặt">
                 <Settings className="w-5 h-5" />

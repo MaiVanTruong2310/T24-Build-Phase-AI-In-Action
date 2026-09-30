@@ -15,6 +15,7 @@ from src.schemas.booking import (
     BookingCreate,
     BookingHoldCreate,
     BookingHoldResponse,
+    BookingRescheduleCreate,
     BookingResponse,
     StaffBookingResponse,
     StaffBookingStatusUpdate,
@@ -109,6 +110,18 @@ async def cancel_booking(
     """Cancel one booking owned by the authenticated user."""
     value = await service.cancel(current_user.id, booking_id, request.reason if request else None)
     return success_response(booking_response(value), "Booking cancelled")
+
+
+@router.post("/{booking_id}/reschedule", response_model=ApiResponse[BookingResponse])
+async def reschedule_booking(
+    booking_id: UUID,
+    request: BookingRescheduleCreate,
+    current_user: User = Depends(require_patient),
+    service: BookingService = Depends(get_booking_service),
+) -> ApiResponse[BookingResponse]:
+    """Move a patient booking to a held schedule and return it to staff review."""
+    value = await service.reschedule(current_user.id, booking_id, request)
+    return success_response(booking_response(value), "Booking rescheduled")
 
 
 @staff_router.get("", response_model=ApiResponse[list[StaffBookingResponse]])

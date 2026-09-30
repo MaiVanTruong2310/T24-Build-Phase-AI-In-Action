@@ -14,12 +14,14 @@ from src.models.catalog import (
     Service,
     Specialty,
 )
+from src.models.notification import Notification
 from src.models.user import User
 
 __all__ = [
     "CatalogAuditEvent",
     "Booking",
     "BookingHold",
+    "Notification",
     "Doctor",
     "DoctorFacility",
     "DoctorSchedule",
