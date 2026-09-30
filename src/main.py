@@ -19,11 +19,11 @@ from src.api.handlers import (
     unexpected_error_handler,
     validation_error_handler,
 )
-from src.api.routes import router
 from src.config import get_settings
 from src.core.exceptions import AppError
 from src.core.logging import get_logger
 from src.db.session import initialize_database
+from src.medical_assistant.api.routes import router as medical_assistant_router
 
 logger = get_logger(__name__)
 
@@ -62,7 +62,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router, prefix="/api/v1")
+app.include_router(medical_assistant_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(user_router, prefix="/api/v1")
 app.include_router(booking_router, prefix="/api/v1")
