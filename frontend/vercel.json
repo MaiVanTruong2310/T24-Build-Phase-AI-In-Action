@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "has": [{ "type": "host", "value": "ai20k-build-phase.vercel.app" }],
+      "destination": "https://masses-widow-plausibly.ngrok-free.dev/api/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://reclining-unlit-unused.ngrok-free.dev/api/:path*"
+    }
+  ]
+}
