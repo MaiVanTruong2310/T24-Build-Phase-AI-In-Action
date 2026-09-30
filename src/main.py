@@ -20,7 +20,7 @@ from src.api.handlers import (
     validation_error_handler,
 )
 from src.api.routes import router
-from src.config import get_settings, parse_cors_origins
+from src.config import get_settings
 from src.core.exceptions import AppError
 from src.core.logging import get_logger
 from src.db.session import initialize_database
