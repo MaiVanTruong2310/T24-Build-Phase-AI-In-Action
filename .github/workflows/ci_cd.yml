@@ -129,6 +129,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Override Git User Info
+        run: |
+          git config --global user.name ${{ vars.VERCEL_OWNER_NAME}}
+          git config --global user.email ${{ secrets.VERCEL_OWNER_EMAIL}}
+
       - name: Validate Vercel configuration
         shell: bash
         run: |
