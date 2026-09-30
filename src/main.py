@@ -23,11 +23,11 @@ from src.api.handlers import (
 from src.config import get_settings, parse_cors_origins
 from src.core.exceptions import AppError
 from src.core.logging import get_logger
-from src.db.session import get_session_factory, initialize_database, check_database_connection, close_database
-from src.services.booking import BookingService
-from src.services.notification import NotificationService
+from src.db.session import check_database_connection, close_database, get_session_factory, initialize_database
 from src.medical_assistant.api.routes import router as medical_assistant_router
 from src.medical_assistant.db.supabase_client import close_supabase_clients
+from src.services.booking import BookingService
+from src.services.notification import NotificationService
 
 logger = get_logger(__name__)
 
@@ -64,22 +64,18 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("main.lifespan database initialization failed")
             raise
-cleanup_task = asyncio.create_task(
-    _booking_hold_cleanup_loop(
-        settings.booking_hold_cleanup_interval_seconds
-    )
-)
+    cleanup_task = None
+    try:
+        cleanup_task = asyncio.create_task(_booking_hold_cleanup_loop(settings.booking_hold_cleanup_interval_seconds))
+        yield
+    finally:
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            await asyncio.gather(cleanup_task, return_exceptions=True)
 
-try:
-    yield
-finally:
-    cleanup_task.cancel()
-    await asyncio.gather(cleanup_task, return_exceptions=True)
-
-    await close_database()
-    close_supabase_clients()
-
-    logger.info("Shutting down")
+        await close_database()
+        close_supabase_clients()
+        logger.info("Shutting down")
 
 
 app = FastAPI(
