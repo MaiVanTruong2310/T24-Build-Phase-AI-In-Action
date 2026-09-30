@@ -28,6 +28,12 @@ export function ForgotPassword() {
 
     const res = await dispatch(requestPasswordReset(username))
     if (requestPasswordReset.fulfilled.match(res)) {
+      // Temporary mock OTP support: the API returns the generated code while
+      // MockOtpProvider is active, so fill it into the existing OTP field.
+      const returnedOtp = (res.payload as { otp?: unknown } | undefined)?.otp
+      if (typeof returnedOtp === 'string' && /^\d{6}$/.test(returnedOtp)) {
+        setOtpCode(returnedOtp)
+      }
       setStep(2)
     }
   }

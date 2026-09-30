@@ -91,8 +91,11 @@ function notifyUnauthorized(): void {
 }
 
 function resolveApiUrl(url: string): string {
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/api/')) {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
+  }
+  if (url.startsWith('/api/')) {
+    return `${API_ORIGIN}${url}`;
   }
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }

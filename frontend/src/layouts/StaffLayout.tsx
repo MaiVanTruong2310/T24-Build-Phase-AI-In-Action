@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { 
   Search, Bell, Settings, Flame, ArrowRightLeft, 
   LayoutDashboard, Activity, ListOrdered, MessageSquare, 
@@ -18,6 +18,12 @@ export function StaffLayout() {
   const handleLogout = async () => {
     await dispatch(logoutUser());
     navigate('/login');
+  };
+
+  const handleOpenPatientPortal = () => {
+    // Keep the staff-to-patient portal switch explicit so it works from every
+    // staff page, including pages rendered by nested routes.
+    navigate('/patient');
   };
 
   const navItems = [
@@ -164,10 +170,14 @@ export function StaffLayout() {
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
               Hệ thống an toàn
             </div>
-            <button className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-sky-700 hover:text-sky-800 hover:bg-sky-50 px-3 py-2.5 rounded-xl transition-colors border border-transparent hover:border-sky-100">
+            <Link
+              to="/patient"
+              onClick={handleOpenPatientPortal}
+              className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-sky-700 hover:text-sky-800 hover:bg-sky-50 px-3 py-2.5 rounded-xl transition-colors border border-transparent hover:border-sky-100"
+            >
               <ArrowRightLeft size={16} />
               Cổng Bệnh Nhân
-            </button>
+            </Link>
           </div>
         </aside>
 
