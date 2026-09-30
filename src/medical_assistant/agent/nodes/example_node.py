@@ -1,3 +1,5 @@
+import asyncio
+
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.cache_service import get_cache_service
 from src.medical_assistant.domain.clinical_fact_service import get_clinical_fact_service
@@ -517,13 +519,14 @@ async def analyze_node(state: AgentState) -> dict:
     if action == "search_available_slot":
         from src.medical_assistant.domain.doctor_schedule_service import get_doctor_schedule_service
         doctor_service = get_doctor_schedule_service()
-        doctors = doctor_service.get_available_doctors_and_slots(
+        doctors = await asyncio.to_thread(
+            doctor_service.get_available_doctors_and_slots,
             specialty_name=get_specialty_display_name(canonical_dept, "vi"),
             limit_doctors=3,
             slots_per_doctor=2,
             requested_days=current_max_days,
             preferred_period=time_pref,
-            facility_id=facility_pref
+            facility_id=facility_pref,
         )
         available_slots = doctors
 
@@ -719,7 +722,8 @@ async def respond_node(state: AgentState) -> dict:
         dept_context = state.get("suggested_department_name") or (
             spec_display if spec_display != "Sức khỏe tổng quát" else None
         )
-        response, quick_replies = get_facility_service().get_facilities_response(
+        response, quick_replies = await asyncio.to_thread(
+            get_facility_service().get_facilities_response,
             language=lang,
             region_filter=region_filter,
             district_filter=district_filter,
@@ -730,7 +734,8 @@ async def respond_node(state: AgentState) -> dict:
     elif workflow_status == "FACILITY_DOCTORS":
         from src.medical_assistant.domain.facility_service import get_facility_service
         fac_q = meta.get("facility_name_query") or state.get("metadata", {}).get("facility_preference") or "Vinmec"
-        response, quick_replies = get_facility_service().get_facility_doctors_response(
+        response, quick_replies = await asyncio.to_thread(
+            get_facility_service().get_facility_doctors_response,
             facility_query=fac_q,
             language=lang,
             enable_citation=enable_citation,
@@ -738,7 +743,8 @@ async def respond_node(state: AgentState) -> dict:
     elif workflow_status == "FACILITY_BOOKING_START":
         from src.medical_assistant.domain.facility_service import get_facility_service
         fac_q = meta.get("facility_name_query") or state.get("metadata", {}).get("facility_preference") or "Vinmec"
-        response, quick_replies = get_facility_service().get_facility_booking_guidance_response(
+        response, quick_replies = await asyncio.to_thread(
+            get_facility_service().get_facility_booking_guidance_response,
             facility_query=fac_q,
             language=lang,
         )

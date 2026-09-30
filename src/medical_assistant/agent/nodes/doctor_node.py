@@ -4,6 +4,8 @@ Fetches real doctors and open appointment slots from Supabase database
 when triage is complete and non-emergency.
 """
 
+import asyncio
+
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.doctor_schedule_service import get_doctor_schedule_service
 
@@ -35,13 +37,14 @@ async def find_doctors_node(state: AgentState) -> dict:
         # unverified until a database connection is provided.
         return {"available_slots": []}
 
-    doctors_with_slots = doctor_service.get_available_doctors_and_slots(
+    doctors_with_slots = await asyncio.to_thread(
+        doctor_service.get_available_doctors_and_slots,
         specialty_name=specialty_name,
         limit_doctors=3,
         slots_per_doctor=2,
         requested_days=requested_days,
         preferred_period=preferred_period,
-        facility_id=facility_id
+        facility_id=facility_id,
     )
 
     return {

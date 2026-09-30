@@ -16,7 +16,16 @@ class SupabaseRestClient:
     Lightweight, fast PostgREST / Supabase client using httpx.Client with connection pooling.
     """
 
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        *,
+        timeout_seconds: float = 8.0,
+        connect_timeout_seconds: float = 3.0,
+        max_connections: int = 50,
+        max_keepalive_connections: int = 20,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.headers = {
@@ -25,14 +34,23 @@ class SupabaseRestClient:
             "Content-Type": "application/json",
             "Prefer": "return=representation",
         }
-        # Connection pooling configured for high throughput
-        limits = httpx.Limits(max_keepalive_connections=50, max_connections=200)
+        limits = httpx.Limits(
+            max_keepalive_connections=max_keepalive_connections,
+            max_connections=max_connections,
+            keepalive_expiry=30.0,
+        )
+        timeout = httpx.Timeout(timeout_seconds, connect=connect_timeout_seconds)
         self.client = httpx.Client(
             base_url=f"{self.base_url}/rest/v1",
             headers=self.headers,
             limits=limits,
-            timeout=10.0,
+            timeout=timeout,
+            transport=httpx.HTTPTransport(retries=1),
         )
+
+    def close(self) -> None:
+        """Close pooled sockets held by the shared HTTP client."""
+        self.client.close()
 
     def select(self, table: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """
@@ -86,6 +104,10 @@ def get_supabase_client() -> SupabaseRestClient:
         _supabase_client = SupabaseRestClient(
             base_url=settings.supabase_url,
             api_key=settings.supabase_key,
+            timeout_seconds=settings.supabase_timeout_seconds,
+            connect_timeout_seconds=settings.supabase_connect_timeout_seconds,
+            max_connections=settings.supabase_max_connections,
+            max_keepalive_connections=settings.supabase_max_keepalive_connections,
         )
     return _supabase_client
 
@@ -102,5 +124,20 @@ def get_supabase_admin_client() -> SupabaseRestClient:
         _supabase_admin_client = SupabaseRestClient(
             base_url=settings.supabase_url,
             api_key=settings.supabase_service_role_key,
+            timeout_seconds=settings.supabase_timeout_seconds,
+            connect_timeout_seconds=settings.supabase_connect_timeout_seconds,
+            max_connections=settings.supabase_max_connections,
+            max_keepalive_connections=settings.supabase_max_keepalive_connections,
         )
     return _supabase_admin_client
+
+
+def close_supabase_clients() -> None:
+    """Close and clear cached clients so shutdown does not leak sockets."""
+    global _supabase_client, _supabase_admin_client
+    clients = {_supabase_client, _supabase_admin_client}
+    for client in clients:
+        if client is not None:
+            client.close()
+    _supabase_client = None
+    _supabase_admin_client = None

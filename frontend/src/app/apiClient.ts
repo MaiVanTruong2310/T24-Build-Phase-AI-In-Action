@@ -87,7 +87,7 @@ function notifyUnauthorized(): void {
   }
 }
 
-function resolveApiUrl(url: string): string {
+export function resolveApiUrl(url: string): string {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
@@ -95,6 +95,10 @@ function resolveApiUrl(url: string): string {
     return `${API_ORIGIN}${url}`;
   }
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
+export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(resolveApiUrl(url), options);
 }
 
 async function performRefresh(refreshToken: string): Promise<string | null> {

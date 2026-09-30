@@ -1,7 +1,9 @@
 import asyncio
 import json
+import logging
+from contextlib import suppress
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from src.medical_assistant.agent.graph import agent
@@ -17,6 +19,7 @@ from src.medical_assistant.domain.schemas import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -48,12 +51,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
             acuity_status=result.get("acuity_status") or meta.get("acuity_status"),
             disposition=result.get("disposition") or meta.get("disposition"),
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.exception("medical_assistant.chat failed")
+        raise HTTPException(status_code=500, detail="Không thể xử lý hội thoại lúc này.") from exc
 
 
 @router.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest, http_request: Request):
     """
     Chat thời gian thực sử dụng Server-Sent Events (SSE).
     - Stream token phản hồi ngay lập tức cho client.
@@ -68,10 +72,23 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'init', 'session_id': request.session_id})}\n\n"
 
             # 2. Thực thi Agent
-            result = await agent.ainvoke(
-                {"query": request.message, "user_id": request.user_id, "enable_citation": request.enable_citation},
-                config=config,
+            agent_task = asyncio.create_task(
+                agent.ainvoke(
+                    {"query": request.message, "user_id": request.user_id, "enable_citation": request.enable_citation},
+                    config=config,
+                )
             )
+            while not agent_task.done():
+                if await http_request.is_disconnected():
+                    agent_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await agent_task
+                    return
+                try:
+                    await asyncio.wait_for(asyncio.shield(agent_task), timeout=5.0)
+                except TimeoutError:
+                    yield ": keep-alive\n\n"
+            result = await agent_task
 
             response_text = result.get("response", "")
             meta = result.get("metadata", {})
@@ -112,8 +129,12 @@ async def chat_stream(request: ChatRequest):
             # 5. Kết thúc stream chuẩn SSE
             yield "data: [DONE]\n\n"
 
-        except Exception as err:
-            err_payload = json.dumps({"type": "error", "message": str(err)}, ensure_ascii=False)
+        except Exception:
+            logger.exception("medical_assistant.chat_stream failed")
+            err_payload = json.dumps(
+                {"type": "error", "message": "Không thể xử lý hội thoại lúc này."},
+                ensure_ascii=False,
+            )
             yield f"data: {err_payload}\n\n"
 
     return StreamingResponse(
@@ -174,7 +195,7 @@ async def create_booking_request(request: BookingIntakeRequest) -> BookingIntake
         "symptoms_summary": " | ".join(state.get("collected_details") or [])[:2000] or None,
     }
     try:
-        result = BookingRequestService().submit(request, context)
+        result = await asyncio.to_thread(BookingRequestService().submit, request, context)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except BookingPersistenceError as exc:

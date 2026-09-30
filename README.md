@@ -1,4 +1,12 @@
-# AI20K Agent Template
+# P-124 Medical Assistant
+
+P-124 là trợ lý tiếp đón y tế dùng LangGraph, FastAPI và React. Hệ thống ghi nhớ
+ngữ cảnh theo phiên, phân tầng ATS, xử lý nhiều nhóm triệu chứng, gợi ý tối đa
+hai chuyên khoa khi đủ bằng chứng, tra cứu cơ sở/bác sĩ và tiếp nhận yêu cầu đặt
+lịch để nhân viên xác nhận.
+
+Frontend sử dụng SSE tại `POST /api/v1/chat/stream`; nếu kết nối stream lỗi,
+client tự chuyển sang `POST /api/v1/chat` trong cùng session.
 
 Template chính thức cho học viên VinUni AI20K Build Phase: cấu trúc dự án, code
 mẫu và hướng dẫn kỹ thuật để xây dựng một AI Agent hoàn chỉnh — từ kiến trúc,
@@ -58,7 +66,9 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Mở `.env` và điền `OPENAI_API_KEY`. Riêng `AI_LOG_API_KEY`, mỗi thành viên tự
+Mở `.env` và điền `DATABASE_URL` cùng ít nhất một nhà cung cấp LLM
+(`OPENROUTER_API_KEY`, `GOOGLE_AI_API_KEY` hoặc `OPENAI_API_KEY`). Nếu không có
+LLM, Agent vẫn chạy theo rule fallback bảo thủ. Riêng `AI_LOG_API_KEY`, mỗi thành viên tự
 tạo key riêng tại [dashboard Phoenix](https://phoenix.note.transformerlabs.ai/api-keys)
 rồi thay vào chỗ `<get-your-api-key-from-dashboard-phoenix>` — giá trị trong
 `.env.example` chỉ là placeholder, để nguyên thì log không vào được hệ thống chấm.
@@ -74,14 +84,25 @@ Chạy một lần sau khi clone. Hook ghi lại prompt khi bạn dùng Claude C
 Codex CLI, Gemini CLI, Antigravity hoặc GitHub Copilot, và cài pre-push hook để
 đẩy log lên server.
 
-### 5. Chạy server
+### 5. Chạy backend
 
 ```bash
-uvicorn src.main:app --reload --port 8000
+python scripts/run_backend.py --host 127.0.0.1 --port 8000
 ```
 
-Swagger UI ở <http://localhost:8000/docs>. Hoặc dùng `make run`, `make test`,
-`make lint` — xem `Makefile`.
+Launcher này chọn event loop tương thích với `psycopg` trên Windows. Swagger UI
+ở <http://localhost:8000/docs>; kiểm tra database tại
+<http://localhost:8000/health/ready>.
+
+### 6. Chạy frontend
+
+```bash
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+Mở <http://localhost:5173>. Có thể đặt backend khác qua `VITE_API_BASE_URL`.
 
 ## Cấu trúc thư mục
 

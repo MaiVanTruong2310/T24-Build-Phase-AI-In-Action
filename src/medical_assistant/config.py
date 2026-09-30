@@ -31,13 +31,18 @@ class Settings(BaseSettings):
     google_ai_api_key: str = ""
     google_ai_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     google_ai_model_name: str = "gemini-3.1-flash-lite"
-    llm_request_timeout_seconds: float = Field(default=20.0, gt=0.0, le=120.0)
+    llm_request_timeout_seconds: float = Field(default=12.0, gt=0.0, le=120.0)
+    llm_failure_cooldown_seconds: float = Field(default=30.0, ge=1.0, le=600.0)
 
     # Database
     database_url: str = "sqlite:///./data/app.db"
     supabase_url: str = ""
     supabase_key: str = ""
     supabase_service_role_key: str = ""
+    supabase_timeout_seconds: float = Field(default=8.0, gt=0.0, le=60.0)
+    supabase_connect_timeout_seconds: float = Field(default=3.0, gt=0.0, le=30.0)
+    supabase_max_connections: int = Field(default=50, ge=1, le=500)
+    supabase_max_keepalive_connections: int = Field(default=20, ge=1, le=200)
 
     # Vector Store
     chroma_persist_dir: str = "./data/chroma"
