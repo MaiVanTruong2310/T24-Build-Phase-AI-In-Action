@@ -20,7 +20,7 @@ from src.api.handlers import (
     validation_error_handler,
 )
 from src.api.routes import router
-from src.config import get_settings
+from src.config import get_settings, parse_cors_origins
 from src.core.exceptions import AppError
 from src.core.logging import get_logger
 from src.db.session import initialize_database
@@ -56,7 +56,7 @@ app = FastAPI(
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins.split(","),
+    allow_origins=parse_cors_origins(settings.cors_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -199,11 +199,18 @@ jobs:
             if [ "$GITHUB_REF_NAME" = "main" ]; then
               OVERRIDE=docker-compose.prod.yml
               ENV_TAG=production
-              FRONTEND_ORIGIN="${{ vars.FRONTEND_PROD_URL || 'https://ai20k-build-phase.vercel.app' }}"
+              FRONTEND_ORIGIN="${{ secrets.FRONTEND_PROD_URL || 'https://ai20k-build-phase.vercel.app' }}"
             else
               OVERRIDE=docker-compose.dev.yml
               ENV_TAG=development
-              FRONTEND_ORIGIN="${{ vars.FRONTEND_DEV_URL || 'https://ai20k-build-phase-dev.vercel.app' }}"
+              FRONTEND_ORIGIN="${{ secrets.FRONTEND_DEV_URL || 'https://ai20k-build-phase-dev.vercel.app' }}"
+            fi
+
+            # CORS compares the browser Origin exactly: no trailing slash or path.
+            FRONTEND_ORIGIN="${FRONTEND_ORIGIN%/}"
+            if [[ ! "$FRONTEND_ORIGIN" =~ ^https?://[^/]+$ ]]; then
+              echo "Invalid frontend origin for CORS: $FRONTEND_ORIGIN"
+              exit 1
             fi
 
             cat > .env <<EOF
@@ -239,4 +246,18 @@ jobs:
             # đợi healthcheck rồi dọn image cũ
             sleep 15
             docker compose -f docker-compose.yml -f "$OVERRIDE" ps
+
+            # Fail the deployment if the running container does not allow the
+            # deployed Vercel origin for authenticated browser requests.
+            CORS_HEADERS=$(curl -sS -D - -o /dev/null -X OPTIONS \
+              http://127.0.0.1:8000/api/v1/users/me \
+              -H "Origin: $FRONTEND_ORIGIN" \
+              -H "Access-Control-Request-Method: GET" \
+              -H "Access-Control-Request-Headers: authorization")
+            if ! printf '%s\n' "$CORS_HEADERS" | grep -Fqi "access-control-allow-origin: $FRONTEND_ORIGIN"; then
+              echo "CORS preflight failed for $FRONTEND_ORIGIN"
+              printf '%s\n' "$CORS_HEADERS"
+              exit 1
+            fi
+
             docker image prune -f
