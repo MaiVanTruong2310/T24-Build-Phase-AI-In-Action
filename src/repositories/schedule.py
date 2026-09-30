@@ -98,13 +98,17 @@ class ScheduleRepositoryMixin:
         if facility_id:
             statement = statement.where(DoctorSchedule.facility_id == facility_id)
         if service_id:
-            statement = statement.join(
-                DoctorService,
-                DoctorService.doctor_id == DoctorSchedule.doctor_id,
-            ).join(Service, Service.id == DoctorService.service_id).where(
-                DoctorService.service_id == service_id,
-                DoctorService.active.is_(True),
-                Service.status == "active",
+            statement = (
+                statement.join(
+                    DoctorService,
+                    DoctorService.doctor_id == DoctorSchedule.doctor_id,
+                )
+                .join(Service, Service.id == DoctorService.service_id)
+                .where(
+                    DoctorService.service_id == service_id,
+                    DoctorService.active.is_(True),
+                    Service.status == "active",
+                )
             )
         if starts_from:
             statement = statement.where(DoctorSchedule.ends_at > starts_from)

@@ -81,7 +81,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <StaffDashboard /> },
       { path: 'overview', element: <StaffDashboard /> },
-      { path: 'queue', element: <EmergencyCoordinator /> },
+      { path: 'queue', element: <AppointmentApproval /> },
+      { path: 'emergency', element: <EmergencyCoordinator /> },
       { path: 'chat', element: <ChatTakeover /> },
       { path: 'doctors', element: <DoctorManagement /> },
       { path: 'doctors/create', element: <CreateDoctor /> },

@@ -3,22 +3,24 @@
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_current_user, require_staff
+from src.api.dependencies import get_current_user, require_patient, require_staff
 from src.api.response import success_response
 from src.db.dependencies import get_db_session
 from src.models.user import User
 from src.schemas.booking import (
     BookingCancelRequest,
     BookingCreate,
+    BookingHoldCreate,
+    BookingHoldResponse,
     BookingResponse,
     StaffBookingResponse,
     StaffBookingStatusUpdate,
 )
 from src.schemas.common import ApiResponse
-from src.services.booking import BookingService, booking_response, staff_booking_response
+from src.services.booking import BookingService, booking_hold_response, booking_response, staff_booking_response
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 staff_router = APIRouter(prefix="/staff/bookings", tags=["staff-bookings"])
@@ -32,12 +34,41 @@ def get_booking_service(session: AsyncSession = Depends(get_db_session)) -> Book
 @router.post("", response_model=ApiResponse[BookingResponse], status_code=status.HTTP_201_CREATED)
 async def create_booking(
     request: BookingCreate,
-    current_user: User = Depends(get_current_user),
+    response: Response,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
+    current_user: User = Depends(require_patient),
     service: BookingService = Depends(get_booking_service),
 ) -> ApiResponse[BookingResponse]:
-    """Create a pending booking for any authenticated user to be reviewed by staff."""
-    value = await service.create(current_user.id, request)
+    """Create a pending booking exactly once after consuming a valid hold."""
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
+    value, replay = await service.create_idempotent(current_user.id, request, idempotency_key)
+    if replay:
+        response.status_code = status.HTTP_200_OK
+        return success_response(booking_response(value), "Booking replayed")
     return success_response(booking_response(value), "Booking created", 201)
+
+
+@router.post("/hold", response_model=ApiResponse[BookingHoldResponse], status_code=status.HTTP_201_CREATED)
+async def create_booking_hold(
+    request: BookingHoldCreate,
+    current_user: User = Depends(require_patient),
+    service: BookingService = Depends(get_booking_service),
+) -> ApiResponse[BookingHoldResponse]:
+    """Reserve one available schedule before the patient confirms a booking."""
+    value = await service.hold(current_user.id, request)
+    return success_response(booking_hold_response(value), "Booking hold created", 201)
+
+
+@router.delete("/holds/{hold_id}", response_model=ApiResponse[None])
+async def release_booking_hold(
+    hold_id: UUID,
+    current_user: User = Depends(get_current_user),
+    service: BookingService = Depends(get_booking_service),
+) -> ApiResponse[None]:
+    """Release a patient's hold, or let staff release an operational hold."""
+    await service.release_hold(current_user.id, hold_id, is_staff=current_user.role == "staff")
+    return success_response(None, "Booking hold released")
 
 
 @router.get("", response_model=ApiResponse[list[BookingResponse]])

@@ -2,16 +2,27 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+import hashlib
+import json
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger
 from src.models.booking import Booking
+from src.models.booking_hold import BookingHold
 from src.repositories.booking import BookingRepository
-from src.schemas.booking import BookingCreate, BookingResponse, StaffBookingResponse, StaffBookingStatusUpdate
+from src.schemas.booking import (
+    BookingCreate,
+    BookingHoldCreate,
+    BookingHoldResponse,
+    BookingResponse,
+    StaffBookingResponse,
+    StaffBookingStatusUpdate,
+)
 
 logger = get_logger(__name__)
 
@@ -26,73 +37,218 @@ class BookingService:
     async def create(self, user_id: UUID, request: BookingCreate) -> Booking:
         """Create a scheduled booking or a requested-time booking awaiting staff review."""
         async with self.session.begin():
+            booking = await self._create_in_transaction(user_id, request)
+        logger.info("BookingService.create booking pending approval", extra={"booking_id": str(booking.id)})
+        return await self.get(user_id, booking.id)
+
+    async def create_idempotent(self, user_id: UUID, request: BookingCreate, key: str) -> tuple[Booking, bool]:
+        """Create a booking once and replay the same result for duplicate submits."""
+        normalized_key = key.strip()
+        if not normalized_key:
+            raise ConflictError("IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key must not be blank")
+        request_hash = self._request_hash(request)
+        replay = False
+        try:
+            async with self.session.begin():
+                existing = await self.bookings.get_booking_by_idempotency(user_id, normalized_key)
+                if existing is not None:
+                    if existing.idempotency_hash != request_hash:
+                        raise ConflictError(
+                            "IDEMPOTENCY_KEY_REUSED", "Idempotency-Key was used with a different request"
+                        )
+                    booking = existing
+                    replay = True
+                else:
+                    booking = await self._create_in_transaction(user_id, request)
+                    booking.idempotency_key = normalized_key
+                    booking.idempotency_hash = request_hash
+                    await self.session.flush()
+        except IntegrityError:
+            # A concurrent request may win the partial unique index between the
+            # lookup and insert. Re-read the committed winner and replay it.
+            await self.session.rollback()
+            existing = await self.bookings.get_booking_by_idempotency(user_id, normalized_key)
+            if existing is None or existing.idempotency_hash != request_hash:
+                raise
+            booking = existing
+            replay = True
+        if replay:
+            logger.info("BookingService.create idempotent replay", extra={"booking_id": str(booking.id)})
+        else:
+            logger.info("BookingService.create booking pending approval", extra={"booking_id": str(booking.id)})
+        return await self.get(user_id, booking.id), replay
+
+    async def hold(self, user_id: UUID, request: BookingHoldCreate) -> BookingHold:
+        """Reserve schedule capacity for five to ten minutes."""
+        async with self.session.begin():
             service = await self.bookings.get_service(request.service_id)
+            specialty = await self.bookings.get_specialty(request.specialty_id)
             if service is None or service.status != "active":
                 raise NotFoundError("Service not found")
-            specialty = await self.bookings.get_specialty(request.specialty_id)
             if specialty is None or specialty.status != "active":
                 raise NotFoundError("Specialty not found")
 
-            schedule = None
-            if request.schedule_id:
-                schedule = await self.bookings.get_schedule_for_update(request.schedule_id)
-                if schedule is None:
-                    raise NotFoundError("Schedule not found")
-                self._validate_schedule(schedule)
-                doctor_id = schedule.doctor_id
-                facility_id = schedule.facility_id
-                starts_at = schedule.starts_at
-                ends_at = schedule.ends_at
+            schedule = await self.bookings.get_schedule_for_update(request.schedule_id)
+            if schedule is None:
+                raise NotFoundError("Schedule not found")
+            self._validate_schedule(schedule)
+            if schedule.starts_at <= datetime.now(UTC):
+                raise ConflictError("SLOT_IN_PAST", "Requested schedule is no longer bookable")
+            await self._validate_catalog_relationships(schedule, service, specialty)
+
+            existing = await self.bookings.get_active_hold_for_user_schedule(user_id, schedule.id, for_update=True)
+            if existing is not None:
+                if existing.service_id == service.id and existing.specialty_id == specialty.id:
+                    hold = existing
+                else:
+                    raise ConflictError("HOLD_ALREADY_EXISTS", "Patient already holds this schedule")
             else:
-                doctor_id = request.doctor_id
-                facility_id = request.facility_id
-                starts_at = request.starts_at
-                ends_at = request.ends_at
-                doctor = await self.bookings.get_doctor(doctor_id)
-                facility = await self.bookings.get_facility(facility_id)
-                if doctor is None or doctor.status != "active" or doctor.review_status != "approved":
-                    raise ConflictError("DOCTOR_UNAVAILABLE", "Doctor is not available for booking")
-                if not doctor.booking_enabled:
-                    raise ConflictError("DOCTOR_BOOKING_DISABLED", "Doctor booking is disabled")
-                if facility is None or facility.status != "active":
-                    raise ConflictError("FACILITY_UNAVAILABLE", "Facility is not available for booking")
-                if not starts_at or not ends_at or starts_at <= datetime.now(UTC):
-                    raise ConflictError("SLOT_IN_PAST", "Requested booking time must be in the future")
-                if not await self.bookings.has_doctor_facility(doctor_id, facility_id):
-                    raise ConflictError("FACILITY_NOT_AVAILABLE", "Doctor is not available at this facility")
-
-            if not await self.bookings.has_doctor_service(doctor_id, service.id):
-                raise ConflictError("SERVICE_NOT_AVAILABLE", "Service is not available for this doctor")
-            if not await self.bookings.has_doctor_specialty(doctor_id, specialty.id):
-                raise ConflictError("SPECIALTY_NOT_AVAILABLE", "Specialty is not available for this doctor")
-
-            if schedule:
-                # The schedule row lock is held until this transaction commits. Every
-                # concurrent request for this schedule therefore waits before counting,
-                # making the count-and-insert decision serial for the same schedule.
-                active_count = await self.bookings.count_active_for_schedule(schedule.id)
+                active_count = await self.bookings.count_reservations_for_schedule(schedule.id)
                 if service.booking_mode == "doctor_visit" and active_count >= 1:
                     raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
                 if service.booking_mode == "group" and active_count >= schedule.capacity:
                     raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
+                hold = BookingHold(
+                    user_id=user_id,
+                    schedule_id=schedule.id,
+                    service_id=service.id,
+                    specialty_id=specialty.id,
+                    status="active",
+                    expires_at=datetime.now(UTC) + timedelta(seconds=request.hold_seconds),
+                )
+                await self.bookings.add_hold(hold)
+        logger.info(
+            "BookingService.hold created", extra={"hold_id": str(hold.id), "schedule_id": str(request.schedule_id)}
+        )
+        return hold
 
-            booking = Booking(
-                user_id=user_id,
-                schedule_id=schedule.id if schedule else None,
-                doctor_id=doctor_id,
-                facility_id=facility_id,
-                starts_at=starts_at,
-                ends_at=ends_at,
-                service_id=service.id,
-                specialty_id=specialty.id,
-                encounter_type=request.encounter_type,
-                reason=request.reason.strip(),
-                patient_note=request.patient_note.strip() if request.patient_note else None,
-                status="pending_approval",
+    async def release_hold(self, user_id: UUID, hold_id: UUID, *, is_staff: bool = False) -> BookingHold:
+        """Release an owned hold; repeated release is safe."""
+        async with self.session.begin():
+            hold = (
+                await self.bookings.get_hold(hold_id, for_update=True)
+                if is_staff
+                else await self.bookings.get_hold_for_user(hold_id, user_id, for_update=True)
             )
-            await self.bookings.add(booking)
-        logger.info("BookingService.create booking pending approval", extra={"booking_id": str(booking.id)})
-        return await self.get(user_id, booking.id)
+            if hold is None:
+                raise NotFoundError("Hold not found")
+            if hold.status == "active":
+                now = datetime.now(UTC)
+                hold.status = "expired" if hold.expires_at <= now else "released"
+                hold.released_at = now
+                await self.session.flush()
+        return hold
+
+    async def release_expired_holds(self) -> int:
+        """Release expired holds for a periodic worker or maintenance command."""
+        async with self.session.begin():
+            count = await self.bookings.release_expired_holds()
+        return count
+
+    async def _create_in_transaction(self, user_id: UUID, request: BookingCreate) -> Booking:
+        """Validate and stage a booking while the caller owns the transaction."""
+        service = await self.bookings.get_service(request.service_id)
+        if service is None or service.status != "active":
+            raise NotFoundError("Service not found")
+        specialty = await self.bookings.get_specialty(request.specialty_id)
+        if specialty is None or specialty.status != "active":
+            raise NotFoundError("Specialty not found")
+
+        schedule = None
+        hold = None
+        if request.schedule_id:
+            schedule = await self.bookings.get_schedule_for_update(request.schedule_id)
+            if schedule is None:
+                raise NotFoundError("Schedule not found")
+            self._validate_schedule(schedule)
+            doctor_id = schedule.doctor_id
+            facility_id = schedule.facility_id
+            starts_at = schedule.starts_at
+            ends_at = schedule.ends_at
+            if request.hold_id:
+                hold = await self.bookings.get_hold_for_user(request.hold_id, user_id, for_update=True)
+                if hold is None:
+                    raise NotFoundError("Hold not found")
+                if hold.status != "active" or hold.expires_at <= datetime.now(UTC):
+                    raise ConflictError("HOLD_EXPIRED", "The booking hold has expired or was released")
+                if hold.schedule_id != schedule.id:
+                    raise ConflictError("HOLD_SCHEDULE_MISMATCH", "Hold does not belong to this schedule")
+                if hold.service_id != service.id or hold.specialty_id != specialty.id:
+                    raise ConflictError("HOLD_REQUEST_MISMATCH", "Hold does not match the booking request")
+        else:
+            if request.hold_id:
+                raise ConflictError("HOLD_SCHEDULE_REQUIRED", "A hold booking must include schedule_id")
+            doctor_id = request.doctor_id
+            facility_id = request.facility_id
+            starts_at = request.starts_at
+            ends_at = request.ends_at
+            doctor = await self.bookings.get_doctor(doctor_id)
+            facility = await self.bookings.get_facility(facility_id)
+            if doctor is None or doctor.status != "active" or doctor.review_status != "approved":
+                raise ConflictError("DOCTOR_UNAVAILABLE", "Doctor is not available for booking")
+            if not doctor.booking_enabled:
+                raise ConflictError("DOCTOR_BOOKING_DISABLED", "Doctor booking is disabled")
+            if facility is None or facility.status != "active":
+                raise ConflictError("FACILITY_UNAVAILABLE", "Facility is not available for booking")
+            if not starts_at or not ends_at or starts_at <= datetime.now(UTC):
+                raise ConflictError("SLOT_IN_PAST", "Requested booking time must be in the future")
+            if not await self.bookings.has_doctor_facility(doctor_id, facility_id):
+                raise ConflictError("FACILITY_NOT_AVAILABLE", "Doctor is not available at this facility")
+
+        await self._validate_catalog_relationships(
+            schedule, service, specialty, doctor_id=doctor_id, facility_id=facility_id
+        )
+
+        if schedule:
+            # The schedule row lock is held until commit, serializing capacity decisions.
+            if hold:
+                active_count = await self.bookings.count_reservations_for_schedule(schedule.id, exclude_hold_id=hold.id)
+            else:
+                active_count = await self.bookings.count_active_for_schedule(schedule.id)
+            if service.booking_mode == "doctor_visit" and active_count >= 1:
+                raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
+            if service.booking_mode == "group" and active_count >= schedule.capacity:
+                raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
+
+        booking = Booking(
+            user_id=user_id,
+            hold_id=hold.id if hold else None,
+            schedule_id=schedule.id if schedule else None,
+            doctor_id=doctor_id,
+            facility_id=facility_id,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            service_id=service.id,
+            specialty_id=specialty.id,
+            encounter_type=request.encounter_type,
+            reason=request.reason.strip(),
+            patient_note=request.patient_note.strip() if request.patient_note else None,
+            status="pending_approval",
+        )
+        await self.bookings.add(booking)
+        if hold:
+            hold.status = "consumed"
+            hold.released_at = datetime.now(UTC)
+        return booking
+
+    async def _validate_catalog_relationships(
+        self, schedule, service, specialty, *, doctor_id: UUID | None = None, facility_id: UUID | None = None
+    ) -> None:
+        """Ensure selected catalog resources match the doctor and schedule."""
+        resolved_doctor_id = doctor_id or schedule.doctor_id
+        resolved_facility_id = facility_id or schedule.facility_id
+        if not await self.bookings.has_doctor_service(resolved_doctor_id, service.id):
+            raise ConflictError("SERVICE_NOT_AVAILABLE", "Service is not available for this doctor")
+        if not await self.bookings.has_doctor_specialty(resolved_doctor_id, specialty.id):
+            raise ConflictError("SPECIALTY_NOT_AVAILABLE", "Specialty is not available for this doctor")
+        if schedule is not None and resolved_facility_id != schedule.facility_id:
+            raise ConflictError("FACILITY_NOT_AVAILABLE", "Doctor is not available at this facility")
+
+    @staticmethod
+    def _request_hash(request: BookingCreate) -> str:
+        """Hash the normalized request body for idempotency-key reuse checks."""
+        payload = request.model_dump(mode="json")
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     async def list(self, user_id: UUID, status: str | None, offset: int, limit: int) -> list[Booking]:
         """List bookings owned by the authenticated user."""
@@ -148,6 +304,8 @@ class BookingService:
                 raise ConflictError("BOOKING_ALREADY_REVIEWED", "Only pending bookings can be reviewed")
             if request.status == "rejected" and not request.note:
                 raise ConflictError("REJECTION_NOTE_REQUIRED", "A rejection reason is required")
+            if request.status == "confirmed" and booking.schedule is not None:
+                self._validate_schedule(booking.schedule)
             booking.status = request.status
             booking.staff_note = request.note
             booking.reviewed_by = actor_id
@@ -180,6 +338,7 @@ def booking_response(value: Booking) -> BookingResponse:
         id=value.id,
         user_id=value.user_id,
         schedule_id=value.schedule_id,
+        hold_id=value.hold_id,
         service_id=value.service_id,
         specialty_id=value.specialty_id,
         doctor_id=value.doctor_id,
@@ -197,6 +356,21 @@ def booking_response(value: Booking) -> BookingResponse:
         reviewed_at=value.reviewed_at,
         created_at=value.created_at,
         updated_at=value.updated_at,
+    )
+
+
+def booking_hold_response(value: BookingHold) -> BookingHoldResponse:
+    """Map a hold to its stable API representation."""
+    return BookingHoldResponse(
+        id=value.id,
+        user_id=value.user_id,
+        schedule_id=value.schedule_id,
+        service_id=value.service_id,
+        specialty_id=value.specialty_id,
+        status=value.status,
+        expires_at=value.expires_at,
+        released_at=value.released_at,
+        created_at=value.created_at,
     )
 
 

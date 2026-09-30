@@ -17,6 +17,8 @@ export default function AppointmentApproval() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{ id: string; status: 'rejected' } | null>(null);
+  const [reviewNote, setReviewNote] = useState('');
   const [error, setError] = useState('');
 
   const loadBookings = useCallback(async () => {
@@ -107,18 +109,25 @@ export default function AppointmentApproval() {
   }, [replaceBooking]);
 
   const handleReject = useCallback(async (id: string) => {
-    const reason = window.prompt('Nhập lý do từ chối lịch hẹn:')?.trim();
-    if (!reason) return;
+    setReviewTarget({ id, status: 'rejected' });
+    setReviewNote('');
+  }, []);
+
+  const confirmReject = useCallback(async () => {
+    if (!reviewTarget || !reviewNote.trim()) return;
+    const id = reviewTarget.id;
     setActionId(id);
     setError('');
     try {
-      replaceBooking(await rejectBooking(id, reason));
+      replaceBooking(await rejectBooking(id, reviewNote.trim()));
+      setReviewTarget(null);
+      setReviewNote('');
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Không thể từ chối lịch hẹn.');
     } finally {
       setActionId(null);
     }
-  }, [replaceBooking]);
+  }, [replaceBooking, reviewNote, reviewTarget]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -157,6 +166,28 @@ export default function AppointmentApproval() {
         filteredCount={filtered.length}
         totalCount={bookings.length}
       />
+
+      {reviewTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-slate-900">Từ chối lịch hẹn</h2>
+            <p className="mt-2 text-sm text-slate-600">Vui lòng nhập lý do để bệnh nhân có thể biết hướng xử lý tiếp theo.</p>
+            <textarea
+              autoFocus
+              value={reviewNote}
+              onChange={(event) => setReviewNote(event.target.value)}
+              maxLength={2000}
+              rows={4}
+              className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              placeholder="Lý do từ chối"
+            />
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setReviewTarget(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Huỷ</button>
+              <button onClick={() => void confirmReject()} disabled={!reviewNote.trim() || Boolean(actionId)} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Xác nhận từ chối</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

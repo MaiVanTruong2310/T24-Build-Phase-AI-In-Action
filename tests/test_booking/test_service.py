@@ -9,7 +9,7 @@ import pytest
 
 from src.core.exceptions import ConflictError
 from src.models.booking import Booking
-from src.schemas.booking import BookingCreate
+from src.schemas.booking import BookingCreate, BookingHoldCreate
 from src.services.booking import BookingService
 
 
@@ -50,6 +50,7 @@ class FakeBookingRepository:
         self.service = service
         self.active_count = active_count
         self.booking = None
+        self.holds = []
 
     async def get_schedule_for_update(self, schedule_id):
         assert schedule_id == self.schedule.id
@@ -90,6 +91,42 @@ class FakeBookingRepository:
 
     async def add(self, booking):
         self.booking = booking
+
+    async def add_hold(self, hold):
+        hold.id = hold.id or uuid4()
+        self.holds.append(hold)
+
+    async def get_active_hold_for_user_schedule(self, user_id, schedule_id, *, for_update=False):
+        del for_update
+        now = datetime.now(UTC)
+        return next(
+            (
+                hold
+                for hold in self.holds
+                if hold.user_id == user_id
+                and hold.schedule_id == schedule_id
+                and hold.status == "active"
+                and hold.expires_at > now
+            ),
+            None,
+        )
+
+    async def count_reservations_for_schedule(self, schedule_id, *, exclude_hold_id=None):
+        del schedule_id
+        return self.active_count + sum(hold.status == "active" and hold.id != exclude_hold_id for hold in self.holds)
+
+    async def get_hold_for_user(self, hold_id, user_id, *, for_update=False):
+        del for_update
+        return next((hold for hold in self.holds if hold.id == hold_id and hold.user_id == user_id), None)
+
+    async def get_hold(self, hold_id, *, for_update=False):
+        del for_update
+        return next((hold for hold in self.holds if hold.id == hold_id), None)
+
+    async def get_booking_by_idempotency(self, user_id, key):
+        if self.booking and self.booking.user_id == user_id and self.booking.idempotency_key == key:
+            return self.booking
+        return None
 
     async def get_for_user(self, booking_id, user_id, *, for_update=False):
         del booking_id, user_id, for_update
@@ -199,3 +236,70 @@ def test_booking_request_rejects_naive_requested_time():
             specialty_id=uuid4(),
             reason="Timezone check",
         )
+
+
+def test_hold_reserves_capacity_and_reuses_patient_hold():
+    """A patient gets one active hold for a schedule and can safely retry the request."""
+    schedule = make_schedule(capacity=2)
+    schedule.starts_at = datetime.now(UTC) + timedelta(days=1)
+    service = SimpleNamespace(id=uuid4(), status="active", booking_mode="group")
+    repository = FakeBookingRepository(schedule, service, active_count=0)
+    booking_service = BookingService(FakeSession())
+    booking_service.bookings = repository
+    user_id = uuid4()
+    request = BookingHoldCreate(schedule_id=schedule.id, service_id=service.id, specialty_id=uuid4())
+
+    first = asyncio.run(booking_service.hold(user_id, request))
+    second = asyncio.run(booking_service.hold(user_id, request))
+
+    assert first.id == second.id
+    assert first.status == "active"
+    assert first.expires_at > datetime.now(UTC)
+
+
+def test_hold_capacity_conflict_counts_other_active_holds():
+    """Active holds consume capacity before a booking is submitted."""
+    schedule = make_schedule(capacity=1)
+    schedule.starts_at = datetime.now(UTC) + timedelta(days=1)
+    service = SimpleNamespace(id=uuid4(), status="active", booking_mode="group")
+    repository = FakeBookingRepository(schedule, service, active_count=0)
+    booking_service = BookingService(FakeSession())
+    booking_service.bookings = repository
+    request = BookingHoldCreate(schedule_id=schedule.id, service_id=service.id, specialty_id=uuid4())
+
+    asyncio.run(booking_service.hold(uuid4(), request))
+
+    with pytest.raises(ConflictError, match="no remaining capacity"):
+        asyncio.run(booking_service.hold(uuid4(), request))
+
+
+def test_booking_consumes_hold_and_idempotent_retry_replays_same_booking():
+    """Confirming a held slot consumes the hold and duplicate submits replay it."""
+    schedule = make_schedule(capacity=1)
+    schedule.starts_at = datetime.now(UTC) + timedelta(days=1)
+    service = SimpleNamespace(id=uuid4(), status="active", booking_mode="group")
+    repository = FakeBookingRepository(schedule, service, active_count=0)
+    booking_service = BookingService(FakeSession())
+    booking_service.bookings = repository
+    user_id = uuid4()
+    hold = asyncio.run(
+        booking_service.hold(
+            user_id,
+            BookingHoldCreate(schedule_id=schedule.id, service_id=service.id, specialty_id=uuid4()),
+        )
+    )
+    request = BookingCreate(
+        hold_id=hold.id,
+        schedule_id=schedule.id,
+        service_id=service.id,
+        specialty_id=hold.specialty_id,
+        reason="Held consultation",
+    )
+
+    first, replayed_first = asyncio.run(booking_service.create_idempotent(user_id, request, "booking-1"))
+    second, replayed_second = asyncio.run(booking_service.create_idempotent(user_id, request, "booking-1"))
+
+    assert replayed_first is False
+    assert replayed_second is True
+    assert first.id == second.id
+    assert hold.status == "consumed"

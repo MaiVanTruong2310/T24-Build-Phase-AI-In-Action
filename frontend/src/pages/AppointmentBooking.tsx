@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { BookingHeader } from '../features/appointment-booking/components/BookingHeader';
@@ -9,7 +9,9 @@ import { SpecialtySelector } from '../features/appointment-booking/components/Sp
 import { fetchCurrentUser, PatientProfile } from '../features/patient/api';
 import {
   BookingApiError,
+  BookingHold,
   createBooking,
+  createBookingHold,
   Doctor,
   Facility,
   fetchAvailability,
@@ -18,6 +20,7 @@ import {
   fetchServices,
   fetchSpecialties,
   MedicalService,
+  releaseBookingHold,
   Schedule,
   Specialty,
 } from '../features/appointment-booking/api';
@@ -27,33 +30,6 @@ function formatLocalDate(value: Date): string {
   const month = String(value.getMonth() + 1).padStart(2, '0');
   const day = String(value.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-const DEMO_SLOT_TIMES = [
-  '08:00', '08:15', '08:30', '08:45',
-  '09:00', '09:15', '09:30', '09:45',
-  '10:00', '10:15', '10:30', '10:45',
-  '13:30', '13:45', '14:00', '14:15',
-  '14:30', '14:45', '15:00', '15:15',
-  '15:30', '15:45', '16:00',
-];
-
-function buildDemoSchedules(date: string, doctorId: string, facilityId: string, durationMinutes: number): Schedule[] {
-  return DEMO_SLOT_TIMES.map((time) => {
-    const startsAt = new Date(`${date}T${time}:00`);
-    const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
-    return {
-      id: `demo-${date}-${time.replace(':', '')}`,
-      doctor_id: doctorId,
-      facility_id: facilityId,
-      starts_at: startsAt.toISOString(),
-      ends_at: endsAt.toISOString(),
-      capacity: 0,
-      status: 'available',
-      version: 0,
-      source_system: 'ui-demo',
-    };
-  });
 }
 
 export default function AppointmentBooking() {
@@ -78,13 +54,34 @@ export default function AppointmentBooking() {
   const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   const [isBooking, setIsBooking] = useState(false);
+  const [hold, setHold] = useState<BookingHold | null>(null);
+  const [holdSecondsRemaining, setHoldSecondsRemaining] = useState(0);
   const [bookingError, setBookingError] = useState('');
   const [catalogError, setCatalogError] = useState('');
   const [availabilityError, setAvailabilityError] = useState('');
   const [reason, setReason] = useState('');
   const [patientNote, setPatientNote] = useState('');
+  const holdRef = useRef<BookingHold | null>(null);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    holdRef.current = hold;
+  }, [hold]);
+
+  useEffect(() => {
+    return () => {
+      const activeHold = holdRef.current;
+      if (activeHold) void releaseBookingHold(activeHold.id).catch(() => undefined);
+    };
+  }, []);
+
+  useEffect(() => {
+    const previousHold = holdRef.current;
+    if (previousHold) {
+      holdRef.current = null;
+      setHold(null);
+      void releaseBookingHold(previousHold.id).catch(() => undefined);
+    }
     let cancelled = false;
 
     Promise.all([fetchSpecialties(), fetchFacilities()])
@@ -187,6 +184,36 @@ export default function AppointmentBooking() {
   }, [selectedSpecialty, selectedFacility, selectedService]);
 
   useEffect(() => {
+    const previousHold = holdRef.current;
+    if (!previousHold) return;
+    holdRef.current = null;
+    setHold(null);
+    void releaseBookingHold(previousHold.id).catch(() => undefined);
+  }, [selectedDoctorId, selectedDate]);
+
+  useEffect(() => {
+    if (!hold) {
+      setHoldSecondsRemaining(0);
+      return undefined;
+    }
+
+    const updateRemaining = () => {
+      const seconds = Math.max(0, Math.ceil((new Date(hold.expires_at).getTime() - Date.now()) / 1000));
+      setHoldSecondsRemaining(seconds);
+      if (seconds === 0) {
+        holdRef.current = null;
+        setHold(null);
+        setSelectedSlot('');
+        setBookingError('Thời gian giữ chỗ đã hết. Vui lòng chọn lại khung giờ.');
+      }
+    };
+
+    updateRemaining();
+    const timer = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(timer);
+  }, [hold]);
+
+  useEffect(() => {
     let cancelled = false;
     setSchedules([]);
     setSelectedSlot('');
@@ -225,18 +252,40 @@ export default function AppointmentBooking() {
   const selectedServiceData = services.find((service) => service.id === selectedService);
   const selectedFacilityData = facilities.find((facility) => facility.id === selectedFacility);
   const serviceDuration = selectedServiceData?.duration_minutes ?? null;
-  const displaySchedules = !loadingAvailability && !availabilityError && schedules.length === 0 && selectedDoctorId && selectedFacility && serviceDuration && serviceDuration > 0
-    ? buildDemoSchedules(selectedDate, selectedDoctorId, selectedFacility, serviceDuration)
-    : schedules;
+  const displaySchedules = schedules;
   const selectedSchedule = displaySchedules.find((schedule) => schedule.id === selectedSlot);
-  const isDemoSlot = selectedSchedule?.source_system === 'ui-demo';
   const scheduleFacility = facilities.find((facility) => facility.id === selectedSchedule?.facility_id) || selectedFacilityData;
   const selectedDisplayEndsAt = selectedSchedule && serviceDuration
     ? new Date(new Date(selectedSchedule.starts_at).getTime() + serviceDuration * 60 * 1000).toISOString()
     : selectedSchedule?.ends_at || '';
 
+  const handleSlotSelection = async (slotId: string) => {
+    setBookingError('');
+    const previousHold = holdRef.current;
+    if (previousHold) {
+      holdRef.current = null;
+      setHold(null);
+      await releaseBookingHold(previousHold.id).catch(() => undefined);
+    }
+    setSelectedSlot(slotId);
+    if (!slotId || !selectedService || !selectedSpecialty) return;
+
+    try {
+      const nextHold = await createBookingHold(slotId, selectedService, selectedSpecialty);
+      holdRef.current = nextHold;
+      setHold(nextHold);
+    } catch (error) {
+      setSelectedSlot('');
+      if (error instanceof BookingApiError && error.status === 409) {
+        setBookingError('Khung giờ vừa được giữ bởi người khác. Vui lòng chọn khung giờ khác.');
+      } else {
+        setBookingError('Không thể giữ khung giờ. Vui lòng thử lại.');
+      }
+    }
+  };
+
   const handleBooking = async () => {
-    if (!selectedDoctorId || !selectedSpecialty || !selectedService || !selectedSlot) {
+    if (!selectedDoctorId || !selectedSpecialty || !selectedService || !selectedSlot || !hold) {
       setBookingError('Vui lòng chọn chuyên khoa, dịch vụ, bác sĩ và khung giờ.');
       return;
     }
@@ -253,7 +302,8 @@ export default function AppointmentBooking() {
     setBookingError('');
     try {
       const booking = await createBooking({
-        schedule_id: isDemoSlot ? undefined : selectedSlot,
+        hold_id: hold.id,
+        schedule_id: selectedSlot,
         doctor_id: selectedDoctorId,
         facility_id: scheduleFacility.id,
         starts_at: selectedSchedule.starts_at,
@@ -263,7 +313,7 @@ export default function AppointmentBooking() {
         encounter_type: selectedType === 'offline' ? 'in_person' : 'telehealth',
         reason: reason.trim(),
         patient_note: patientNote.trim() || undefined,
-      });
+      }, idempotencyKeyRef.current || (idempotencyKeyRef.current = crypto.randomUUID()));
       navigate(`/patient/appointments/${booking.id}`);
     } catch (error) {
       if (error instanceof BookingApiError && error.status === 409) {
@@ -343,7 +393,7 @@ export default function AppointmentBooking() {
               selectedType={selectedType}
               onSelectType={setSelectedType}
               selectedSlot={selectedSlot}
-              onSelectSlot={setSelectedSlot}
+              onSelectSlot={handleSlotSelection}
               schedules={displaySchedules}
               selectedFacility={scheduleFacility}
               serviceDuration={serviceDuration}
@@ -352,6 +402,11 @@ export default function AppointmentBooking() {
           </main>
 
           <div className="lg:col-span-4">
+            {hold && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Khung giờ đang được giữ trong <strong>{Math.floor(holdSecondsRemaining / 60)}:{String(holdSecondsRemaining % 60).padStart(2, '0')}</strong>.
+              </div>
+            )}
             <BookingSummary
               patientName={patient?.full_name || 'Chưa cập nhật họ tên'}
               patientPhone={patient?.phone || null}
