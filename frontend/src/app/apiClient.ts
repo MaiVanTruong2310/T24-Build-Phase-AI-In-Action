@@ -16,7 +16,7 @@ function normalizeApiOrigin(value: string): string {
   return `http://${trimmedValue}`.replace(/\/api\/v1$/, '');
 }
 
-// EC2_HOST_PROD/EC2_HOST_DEV are injected by CI/CD without a protocol.
+// API_DOMAIN_PROD/API_DOMAIN_DEV are injected by CI/CD as the backend URL.
 const API_ORIGIN = normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
 const API_BASE = `${API_ORIGIN}/api/v1`;
 const REFRESH_PATH = `${API_BASE}/auth/refresh-token`;
