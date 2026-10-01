@@ -55,10 +55,7 @@ class AuthService:
                 phone=phone,
                 password_hash=hash_password(request.password) if request.password else None,
                 full_name=request.full_name,
-                # Temporary mock behavior: new registrations are staff users.
-                # Restore the original patient role after the demo:
-                # role="patient",
-                role="staff",
+                role="patient",
                 status="pending_verification",
                 date_of_birth=request.date_of_birth,
                 gender=request.gender,
@@ -131,7 +128,7 @@ class AuthService:
             if user is None:
                 logger.warning("AuthService.verify_registration_otp identity not found")
                 raise AuthenticationError("INVALID_OTP", "Invalid or expired OTP")
-            verification_error = await self._consume_otp(target, "register", code or 999999)
+            verification_error = await self._consume_otp(target, "register", code or "999999")
             if verification_error is None:
                 now = _now()
                 user.status = "active"
@@ -256,16 +253,14 @@ class AuthService:
     async def _create_otp(self, user: User, target: str, purpose: str) -> str | None:
         """Create a rate-limited OTP and return its value only for mock delivery."""
         active = await self.auth.get_latest_otp(target, purpose)
-        if active and active.created_at and (_now() - active.created_at) < timedelta(seconds=30):
-            # Original production behavior: reject repeated OTP requests.
-            # if active and active.created_at and (_now() - active.created_at) < timedelta(seconds=30):
-            #     logger.warning("AuthService._create_otp rate limit reached", extra={"purpose": purpose})
-            #     raise RateLimitError("Please wait before requesting another OTP")
-            # Temporary mock behavior: allow the frontend to request the
-            # generated code after registration, then verify that latest code.
-            if not isinstance(self.otp_provider, MockOtpProvider):
-                logger.warning("AuthService._create_otp rate limit reached", extra={"purpose": purpose})
-                raise RateLimitError("Please wait before requesting another OTP")
+        if (
+            active
+            and active.created_at
+            and (_now() - active.created_at) < timedelta(seconds=30)
+            and not isinstance(self.otp_provider, MockOtpProvider)
+        ):
+            logger.warning("AuthService._create_otp rate limit reached", extra={"purpose": purpose})
+            raise RateLimitError("Please wait before requesting another OTP")
         code = (
             self.otp_provider.generate_code()
             if isinstance(self.otp_provider, MockOtpProvider)

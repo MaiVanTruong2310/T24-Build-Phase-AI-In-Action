@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # Vector Store
     chroma_persist_dir: str = "./data/chroma"
 
+    # Supabase
+    supabase_url: str = ""
+    supabase_key: str = ""
+
 
 def parse_cors_origins(value: str) -> list[str]:
     """Parse comma-separated origins into values browsers can match exactly."""

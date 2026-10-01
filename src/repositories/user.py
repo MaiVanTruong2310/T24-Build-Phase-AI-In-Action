@@ -20,11 +20,11 @@ class UserRepository:
         return await self.session.get(User, user_id)
 
     async def get_by_identifier(self, email: str | None, phone: str | None) -> User | None:
-        """Find a user by one normalized email or phone identifier."""
+        """Find a user by email, phone, or citizen_id."""
         if email:
             statement = select(User).where(User.email == email)
         elif phone:
-            statement = select(User).where(User.phone == phone)
+            statement = select(User).where(or_(User.phone == phone, User.citizen_id == phone))
         else:
             return None
         return (await self.session.execute(statement)).scalar_one_or_none()

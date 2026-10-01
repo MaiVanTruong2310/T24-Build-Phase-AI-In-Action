@@ -5,9 +5,8 @@ import { AppDispatch, RootState } from '../app/store'
 import { registerUser, sendOtp, verifyOtp, resetRegisterSuccess } from '../features/auth/authSlice'
 import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Loader2, Phone, Mail, Key } from 'lucide-react'
 
-// TEMPORARY DEMO ONLY: keep this disabled before enabling real OTP delivery.
-const TEMPORARY_OTP_BYPASS = true
-const TEMPORARY_OTP_CODE = '123456'
+const AUTO_VERIFY_MOCK_OTP = true
+const DEFAULT_MOCK_OTP = '123456'
 
 export function Register() {
   const [formData, setFormData] = useState({
@@ -69,15 +68,9 @@ export function Register() {
       ...(formData.health_insurance_code && { health_insurance_code: formData.health_insurance_code }),
     }
 
-    /*
-     * Original flow kept for restoration:
-     * await dispatch(registerUser(payload))
-     * The successful registration then displays the manual OTP form below.
-     */
     const registrationResult = await dispatch(registerUser(payload))
 
-    // TEMPORARY OTP bypass: ask the mock API for the actual generated code.
-    if (TEMPORARY_OTP_BYPASS && registerUser.fulfilled.match(registrationResult)) {
+    if (AUTO_VERIFY_MOCK_OTP && registerUser.fulfilled.match(registrationResult)) {
       const otpResult = await dispatch(sendOtp({ phone: formData.phone, purpose: 'register' }))
       if (sendOtp.rejected.match(otpResult)) {
         setValidationError('Không thể lấy OTP tự động. Bạn có thể nhập OTP thủ công.')
@@ -85,10 +78,9 @@ export function Register() {
       }
 
       const returnedOtp = otpResult.payload?.otp
-      // Keep the fixed mock code only as a fallback for older deployments.
       const generatedOtp = typeof returnedOtp === 'string' && /^\d{6}$/.test(returnedOtp)
         ? returnedOtp
-        : TEMPORARY_OTP_CODE
+        : DEFAULT_MOCK_OTP
       setOtpCode(generatedOtp)
       const verificationResult = await dispatch(verifyOtp({ phone: formData.phone, code: generatedOtp }))
 
@@ -116,8 +108,6 @@ export function Register() {
     }
   }
 
-  // The original manual OTP screen remains as a fallback if the temporary
-  // bypass is disabled or the automatic verification fails.
   if (registerSuccess) {
     return (
       <div className="w-full max-w-md mx-auto">
