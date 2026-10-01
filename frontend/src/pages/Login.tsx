@@ -57,10 +57,19 @@ export function Login() {
     <div className="w-full max-w-md">
       <div className="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-xl dark:shadow-2xl p-6 sm:p-8 text-slate-900 dark:text-slate-100 transition-colors duration-300">
         {/* Form Header */}
-
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2 tracking-tight">
-          Đăng Nhập VCare+
-        </h2>
+        <div className="flex items-center gap-3.5 mb-3">
+          <img
+            src="/vcare-logo.png"
+            alt="VCare+ Logo"
+            className="w-12 h-12 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm shrink-0 p-0.5"
+          />
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+              Đăng Nhập VCare+
+            </h2>
+            <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Hệ Thống Y Tế Số Đa Tầng</p>
+          </div>
+        </div>
         <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
           Chào mừng quay trở lại. Đăng nhập để tiếp tục lộ trình khám bệnh đa tầng và theo dõi bệnh án.
         </p>

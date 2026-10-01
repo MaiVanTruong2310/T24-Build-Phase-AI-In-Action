@@ -160,11 +160,20 @@ export function Register() {
     <div className="w-full max-w-2xl mx-auto">
       <div className="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-xl dark:shadow-2xl p-6 sm:p-8 text-slate-900 dark:text-slate-100 transition-colors duration-300">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center gap-2 border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-full text-xs font-semibold mb-4">
-            <ShieldCheck className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-            Cổng Đăng Ký Y Tế Số An Toàn
+          <div className="inline-flex items-center justify-center mb-4">
+            <img
+              src="/vcare-logo.png"
+              alt="VCare+ Logo"
+              className="w-14 h-14 rounded-2xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-1"
+            />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3 tracking-tight">Tạo tài khoản VCare+</h2>
+          <div className="flex items-center justify-center">
+            <div className="inline-flex items-center justify-center gap-2 border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-full text-xs font-semibold mb-3">
+              <ShieldCheck className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+              Cổng Đăng Ký Y Tế Số An Toàn
+            </div>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2 tracking-tight">Tạo tài khoản VCare+</h2>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
             Đăng ký nhanh chóng để quản lý hồ sơ sức khỏe và đặt lịch khám thông minh.
           </p>
