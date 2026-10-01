@@ -62,8 +62,8 @@ async def initialize_database() -> None:
     """Create missing ORM tables for explicit local bootstrap only.
 
     Alembic is the normal schema-management path. The advisory transaction
-    lock keeps this legacy opt-in path safe when the API reload process and a
-    worker start at the same time.
+    lock keeps this legacy opt-in path safe when multiple API processes start
+    at the same time.
     """
     engine = get_engine()
     table_names = sorted(Base.metadata.tables)

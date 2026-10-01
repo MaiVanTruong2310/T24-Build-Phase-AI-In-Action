@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_current_user, require_patient, require_staff
+from src.api.dependencies import get_current_user, require_staff
 from src.api.response import success_response
 from src.db.dependencies import get_db_session
 from src.models.user import User
@@ -35,7 +35,7 @@ async def create_booking(
     request: BookingCreate,
     response: Response,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
-    current_user: User = Depends(require_patient),
+    current_user: User = Depends(get_current_user),
     service: BookingService = Depends(get_booking_service),
 ) -> ApiResponse[BookingResponse]:
     """Create a pending booking exactly once while reserving effective capacity."""
@@ -92,7 +92,7 @@ async def cancel_booking(
 async def reschedule_booking(
     booking_id: UUID,
     request: BookingRescheduleCreate,
-    current_user: User = Depends(require_patient),
+    current_user: User = Depends(get_current_user),
     service: BookingService = Depends(get_booking_service),
 ) -> ApiResponse[BookingResponse]:
     """Move a patient booking to a new schedule and return it to staff review."""

@@ -17,6 +17,7 @@ function formatDateTime(value: string): string {
 function statusLabel(status: Booking['status']): string {
   if (status === 'pending_approval') return 'Chờ duyệt';
   if (status === 'confirmed') return 'Đã duyệt';
+  if (status === 'expired') return 'Đã hết hạn';
   return 'Đã từ chối';
 }
 
@@ -97,7 +98,9 @@ export default function ScheduleApprove() {
           ? 'rounded-full bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700'
           : booking.status === 'rejected'
             ? 'rounded-full bg-rose-100 px-4 py-2 text-sm font-bold text-rose-700'
-            : 'rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-700'}>
+            : booking.status === 'expired'
+              ? 'rounded-full bg-orange-100 px-4 py-2 text-sm font-bold text-orange-700'
+              : 'rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-700'}>
           {statusLabel(booking.status)}
         </span>
       </div>

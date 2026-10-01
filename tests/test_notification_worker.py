@@ -1,4 +1,4 @@
-"""Notification worker and Gmail delivery tests."""
+"""Notification delivery and Gmail tests."""
 
 import asyncio
 from unittest.mock import patch

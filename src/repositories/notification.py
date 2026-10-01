@@ -95,6 +95,7 @@ class NotificationRepository:
         """Claim due notification rows for Kafka publication."""
         statement = (
             select(Notification)
+            .options(selectinload(Notification.user))
             .where(
                 Notification.status.in_(("pending", "failed")),
                 Notification.available_at <= now,
@@ -160,6 +161,19 @@ class NotificationRepository:
         notification.available_at = now + timedelta(seconds=delay)
         notification.updated_at = now
         await self.session.flush()
+
+    async def mark_dead_letter(self, notification_id: UUID, error: str, now: datetime) -> None:
+        """Mark an event as terminal after the consumer sends it to the DLT."""
+        await self.session.execute(
+            update(Notification)
+            .where(Notification.id == notification_id, Notification.status == "processing")
+            .values(
+                status="failed",
+                error=error[:2000],
+                dead_letter=True,
+                updated_at=now,
+            )
+        )
 
     async def requeue_stale_processing(self, now: datetime, timeout_seconds: int) -> int:
         """Return rows abandoned by a crashed publisher/consumer to the queue."""

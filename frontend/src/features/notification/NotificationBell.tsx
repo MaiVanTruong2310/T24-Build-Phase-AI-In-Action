@@ -21,14 +21,16 @@ export function NotificationBell({ enabled }: { enabled: boolean }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const loadNotifications = useCallback(async () => {
     if (!enabled) return;
     try {
       setLoading(true);
+      setError('');
       setNotifications(await fetchNotifications());
     } catch {
-      // The header should remain usable when the notification service is unavailable.
+      setError('Không thể tải thông báo.');
     } finally {
       setLoading(false);
     }
@@ -90,6 +92,14 @@ export function NotificationBell({ enabled }: { enabled: boolean }) {
             </button>
           </div>
           <div className="max-h-96 overflow-y-auto">
+            {error && (
+              <div role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+                <p>{error}</p>
+                <button type="button" className="mt-2 font-semibold underline" onClick={() => void loadNotifications()}>
+                  Thử lại
+                </button>
+              </div>
+            )}
             {loading && notifications.length === 0 && <div className="flex justify-center px-4 py-8"><Loader2 className="h-5 w-5 animate-spin text-sky-600" /></div>}
             {!loading && notifications.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-500">Chưa có thông báo.</p>}
             {notifications.map((notification) => (

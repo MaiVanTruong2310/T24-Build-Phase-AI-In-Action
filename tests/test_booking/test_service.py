@@ -174,11 +174,14 @@ def test_group_booking_rejects_when_shared_capacity_is_full():
     schedule = make_schedule(capacity=2)
     service = SimpleNamespace(id=uuid4(), status="active", booking_mode="group")
     repository = FakeBookingRepository(schedule, service, active_count=2)
-    booking_service = BookingService(FakeSession())
+    session = FakeSession()
+    booking_service = BookingService(session)
     booking_service.bookings = repository
 
     with pytest.raises(ConflictError, match="no remaining capacity"):
         asyncio.run(booking_service.create(uuid4(), create_request(schedule, service)))
+
+    assert session.added == []
 
 
 def test_doctor_visit_allows_only_one_booking_per_schedule():
@@ -388,6 +391,34 @@ def test_expired_pending_booking_releases_capacity_and_notifies_patient():
     service.bookings = repository
 
     assert asyncio.run(service.expire_pending_bookings()) == 1
+    assert booking.status == "expired"
+    assert [item.channel for item in session.added] == ["in_app", "email"]
+
+
+def test_staff_review_of_expired_booking_commits_expired_status_and_notifies_patient():
+    """A late staff action soft-expires the booking instead of rolling back."""
+    session = FakeSession()
+    repository = FakeBookingRepository(make_schedule(), SimpleNamespace(id=uuid4()), active_count=0)
+    booking = SimpleNamespace(
+        id=uuid4(),
+        user_id=uuid4(),
+        status="pending_approval",
+        expired_at=datetime.now(UTC) - timedelta(minutes=1),
+        staff_note=None,
+    )
+    repository.staff_booking = booking
+    service = BookingService(session)
+    service.bookings = repository
+
+    with pytest.raises(ConflictError, match="deadline has passed"):
+        asyncio.run(
+            service.review(
+                booking.id,
+                uuid4(),
+                StaffBookingStatusUpdate(status="confirmed"),
+            )
+        )
+
     assert booking.status == "expired"
     assert [item.channel for item in session.added] == ["in_app", "email"]
 

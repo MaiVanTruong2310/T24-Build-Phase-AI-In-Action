@@ -1,4 +1,4 @@
-"""Add delivery metadata used by the independent notification worker."""
+"""Add delivery metadata used by the independent notification consumer."""
 
 from typing import Sequence, Union
 
@@ -30,7 +30,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove worker delivery metadata."""
+    """Remove consumer delivery metadata."""
     op.drop_index("ix_notifications_delivery_queue", table_name="notifications")
     op.drop_constraint("ck_notifications_status", "notifications", type_="check")
     op.create_check_constraint(

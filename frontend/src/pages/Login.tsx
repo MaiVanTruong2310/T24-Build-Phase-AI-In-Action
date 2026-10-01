@@ -6,7 +6,6 @@ import { loginUser } from '../features/auth/authSlice'
 import {
   Eye,
   EyeOff,
-  ShieldCheck,
   User,
   ArrowRight,
   Loader2,

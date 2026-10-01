@@ -134,7 +134,7 @@ class BookingService:
             reason=reason.strip(),
             patient_note=patient_note.strip() if patient_note else None,
             status="confirmed",
-            expired_at=schedule.starts_at,
+            expired_at=self._approval_expiry(datetime.now(UTC)),
             reviewed_by=actor_id,
             reviewed_at=datetime.now(UTC),
         )
@@ -368,6 +368,7 @@ class BookingService:
             booking.staff_note = None
             booking.reviewed_by = None
             booking.reviewed_at = None
+            await self.notifications.create_for_booking_request(booking, cycle="rescheduled")
             self.session.add(
                 CatalogAuditEvent(
                     actor_id=user_id,
@@ -408,6 +409,7 @@ class BookingService:
 
     async def review(self, booking_id: UUID, actor_id: UUID, request: StaffBookingStatusUpdate) -> Booking:
         """Approve or reject a booking exactly once as staff."""
+        expired = False
         async with self.session.begin():
             booking = await self.bookings.get_for_staff(booking_id, for_update=True)
             if booking is None:
@@ -416,12 +418,13 @@ class BookingService:
                 raise ConflictError("BOOKING_ALREADY_REVIEWED", "Only pending bookings can be reviewed")
             if booking.expired_at <= datetime.now(UTC):
                 booking.status = "expired"
+                await self.notifications.create_for_booking_expired(booking)
                 await self.session.flush()
-                raise ConflictError("BOOKING_EXPIRED", "Booking approval deadline has passed")
-            if request.status == "rejected" and not request.note:
+                expired = True
+            if not expired and request.status == "rejected" and not request.note:
                 raise ConflictError("REJECTION_NOTE_REQUIRED", "A rejection reason is required")
             created_schedule = False
-            if request.status == "confirmed" and booking.schedule_id is None:
+            if not expired and request.status == "confirmed" and booking.schedule_id is None:
                 blocking_finder = getattr(self.bookings, "find_blocking_schedule", None)
                 blocking = await blocking_finder(
                     doctor_id=booking.doctor_id,
@@ -461,7 +464,7 @@ class BookingService:
                         payload={"booking_id": str(booking.id)},
                     )
                 )
-            if request.status == "confirmed" and booking.schedule_id is not None:
+            if not expired and request.status == "confirmed" and booking.schedule_id is not None:
                 schedule = await self.bookings.get_schedule_for_update(booking.schedule_id)
                 if schedule is None:
                     raise ConflictError("SCHEDULE_UNAVAILABLE", "Schedule is not available")
@@ -475,12 +478,15 @@ class BookingService:
                     raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
                 if booking.service.booking_mode == "group" and active_count >= schedule.capacity:
                     raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
-            booking.status = request.status
-            booking.staff_note = request.note
-            booking.reviewed_by = actor_id
-            booking.reviewed_at = datetime.now(UTC)
-            await self.notifications.create_for_booking_review(booking, request.status)
-            await self.session.flush()
+            if not expired:
+                booking.status = request.status
+                booking.staff_note = request.note
+                booking.reviewed_by = actor_id
+                booking.reviewed_at = datetime.now(UTC)
+                await self.notifications.create_for_booking_review(booking, request.status)
+                await self.session.flush()
+        if expired:
+            raise ConflictError("BOOKING_EXPIRED", "Booking approval deadline has passed")
         logger.info(
             "BookingService.review booking reviewed",
             extra={"booking_id": str(booking_id), "status": request.status, "actor_id": str(actor_id)},

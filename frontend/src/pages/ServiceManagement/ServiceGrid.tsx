@@ -46,7 +46,7 @@ export function ServiceGrid({ services }: Props) {
               </div>
               <div className="text-right">
                 <p className="text-xs text-slate-500 flex items-center gap-1 justify-end"><Clock size={12} /> Dự kiến: {service.duration_minutes} phút</p>
-                <p className="text-xs font-semibold text-teal-600 mt-1">{service.features?.length || 5} Danh mục kỹ thuật</p>
+                {service.features && <p className="text-xs font-semibold text-teal-600 mt-1">{service.features.length} Danh mục kỹ thuật</p>}
               </div>
             </div>
             
@@ -60,19 +60,21 @@ export function ServiceGrid({ services }: Props) {
                   </li>
                 ))}
               </ul>
-              <p className="text-xs font-semibold text-sky-600 mt-3 cursor-pointer hover:underline flex items-center gap-1">
-                Xem thêm 14 hạng mục <ArrowRight size={12} />
-              </p>
+              {service.features && service.features.length > 0 && (
+                <p className="text-xs font-semibold text-sky-600 mt-3 cursor-pointer hover:underline flex items-center gap-1">
+                  Xem thêm <ArrowRight size={12} />
+                </p>
+              )}
             </div>
             
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg mb-5 text-xs font-semibold">
               <div className="flex items-center gap-1 text-slate-700">
                 <UserCircle size={16} className="text-slate-400" />
-                Lượt đã khám: <span className="text-slate-900">{service.patient_count?.toLocaleString() || 0} bệnh nhân</span>
+                Lượt đã khám: <span className="text-slate-900">{service.patient_count?.toLocaleString() ?? 'Chưa cập nhật'}{service.patient_count !== null && ' bệnh nhân'}</span>
               </div>
               <div className="flex items-center gap-1 text-sky-600">
                 <Star size={14} className="fill-sky-600" />
-                {service.satisfaction_rate || 100}% hài lòng
+                {service.satisfaction_rate !== null ? `${service.satisfaction_rate}% hài lòng` : 'Chưa cập nhật'}
               </div>
             </div>
             

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Database
     database_url: str = ""
     # Schema changes are managed by Alembic. Keep ORM bootstrap opt-in so
-    # multiple API/worker processes cannot race while creating tables.
+    # multiple API processes cannot race while creating tables.
     database_auto_create: bool = False
     booking_maintenance_interval_seconds: int = Field(default=60, ge=5, le=3600)
     appointment_reminder_lead_days: int = Field(default=2, ge=1, le=30)
@@ -59,8 +59,7 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = "localhost:9092"
     notification_topic: str = "notifications.v1"
     notification_dead_letter_topic: str = "notifications.dead-letter.v1"
-    notification_consumer_group: str = "notification-worker"
-    notification_poll_interval_seconds: float = Field(default=2.0, gt=0.1, le=60.0)
+    notification_consumer_group: str = "notification-consumer"
     notification_processing_timeout_seconds: int = Field(default=300, ge=30, le=86400)
     notification_max_attempts: int = Field(default=5, ge=1, le=20)
     notification_retry_backoff_seconds: int = Field(default=5, ge=1, le=3600)

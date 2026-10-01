@@ -121,7 +121,7 @@ class NotificationService:
     ) -> None:
         """Stage the two patient delivery channels for one business event."""
         available = available_at or datetime.now(UTC)
-        for channel, provider in (("in_app", "database"), ("email", "gmail")):
+        for channel, provider in (("in_app", "database"), ("email", "gmail_smtp")):
             await self.notifications.add(
                 Notification(
                     user_id=booking.user_id,
