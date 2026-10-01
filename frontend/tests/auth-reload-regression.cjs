@@ -31,6 +31,7 @@ async function main(){
     const slice=load('frontend/src/features/auth/authSlice.ts',{'@reduxjs/toolkit':toolkit,'../../app/apiClient':x.api,'./session':x.session},x.env);
     const fresh=toolkit.configureStore({reducer:{auth:slice.default}});
     await fresh.dispatch(slice.initializeAuth());
+    assert.equal(calls,2);
     assert.equal(fresh.getState().auth.user.id,profile.id);
     assert(!x.env.storage.getItem('access_token') && !x.env.storage.getItem('refresh_token'));
     assert(!('token' in fresh.getState().auth.user));
