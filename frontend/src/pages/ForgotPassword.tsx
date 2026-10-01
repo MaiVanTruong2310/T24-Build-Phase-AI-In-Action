@@ -61,24 +61,24 @@ export function ForgotPassword() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 text-center">
-        <div className="w-16 h-16 bg-sky-50 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Lock className="w-8 h-8 text-sky-600" />
+      <div className="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-xl dark:shadow-2xl p-6 sm:p-8 text-center text-slate-900 dark:text-slate-100 transition-colors duration-300">
+        <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Lock className="w-8 h-8 text-blue-600 dark:text-blue-400" />
         </div>
         
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Khôi phục mật khẩu</h2>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">Khôi phục mật khẩu</h2>
         {step === 1 ? (
-          <p className="text-sm text-slate-500 mb-8 leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
             Vui lòng nhập số điện thoại hoặc email đã đăng ký. Chúng tôi sẽ gửi mã xác thực (OTP) để bạn đặt lại mật khẩu mới.
           </p>
         ) : (
-          <p className="text-sm text-slate-500 mb-8 leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
             Mã OTP đã được gửi đến <strong>{username}</strong>. Vui lòng nhập mã xác thực và mật khẩu mới.
           </p>
         )}
 
         {(validationError || error) && (
-          <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600 flex items-start gap-2">
+          <div className="mb-6 p-3 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-500/40 rounded-xl text-xs sm:text-sm text-red-700 dark:text-red-300 flex items-start gap-2 text-left">
             <div className="mt-0.5">⚠️</div>
             <p>{validationError || error}</p>
           </div>
@@ -87,7 +87,7 @@ export function ForgotPassword() {
         {step === 1 ? (
           <form onSubmit={handleSubmitStep1} className="space-y-6">
           <div className="space-y-1.5 text-left">
-            <label className="text-sm font-semibold text-slate-900 block" htmlFor="username">
+            <label className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 block" htmlFor="username">
               Số điện thoại hoặc Email
             </label>
             <input
@@ -96,7 +96,7 @@ export function ForgotPassword() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Nhập thông tin"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm placeholder:text-slate-400 bg-white"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-950/60 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-cyan-500/60 transition-all"
               disabled={loading}
             />
           </div>
@@ -104,13 +104,13 @@ export function ForgotPassword() {
           <button
             type="submit"
             disabled={loading || !username}
-            className="w-full bg-sky-700 hover:bg-sky-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+            className="btn-clinical-primary w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 text-sm"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
-                Gửi mã xác thực
+                <span>Gửi mã xác thực</span>
                 <ArrowRight className="w-5 h-5" />
               </>
             )}
@@ -119,7 +119,7 @@ export function ForgotPassword() {
         ) : (
         <form onSubmit={handleSubmitStep2} className="space-y-5">
           <div className="space-y-1.5 text-left">
-            <label className="text-sm font-semibold text-slate-900 block" htmlFor="otpCode">
+            <label className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 block" htmlFor="otpCode">
               Mã xác thực (OTP)
             </label>
             <input
@@ -129,13 +129,13 @@ export function ForgotPassword() {
               value={otpCode}
               onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
               placeholder="Nhập 6 chữ số"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm placeholder:text-slate-400 bg-white text-center tracking-widest font-mono text-lg"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-950/60 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-cyan-500/60 transition-all text-center tracking-[0.5em] font-mono font-bold text-lg"
               disabled={loading}
             />
           </div>
 
           <div className="space-y-1.5 text-left">
-            <label className="text-sm font-semibold text-slate-900 block" htmlFor="newPassword">
+            <label className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 block" htmlFor="newPassword">
               Mật khẩu mới
             </label>
             <div className="relative">
@@ -145,16 +145,16 @@ export function ForgotPassword() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Nhập 8 đến 128 ký tự"
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm placeholder:text-slate-400 bg-white"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-950/60 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-cyan-500/60 transition-all"
                 disabled={loading}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
                 tabIndex={-1}
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -162,7 +162,7 @@ export function ForgotPassword() {
           <button
             type="submit"
             disabled={loading || !otpCode || !newPassword}
-            className="w-full bg-sky-700 hover:bg-sky-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 mt-4"
+            className="btn-clinical-primary w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 text-sm mt-4"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -173,8 +173,8 @@ export function ForgotPassword() {
         </form>
         )}
 
-        <div className="mt-8 text-sm">
-          <Link to="/login" className="font-semibold text-sky-600 hover:text-sky-700">
+        <div className="mt-8 text-xs sm:text-sm">
+          <Link to="/login" className="font-semibold text-blue-600 dark:text-cyan-400 hover:text-blue-700 dark:hover:text-cyan-300">
             Quay lại đăng nhập
           </Link>
         </div>
