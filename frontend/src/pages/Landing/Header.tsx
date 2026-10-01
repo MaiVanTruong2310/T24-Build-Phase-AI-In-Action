@@ -48,7 +48,7 @@ export function Header() {
             <img
               src="/vcare-logo.png"
               alt="VCare+ Logo"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 shadow-xs shrink-0 p-0.5"
+              className="w-10 h-10 rounded-xl object-contain bg-white shadow-xs ring-1 ring-slate-900/5 dark:ring-white/20 p-0.5 shrink-0 transition-transform duration-200 hover:scale-105"
             />
             <div className="leading-tight">
               <div className="flex items-center gap-1.5 sm:gap-2">
@@ -80,15 +80,6 @@ export function Header() {
         <div className="flex items-center gap-3 sm:border-l border-slate-200 sm:pl-4">
           <NotificationBell enabled={Boolean(user)} />
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* HITL Doctor Safety Badge (Desktop & Tablet) */}
-            <div className="hidden md:flex items-center gap-2 border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-3 py-1 text-xs font-medium rounded-xl">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-
-            </div>
 
             {/* Theme Toggle Button (Light / Dark) */}
             <ThemeToggle />
@@ -153,8 +144,8 @@ export function Header() {
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) => `text-xs sm:text-sm font-medium px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 transition-all ${isActive
-                    ? 'bg-blue-600/10 dark:bg-blue-600/20 text-blue-700 dark:text-cyan-300 border border-blue-500/30'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40'
+                  ? 'bg-blue-600/10 dark:bg-blue-600/20 text-blue-700 dark:text-cyan-300 border border-blue-500/30'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40'
                   }`}
               >
                 {item.icon && <item.icon className="w-3.5 h-3.5" />}
@@ -195,8 +186,8 @@ export function Header() {
                 end={item.end}
                 onClick={() => setMobileMenuOpen(false)}
                 className={({ isActive }) => `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
               >
                 {item.icon ? <item.icon className="w-4 h-4 shrink-0" /> : <div className="w-4 h-4 flex items-center justify-center font-bold text-xs">•</div>}

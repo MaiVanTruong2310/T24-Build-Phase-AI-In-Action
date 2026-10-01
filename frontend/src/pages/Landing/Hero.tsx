@@ -28,6 +28,19 @@ export function Hero() {
         {/* Left Column: Clinical Value Proposition */}
         <div className="lg:col-span-7 reveal-item">
 
+          {/* Clinical Authority Badge */}
+          <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white/85 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 shadow-xs mb-5 sm:mb-6 backdrop-blur-md">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 motion-reduce:hidden" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Hệ Thống Y Tế Số Đa Tầng Bác Sĩ Giám Sát 24/7
+            </span>
+            <span className="font-mono text-[9px] text-blue-700 dark:text-cyan-400 bg-blue-50 dark:bg-cyan-950/60 border border-blue-500/20 dark:border-cyan-500/30 px-1.5 py-0.5 rounded font-medium">
+              CLINICAL AI
+            </span>
+          </div>
 
           {/* Heading */}
           <h1 className="text-2xl sm:text-4xl lg:text-5xl font-semibold leading-tight mb-4 sm:mb-6 tracking-tight text-slate-900 dark:text-slate-100">
@@ -43,7 +56,7 @@ export function Hero() {
           </p>
 
           {/* 2 Rounded-xl Action Buttons (10-12px) */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-7 sm:mb-9">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-7 sm:mb-8">
             <Link
               to="/patient"
               className="btn-clinical-primary px-6 sm:px-7 py-3 sm:py-3.5 rounded-xl flex items-center justify-center gap-2.5 text-sm sm:text-base"
@@ -62,21 +75,24 @@ export function Hero() {
           </div>
 
           {/* Brand Guarantee Bar with VCare+ Logo */}
-          <div className="flex items-center gap-4 border-t border-slate-200 dark:border-slate-800/80 pt-5 sm:pt-6">
+          <div className="pt-6 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-slate-50/70 dark:bg-slate-900/50 p-4 sm:p-4.5 rounded-2xl border border-slate-200/70 dark:border-slate-800/70 shadow-xs backdrop-blur-xs">
             <img
               src="/vcare-logo.png"
               alt="VCare+ Logo"
-              className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-md shrink-0 p-1"
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-contain bg-white shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 shrink-0 p-1"
             />
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100">
-                <span>VCare+ — Hệ Thống Y Tế Số Đa Tầng</span>
-                <span className="font-mono text-[9px] text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
-                  EST. 2026
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                  VCare+ Health System
                 </span>
+                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  Chuẩn Bộ Y Tế & HIPAA
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">EST. 2026</span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">
-                Sản phẩm công nghệ y tế phục vụ người Việt, kết hợp AI phân luồng lâm sàng và đội ngũ bác sĩ chuyên khoa bảo chứng y lệnh 24/7.
+                Sản phẩm công nghệ y tế phục vụ người Việt, kết hợp AI phân luồng lâm sàng chuẩn quốc tế ATS và hội đồng bác sĩ chuyên khoa bảo chứng y lệnh 24/7.
               </p>
             </div>
           </div>

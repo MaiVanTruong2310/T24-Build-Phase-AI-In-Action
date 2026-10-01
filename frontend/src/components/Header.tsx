@@ -10,7 +10,7 @@ export const Header = memo(function Header() {
         <img
           src="/vcare-logo.png"
           alt="VCare+ Logo"
-          className="w-10 h-10 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 shadow-xs shrink-0 p-0.5"
+          className="w-10 h-10 rounded-xl object-contain bg-white shadow-xs ring-1 ring-slate-900/5 dark:ring-white/20 p-0.5 shrink-0 transition-transform duration-200 hover:scale-105"
         />
         <div>
           <div className="flex items-center gap-2">
