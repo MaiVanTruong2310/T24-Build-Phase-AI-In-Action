@@ -15,7 +15,7 @@ export const ProfileFooter = memo(function ProfileFooter() {
           <div className="flex h-6 w-6 items-center justify-center rounded bg-[#0e7490]/10 text-[#0e7490]">
             <Stethoscope className="h-3.5 w-3.5" />
           </div>
-          <span className="font-bold text-slate-600">MediCare AI</span>
+          <span className="font-bold text-slate-600">VCare+</span>
           <span className="hidden text-slate-300 sm:inline">|</span>
           <span className="hidden text-[11px] sm:inline">
             Hệ Thống Khám Bệnh Dự Tổng Đài 50 Cửa Sổ
@@ -25,7 +25,7 @@ export const ProfileFooter = memo(function ProfileFooter() {
         {/* Right: Compliance + actions */}
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
           <span>
-            © 2024 MediCare AI Health System. Chuẩn an toàn dữ liệu y tế
+            © 2024 VCare+ Health System. Chuẩn an toàn dữ liệu y tế
             ISO/IEC 27001 & HIPAA.
           </span>
           <div className="flex items-center gap-2">

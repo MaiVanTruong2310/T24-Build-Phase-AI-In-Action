@@ -2,7 +2,7 @@ import type { ConsultationData } from './types';
 
 export const mockConsultationData: ConsultationData = {
   assessmentTitle: 'Hồ sơ Khám & Hội chẩn Bác sĩ Hôm nay',
-  lastUpdated: 'Cập nhật lúc 10:15 AM bởi Hội đồng HITL MediCare',
+  lastUpdated: 'Cập nhật lúc 10:15 AM bởi Hội đồng HITL VCare+',
   statusText: 'Tình trạng: Cần thăm khám sớm trong ngày',
   symptoms: {
     title: 'Triệu chứng ghi nhận qua AI Triage:',
@@ -50,7 +50,7 @@ export const mockConsultationData: ConsultationData = {
       'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=200',
     specialty: 'Khoa Tim Mạch Can Thiệp',
     timeSlot: '14:30 Hôm nay (25/10/2024)',
-    location: 'P.302, MediCare Tân Bình',
+    location: 'P.302, VCare+ Tân Bình',
     serviceType: 'Khám lâm sàng trực tiếp',
     fee: '450.000 đ',
     insuranceNote: '(Có BHYT)',

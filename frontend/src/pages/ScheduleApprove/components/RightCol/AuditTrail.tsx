@@ -4,7 +4,7 @@ export function AuditTrail() {
   const events = [
     {
       time: "10:14:22",
-      actor: "MediCare AI Agent",
+      actor: "VCare+ Agent",
       action: "Tiếp nhận triệu chứng đau tức ngực qua chat, khởi tạo hồ sơ và đề xuất chuyên khoa Tim mạch.",
       icon: <Bot size={14} className="text-sky-600" />,
       bg: "bg-sky-100"

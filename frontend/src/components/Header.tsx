@@ -12,7 +12,7 @@ export const Header = memo(function Header() {
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">MediCare AI</span>
+            <span className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">VCare+</span>
             <span className="font-mono text-[10px] text-blue-700 dark:text-cyan-400 border border-blue-500/30 dark:border-cyan-500/30 bg-blue-50 dark:bg-cyan-950/40 px-1.5 py-0.5 rounded">
               CLINICAL
             </span>

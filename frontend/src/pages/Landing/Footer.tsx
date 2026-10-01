@@ -14,7 +14,7 @@ export function Footer() {
                 <Stethoscope className="w-5 h-5" strokeWidth={2.2} />
               </div>
               <div className="leading-tight">
-                <span className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">MediCare AI</span>
+                <span className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">VCare+</span>
                 <p className="text-[10px] text-blue-700 dark:text-cyan-400 font-mono">CLINICAL HEALTH SYSTEM</p>
               </div>
             </div>
@@ -81,7 +81,7 @@ export function Footer() {
         </div>
         
         <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-slate-200 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 gap-4">
-          <p>© 2026 MediCare AI Health System. Giấy phép hoạt động khám chữa bệnh số 482/BYT-GPHĐ.</p>
+          <p>© 2026 VCare+ Health System. Giấy phép hoạt động khám chữa bệnh số 482/BYT-GPHĐ.</p>
           <div className="flex items-center gap-4 flex-wrap">
             <span className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer">Điều khoản sử dụng y tế</span>
             <span className="w-1 h-1 bg-slate-400 dark:bg-slate-600 rounded-full"></span>

@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'MediCare AI',
-        short_name: 'MediCare AI',
+        name: 'VCare+',
+        short_name: 'VCare+',
         description: 'Hệ thống y tế số đa tầng bác sĩ giám sát',
         theme_color: '#0284c7',
         background_color: '#f8fafc',

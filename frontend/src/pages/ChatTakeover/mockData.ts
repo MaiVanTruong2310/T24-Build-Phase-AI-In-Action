@@ -70,7 +70,7 @@ export const MOCK_PATIENTS: PatientQueueItem[] = [
       {
         id: 'msg-2',
         sender: 'ai',
-        senderName: 'MediCare AI (MedPaLM Clinical Engine)',
+        senderName: 'VCare+ (MedPaLM Clinical Engine)',
         time: '08:42:15',
         badge: 'Tự động sàng lọc',
         content:

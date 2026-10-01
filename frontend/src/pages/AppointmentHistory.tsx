@@ -43,7 +43,7 @@ export default function AppointmentHistory() {
     <section className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <p className="text-sm font-semibold text-sky-600">MediCare AI</p>
+          <p className="text-sm font-semibold text-sky-600">VCare+</p>
           <h1 className="mt-1 text-3xl font-bold text-slate-900">Lịch hẹn của tôi</h1>
           <p className="mt-2 text-sm text-slate-600">Theo dõi các lịch khám đã xác nhận và đã huỷ.</p>
         </div>

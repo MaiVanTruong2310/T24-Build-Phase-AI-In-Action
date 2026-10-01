@@ -3,7 +3,7 @@ import authReducer from '../features/auth/authSlice'
 
 const getInitialTheme = (): 'dark' | 'light' => {
   if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('medicare_theme')
+    const saved = localStorage.getItem('vcare_theme') || localStorage.getItem('medicare_theme')
     if (saved === 'light' || saved === 'dark') {
       return saved
     }

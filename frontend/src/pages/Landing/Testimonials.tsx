@@ -11,7 +11,7 @@ export function Testimonials() {
       img: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150'
     },
     {
-      text: 'Trước đây mỗi lần đi khám phải mất cả buổi sáng xếp hàng lấy số. Nay có MediCare AI, tôi chia sẻ triệu chứng trước, đến bệnh viện là vào thẳng phòng bác sĩ chuyên khoa đúng giờ hẹn, toa thuốc gửi thẳng về điện thoại.',
+      text: 'Trước đây mỗi lần đi khám phải mất cả buổi sáng xếp hàng lấy số. Nay có VCare+, tôi chia sẻ triệu chứng trước, đến bệnh viện là vào thẳng phòng bác sĩ chuyên khoa đúng giờ hẹn, toa thuốc gửi thẳng về điện thoại.',
       name: 'Phạm Thu Hương',
       desc: '38 tuổi, TP. Hồ Chí Minh',
       condition: 'Khám Nội Tim Mạch & Huyết Áp',

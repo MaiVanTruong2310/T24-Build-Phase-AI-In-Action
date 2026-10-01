@@ -52,7 +52,7 @@ export function StaffLayout() {
               <span className="text-white font-bold text-xl leading-none">+</span>
             </div>
             <div>
-              <h1 className="text-xl font-extrabold text-sky-800 leading-none mb-1">MediCare AI</h1>
+              <h1 className="text-xl font-extrabold text-sky-800 leading-none mb-1">VCare+</h1>
               <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider leading-none">Hệ Thống Quản Trị Y Tế</p>
             </div>
           </div>

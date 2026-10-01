@@ -30,7 +30,7 @@ export function CTA() {
         </h2>
 
         <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base mb-10 max-w-2xl mx-auto leading-relaxed">
-          Bắt đầu sàng lọc triệu chứng lâm sàng cùng MediCare AI và nhận phác đồ được phê duyệt bởi các bác sĩ chuyên khoa ngay hôm nay. Hoàn toàn bảo mật theo chuẩn y tế quốc tế.
+          Bắt đầu sàng lọc triệu chứng lâm sàng cùng VCare+ và nhận phác đồ được phê duyệt bởi các bác sĩ chuyên khoa ngay hôm nay. Hoàn toàn bảo mật theo chuẩn y tế quốc tế.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">

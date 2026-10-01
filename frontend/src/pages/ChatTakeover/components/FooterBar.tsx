@@ -14,7 +14,7 @@ export function FooterBar({
       <div className="flex items-center gap-2">
         <ShieldCheck size={15} className="text-teal-600 shrink-0" />
         <span>
-          MediCare AI Clinical HITL Management System - Chuẩn HIPAA & Bộ Y Tế. Hệ thống tự động ghi nhật ký can thiệp y khoa.
+          VCare+ Clinical HITL Management System - Chuẩn HIPAA & Bộ Y Tế. Hệ thống tự động ghi nhật ký can thiệp y khoa.
         </span>
       </div>
 

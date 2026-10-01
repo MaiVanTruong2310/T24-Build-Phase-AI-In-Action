@@ -41,7 +41,7 @@ export default memo(function PatientConsultationPage() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/70 border border-blue-200/60 dark:border-cyan-500/30 px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-blue-700 dark:text-cyan-300">
-                  <Activity className="h-3 w-3" /> Medicare AI · Phân Tầng Y Khoa
+                  <Activity className="h-3 w-3" /> VCare+ · Phân Tầng Y Khoa
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />

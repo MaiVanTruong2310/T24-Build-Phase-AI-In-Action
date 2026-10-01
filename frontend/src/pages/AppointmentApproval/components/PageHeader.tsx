@@ -21,7 +21,7 @@ export function PageHeader({ counts, isRefreshing, onRefresh }: PageHeaderProps)
               Duyệt Lịch Hẹn Khám Bệnh
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              HITL Coordinator — Phê duyệt & điều phối lịch hẹn bệnh nhân trong hệ thống MediCare AI
+              HITL Coordinator — Phê duyệt & điều phối lịch hẹn bệnh nhân trong hệ thống VCare+
             </p>
           </div>
         </div>

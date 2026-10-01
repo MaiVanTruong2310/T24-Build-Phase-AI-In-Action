@@ -12,7 +12,7 @@ interface WelcomeHeaderProps {
 export function WelcomeHeader({
   doctorName = 'BS. Nguyễn Phương Linh',
   shiftTime = 'Ca Sáng: 07:30 - 15:30',
-  facilityLocation = 'MediCare Sài Gòn (Khu Vực Đa Khoa Kỹ Thuật Cao)',
+  facilityLocation = 'VCare+ Sài Gòn (Khu Vực Đa Khoa Kỹ Thuật Cao)',
   onExportReport,
   onTriggerAlarm,
 }: WelcomeHeaderProps) {

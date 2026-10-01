@@ -81,7 +81,7 @@ export const MOCK_URGENT_CASES: UrgentCaseItem[] = [
     priorityBadge: 'AI CONFIDENCE 61%',
     priorityType: 'low_confidence',
     alertText: 'AI không đủ độ tin cậy phân biệt giữa trào ngược dạ dày thực quản & cơn đau co thắt mạch vành',
-    sourceText: 'Bệnh nhân đang trực tiếp trò chuyện trên cổng MediCare App • 12 phút trước',
+    sourceText: 'Bệnh nhân đang trực tiếp trò chuyện trên cổng VCare+ App • 12 phút trước',
     actionLabel: 'Tiếp quản Chat',
     actionLink: '/staff/chat',
     actionType: 'takeover',

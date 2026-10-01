@@ -22,7 +22,7 @@ export function PermissionsSection({ form, onChange }: Props) {
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900">4. Phân quyền Hệ thống & Duyệt Y lệnh AI (HITL Protocol)</h2>
-            <p className="text-xs text-slate-500">Quy định thẩm quyền pháp lý đối với các gợi ý phác đồ từ trợ lý AI MediCare</p>
+            <p className="text-xs text-slate-500">Quy định thẩm quyền pháp lý đối với các gợi ý phác đồ từ trợ lý AI VCare+</p>
           </div>
         </div>
         <span className="px-2 py-1 bg-teal-100 text-teal-700 text-xs font-bold rounded">Bảo mật cấp 4</span>
@@ -133,7 +133,7 @@ export function PermissionsSection({ form, onChange }: Props) {
           />
           <div>
             <p className="text-sm font-bold text-slate-900">Kích hoạt chế độ sẵn sàng tham gia kíp can thiệp cấp cứu khẩn cấp (Emergency Code Red)</p>
-            <p className="text-xs text-slate-500 mt-0.5">Nhận cuộc gọi khẩn và báo động y khoa ưu tiên qua vòng đeo tay y tế MediCare IoT</p>
+            <p className="text-xs text-slate-500 mt-0.5">Nhận cuộc gọi khẩn và báo động y khoa ưu tiên qua vòng đeo tay y tế VCare+ IoT</p>
           </div>
         </label>
       </div>

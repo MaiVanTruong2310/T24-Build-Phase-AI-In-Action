@@ -11,7 +11,7 @@ const CHECKLIST_TASKS = [
   { id: 'gps', title: 'Đã xác nhận định vị GPS', desc: 'Tòa The Sun, Cầu Giấy' },
   { id: 'an', title: 'Đã đàm thoại trấn an BN', desc: 'Hướng dẫn nằm nghỉ ngơi' },
   { id: '115', title: 'Đã điều xe Cấp cứu 115', desc: 'Mã kíp trực: 115-HN-04' },
-  { id: 'cath', title: 'Kích hoạt Cathlab Can thiệp', desc: 'Phòng DSA số 2 - BV MediCare' },
+  { id: 'cath', title: 'Kích hoạt Cathlab Can thiệp', desc: 'Phòng DSA số 2 - BV VCare+' },
 ];
 
 export default function EmergencyCoordinator() {

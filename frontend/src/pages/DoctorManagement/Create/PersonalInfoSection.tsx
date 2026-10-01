@@ -129,14 +129,14 @@ export function PersonalInfoSection({ form, errors, onChange }: Props) {
 
         {/* Email */}
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1.5">Email bệnh viện MediCare <span className="text-rose-500">*</span></label>
+          <label className="block text-sm font-semibold text-slate-900 mb-1.5">Email bệnh viện VCare+ <span className="text-rose-500">*</span></label>
           <div className="relative">
             <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="email" 
               value={form.email}
               onChange={(e) => onChange('email', e.target.value)}
-              placeholder="nam.nguyenhoang@medicare.vn"
+              placeholder="nam.nguyenhoang@vcare.vn"
               className={`w-full pl-10 pr-4 py-2 bg-slate-50 border ${errors.email ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200'} rounded-lg text-sm focus:outline-none focus:border-sky-500 focus:bg-white`}
             />
           </div>

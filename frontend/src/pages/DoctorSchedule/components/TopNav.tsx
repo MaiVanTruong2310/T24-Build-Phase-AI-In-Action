@@ -11,7 +11,7 @@ export const TopNav = () => (
             <span className="text-white font-bold text-xl leading-none">+</span>
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-sky-800 leading-none mb-1">MediCare AI <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full ml-2 align-middle">CLINICAL PORTAL</span></h1>
+            <h1 className="text-xl font-extrabold text-sky-800 leading-none mb-1">VCare+ <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full ml-2 align-middle">CLINICAL PORTAL</span></h1>
             <p className="text-[11px] text-slate-500 font-medium">HITL Coordinator - Phòng Khám Đa Tầng Bác Sĩ Giám Sát</p>
           </div>
         </div>

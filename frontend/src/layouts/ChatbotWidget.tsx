@@ -51,7 +51,7 @@ const DEFAULT_QUICK_REPLIES = [
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   sender: 'bot',
-  text: 'Kính chào Quý bệnh nhân! Em là Trợ lý Y tế Lâm sàng P-124 thuộc hệ thống Medicare AI, hoạt động dưới sự giám sát trực tiếp 24/7 của Bác sĩ trực ban.\n\nBác vui lòng mô tả các triệu chứng hiện tại (vị trí đau, thời gian xuất hiện, mức độ khó chịu) để em hỗ trợ phân tầng mức ưu tiên và kết nối chuyên khoa phù hợp.',
+  text: 'Kính chào Quý bệnh nhân! Em là Trợ lý Y tế Lâm sàng P-124 thuộc hệ thống VCare+, hoạt động dưới sự giám sát trực tiếp 24/7 của Bác sĩ trực ban.\n\nBác vui lòng mô tả các triệu chứng hiện tại (vị trí đau, thời gian xuất hiện, mức độ khó chịu) để em hỗ trợ phân tầng mức ưu tiên và kết nối chuyên khoa phù hợp.',
   time: '',
 };
 
@@ -442,7 +442,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-bold tracking-tight text-white sm:text-sm">
-                    Medicare AI · Trợ Lý Y Tế P-124
+                    VCare+ · Trợ Lý Y Tế P-124
                   </h3>
                 </div>
                 <div className="flex items-center gap-2 text-[10.5px] text-slate-300">

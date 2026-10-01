@@ -48,7 +48,7 @@ export function AppointmentDetail() {
           <div className="flex items-start gap-2">
             <Building2 size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-slate-600">
-              Phòng 304 • Tầng 3 - MediCare Tân Bình Clinic
+              Phòng 304 • Tầng 3 - VCare+ Tân Bình Clinic
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-600">

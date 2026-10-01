@@ -62,7 +62,7 @@ export function Comparison() {
             <span>ĐỐI CHIẾU TIÊU CHUẨN AN TOÀN Y KHOA</span>
           </div>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 dark:text-slate-100 mb-3 sm:mb-4 tracking-tight">
-            Sự Khác Biệt Giữa AI Đại Trà & MediCare AI (Có Bác Sĩ Giám Sát)
+            Sự Khác Biệt Giữa AI Đại Trà & VCare+ (Có Bác Sĩ Giám Sát)
           </h2>
           <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm lg:text-base max-w-2xl mx-auto leading-relaxed">
             Tại sao người bệnh không nên tự ý dùng chatbot đại trà để chẩn đoán sức khỏe? Hãy đối chiếu bảng tiêu chuẩn lâm sàng dưới đây.
@@ -75,7 +75,7 @@ export function Comparison() {
             <div className="p-5 text-slate-700 dark:text-slate-300">Tiêu Chí Lâm Sàng</div>
             <div className="p-5 text-slate-500 dark:text-slate-400 border-l border-slate-200 dark:border-slate-800/80">AI Đơn Thuần (Chatbot Đại Trà)</div>
             <div className="p-5 text-blue-700 dark:text-cyan-300 bg-blue-50/70 dark:bg-blue-950/30 border-l border-slate-200 dark:border-slate-800/80">
-              MediCare AI & Bác Sĩ Giám Sát (HITL)
+              VCare+ & Bác Sĩ Giám Sát (HITL)
             </div>
           </div>
           
@@ -139,10 +139,10 @@ export function Comparison() {
                     </p>
                   </div>
 
-                  {/* MediCare AI */}
+                  {/* VCare+ */}
                   <div className="bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/30 rounded-xl p-3">
                     <div className="text-[10px] font-semibold text-blue-700 dark:text-cyan-300 uppercase tracking-wider mb-1">
-                      MediCare AI (HITL):
+                      VCare+ (HITL):
                     </div>
                     <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mb-1">
                       <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />

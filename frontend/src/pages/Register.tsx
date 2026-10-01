@@ -164,7 +164,7 @@ export function Register() {
             <ShieldCheck className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
             Cổng Đăng Ký Y Tế Số An Toàn
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3 tracking-tight">Tạo tài khoản MediCare AI</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3 tracking-tight">Tạo tài khoản VCare+</h2>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
             Đăng ký nhanh chóng để quản lý hồ sơ sức khỏe và đặt lịch khám thông minh.
           </p>
@@ -346,7 +346,7 @@ export function Register() {
           <label className="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" className="mt-1 rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-blue-600 focus:ring-blue-500/20" />
             <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-              Tôi đồng ý với <a href="#" className="text-blue-600 dark:text-cyan-400 font-semibold hover:underline">Điều khoản dịch vụ</a> và <a href="#" className="text-blue-600 dark:text-cyan-400 font-semibold hover:underline">Chính sách bảo mật dữ liệu y tế</a> của MediCare AI.
+              Tôi đồng ý với <a href="#" className="text-blue-600 dark:text-cyan-400 font-semibold hover:underline">Điều khoản dịch vụ</a> và <a href="#" className="text-blue-600 dark:text-cyan-400 font-semibold hover:underline">Chính sách bảo mật dữ liệu y tế</a> của VCare+.
             </span>
           </label>
 

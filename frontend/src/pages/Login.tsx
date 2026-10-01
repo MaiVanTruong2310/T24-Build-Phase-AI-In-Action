@@ -59,7 +59,7 @@ export function Login() {
         {/* Form Header */}
 
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2 tracking-tight">
-          Đăng Nhập MediCare AI
+          Đăng Nhập VCare+
         </h2>
         <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
           Chào mừng quay trở lại. Đăng nhập để tiếp tục lộ trình khám bệnh đa tầng và theo dõi bệnh án.

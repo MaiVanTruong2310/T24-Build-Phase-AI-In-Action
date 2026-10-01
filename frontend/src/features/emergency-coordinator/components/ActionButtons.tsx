@@ -31,7 +31,7 @@ export const ActionButtons = memo(() => (
         <div className="text-left">
           <div className="text-xs opacity-80 uppercase tracking-wider">Phòng can thiệp tim mạch</div>
           <div className="font-bold text-lg">BÁO ĐỘNG CATHLAB ALERT</div>
-          <div className="text-xs opacity-80">Sẵn sàng kíp thông tim BV MediCare 01</div>
+          <div className="text-xs opacity-80">Sẵn sàng kíp thông tim BV VCare+ 01</div>
         </div>
       </div>
       <ArrowRight className="w-6 h-6" />

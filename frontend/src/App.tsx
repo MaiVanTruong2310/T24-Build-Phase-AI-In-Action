@@ -36,7 +36,7 @@ import StaffDashboard from './pages/StaffDashboard'
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
     <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-sky-600">MediCare AI</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-sky-600">VCare+</p>
       <h1 className="mt-2 text-2xl font-bold text-slate-900">{title}</h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
     </section>

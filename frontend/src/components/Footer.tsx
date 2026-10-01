@@ -15,7 +15,7 @@ export const Footer = memo(function Footer() {
           <span>ISO 27001 Certified</span>
         </div>
         <span className="w-1 h-1 rounded-full bg-slate-600 hidden sm:inline-block"></span>
-        <span>© 2026 MediCare AI Health System.</span>
+        <span>© 2026 VCare+ Health System.</span>
       </div>
       
       <div className="flex items-center gap-5">
