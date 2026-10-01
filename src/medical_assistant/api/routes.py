@@ -3,7 +3,12 @@ import json
 import logging
 from contextlib import suppress
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.api.dependencies import get_current_user
+from src.db.dependencies import get_auth_db_session
+from src.models.user import User
+from src.services.chat_history import ChatHistoryService, graph_thread, health_record, STATE_FIELDS
 from fastapi.responses import StreamingResponse
 
 from src.medical_assistant.agent.graph import agent
@@ -31,147 +36,132 @@ def chat_agent_input(request: ChatRequest) -> dict:
     return payload
 
 
-@router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
-    """Chat đồng bộ với AI agent có quản lý ngữ cảnh qua session_id (thread_id)."""
-    try:
-        config = {"configurable": {"thread_id": request.session_id}}
-        result = await agent.ainvoke(
-            chat_agent_input(request),
-            config=config,
-        )
+async def optional_chat_user(http_request: Request, session: AsyncSession = Depends(get_auth_db_session)):
+    header = http_request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(401, "Phiên đăng nhập không hợp lệ.")
+    return await get_current_user(token.strip(), session)
 
-        meta = result.get("metadata", {})
-        token_usage = result.get("token_usage") or meta.get("token_usage")
-        return ChatResponse(
-            response=result.get("response", ""),
-            analysis=result.get("analysis", ""),
-            session_id=request.session_id,
-            ats_level=result.get("ats_level"),
-            max_booking_days=result.get("max_booking_days"),
-            quick_replies=meta.get("quick_replies", []),
-            is_emergency=result.get("is_emergency", False),
-            token_usage=token_usage,
-            workflow_status=result.get("workflow_status"),
-            booking_intake=meta.get("booking_intake"),
-            suggested_department=result.get("suggested_department_name"),
-            candidate_specialties=result.get("candidate_specialties") or meta.get("candidate_specialties", []),
-            conflict_reason=result.get("conflict_reason") or meta.get("conflict_reason"),
-            acuity_status=result.get("acuity_status") or meta.get("acuity_status"),
-            disposition=result.get("disposition") or meta.get("disposition"),
-        )
+
+def public_result(result, session_id):
+    meta = result.get("metadata") or {}
+    payload = {key: result.get(key) for key in (
+        "ats_level", "max_booking_days", "workflow_status", "conflict_reason", "acuity_status", "disposition"
+    )}
+    payload.update(response=result.get("response", ""), analysis="", session_id=session_id,
+        is_emergency=bool(result.get("is_emergency")), token_usage=result.get("token_usage") or meta.get("token_usage"),
+        quick_replies=meta.get("quick_replies", []), booking_intake=meta.get("booking_intake"),
+        suggested_department=result.get("suggested_department_name"),
+        candidate_specialties=result.get("candidate_specialties") or meta.get("candidate_specialties", []))
+    return ChatResponse(**payload).model_dump(mode="json")
+
+
+async def prepare_turn(request, user, session):
+    service = ChatHistoryService(session)
+    turn = await service.begin_turn(user, request) if user else None
+    payload = chat_agent_input(request)
+    payload["user_id"] = str(user.id) if user else None
+    if user:
+        checkpoint = turn.get("checkpoint", {})
+        defaults = {key: None for key in STATE_FIELDS}
+        defaults.update(messages=[], symptoms=[], clinical_facts={}, collected_details=[], metadata={},
+            language="vi", probing_turn=0, active_probing_categories=[], probing_by_complaint={},
+            available_slots=[], candidate_specialties=[], routing_candidates=[], is_emergency=False, workflow_status="IDLE")
+        payload = {**defaults, **checkpoint, **payload, "error": None}
+        payload.update(patient_profile={"name":user.full_name or "", "phone":user.phone or ""},
+            patient_name=user.full_name, patient_phone=user.phone, patient_health_record=health_record(user))
+    else:
+        payload["patient_health_record"] = None
+    return payload, turn, service
+
+
+async def run_turn(request, user, payload, turn, service):
+    if turn and turn.get("cached"):
+        return turn["cached"]
+    try:
+        result = await agent.ainvoke(payload, config={"configurable":{"thread_id":graph_thread(request.session_id,user)}})
+        response = public_result(result, request.session_id)
+        if not response["response"].strip():
+            raise RuntimeError("Empty agent response")
+        if user:
+            await service.complete(turn, response, result)
+        return response
+    except BaseException:
+        if turn:
+            with suppress(Exception):
+                await service.fail(turn)
+        raise
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest, user=Depends(optional_chat_user), session: AsyncSession=Depends(get_auth_db_session)):
+    payload, turn, service = await prepare_turn(request,user,session)
+    try:
+        return await run_turn(request,user,payload,turn,service)
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("medical_assistant.chat failed")
-        raise HTTPException(status_code=500, detail="Không thể xử lý hội thoại lúc này.") from exc
+        raise HTTPException(503,"Không thể hoàn tất hoặc lưu hội thoại lúc này. Vui lòng thử lại.") from exc
 
 
 @router.post("/chat/stream")
-async def chat_stream(request: ChatRequest, http_request: Request):
-    """
-    Chat thời gian thực sử dụng Server-Sent Events (SSE).
-    - Stream token phản hồi ngay lập tức cho client.
-    - Duy trì state và conversation history theo session_id (thread_id).
-    - Truyền metadata (quick_replies, ats_level, max_booking_days, token_usage) ở cuối stream.
-    """
-
+async def chat_stream(request: ChatRequest, http_request: Request, user=Depends(optional_chat_user), session: AsyncSession=Depends(get_auth_db_session)):
+    payload, turn, service = await prepare_turn(request,user,session)
     async def event_generator():
+        task = None
         try:
-            config = {"configurable": {"thread_id": request.session_id}}
-
-            # 1. Bắn event khởi động phiên
-            yield f"data: {json.dumps({'type': 'init', 'session_id': request.session_id})}\n\n"
-
-            # 2. Thực thi Agent
-            agent_task = asyncio.create_task(
-                agent.ainvoke(
-                    chat_agent_input(request),
-                    config=config,
-                )
-            )
-            while not agent_task.done():
+            yield f"data: {json.dumps({'type':'init','session_id':request.session_id})}\n\n"
+            task = asyncio.create_task(run_turn(request,user,payload,turn,service))
+            while not task.done():
                 if await http_request.is_disconnected():
-                    agent_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await agent_task
+                    task.cancel()
+                    with suppress(asyncio.CancelledError): await task
                     return
-                try:
-                    await asyncio.wait_for(asyncio.shield(agent_task), timeout=5.0)
-                except TimeoutError:
-                    yield ": keep-alive\n\n"
-            result = await agent_task
-
-            response_text = result.get("response", "")
-            meta = result.get("metadata", {})
-            quick_replies = meta.get("quick_replies", [])
-            ats_level = result.get("ats_level")
-            max_booking_days = result.get("max_booking_days")
-            is_emergency = result.get("is_emergency", False)
-            token_usage = result.get("token_usage") or meta.get("token_usage")
-
-            # 3. Stream phản hồi dạng text chunk (giả lập streaming mượt mà cho UI)
-            # Với LLM stream trực tiếp thì event on_chat_model_stream sẽ emit từng token
-            words = response_text.split(" ")
-            for i, word in enumerate(words):
-                chunk = word + (" " if i < len(words) - 1 else "")
-                payload = json.dumps({"type": "token", "content": chunk}, ensure_ascii=False)
-                yield f"data: {payload}\n\n"
-                await asyncio.sleep(0.015)  # Hiệu ứng gõ mượt 15ms
-
-            # 4. Bắn event metadata (chuyên khoa, quick replies, ATS level, token_usage, analysis)
-            meta_payload = json.dumps(
-                {
-                    "type": "metadata",
-                    "analysis": result.get("analysis", ""),
-                    "ats_level": ats_level,
-                    "max_booking_days": max_booking_days,
-                    "is_emergency": is_emergency,
-                    "quick_replies": quick_replies,
-                    "suggested_department": result.get("suggested_department_name"),
-                    "token_usage": token_usage,
-                    "workflow_status": result.get("workflow_status"),
-                    "booking_intake": meta.get("booking_intake"),
-                    "candidate_specialties": result.get("candidate_specialties")
-                    or meta.get("candidate_specialties", []),
-                    "conflict_reason": result.get("conflict_reason") or meta.get("conflict_reason"),
-                    "acuity_status": result.get("acuity_status") or meta.get("acuity_status"),
-                    "disposition": result.get("disposition") or meta.get("disposition"),
-                },
-                ensure_ascii=False,
-            )
-            yield f"data: {meta_payload}\n\n"
-
-            # 5. Kết thúc stream chuẩn SSE
+                try: await asyncio.wait_for(asyncio.shield(task),timeout=5)
+                except TimeoutError: yield ": keep-alive\n\n"
+            result = await task
+            # The complete turn is durable before any answer is sent to the client.
+            for word in result['response'].splitlines(keepends=True):
+                yield f"data: {json.dumps({'type':'token','content':word},ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type':'metadata',**{k:v for k,v in result.items() if k not in ('response','analysis','session_id')}},ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
-
         except Exception:
             logger.exception("medical_assistant.chat_stream failed")
-            err_payload = json.dumps(
-                {"type": "error", "message": "Không thể xử lý hội thoại lúc này."},
-                ensure_ascii=False,
-            )
-            yield f"data: {err_payload}\n\n"
+            yield f"data: {json.dumps({'type':'error','message':'Không thể hoàn tất hoặc lưu hội thoại. Vui lòng thử lại.'},ensure_ascii=False)}\n\n"
+        finally:
+            if task and not task.done():
+                task.cancel()
+                with suppress(asyncio.CancelledError): await task
+            elif task is None and turn and not turn.get('cached'):
+                with suppress(Exception): await service.fail(turn)
+    return StreamingResponse(event_generator(),media_type="text/event-stream",headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Content-Type": "text/event-stream",
-            "X-Accel-Buffering": "no",  # Chống Nginx buffer làm chậm SSE
-        },
-    )
+
+@router.get("/chat/conversations")
+async def conversations(user:User=Depends(get_current_user),session:AsyncSession=Depends(get_auth_db_session),limit:int=Query(30,ge=1,le=100),offset:int=Query(0,ge=0)):
+    return await ChatHistoryService(session).list_conversations(user.id,limit,offset)
+
+
+@router.get("/chat/conversations/{session_id}")
+async def conversation_messages(session_id:str,user:User=Depends(get_current_user),session:AsyncSession=Depends(get_auth_db_session),limit:int=Query(50,ge=1,le=100),offset:int=Query(0,ge=0)):
+    return await ChatHistoryService(session).history(user.id,session_id,limit,offset)
 
 
 @router.post("/booking-requests", response_model=BookingIntakeResponse, status_code=201)
-async def create_booking_request(request: BookingIntakeRequest) -> BookingIntakeResponse:
+async def create_booking_request(request: BookingIntakeRequest, user=Depends(optional_chat_user), session:AsyncSession=Depends(get_auth_db_session)) -> BookingIntakeResponse:
     """Create a durable HITL request; never claim success before DB insertion."""
     if not request.consent_to_contact:
         raise HTTPException(status_code=422, detail="Cần đồng ý để điều phối viên liên hệ.")
 
-    config = {"configurable": {"thread_id": request.session_id}}
+    config = {"configurable": {"thread_id": graph_thread(request.session_id,user)}}
     snapshot = await agent.aget_state(config)
     state = dict(snapshot.values or {})
+    if not state and user:
+        state = await ChatHistoryService(session).checkpoint(user.id,request.session_id)
     if not state:
         raise HTTPException(
             status_code=409, detail="Phiên tư vấn không còn hiệu lực. Vui lòng trao đổi lại với trợ lý."
@@ -208,7 +198,7 @@ async def create_booking_request(request: BookingIntakeRequest) -> BookingIntake
             )
 
     context = {
-        "user_id": state.get("user_id"),
+        "user_id": str(user.id) if user else None,
         "specialty_code": state.get("suggested_department_code"),
         "specialty_name": state.get("suggested_department_name"),
         "doctor_id": chosen_doctor.get("id") if chosen_doctor else None,

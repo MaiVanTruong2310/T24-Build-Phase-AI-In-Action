@@ -1,5 +1,22 @@
 import type { ChatProfile } from './profile';
-import { fetchPublicApi } from '../../app/apiClient';
+import { fetchPublicApi, fetchWithAuth } from '../../app/apiClient';
+import { readAccessToken, readRefreshToken } from '../auth/session';
+
+function fetchChatApi(url: string, options: RequestInit = {}) {
+  return readAccessToken() || readRefreshToken() ? fetchWithAuth(url, options) : fetchPublicApi(url, options);
+}
+export interface SavedConversation { session_id: string; title: string; created_at: string; updated_at: string }
+export interface SavedChatTurn { id: string; request_id: string; user_text: string; assistant_text: string | null; result: ChatMetadata | null; status: 'completed' | 'processing' | 'failed'; created_at: string }
+export interface ConversationHistory { title: string; turns: SavedChatTurn[]; has_more: boolean }
+async function historyJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetchWithAuth(url, { signal });
+  const data = await response.json();
+  if (!response.ok) { const error = new Error(data.message || data.detail || 'Không thể tải lịch sử trò chuyện.') as Error & { status?: number }; error.status = response.status; throw error; }
+  return data;
+}
+export const getConversations = (offset = 0, signal?: AbortSignal) => historyJson<{ conversations: SavedConversation[]; has_more: boolean }>(`/chat/conversations?offset=${offset}`, signal);
+export const getConversation = (id: string, offset = 0, signal?: AbortSignal) => historyJson<ConversationHistory>(`/chat/conversations/${encodeURIComponent(id)}?offset=${offset}`, signal);
+
 
 export interface TokenUsage {
   prompt_tokens?: number;
@@ -56,6 +73,7 @@ interface ChatResponse extends ChatMetadata {
 interface StreamChatOptions {
   message: string;
   sessionId: string;
+  requestId?: string;
   signal?: AbortSignal;
   profile?: ChatProfile;
   onToken: (token: string) => void;
@@ -74,15 +92,16 @@ function parseServerEvent(rawEvent: string): string | null {
 export async function streamChat({
   message,
   sessionId,
+  requestId,
   signal,
   onToken,
   onMetadata,
   profile,
 }: StreamChatOptions): Promise<void> {
-  const response = await fetchPublicApi('/chat/stream', {
+  const response = await fetchChatApi('/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, patient_profile: profile }),
+    body: JSON.stringify({ message, session_id: sessionId, request_id: requestId, patient_profile: profile }),
     signal,
   });
 
@@ -137,11 +156,11 @@ export async function streamChat({
   }
 }
 
-export async function sendChat(message: string, sessionId: string, signal?: AbortSignal, profile?: ChatProfile): Promise<ChatResponse> {
-  const response = await fetchPublicApi('/chat', {
+export async function sendChat(message: string, sessionId: string, signal?: AbortSignal, profile?: ChatProfile, requestId?: string): Promise<ChatResponse> {
+  const response = await fetchChatApi('/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, patient_profile: profile }),
+    body: JSON.stringify({ message, session_id: sessionId, request_id: requestId, patient_profile: profile }),
     signal,
   });
   const payload = await response.json().catch(() => ({}));
@@ -170,7 +189,7 @@ export async function submitBooking(
   payload: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<{ saved: boolean; request_code: string; message: string }> {
-  const response = await fetchPublicApi(endpoint, {
+  const response = await fetchChatApi(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

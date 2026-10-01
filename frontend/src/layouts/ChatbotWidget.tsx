@@ -1,8 +1,10 @@
+import { ChatHistoryPanel } from '../features/chat/ChatHistoryPanel';
 import { ChatAccessGate } from '../features/chat/ChatAccessGate';
 import { GUEST_PROFILE_EVENT, readGuestProfile, saveGuestProfile, type ChatProfile } from '../features/chat/profile';
 import { AssistantMessage } from '../features/chat/AssistantMessage';
 import { useEffect, useRef, useState, useCallback, type FormEvent } from 'react';
 import {
+  History,
   Activity,
   AlertTriangle,
   Bot,
@@ -22,6 +24,8 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { closeChat, toggleChat, type RootState } from '../app/store';
 import {
+  getConversation,
+  type SavedChatTurn,
   checkAgentStatus,
   sendChat,
   streamChat,
@@ -65,6 +69,16 @@ function createSessionId(): string {
   const sessionId = `web-${suffix}`;
   sessionStorage.setItem('p124_chat_session_id', sessionId);
   return sessionId;
+}
+
+function savedMessages(turns: SavedChatTurn[]): Message[] {
+  return turns.flatMap(turn => {
+    const time = new Date(turn.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    return [
+      { id: `${turn.id}-user`, sender: 'user' as const, text: turn.user_text, time },
+      { id: `${turn.id}-bot`, sender: 'bot' as const, text: turn.assistant_text || 'Lượt chat chưa hoàn tất. Bạn có thể gửi lại tin nhắn.', time, error: turn.status !== 'completed', metadata: turn.result || undefined },
+    ];
+  });
 }
 
 function displayTime(): string {
@@ -275,6 +289,13 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const [isSending, setIsSending] = useState(false);
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [sessionId, setSessionId] = useState(createSessionId);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyMore, setHistoryMore] = useState(false);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyReload, setHistoryReload] = useState(0);
+  const historyRequest = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
@@ -379,6 +400,42 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     setIsSending(false);
   }, [ownerKey]);
 
+  useEffect(() => {
+    if (!authUser || !isChatOpen) { setHistoryError(''); setHistoryMore(false); setHistoryLoading(false); return; }
+    const controller = new AbortController();
+    historyRequest.current?.abort(); historyRequest.current = controller;
+    setHistoryLoading(true); setHistoryError('');
+    getConversation(sessionId, 0, controller.signal).then(data => {
+      if (controller.signal.aborted) return;
+      setMessages(data.turns.length ? savedMessages(data.turns) : [WELCOME_MESSAGE]);
+      setHistoryMore(data.has_more); setHistoryOffset(data.turns.length);
+    }).catch((error: Error & { status?: number }) => {
+      if (controller.signal.aborted) return;
+      if (error.status === 404) { setMessages([WELCOME_MESSAGE]); setHistoryMore(false); setHistoryOffset(0); }
+      else setHistoryError(error.message || 'Không thể tải lịch sử.');
+    }).finally(() => { if (!controller.signal.aborted) setHistoryLoading(false); });
+    return () => controller.abort();
+  }, [sessionId, ownerKey, authUser?.id, isChatOpen, historyReload]);
+
+  const loadOlderMessages = async () => {
+    const controller = new AbortController(); historyRequest.current?.abort(); historyRequest.current = controller;
+    setHistoryLoading(true); setHistoryError('');
+    try {
+      const data = await getConversation(sessionId, historyOffset, controller.signal);
+      if (controller.signal.aborted) return;
+      setMessages(current => [...savedMessages(data.turns), ...current.filter(message => message.id !== 'welcome')].filter((message,index,all) => all.findIndex(item => item.id === message.id) === index));
+      setHistoryMore(data.has_more); setHistoryOffset(value => value + data.turns.length);
+    } catch (error) { if (!controller.signal.aborted) setHistoryError(error instanceof Error ? error.message : 'Không thể tải lịch sử.'); }
+    finally { if (!controller.signal.aborted) setHistoryLoading(false); }
+  };
+
+  const openConversation = (id: string) => {
+    if (isSending || historyLoading) return;
+    sessionStorage.setItem('p124_chat_session_id', id); setSessionId(id);
+    setHistoryOpen(false); setMessages([WELCOME_MESSAGE]); setHistoryError(''); setInputText('');
+    if (id === sessionId) setHistoryReload(value => value + 1);
+  };
+
   const resetConversation = () => {
     activeRequest.current?.abort();
     const next = `web-${crypto.randomUUID?.() || Date.now()}`;
@@ -401,7 +458,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
   const sendMessage = async (rawText: string) => {
     const text = rawText.trim();
-    if (!text || isSending || chatLocked) return;
+    if (!text || isSending || chatLocked || historyLoading || historyError) return;
 
     const request = new AbortController();
     activeRequest.current = request;
@@ -409,6 +466,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     setInputText('');
     const stamp = Date.now();
     const botId = `bot-${stamp}`;
+    const requestId = crypto.randomUUID();
     setMessages((current) => [
       ...current,
       { id: `user-${stamp}`, sender: 'user', text, time: displayTime() },
@@ -420,6 +478,8 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
       ensureChatVisibleInPage();
     }, 40);
 
+    setHistoryOpen(false);
+    let completed = false;
     let streamedText = '';
     let receivedMetadata = false;
     const showConnectionError = () => {
@@ -437,6 +497,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     try {
       await streamChat({
         message: text,
+        requestId,
         profile: profile || undefined,
         sessionId,
         signal: request.signal,
@@ -452,6 +513,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
           updateBot(botId, { metadata });
         },
       });
+      completed = true;
       setAgentOnline(true);
       updateBot(botId, { pending: false });
       setTimeout(() => {
@@ -467,7 +529,8 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         return;
       }
       try {
-        const result = await sendChat(text, sessionId, request.signal, profile || undefined);
+        const result = await sendChat(text, sessionId, request.signal, profile || undefined, requestId);
+        completed = true;
         setAgentOnline(true);
         updateBot(botId, { text: result.response, pending: false, metadata: result });
         setTimeout(() => {
@@ -479,6 +542,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         if (!request.signal.aborted) showConnectionError();
       }
     } finally {
+      if (completed && authUser) setHistoryOffset(value => value + 1);
       if (activeRequest.current === request) {
         activeRequest.current = null;
         setIsSending(false);
@@ -550,6 +614,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
             {/* Action buttons */}
             <div className="flex items-center gap-1 text-slate-300">
+              {authUser && <button type="button" disabled={isSending || historyLoading} aria-label="Lịch sử trò chuyện" title="Lịch sử trò chuyện" onClick={() => setHistoryOpen(value => !value)} className="rounded-lg p-2 hover:bg-white/10 disabled:opacity-50"><History className="h-4 w-4" /></button>}
               <button
                 type="button"
                 onClick={resetConversation}
@@ -595,6 +660,11 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
           </div>
 
           {/* Message List */}
+          {authUser && historyOpen && <ChatHistoryPanel key={authUser.id} activeSessionId={sessionId} onSelect={openConversation} />}
+          {authUser && <p className="border-b border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800">Sử dụng hồ sơ sức khỏe của bạn · Lịch sử được lưu theo tài khoản.</p>}
+          {historyError && <p role="alert" className="px-4 py-2 text-xs text-red-600">{historyError} <button type="button" onClick={() => setHistoryReload(value => value + 1)} className="underline">Thử tải lại</button></p>}
+          {historyLoading && <p className="px-4 py-2 text-xs text-slate-500">Đang tải cuộc trò chuyện…</p>}
+          {historyMore && <button disabled={historyLoading || isSending} type="button" onClick={loadOlderMessages} className="px-4 py-2 text-xs text-blue-600">Tải tin nhắn cũ hơn</button>}
           <div
             ref={messagesContainerRef}
             onScroll={handleMessagesScroll}
@@ -706,7 +776,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                 <button
                   key={reply}
                   type="button"
-                  disabled={isSending}
+                  disabled={isSending || historyLoading || Boolean(historyError)}
                   onClick={() => {
                     void sendMessage(reply);
                     ensureChatVisibleInPage();
@@ -734,7 +804,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                   ref={inputRef}
                   type="text"
                   value={inputText}
-                  disabled={isSending}
+                  disabled={isSending || historyLoading || Boolean(historyError)}
                   onFocus={ensureChatVisibleInPage}
                   onChange={(event) => setInputText(event.target.value)}
                   placeholder="Mô tả triệu chứng, vị trí và thời gian bắt đầu…"
@@ -752,7 +822,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
               <button
                 type="submit"
-                disabled={isSending || !inputText.trim()}
+                disabled={isSending || historyLoading || Boolean(historyError) || !inputText.trim()}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md shadow-blue-500/25 hover:from-blue-500 hover:to-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 transition-all active:scale-95 cursor-pointer"
                 aria-label="Gửi tin nhắn"
               >

@@ -22,7 +22,8 @@ function load(relative, mocks) {
 }
 let response;
 const api = load('frontend/src/features/chat/api.ts', {
-  '../../app/apiClient': { fetchPublicApi: async () => response },
+  '../../app/apiClient': { fetchPublicApi: async () => response, fetchWithAuth: async () => response },
+  '../auth/session': { readAccessToken: () => null, readRefreshToken: () => null },
 });
 const sse = (body) => new Response(body, { headers: { 'content-type': 'text/event-stream' } });
 async function transportTests() {
@@ -59,6 +60,7 @@ async function widgetTest(mode) {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx },
     'lucide-react': {}, 'react-redux': { useDispatch: () => () => {}, useSelector: f => f({ layout: { isChatOpen: true }, auth: { user: mode === 'authenticated' ? { id: 'auth-1', full_name: 'Nguyễn An', phone: '0912345678' } : null } }) },
     '../features/chat/AssistantMessage': {},
+    '../features/chat/ChatHistoryPanel': { ChatHistoryPanel: 'ChatHistoryPanel' },
     '../features/chat/ChatAccessGate': { ChatAccessGate: 'ChatAccessGate' },
     '../features/chat/profile': { readGuestProfile: () => mode === 'locked' || mode === 'authenticated' ? null : { name: 'Nguyễn An', phone: '0912345678' }, saveGuestProfile() {}, GUEST_PROFILE_EVENT: 'guest-profile' },
     '../app/store': {}, '../features/chat/api': {
