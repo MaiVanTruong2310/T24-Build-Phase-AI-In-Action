@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from contextlib import suppress
 
 from fastapi import APIRouter, HTTPException, Request, Depends, Query
@@ -60,6 +61,7 @@ def public_result(result, session_id):
 
 
 async def prepare_turn(request, user, session):
+    started = time.perf_counter()
     service = ChatHistoryService(session)
     turn = await service.begin_turn(user, request) if user else None
     payload = chat_agent_input(request)
@@ -75,6 +77,7 @@ async def prepare_turn(request, user, session):
             patient_name=user.full_name, patient_phone=user.phone, patient_health_record=health_record(user))
     else:
         payload["patient_health_record"] = None
+    logger.info("chat.prepare elapsed_ms=%.0f", (time.perf_counter()-started)*1000)
     return payload, turn, service
 
 
@@ -82,12 +85,15 @@ async def run_turn(request, user, payload, turn, service):
     if turn and turn.get("cached"):
         return turn["cached"]
     try:
+        started = time.perf_counter()
         result = await agent.ainvoke(payload, config={"configurable":{"thread_id":graph_thread(request.session_id,user)}})
+        agent_finished = time.perf_counter()
         response = public_result(result, request.session_id)
         if not response["response"].strip():
             raise RuntimeError("Empty agent response")
         if user:
             await service.complete(turn, response, result)
+        logger.info("chat.completed agent_ms=%.0f archive_ms=%.0f", (agent_finished-started)*1000, (time.perf_counter()-agent_finished)*1000)
         return response
     except BaseException:
         if turn:
