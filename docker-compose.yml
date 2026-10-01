@@ -13,7 +13,7 @@ services:
       kafka-1:
         condition: service_healthy
       db-migrate:
-      condition: service_healthy
+        condition: service_completed_successfully
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:
