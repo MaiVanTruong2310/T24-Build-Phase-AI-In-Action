@@ -14,7 +14,6 @@ from src.schemas.catalog import (
     BulkImportResponse,
     BulkScheduleImportRequest,
     CatalogAuditResponse,
-    DoctorScheduleCreate,
     DoctorScheduleResponse,
     DoctorScheduleUpdate,
     ScheduleCancellationRequest,
@@ -41,7 +40,7 @@ async def doctor_availability(
     _: User = Depends(get_current_user),
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[DoctorScheduleResponse]]:
-    """Return only available slots with positive capacity."""
+    """Return consultation slots and blocking schedule periods for the selected day."""
     try:
         starts_from, starts_to = _availability_window(from_datetime, to_datetime, selected_date)
     except ValueError as exc:

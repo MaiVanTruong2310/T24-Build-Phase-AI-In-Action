@@ -4,9 +4,9 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.schemas.catalog_types import MutableScheduleStatus
+from src.schemas.catalog_types import MutableScheduleStatus, ScheduleType
 
 
 class GuestPatientCreate(BaseModel):
@@ -30,13 +30,15 @@ class DoctorScheduleCreate(BaseModel):
     """Create an availability slot."""
 
     doctor_id: UUID
-    facility_id: UUID
+    facility_id: UUID | None = None
     service_id: UUID | None = None
     specialty_id: UUID | None = None
     starts_at: datetime
     ends_at: datetime
     capacity: int = Field(ge=0)
     status: MutableScheduleStatus = "available"
+    type: ScheduleType = "consultation"
+    note: str | None = Field(default=None, max_length=2000)
     source_system: str | None = Field(default=None, max_length=64)
     external_schedule_id: str | None = Field(default=None, max_length=128)
     patient_id: UUID | None = None
@@ -52,14 +54,30 @@ class DoctorScheduleCreate(BaseModel):
             raise ValueError("ends_at must be after starts_at")
         if self.patient_id and self.guest_patient:
             raise ValueError("patient_id and guest_patient are mutually exclusive")
+        if self.type == "consultation" and self.facility_id is None:
+            raise ValueError("facility_id is required for consultation schedules")
+        if self.type != "consultation":
+            if self.patient_id or self.guest_patient:
+                raise ValueError("Busy schedules cannot be assigned to a patient")
+            self.capacity = 0
+            if self.status == "available":
+                self.status = "blocked"
         self.reason = self.reason.strip()
+        if self.note is not None:
+            self.note = self.note.strip() or None
         return self
 
 
 class StaffScheduleCreate(DoctorScheduleCreate):
     """Manual staff schedule creation, always scoped to one service."""
 
-    service_id: UUID
+    service_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def require_service_for_consultation(self) -> "StaffScheduleCreate":
+        if self.type == "consultation" and self.service_id is None:
+            raise ValueError("service_id is required for consultation schedules")
+        return self
 
 
 class DoctorScheduleUpdate(BaseModel):
@@ -69,6 +87,8 @@ class DoctorScheduleUpdate(BaseModel):
     ends_at: datetime
     capacity: int = Field(ge=0)
     status: MutableScheduleStatus
+    type: ScheduleType | None = None
+    note: str | None = Field(default=None, max_length=2000)
     expected_version: int = Field(ge=1)
 
     @model_validator(mode="after")
@@ -76,6 +96,8 @@ class DoctorScheduleUpdate(BaseModel):
         """Validate the complete replacement time range."""
         if self.ends_at <= self.starts_at:
             raise ValueError("ends_at must be after starts_at")
+        if self.note is not None:
+            self.note = self.note.strip() or None
         return self
 
 
@@ -86,12 +108,14 @@ class DoctorScheduleResponse(BaseModel):
 
     id: UUID
     doctor_id: UUID
-    facility_id: UUID
+    facility_id: UUID | None
     starts_at: datetime
     ends_at: datetime
     capacity: int
     remaining_capacity: int | None = None
     status: str
+    type: ScheduleType = "consultation"
+    note: str | None
     version: int
     source_system: str | None
     external_schedule_id: str | None
@@ -100,6 +124,12 @@ class DoctorScheduleResponse(BaseModel):
     cancellation_reason: str | None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def default_legacy_type(cls, value: str | None) -> str:
+        """Treat legacy rows without a type as consultation schedules."""
+        return value or "consultation"
 
 
 class StaffScheduleCreateResponse(BaseModel):

@@ -8,6 +8,7 @@ from src.schemas.catalog_types import (
     MutableScheduleStatus,
     ReviewStatus,
     ScheduleStatus,
+    ScheduleType,
 )
 from src.schemas.doctor import (
     DoctorCreate,
@@ -28,12 +29,12 @@ from src.schemas.schedule import (
     BulkImportResponse,
     BulkScheduleImportRequest,
     DoctorScheduleCreate,
-    StaffScheduleCreate,
     DoctorScheduleResponse,
     DoctorScheduleUpdate,
     GuestPatientCreate,
     ScheduleCancellationRequest,
     ScheduleImportRecord,
+    StaffScheduleCreate,
     StaffScheduleCreateResponse,
 )
 from src.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
@@ -72,6 +73,7 @@ __all__ = [
     "ScheduleCancellationRequest",
     "ScheduleImportRecord",
     "ScheduleStatus",
+    "ScheduleType",
     "ServiceCreate",
     "ServiceResponse",
     "ServiceUpdate",

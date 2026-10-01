@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from src.models.booking import Booking
@@ -38,9 +38,48 @@ class BookingRepository:
             .where(
                 DoctorSchedule.doctor_id == doctor_id,
                 DoctorSchedule.status != "cancelled",
+                DoctorSchedule.type == "consultation",
                 DoctorSchedule.starts_at < ends_at,
                 DoctorSchedule.ends_at > starts_at,
             )
+            .with_for_update()
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def find_blocking_schedule(
+        self, *, doctor_id: UUID, facility_id: UUID, starts_at: datetime, ends_at: datetime
+    ) -> DoctorSchedule | None:
+        """Find a busy block that applies globally or to the selected facility."""
+        statement = (
+            select(DoctorSchedule)
+            .where(
+                DoctorSchedule.doctor_id == doctor_id,
+                DoctorSchedule.type.in_(("busy", "leave", "other")),
+                DoctorSchedule.status != "cancelled",
+                DoctorSchedule.starts_at < ends_at,
+                DoctorSchedule.ends_at > starts_at,
+                or_(DoctorSchedule.facility_id.is_(None), DoctorSchedule.facility_id == facility_id),
+            )
+            .order_by(DoctorSchedule.starts_at)
+            .limit(1)
+            .with_for_update()
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def find_active_booking_conflict(
+        self, *, doctor_id: UUID, starts_at: datetime, ends_at: datetime
+    ) -> Booking | None:
+        """Find an active appointment overlapping a requested doctor-visit time."""
+        statement = (
+            select(Booking)
+            .where(
+                Booking.doctor_id == doctor_id,
+                Booking.status.in_(("pending_approval", "confirmed")),
+                Booking.starts_at < ends_at,
+                Booking.ends_at > starts_at,
+            )
+            .order_by(Booking.starts_at)
+            .limit(1)
             .with_for_update()
         )
         return (await self.session.execute(statement)).scalar_one_or_none()
@@ -71,6 +110,10 @@ class BookingRepository:
     async def get_doctor(self, doctor_id: UUID) -> Doctor | None:
         """Fetch a doctor for a requested-time booking."""
         return await self._one(select(Doctor).where(Doctor.id == doctor_id))
+
+    async def get_doctor_for_update(self, doctor_id: UUID) -> Doctor | None:
+        """Lock a doctor while validating a requested-time booking."""
+        return await self._one(select(Doctor).where(Doctor.id == doctor_id).with_for_update())
 
     async def get_facility(self, facility_id: UUID) -> Facility | None:
         """Fetch a facility for a requested-time booking."""

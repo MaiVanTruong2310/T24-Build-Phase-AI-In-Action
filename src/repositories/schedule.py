@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from src.models.booking import Booking
@@ -83,6 +83,7 @@ class ScheduleRepositoryMixin:
             .where(
                 DoctorSchedule.doctor_id == doctor_id,
                 DoctorSchedule.status != "cancelled",
+                DoctorSchedule.type == "consultation",
                 DoctorSchedule.starts_at < ends_at,
                 DoctorSchedule.ends_at > starts_at,
             )
@@ -91,6 +92,26 @@ class ScheduleRepositoryMixin:
         )
         if exclude_schedule_id:
             statement = statement.where(DoctorSchedule.id != exclude_schedule_id)
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def find_blocking_schedule(
+        self, *, doctor_id: UUID, facility_id: UUID, starts_at: datetime, ends_at: datetime
+    ) -> DoctorSchedule | None:
+        """Find a busy schedule that applies globally or to one facility."""
+        statement = (
+            select(DoctorSchedule)
+            .where(
+                DoctorSchedule.doctor_id == doctor_id,
+                DoctorSchedule.type.in_(("busy", "leave", "other")),
+                DoctorSchedule.status != "cancelled",
+                DoctorSchedule.starts_at < ends_at,
+                DoctorSchedule.ends_at > starts_at,
+                or_(DoctorSchedule.facility_id.is_(None), DoctorSchedule.facility_id == facility_id),
+            )
+            .order_by(DoctorSchedule.starts_at)
+            .limit(1)
+            .with_for_update()
+        )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def list_schedules(
@@ -111,7 +132,7 @@ class ScheduleRepositoryMixin:
         statement = (
             select(DoctorSchedule)
             .join(Doctor)
-            .join(Facility)
+            .outerjoin(Facility)
             .options(selectinload(DoctorSchedule.doctor), selectinload(DoctorSchedule.facility))
             .order_by(DoctorSchedule.starts_at)
             .offset(offset)
@@ -120,20 +141,24 @@ class ScheduleRepositoryMixin:
         if doctor_id:
             statement = statement.where(DoctorSchedule.doctor_id == doctor_id)
         if facility_id:
-            statement = statement.where(DoctorSchedule.facility_id == facility_id)
-        if service_id:
-            statement = (
-                statement.join(
-                    DoctorService,
-                    DoctorService.doctor_id == DoctorSchedule.doctor_id,
+            statement = statement.where(
+                or_(
+                    DoctorSchedule.facility_id == facility_id,
+                    and_(DoctorSchedule.type != "consultation", DoctorSchedule.facility_id.is_(None)),
                 )
+            )
+        if service_id:
+            service_available = exists(
+                select(DoctorService.id)
                 .join(Service, Service.id == DoctorService.service_id)
                 .where(
+                    DoctorService.doctor_id == DoctorSchedule.doctor_id,
                     DoctorService.service_id == service_id,
                     DoctorService.active.is_(True),
                     Service.status == "active",
                 )
             )
+            statement = statement.where(or_(DoctorSchedule.type != "consultation", service_available))
         if starts_from:
             statement = statement.where(DoctorSchedule.ends_at > starts_from)
         if starts_to:
@@ -143,21 +168,21 @@ class ScheduleRepositoryMixin:
         if source_system:
             statement = statement.where(DoctorSchedule.source_system == source_system)
         if public_only:
-            active_count = (
-                select(func.count(Booking.id))
-                .where(
-                    Booking.schedule_id == DoctorSchedule.id,
-                    Booking.status.in_(("pending_approval", "confirmed")),
-                )
-                .correlate(DoctorSchedule)
-                .scalar_subquery()
-            )
             statement = statement.where(
-                DoctorSchedule.status == "available",
-                DoctorSchedule.capacity > active_count,
                 Doctor.status == "active",
                 Doctor.review_status == "approved",
                 Doctor.booking_enabled.is_(True),
-                Facility.status == "active",
+                DoctorSchedule.status != "cancelled",
+                or_(
+                    and_(
+                        DoctorSchedule.type == "consultation",
+                        DoctorSchedule.status == "available",
+                        Facility.status == "active",
+                    ),
+                    and_(
+                        DoctorSchedule.type != "consultation",
+                        or_(DoctorSchedule.facility_id.is_(None), Facility.status == "active"),
+                    ),
+                ),
             )
         return list((await self.session.execute(statement)).scalars().all())

@@ -45,6 +45,24 @@ def test_schedule_update_accepts_version_and_capacity():
     assert request.capacity == 4
 
 
+def test_busy_schedule_is_global_and_does_not_use_capacity():
+    """Busy schedules can apply to every facility and ignore consultation capacity."""
+    starts_at = datetime.now(UTC)
+    request = DoctorScheduleCreate(
+        doctor_id=uuid4(),
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=1),
+        capacity=4,
+        type="busy",
+        note="  Clinical meeting  ",
+    )
+
+    assert request.facility_id is None
+    assert request.capacity == 0
+    assert request.status == "blocked"
+    assert request.note == "Clinical meeting"
+
+
 def test_schedule_cancellation_requires_non_blank_reason():
     """Cancellation requires a trimmed, non-empty reason."""
     request = ScheduleCancellationRequest(reason="  Doctor unavailable  ")

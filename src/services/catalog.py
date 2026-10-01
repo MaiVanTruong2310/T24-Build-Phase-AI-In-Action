@@ -94,13 +94,25 @@ class CatalogService(
     @staticmethod
     def _schedule_is_public(value: DoctorSchedule) -> bool:
         """Check the non-query public availability rules for one slot."""
+        schedule_type = getattr(value, "type", "consultation") or "consultation"
+        facility = getattr(value, "facility", None)
+        if schedule_type != "consultation":
+            return (
+                value.status != "cancelled"
+                and value.doctor.status == "active"
+                and value.doctor.review_status == "approved"
+                and value.doctor.booking_enabled
+                and (facility is None or facility.status == "active")
+            )
         return (
-            value.status == "available"
+            schedule_type == "consultation"
+            and value.status == "available"
             and (getattr(value, "remaining_capacity", value.capacity) or 0) > 0
             and value.doctor.status == "active"
             and value.doctor.review_status == "approved"
             and value.doctor.booking_enabled
-            and value.facility.status == "active"
+            and facility is not None
+            and facility.status == "active"
         )
 
 

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,9 @@ from src.schemas.schedule import GuestPatientCreate
 from src.services.notification import NotificationService
 
 logger = get_logger(__name__)
+BUSINESS_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+DEFAULT_WORKING_START = time(8, 0)
+DEFAULT_WORKING_END = time(18, 0)
 
 
 class BookingService:
@@ -191,7 +195,8 @@ class BookingService:
             facility_id = request.facility_id
             starts_at = request.starts_at
             ends_at = request.ends_at
-            doctor = await self.bookings.get_doctor(doctor_id)
+            doctor_finder = getattr(self.bookings, "get_doctor_for_update", self.bookings.get_doctor)
+            doctor = await doctor_finder(doctor_id)
             facility = await self.bookings.get_facility(facility_id)
             if doctor is None or doctor.status != "active" or doctor.review_status != "approved":
                 raise ConflictError("DOCTOR_UNAVAILABLE", "Doctor is not available for booking")
@@ -203,6 +208,40 @@ class BookingService:
                 raise ConflictError("SLOT_IN_PAST", "Requested booking time must be in the future")
             if not await self.bookings.has_doctor_facility(doctor_id, facility_id):
                 raise ConflictError("FACILITY_NOT_AVAILABLE", "Doctor is not available at this facility")
+            local_start = starts_at.astimezone(BUSINESS_TZ)
+            local_end = ends_at.astimezone(BUSINESS_TZ)
+            if (
+                local_start.date() != local_end.date()
+                or local_start.time() < DEFAULT_WORKING_START
+                or local_end.time() > DEFAULT_WORKING_END
+            ):
+                raise ConflictError("OUTSIDE_WORKING_HOURS", "Requested booking time is outside the default working hours")
+            published_finder = getattr(self.bookings, "find_schedule_conflict", None)
+            published_schedule = await published_finder(
+                doctor_id=doctor_id,
+                starts_at=starts_at,
+                ends_at=ends_at,
+            ) if published_finder else None
+            if published_schedule is not None:
+                raise ConflictError("SCHEDULE_REQUIRED", "Select the published consultation schedule for this time")
+            blocking_finder = getattr(self.bookings, "find_blocking_schedule", None)
+            blocking = await blocking_finder(
+                doctor_id=doctor_id,
+                facility_id=facility_id,
+                starts_at=starts_at,
+                ends_at=ends_at,
+            ) if blocking_finder else None
+            if blocking is not None:
+                raise ConflictError("DOCTOR_BUSY", "Doctor is busy during the requested time")
+            if service.booking_mode == "doctor_visit":
+                conflict_finder = getattr(self.bookings, "find_active_booking_conflict", None)
+                conflict = await conflict_finder(
+                    doctor_id=doctor_id,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                ) if conflict_finder else None
+                if conflict is not None:
+                    raise ConflictError("SCHEDULE_CONFLICT", "This doctor is already booked during the requested time")
 
         await self._validate_catalog_relationships(
             schedule, service, specialty, doctor_id=doctor_id, facility_id=facility_id
@@ -383,6 +422,15 @@ class BookingService:
                 raise ConflictError("REJECTION_NOTE_REQUIRED", "A rejection reason is required")
             created_schedule = False
             if request.status == "confirmed" and booking.schedule_id is None:
+                blocking_finder = getattr(self.bookings, "find_blocking_schedule", None)
+                blocking = await blocking_finder(
+                    doctor_id=booking.doctor_id,
+                    facility_id=booking.facility_id,
+                    starts_at=booking.starts_at,
+                    ends_at=booking.ends_at,
+                ) if blocking_finder else None
+                if blocking is not None:
+                    raise ConflictError("DOCTOR_BUSY", "Doctor is busy during the requested time")
                 conflict = await self.bookings.find_schedule_conflict(
                     doctor_id=booking.doctor_id,
                     starts_at=booking.starts_at,
@@ -397,6 +445,7 @@ class BookingService:
                     ends_at=booking.ends_at,
                     capacity=1,
                     status="available",
+                    type="consultation",
                     created_by=actor_id,
                     updated_by=actor_id,
                 )
@@ -452,6 +501,8 @@ class BookingService:
     @staticmethod
     def _validate_schedule(schedule) -> None:
         """Validate public schedule state before counting capacity."""
+        if (getattr(schedule, "type", "consultation") or "consultation") != "consultation":
+            raise ConflictError("SCHEDULE_UNAVAILABLE", "This schedule is not a consultation slot")
         if schedule.status != "available":
             raise ConflictError("SCHEDULE_UNAVAILABLE", "Schedule is not available")
         if schedule.capacity <= 0:
@@ -460,7 +511,7 @@ class BookingService:
             raise ConflictError("DOCTOR_UNAVAILABLE", "Doctor is not available for booking")
         if not schedule.doctor.booking_enabled:
             raise ConflictError("DOCTOR_BOOKING_DISABLED", "Doctor booking is disabled")
-        if schedule.facility.status != "active":
+        if getattr(schedule, "facility", None) is None or schedule.facility.status != "active":
             raise ConflictError("FACILITY_UNAVAILABLE", "Facility is not available for booking")
 
 

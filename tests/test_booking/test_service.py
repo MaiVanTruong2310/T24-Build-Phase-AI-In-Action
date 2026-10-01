@@ -96,6 +96,10 @@ class FakeBookingRepository:
             booking_enabled=True,
         )
 
+    async def find_blocking_schedule(self, **kwargs):
+        del kwargs
+        return None
+
     async def get_facility(self, facility_id):
         assert facility_id == self.schedule.facility_id
         return SimpleNamespace(id=facility_id, status="active")
@@ -196,7 +200,7 @@ def test_requested_time_booking_does_not_require_published_schedule():
     repository = FakeBookingRepository(schedule, service, active_count=0)
     booking_service = BookingService(FakeSession())
     booking_service.bookings = repository
-    starts_at = schedule.starts_at + timedelta(days=1)
+    starts_at = datetime.now(UTC).replace(hour=2, minute=0, second=0, microsecond=0) + timedelta(days=1)
     request = BookingCreate(
         doctor_id=schedule.doctor_id,
         facility_id=schedule.facility_id,
@@ -212,6 +216,34 @@ def test_requested_time_booking_does_not_require_published_schedule():
     assert booking.schedule_id is None
     assert booking.starts_at == starts_at
     assert repository.booking.status == "pending_approval"
+
+
+def test_requested_time_booking_rejects_a_busy_schedule():
+    """A requested-time booking cannot overlap a busy doctor schedule."""
+    schedule = make_schedule(capacity=0)
+    service = SimpleNamespace(id=uuid4(), status="active", booking_mode="group")
+
+    class BusyRepository(FakeBookingRepository):
+        async def find_blocking_schedule(self, **kwargs):
+            del kwargs
+            return SimpleNamespace(id=uuid4())
+
+    repository = BusyRepository(schedule, service, active_count=0)
+    booking_service = BookingService(FakeSession())
+    booking_service.bookings = repository
+    starts_at = datetime.now(UTC).replace(hour=2, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    request = BookingCreate(
+        doctor_id=schedule.doctor_id,
+        facility_id=schedule.facility_id,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(minutes=30),
+        service_id=service.id,
+        specialty_id=uuid4(),
+        reason="Requested consultation",
+    )
+
+    with pytest.raises(ConflictError, match="busy during"):
+        asyncio.run(booking_service.create(uuid4(), request))
 
 
 def test_booking_request_normalizes_timezone_to_utc():
