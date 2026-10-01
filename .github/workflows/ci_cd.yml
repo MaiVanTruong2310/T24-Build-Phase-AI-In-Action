@@ -250,7 +250,7 @@ jobs:
               valid = False
           if not valid:
               raise SystemExit('AUTH_DATABASE_URL must be a Supabase PostgreSQL URI for this project on port 5432; percent-encode the password.')
-          values = {name: os.environ.get(name, '') for name in (
+          values = {name: os.environ.get(name, '').rstrip('\r\n') for name in (
               'IMAGE_REPO', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
               'JWT_SECRET_KEY', 'SUPABASE_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
               'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_KEYS',
@@ -274,8 +274,9 @@ jobs:
           )
           if not any(values[name] for name in ('OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GOOGLE_AI_API_KEY')):
               raise SystemExit('Set at least one LLM provider API key.')
-          if any('\n' in value or '\r' in value or '\0' in value for value in values.values()):
-              raise SystemExit('Deployment environment values must be single-line strings.')
+          invalid = [name for name, value in values.items() if '\n' in value or '\r' in value or '\0' in value]
+          if invalid:
+              raise SystemExit('Secrets/variables contain embedded newlines or NUL: ' + ', '.join(invalid))
           output = Path('.env.deploy')
           os.umask(0o077)
           output.write_text(''.join(key + '=' + json.dumps(value.replace('$', '$$')) + '\n'
