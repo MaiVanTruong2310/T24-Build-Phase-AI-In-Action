@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { AssistantMessage } from '../features/chat/AssistantMessage';
+import { useEffect, useRef, useState, useCallback, type FormEvent } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -51,7 +52,7 @@ const DEFAULT_QUICK_REPLIES = [
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   sender: 'bot',
-  text: 'Kính chào Quý bệnh nhân! Em là Trợ lý Y tế Lâm sàng P-124 thuộc hệ thống VCare+, hoạt động dưới sự giám sát trực tiếp 24/7 của Bác sĩ trực ban.\n\nBác vui lòng mô tả các triệu chứng hiện tại (vị trí đau, thời gian xuất hiện, mức độ khó chịu) để em hỗ trợ phân tầng mức ưu tiên và kết nối chuyên khoa phù hợp.',
+  text: 'Kính chào Quý bệnh nhân! Em là Trợ lý Y tế Lâm sàng P-124 thuộc hệ thống VCare+.\n\nBác vui lòng mô tả các triệu chứng hiện tại (vị trí đau, thời gian xuất hiện, mức độ khó chịu) để em hỗ trợ phân tầng mức ưu tiên và kết nối chuyên khoa phù hợp.',
   time: '',
 };
 
@@ -66,16 +67,6 @@ function createSessionId(): string {
 
 function displayTime(): string {
   return new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-}
-
-function cleanAssistantText(text: string): string {
-  return text
-    .replace(/\\n/g, '\n')
-    .replace(/^\s*---+\s*$/gm, '')
-    .replace(/^#{1,4}\s+/gm, '')
-    .replace(/\[([^\]]+)]\((https?:\/\/[^)]+)\)/g, '$1: $2')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
 }
 
 function shouldShowAts(metadata?: ChatMetadata): boolean {
@@ -165,7 +156,7 @@ function BookingForm({ intake, sessionId }: { intake: BookingIntake; sessionId: 
           <Calendar className="h-4 w-4 text-blue-600 dark:text-cyan-400" />
           <span>Phiếu Hẹn Khám Bác Sĩ Chuyên Khoa</span>
         </div>
-        <span className="text-[10px] text-blue-700 dark:text-cyan-400 font-medium">Bác sĩ đối soát</span>
+        <span className="text-[10px] text-blue-700 dark:text-cyan-400 font-medium">Yêu cầu đặt lịch</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -275,14 +266,60 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [sessionId, setSessionId] = useState(createSessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
   const activeRequest = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const scrollToBottom = useCallback((smooth = false) => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      if (smooth) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth',
+        });
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    }
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const threshold = 120;
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+    isNearBottomRef.current = isAtBottom;
+  }, []);
+
+  const ensureChatVisibleInPage = useCallback(() => {
+    if (!embedded || !inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - 10) {
+      window.scrollBy({
+        top: rect.bottom - window.innerHeight + 30,
+        behavior: 'smooth',
+      });
+    }
+  }, [embedded]);
+
+  useEffect(() => {
+    if (!isChatOpen) return;
+    if (isNearBottomRef.current) {
+      scrollToBottom(false);
+    }
+  }, [messages, isChatOpen, scrollToBottom]);
+
   useEffect(() => {
     if (isChatOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      isNearBottomRef.current = true;
+      const timer = setTimeout(() => scrollToBottom(false), 80);
+      return () => clearTimeout(timer);
     }
-  }, [messages, isChatOpen]);
+  }, [isChatOpen, scrollToBottom]);
 
   useEffect(() => {
     if (isChatOpen && !embedded) {
@@ -333,8 +370,26 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
       { id: `user-${stamp}`, sender: 'user', text, time: displayTime() },
       { id: botId, sender: 'bot', text: '', time: displayTime(), pending: true },
     ]);
+    isNearBottomRef.current = true;
+    setTimeout(() => {
+      scrollToBottom(true);
+      ensureChatVisibleInPage();
+    }, 40);
 
     let streamedText = '';
+    let receivedMetadata = false;
+    const showConnectionError = () => {
+      setAgentOnline(false);
+      updateBot(botId, {
+        text: 'Không thể nhận phản hồi từ trợ lý. Vui lòng kiểm tra kết nối hoặc thử lại sau.',
+        pending: false,
+        error: true,
+        metadata: undefined,
+      });
+      setTimeout(() => {
+        if (isNearBottomRef.current) scrollToBottom(true);
+      }, 50);
+    };
     try {
       await streamChat({
         message: text,
@@ -343,66 +398,46 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         onToken: (token) => {
           streamedText += token;
           updateBot(botId, { text: streamedText, pending: false });
+          if (isNearBottomRef.current) {
+            scrollToBottom(false);
+          }
         },
-        onMetadata: (metadata) => updateBot(botId, { metadata }),
+        onMetadata: (metadata) => {
+          receivedMetadata = true;
+          updateBot(botId, { metadata });
+        },
       });
+      setAgentOnline(true);
       updateBot(botId, { pending: false });
+      setTimeout(() => {
+        if (isNearBottomRef.current) {
+          scrollToBottom(true);
+        }
+      }, 60);
     } catch {
       if (request.signal.aborted) return;
+      // Do not replay a turn after the server has already begun responding.
+      if (streamedText || receivedMetadata) {
+        showConnectionError();
+        return;
+      }
       try {
         const result = await sendChat(text, sessionId, request.signal);
+        setAgentOnline(true);
         updateBot(botId, { text: result.response, pending: false, metadata: result });
-      } catch (fallbackError) {
-        // Clinical intelligent response fallback if backend is offline in development
-        console.warn('Backend chat unreachable, generating clinical response simulation:', fallbackError);
-        const lower = text.toLowerCase();
-        let simAts = 4;
-        let isEm = false;
-        let simDept = 'Nội tổng quát';
-        let simContent = '';
-
-        if (lower.includes('ngực') || lower.includes('khó thở') || lower.includes('ngất') || lower.includes('liệt')) {
-          simAts = 2;
-          isEm = true;
-          simDept = 'Tim Mạch & Cấp Cứu';
-          simContent = `Hệ thống ghi nhận dấu hiệu nguy cơ cao (đau tức ngực / khó thở). Khuyến cáo:\n1. Bác sĩ trực ban đã được cảnh báo mức ATS 2.\n2. Vui lòng nghỉ ngơi tại chỗ, nới lỏng trang phục.\n3. Nếu cơn đau lan ra vai, hàm hoặc kèm toát mồ hôi lạnh, hãy gọi ngay cấp cứu 115 hoặc người nhà đưa đến cơ sở y tế gần nhất.`;
-        } else if (lower.includes('sốt') || lower.includes('đầu') || lower.includes('chóng mặt')) {
-          simAts = 3;
-          simDept = 'Nội Thần Kinh';
-          simContent = `Ghi nhận triệu chứng đau đầu / sốt. Bác sĩ trực ban khuyến nghị theo dõi nhiệt độ thân nhiệt, uống đủ nước và kiểm tra huyết áp.\n\nBác có thể đặt lịch hẹn khám trong ngày với Bác sĩ chuyên khoa Thần Kinh để được chỉ định kiểm tra cận lâm sàng.`;
-        } else {
-          simAts = 4;
-          simDept = 'Khám Tổng Quát';
-          simContent = `Cảm ơn Bác đã cung cấp thông tin. Dựa trên mô tả sơ bộ, tình trạng thuộc mức ATS 4 (không nguy kịch). Bác sĩ khuyến nghị đăng ký thăm khám định kỳ hoặc khám theo chuyên khoa phù hợp.\n\nEm đã tạo sẵn phiếu thông tin bên dưới để kết nối Bác với Bác sĩ chuyên khoa.`;
-        }
-
-        updateBot(botId, {
-          text: simContent,
-          pending: false,
-          metadata: {
-            ats_level: simAts,
-            is_emergency: isEm,
-            suggested_department: simDept,
-            quick_replies: ['Đặt lịch khám Bác sĩ', 'Tư vấn thêm về triệu chứng', 'Tìm cơ sở y tế gần nhất'],
-            candidate_specialties: [
-              { code: 'IM', name: simDept, score: 0.95, reason: 'Phù hợp nhóm triệu chứng chính' },
-              { code: 'GEN', name: 'Nội Tổng Hợp', score: 0.8, reason: 'Kiểm tra toàn diện' },
-            ],
-            booking_intake: {
-              required: true,
-              patient_name: '',
-              specialty_name: simDept,
-              doctors: [
-                { id: 'doc-01', name: 'BS CKII. Nguyễn Phương Linh', title: 'Trưởng khoa Điều Phối' },
-                { id: 'doc-02', name: 'ThS.BS. Trần Minh Tuấn', title: 'Chuyên khoa Nội' },
-              ],
-            },
-          },
-        });
+        setTimeout(() => {
+          if (isNearBottomRef.current) {
+            scrollToBottom(true);
+          }
+        }, 60);
+      } catch {
+        if (!request.signal.aborted) showConnectionError();
       }
     } finally {
-      if (activeRequest.current === request) activeRequest.current = null;
-      setIsSending(false);
+      if (activeRequest.current === request) {
+        activeRequest.current = null;
+        setIsSending(false);
+      }
     }
   };
 
@@ -457,13 +492,13 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                       }`}
                     />
                     {agentOnline === false
-                      ? 'AI Dự phòng · Sẵn sàng'
+                      ? 'Chưa kết nối trợ lý'
                       : agentOnline === true
-                      ? 'AI Trực tuyến · Bác sĩ giám sát'
-                      : 'Đang kết nối Bác sĩ trực ban'}
+                      ? 'Trợ lý trực tuyến'
+                      : 'Đang kết nối trợ lý'}
                   </span>
                   <span className="text-slate-500">•</span>
-                  <span className="hidden sm:inline text-cyan-300 font-medium">Chuẩn ATS 24/7</span>
+                  <span className="hidden sm:inline text-cyan-300 font-medium">Hỗ trợ tư vấn</span>
                 </div>
               </div>
             </div>
@@ -505,7 +540,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
           <div className="flex items-center justify-between border-b border-blue-900/30 dark:border-slate-800/80 bg-blue-950/40 dark:bg-[#070D1E] px-4 py-1.5 text-[10.5px] text-blue-200 dark:text-cyan-300">
             <div className="flex items-center gap-1.5 font-medium">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-              <span>Giám sát y khoa đa tầng · Đạt chuẩn phân tầng ATS</span>
+              <span>Trợ lý AI · Hỗ trợ sàng lọc sơ bộ</span>
             </div>
             <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
               Mã: {sessionId.slice(0, 11)}…
@@ -514,7 +549,9 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
           {/* Message List */}
           <div
-            className="flex-1 space-y-4 overflow-y-auto bg-slate-50/70 dark:bg-[#080E1F]/90 p-4 text-xs transition-colors"
+            ref={messagesContainerRef}
+            onScroll={handleMessagesScroll}
+            className="flex-1 space-y-4 overflow-y-auto bg-slate-50/70 dark:bg-[#080E1F]/90 p-4 text-xs transition-colors scroll-smooth"
             aria-live="polite"
           >
             {messages.map((message) => {
@@ -545,7 +582,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                       <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-1.5">
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                           <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                          BS. Trực ban kiểm duyệt song song
+                          Trợ lý AI
                         </span>
                         <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                           {message.time || displayTime()}
@@ -560,11 +597,11 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                     {message.pending && !message.text ? (
                       <div className="flex items-center gap-2.5 py-1 text-slate-500 dark:text-slate-400 font-medium">
                         <LoaderCircle className="h-4 w-4 animate-spin text-blue-500 dark:text-cyan-400" />
-                        <span>AI đang phân tích triệu chứng & đối chiếu lâm sàng…</span>
+                        <span>Đang chờ phản hồi từ trợ lý…</span>
                       </div>
                     ) : (
                       <div className="whitespace-pre-wrap break-words leading-relaxed text-xs sm:text-[13px]">
-                        {!isUser ? cleanAssistantText(message.text) : message.text}
+                        {isUser ? message.text : <AssistantMessage text={message.text} />}
                       </div>
                     )}
 
@@ -623,7 +660,10 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                   key={reply}
                   type="button"
                   disabled={isSending}
-                  onClick={() => void sendMessage(reply)}
+                  onClick={() => {
+                    void sendMessage(reply);
+                    ensureChatVisibleInPage();
+                  }}
                   className="whitespace-nowrap rounded-full border border-blue-200/70 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/90 px-3 py-1.5 text-[11px] font-medium text-slate-700 dark:text-slate-200 hover:border-blue-500 hover:bg-blue-50/70 hover:text-blue-600 dark:hover:border-cyan-400 dark:hover:bg-slate-700 dark:hover:text-cyan-300 disabled:opacity-50 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
                 >
                   {reply}
@@ -638,6 +678,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               onSubmit={(event) => {
                 event.preventDefault();
                 void sendMessage(inputText);
+                ensureChatVisibleInPage();
               }}
               className="flex items-center gap-2"
             >
@@ -647,6 +688,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                   type="text"
                   value={inputText}
                   disabled={isSending}
+                  onFocus={ensureChatVisibleInPage}
                   onChange={(event) => setInputText(event.target.value)}
                   placeholder="Mô tả triệu chứng, vị trí và thời gian bắt đầu…"
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-900/90 py-2.5 pl-3.5 pr-9 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-1 focus:ring-blue-500/30 disabled:opacity-60 transition-all"
@@ -712,7 +754,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                 </span>
               </div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                Bác sĩ trực ban giám sát
+                Trợ lý tư vấn AI
               </span>
             </div>
 
