@@ -2,7 +2,7 @@ import { useState, FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '../app/store'
-import { registerUser, sendOtp, resetRegisterSuccess } from '../features/auth/authSlice'
+import { registerUser, sendOtp, verifyOtp, resetRegisterSuccess } from '../features/auth/authSlice'
 import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Loader2, Phone, Mail, AlertCircle } from 'lucide-react'
 
 
@@ -18,6 +18,9 @@ export function Register() {
     password: '',
     confirm_password: ''
   })
+  const [otpCode, setOtpCode] = useState('')
+  const [emailVerified, setEmailVerified] = useState(false)
+  const [confirmationNotice, setConfirmationNotice] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [validationError, setValidationError] = useState('')
@@ -156,10 +159,21 @@ export function Register() {
       <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900">
         <Mail className="mb-4 h-10 w-10 text-blue-600" />
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Xác nhận email của bạn</h2>
-        <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">Vui lòng kiểm tra hộp thư <strong>{formData.email}</strong> và mở liên kết xác nhận. Bạn cần xác nhận email trước khi đăng nhập.</p>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{emailVerified ? 'Email đã được xác nhận. Bạn có thể đăng nhập bằng email và mật khẩu.' : <>Vui lòng nhập mã OTP 6 chữ số gửi đến <strong>{formData.email}</strong>, hoặc mở liên kết xác nhận trong email.</>}</p>
+        {!emailVerified && <form className="mt-5 space-y-3" onSubmit={async (event) => {
+          event.preventDefault(); setValidationError(''); setConfirmationNotice('')
+          if (!/^\d{6}$/.test(otpCode)) { setValidationError('Vui lòng nhập đủ 6 chữ số OTP.'); return }
+          const result = await dispatch(verifyOtp({ email: formData.email.trim().toLowerCase(), code: otpCode }))
+          if (verifyOtp.fulfilled.match(result)) { setEmailVerified(true); setOtpCode('') }
+        }}>
+          <label htmlFor="email-otp" className="block text-sm font-medium text-slate-700 dark:text-slate-200">Mã OTP email</label>
+          <input id="email-otp" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={otpCode} onChange={event => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Nhập 6 chữ số" disabled={loading} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-xl tracking-[0.3em] dark:border-slate-600 dark:bg-slate-950" />
+          <button type="submit" disabled={loading || otpCode.length !== 6} className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{loading ? 'Đang xác nhận…' : 'Xác nhận OTP'}</button>
+        </form>}
+        {confirmationNotice && <p role="status" className="mt-3 text-sm text-green-700">{confirmationNotice}</p>}
         <p className="mt-2 text-xs text-slate-500">Nếu chưa thấy thư, hãy kiểm tra mục Spam. Số điện thoại được giữ làm thông tin liên hệ.</p>
         {(error || validationError) && <p role="alert" className="mt-3 text-sm text-red-600">{validationError || error}</p>}
-        <button type="button" disabled={loading} onClick={async () => { const result = await dispatch(sendOtp({ email: formData.email, purpose: 'register' })); if (sendOtp.fulfilled.match(result)) setValidationError('Đã yêu cầu gửi lại email xác nhận.'); }} className="mt-5 w-full rounded-xl border border-blue-200 px-4 py-3 text-sm font-semibold text-blue-600 disabled:opacity-50">{loading ? 'Đang gửi…' : 'Gửi lại email xác nhận'}</button>
+        <button type="button" disabled={loading || emailVerified} onClick={async () => { setValidationError(''); setConfirmationNotice(''); const result = await dispatch(sendOtp({ email: formData.email.trim().toLowerCase(), purpose: 'register' })); if (sendOtp.fulfilled.match(result)) setConfirmationNotice('Đã yêu cầu gửi lại email chứa mã OTP.'); }} className="mt-5 w-full rounded-xl border border-blue-200 px-4 py-3 text-sm font-semibold text-blue-600 disabled:opacity-50">{loading ? 'Đang gửi…' : 'Gửi lại email xác nhận'}</button>
         <Link to="/login" onClick={() => dispatch(resetRegisterSuccess())} className="mt-3 block rounded-xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white">Đến trang đăng nhập</Link>
       </div>
     )

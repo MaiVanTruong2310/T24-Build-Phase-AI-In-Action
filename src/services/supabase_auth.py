@@ -27,6 +27,7 @@ async def auth_call(path: str, body: dict | None = None, token: str | None = Non
     if response.is_error:
         code = payload.get("error_code") or payload.get("code")
         messages = {
+            "otp_expired": "Mã OTP không đúng hoặc đã hết hạn. Vui lòng kiểm tra mã hoặc yêu cầu gửi lại.",
             "email_not_confirmed": "Bạn cần xác nhận email trước khi đăng nhập.",
             "invalid_credentials": "Email hoặc mật khẩu không đúng.",
             "over_email_send_rate_limit": "Đã vượt giới hạn gửi email. Vui lòng thử lại sau.",

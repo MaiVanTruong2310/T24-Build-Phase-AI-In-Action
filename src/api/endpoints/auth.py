@@ -28,7 +28,7 @@ from src.schemas.common import ApiResponse
 from src.config import get_settings
 from pydantic import BaseModel, Field
 from src.services.auth import AuthService
-from src.services.supabase_auth import native_auth_enabled, register_email, login_email, auth_call
+from src.services.supabase_auth import native_auth_enabled, register_email, login_email, auth_call, authenticated_profile
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 user_router = APIRouter(prefix="/users", tags=["users"])
@@ -74,7 +74,11 @@ async def verify_otp(
 ) -> ApiResponse[UserResponse]:
     """Verify a registration OTP and activate the account."""
     if native_auth_enabled():
-        raise HTTPException(status_code=400, detail="Vui lòng mở liên kết xác nhận trong email.")
+        if not request.email or request.purpose != "register":
+            raise HTTPException(status_code=400, detail="Vui lòng xác thực OTP đăng ký qua email.")
+        tokens = await auth_call("/verify", {"email": request.email.strip().lower(), "token": request.code, "type": "email"})
+        user = await authenticated_profile(tokens["access_token"], service.session)
+        return success_response(UserResponse.model_validate(user), "Đã xác nhận email. Vui lòng đăng nhập.")
     user = await service.verify_registration_otp(request.email, request.phone, request.code)
     return success_response(UserResponse.model_validate(user), "OTP verified")
 
