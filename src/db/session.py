@@ -58,6 +58,37 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+@lru_cache
+def get_auth_engine():
+    """Allow account data on Supabase while the catalog database remains separate."""
+    settings = get_settings()
+    if not settings.auth_database_url:
+        return get_engine()
+    return create_async_engine(
+        _async_database_url(settings.auth_database_url),
+        pool_pre_ping=True,
+        pool_size=min(settings.database_pool_size, 5),
+        max_overflow=min(settings.database_max_overflow, 5),
+        pool_timeout=settings.database_pool_timeout_seconds,
+        pool_recycle=settings.database_pool_recycle_seconds,
+        connect_args={"connect_timeout": settings.database_connect_timeout_seconds},
+    )
+
+
+@lru_cache
+def get_auth_session_factory() -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(get_auth_engine(), expire_on_commit=False)
+
+
+async def get_auth_db_session() -> AsyncIterator[AsyncSession]:
+    if not get_settings().auth_database_url:
+        async for session in get_db_session():
+            yield session
+        return
+    async with get_auth_session_factory()() as session:
+        yield session
+
+
 async def initialize_database() -> None:
     """Create missing ORM tables during the first application startup."""
     engine = get_engine()
@@ -80,3 +111,5 @@ async def close_database() -> None:
     settings = get_settings()
     if settings.database_url:
         await get_engine().dispose()
+    if settings.auth_database_url:
+        await get_auth_engine().dispose()

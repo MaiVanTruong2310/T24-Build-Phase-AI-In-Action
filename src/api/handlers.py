@@ -51,3 +51,14 @@ async def unexpected_error_handler(_: Request, exc: Exception) -> JSONResponse:
     logger.exception("unexpected_error_handler unhandled API exception", exc_info=exc)
     response = error_response(500, "Internal server error", 500)
     return JSONResponse(status_code=500, content=response.model_dump(mode="json"))
+
+
+async def database_unavailable_handler(_: Request, exc: Exception) -> JSONResponse:
+    """Handle connection failures inside ExceptionMiddleware so CORS is preserved."""
+    logger.warning("API database unavailable: %s", type(exc).__name__)
+    response = error_response(
+        500,
+        "Hệ thống tạm thời không thể truy cập dữ liệu. Vui lòng thử lại sau.",
+        503,
+    )
+    return JSONResponse(status_code=503, content=response.model_dump(mode="json"))

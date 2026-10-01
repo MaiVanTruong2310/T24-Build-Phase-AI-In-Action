@@ -1,3 +1,5 @@
+import { ChatAccessGate } from '../features/chat/ChatAccessGate';
+import { GUEST_PROFILE_EVENT, readGuestProfile, saveGuestProfile, type ChatProfile } from '../features/chat/profile';
 import { AssistantMessage } from '../features/chat/AssistantMessage';
 import { useEffect, useRef, useState, useCallback, type FormEvent } from 'react';
 import {
@@ -177,6 +179,7 @@ function BookingForm({ intake, sessionId }: { intake: BookingIntake; sessionId: 
           <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Số điện thoại liên hệ *</label>
           <input
             name="patient_phone"
+            defaultValue={intake.patient_phone}
             type="tel"
             required
             placeholder="Ví dụ: 0912 345 678"
@@ -258,6 +261,13 @@ function BookingForm({ intake, sessionId }: { intake: BookingIntake; sessionId: 
 export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const dispatch = useDispatch();
   const floatingChatOpen = useSelector((state: RootState) => state.layout.isChatOpen);
+  const authUser = useSelector((state: RootState) => state.auth.user);
+  const [guestProfile, setGuestProfile] = useState<ChatProfile | null>(readGuestProfile);
+  const profile: ChatProfile | null = authUser
+    ? { name: authUser.full_name, phone: authUser.phone || '' }
+    : guestProfile;
+  const chatLocked = !authUser && !guestProfile;
+  const ownerKey = authUser ? `user:${authUser.id}` : guestProfile ? `guest:${guestProfile.name}:${guestProfile.phone}` : '';
   const isChatOpen = embedded || floatingChatOpen;
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputText, setInputText] = useState('');
@@ -335,6 +345,40 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     return () => request.abort();
   }, []);
 
+  useEffect(() => {
+    const refreshGuest = () => setGuestProfile(readGuestProfile());
+    window.addEventListener(GUEST_PROFILE_EVENT, refreshGuest);
+    return () => window.removeEventListener(GUEST_PROFILE_EVENT, refreshGuest);
+  }, []);
+
+  useEffect(() => {
+    if (authUser && readGuestProfile()) saveGuestProfile(null);
+  }, [authUser]);
+
+  useEffect(() => {
+    const previousOwner = sessionStorage.getItem('p124_chat_owner') || '';
+    if (previousOwner === ownerKey) {
+      // Floating and embedded chat widgets must share the same owner/session.
+      const sharedSession = sessionStorage.getItem('p124_chat_session_id');
+      if (sharedSession) setSessionId(sharedSession);
+      activeRequest.current?.abort();
+      activeRequest.current = null;
+      setMessages([WELCOME_MESSAGE]);
+      setInputText('');
+      setIsSending(false);
+      return;
+    }
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    const next = `web-${crypto.randomUUID?.() || Date.now()}`;
+    sessionStorage.setItem('p124_chat_session_id', next);
+    sessionStorage.setItem('p124_chat_owner', ownerKey);
+    setSessionId(next);
+    setMessages([WELCOME_MESSAGE]);
+    setInputText('');
+    setIsSending(false);
+  }, [ownerKey]);
+
   const resetConversation = () => {
     activeRequest.current?.abort();
     const next = `web-${crypto.randomUUID?.() || Date.now()}`;
@@ -357,7 +401,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
   const sendMessage = async (rawText: string) => {
     const text = rawText.trim();
-    if (!text || isSending) return;
+    if (!text || isSending || chatLocked) return;
 
     const request = new AbortController();
     activeRequest.current = request;
@@ -393,6 +437,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     try {
       await streamChat({
         message: text,
+        profile: profile || undefined,
         sessionId,
         signal: request.signal,
         onToken: (token) => {
@@ -422,7 +467,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         return;
       }
       try {
-        const result = await sendChat(text, sessionId, request.signal);
+        const result = await sendChat(text, sessionId, request.signal, profile || undefined);
         setAgentOnline(true);
         updateBot(botId, { text: result.response, pending: false, metadata: result });
         setTimeout(() => {
@@ -536,6 +581,8 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
             </div>
           </div>
 
+          <div className="relative flex min-h-0 flex-1 flex-col">
+          <div inert={chatLocked} aria-hidden={chatLocked || undefined} className={`flex min-h-0 flex-1 flex-col ${chatLocked ? 'pointer-events-none select-none blur-sm' : ''}`}>
           {/* Clinical Security & Supervision Strip */}
           <div className="flex items-center justify-between border-b border-blue-900/30 dark:border-slate-800/80 bg-blue-950/40 dark:bg-[#070D1E] px-4 py-1.5 text-[10.5px] text-blue-200 dark:text-cyan-300">
             <div className="flex items-center gap-1.5 font-medium">
@@ -638,7 +685,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
                     {/* Booking Form Integration */}
                     {message.metadata?.booking_intake?.required && (
-                      <BookingForm intake={message.metadata.booking_intake} sessionId={sessionId} />
+                      <BookingForm intake={{ ...message.metadata.booking_intake, patient_name: message.metadata.booking_intake.patient_name || profile?.name, patient_phone: message.metadata.booking_intake.patient_phone || profile?.phone }} sessionId={sessionId} />
                     )}
 
                     {/* User timestamp */}
@@ -724,6 +771,9 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               </a>{' '}
               ngay.
             </p>
+          </div>
+          </div>
+          {chatLocked && <ChatAccessGate onGuest={saveGuestProfile} />}
           </div>
         </section>
       )}

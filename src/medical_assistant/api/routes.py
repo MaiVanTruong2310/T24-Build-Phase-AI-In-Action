@@ -22,13 +22,22 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def chat_agent_input(request: ChatRequest) -> dict:
+    payload = {"query": request.message, "user_id": request.user_id, "enable_citation": request.enable_citation}
+    # Keep identity separate from clinical history. Omission preserves checkpoint memory.
+    if request.patient_profile:
+        profile = request.patient_profile.model_dump()
+        payload.update(patient_profile=profile, patient_name=profile["name"], patient_phone=profile["phone"])
+    return payload
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """Chat đồng bộ với AI agent có quản lý ngữ cảnh qua session_id (thread_id)."""
     try:
         config = {"configurable": {"thread_id": request.session_id}}
         result = await agent.ainvoke(
-            {"query": request.message, "user_id": request.user_id, "enable_citation": request.enable_citation},
+            chat_agent_input(request),
             config=config,
         )
 
@@ -75,7 +84,7 @@ async def chat_stream(request: ChatRequest, http_request: Request):
             # 2. Thực thi Agent
             agent_task = asyncio.create_task(
                 agent.ainvoke(
-                    {"query": request.message, "user_id": request.user_id, "enable_citation": request.enable_citation},
+                    chat_agent_input(request),
                     config=config,
                 )
             )

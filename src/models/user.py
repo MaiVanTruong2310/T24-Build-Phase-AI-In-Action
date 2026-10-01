@@ -16,6 +16,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    auth_user_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), unique=True, index=True)
     email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
     password_hash: Mapped[str | None] = mapped_column(String(512))

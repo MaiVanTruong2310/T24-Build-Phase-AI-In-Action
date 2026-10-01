@@ -23,8 +23,8 @@ const CONSULTATION_STEPS = [
   },
   {
     step: '03',
-    title: 'Bác sĩ đối soát & Đặt hẹn',
-    desc: 'Bác sĩ trực ban kiểm duyệt thông tin, tư vấn hướng xử trí và phân bổ lịch khám.',
+    title: 'Yêu cầu đặt hẹn & Đặt hẹn',
+    desc: 'Gửi yêu cầu đặt hẹn theo thông tin bác sĩ và lịch khám do hệ thống cung cấp.',
   },
 ];
 
@@ -45,14 +45,14 @@ export default memo(function PatientConsultationPage() {
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  BS. Trực ban trực tuyến
+                  Hỗ trợ bởi trợ lý AI
                 </span>
               </div>
               <h1 className="mt-2 text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
                 Trung Tâm Tư Vấn Triệu Chứng & Điều Phối Khám
               </h1>
               <p className="mt-1.5 max-w-3xl text-xs sm:text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                Hệ thống tiếp đón y tế thông minh tích hợp AI Lâm Sàng và Bác sĩ chuyên khoa giám sát theo thời gian thực.
+                Trợ lý AI hỗ trợ tiếp nhận thông tin triệu chứng và tìm chuyên khoa phù hợp.
                 Hỗ trợ sàng lọc sơ bộ, đánh giá phân tầng cấp cứu ATS và đặt lịch hẹn khám đích xác.
               </p>
             </div>
@@ -61,8 +61,8 @@ export default memo(function PatientConsultationPage() {
           {/* Quick Metrics / Trust Indicators */}
           <div className="flex items-center gap-3 self-start md:self-center shrink-0">
             <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-[#080E1F]/70 px-3.5 py-2 text-center">
-              <div className="text-base font-bold text-blue-600 dark:text-cyan-400">100%</div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-400">Bác sĩ đối soát</div>
+              <div className="text-base font-bold text-blue-600 dark:text-cyan-400">AI</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">Yêu cầu đặt hẹn</div>
             </div>
             <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-[#080E1F]/70 px-3.5 py-2 text-center">
               <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">ATS 1-5</div>
@@ -88,29 +88,29 @@ export default memo(function PatientConsultationPage() {
             <div className="flex items-center justify-between border-b border-slate-200/70 dark:border-slate-800/80 pb-3">
               <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-cyan-300">
                 <UserCheck className="h-4 w-4 text-blue-600 dark:text-cyan-400" />
-                Bác Sĩ Giám Sát Ca Trực
+                Thông Tin Tư Vấn
               </h2>
               <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             </div>
 
             <div className="mt-3.5 flex items-start gap-3">
               <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-700 to-indigo-600 text-white font-bold shadow-md shadow-blue-600/25">
-                <span className="text-sm">PL</span>
+                <span className="text-sm">AI</span>
                 <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0B1329] text-[9px] text-white">
                   ✓
                 </span>
               </div>
               <div>
-                <p className="font-bold text-sm text-slate-900 dark:text-white">BS CKII. Nguyễn Phương Linh</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Khoa Cấp Cứu & Điều Phối Lâm Sàng</p>
+                <p className="font-bold text-sm text-slate-900 dark:text-white">Trợ lý tư vấn AI</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Hỗ trợ sàng lọc sơ bộ</p>
                 <p className="mt-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                  15 năm kinh nghiệm · BV Chợ Rẫy / ĐHYD
+                  Thông tin do hệ thống AI cung cấp
                 </p>
               </div>
             </div>
 
             <p className="mt-3 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-[#070D1E]/80 rounded-xl p-3 border border-slate-200/60 dark:border-slate-800">
-              Bác sĩ trực ban đang giám sát song song phiên hội chẩn. Nếu phát hiện các dấu hiệu nguy kịch (ATS 1-2), bác sĩ sẽ can thiệp tức thì.
+              Phản hồi AI không thay thế việc khám trực tiếp. Yêu cầu đặt hẹn cần được cơ sở y tế xác nhận.
             </p>
           </section>
 
@@ -160,7 +160,7 @@ export default memo(function PatientConsultationPage() {
               Bảo Mật Dữ Liệu Y Tế
             </h2>
             <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-500 dark:text-slate-400">
-              Toàn bộ phiên tư vấn được mã hóa đầu-cuối (E2E), tuân thủ tiêu chuẩn an toàn bảo mật thông tin bệnh án điện tử (EMR) và quy định của Bộ Y Tế.
+              Chỉ cung cấp thông tin cần thiết để tư vấn và đặt hẹn. Không gửi mật khẩu hoặc mã xác thực trong hội thoại.
             </p>
           </section>
         </aside>

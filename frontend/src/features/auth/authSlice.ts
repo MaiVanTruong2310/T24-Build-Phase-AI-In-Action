@@ -37,7 +37,9 @@ const initialState: AuthState = {
 type RegistrationPayload = Record<string, string | boolean | null | undefined>;
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error ? error.message : fallback;
+  error instanceof TypeError && /fetch|network/i.test(error.message)
+    ? 'Không thể kết nối tới máy chủ. Vui lòng thử lại sau.'
+    : error instanceof Error ? error.message : fallback;
 
 const translateError = (msg: string | undefined | null): string => {
   if (!msg) return 'Đã xảy ra lỗi.';

@@ -137,7 +137,7 @@ class HybridDialogueService:
             side = location_match.group(3) or ""
             location = " ".join(part for part in (location_match.group(1), side) if part).strip()
 
-        patient_name = None
+        patient_name = state.get("patient_name")
         name_match = re.search(r"\b(?:tôi|toi|mình|minh)\s+tên(?:\s+là)?\s+([A-Za-zÀ-ỹ]+)", text, re.IGNORECASE)
         if name_match:
             patient_name = name_match.group(1).strip().title()

@@ -5,9 +5,9 @@ import {
   saveTokens,
 } from '../features/auth/session';
 
-// Local Vite development uses the shared development backend exposed through ngrok.
+// Default matches the local backend started by run.ps1.
 // Set VITE_API_BASE_URL in frontend/.env.local to override this when needed.
-const LOCAL_API_ORIGIN = 'https://reclining-unlit-unused.ngrok-free.dev';
+const LOCAL_API_ORIGIN = 'http://localhost:8000';
 
 function normalizeApiOrigin(value: string): string {
   const trimmedValue = value.trim().replace(/\/$/, '');
@@ -101,7 +101,12 @@ export function resolveApiUrl(url: string): string {
 }
 
 export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(resolveApiUrl(url), options);
+  const resolvedUrl = resolveApiUrl(url);
+  const headers = new Headers(options.headers);
+  if (/\.ngrok(?:-free\.(?:dev|app)|\.io)$/.test(new URL(resolvedUrl).hostname)) {
+    headers.set(NGROK_SKIP_BROWSER_WARNING_HEADER, 'true');
+  }
+  return fetch(resolvedUrl, { ...options, headers });
 }
 
 async function performRefresh(refreshToken: string): Promise<string | null> {

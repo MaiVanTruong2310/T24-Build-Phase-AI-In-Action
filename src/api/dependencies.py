@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import AuthenticationError, AuthorizationError
 from src.core.security import decode_access_token
-from src.db.dependencies import get_db_session
+from src.db.dependencies import get_auth_db_session
 from src.models.user import User
 from src.repositories.user import UserRepository
 
@@ -17,9 +17,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_auth_db_session),
 ) -> User:
     """Resolve the active user from a valid access token."""
+    from src.services.supabase_auth import native_auth_enabled, authenticated_profile
+    if native_auth_enabled():
+        return await authenticated_profile(token, session)
     payload = decode_access_token(token)
     try:
         user_id = UUID(str(payload["sub"]))

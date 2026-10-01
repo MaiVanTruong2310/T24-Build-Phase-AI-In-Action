@@ -1,3 +1,4 @@
+import type { ChatProfile } from './profile';
 import { fetchPublicApi } from '../../app/apiClient';
 
 export interface TokenUsage {
@@ -27,6 +28,7 @@ export interface BookingIntake {
   required?: boolean;
   endpoint?: string;
   patient_name?: string;
+  patient_phone?: string;
   specialty_name?: string;
   selected_slot_id?: string | null;
   selected_doctor_id?: string | null;
@@ -55,6 +57,7 @@ interface StreamChatOptions {
   message: string;
   sessionId: string;
   signal?: AbortSignal;
+  profile?: ChatProfile;
   onToken: (token: string) => void;
   onMetadata: (metadata: ChatMetadata) => void;
 }
@@ -74,11 +77,12 @@ export async function streamChat({
   signal,
   onToken,
   onMetadata,
+  profile,
 }: StreamChatOptions): Promise<void> {
   const response = await fetchPublicApi('/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId }),
+    body: JSON.stringify({ message, session_id: sessionId, patient_profile: profile }),
     signal,
   });
 
@@ -86,15 +90,26 @@ export async function streamChat({
     throw new Error(`Chat stream failed with HTTP ${response.status}`);
   }
 
+  if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+    throw new Error('Chat endpoint did not return an event stream');
+  }
+
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let completed = false;
+  let content = '';
 
   const consume = (rawEvent: string) => {
     const data = parseServerEvent(rawEvent);
-    if (!data || data === '[DONE]') return;
+    if (!data) return;
+    if (data === '[DONE]') {
+      completed = true;
+      return;
+    }
     const event = JSON.parse(data) as ChatMetadata & { type?: string; content?: string; message?: string };
     if (event.type === 'token' && typeof event.content === 'string') {
+      content += event.content;
       onToken(event.content);
     } else if (event.type === 'metadata') {
       onMetadata(event);
@@ -103,27 +118,38 @@ export async function streamChat({
     }
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    const events = buffer.split(/\r?\n\r?\n/);
-    buffer = events.pop() || '';
-    events.forEach(consume);
-    if (done) break;
+  try {
+    while (!completed) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop() || '';
+      events.forEach(consume);
+      if (done) break;
+    }
+    if (buffer.trim() && !completed) consume(buffer);
+    if (!completed || !content.trim()) {
+      throw new Error('Chat stream ended without a complete response');
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
-  if (buffer.trim()) consume(buffer);
 }
 
-export async function sendChat(message: string, sessionId: string, signal?: AbortSignal): Promise<ChatResponse> {
+export async function sendChat(message: string, sessionId: string, signal?: AbortSignal, profile?: ChatProfile): Promise<ChatResponse> {
   const response = await fetchPublicApi('/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId }),
+    body: JSON.stringify({ message, session_id: sessionId, patient_profile: profile }),
     signal,
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(payload.detail || `Chat request failed with HTTP ${response.status}`);
+  }
+  if (typeof payload.response !== 'string' || !payload.response.trim()) {
+    throw new Error('Chat endpoint returned an invalid response');
   }
   return payload as ChatResponse;
 }
