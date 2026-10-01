@@ -1,12 +1,13 @@
 """Persistence queries for user notifications and reminder outbox records."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from src.models.notification import Notification
+from src.models.user import User
 
 
 class NotificationRepository:
@@ -34,6 +35,7 @@ class NotificationRepository:
             select(Notification)
             .where(
                 Notification.user_id == user_id,
+                Notification.channel == "in_app",
                 Notification.status == "delivered",
                 Notification.available_at <= now,
             )
@@ -50,6 +52,7 @@ class NotificationRepository:
         statement = select(Notification).where(
             Notification.id == notification_id,
             Notification.user_id == user_id,
+            Notification.channel == "in_app",
             Notification.status == "delivered",
         )
         if for_update:
@@ -62,6 +65,7 @@ class NotificationRepository:
             update(Notification)
             .where(
                 Notification.user_id == user_id,
+                Notification.channel == "in_app",
                 Notification.status == "delivered",
                 Notification.read_at.is_(None),
             )
@@ -76,21 +80,25 @@ class NotificationRepository:
             .where(
                 Notification.booking_id == booking_id,
                 Notification.kind == "appointment_reminder",
-                Notification.status.in_(("pending", "delivered")),
+                Notification.status.in_(("pending", "processing", "failed", "delivered")),
             )
             .values(status="discarded", delivered_at=now, updated_at=now)
         )
         return int(result.rowcount or 0)
 
-    async def claim_due_reminders(self, now: datetime, limit: int) -> list[Notification]:
-        """Claim due reminders, discarding those whose booking is no longer confirmed."""
+    async def list_active_staff_ids(self) -> list[UUID]:
+        """Return all active staff recipients for the temporary global rollout."""
+        statement = select(User.id).where(User.role == "staff", User.status == "active")
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def claim_pending(self, now: datetime, limit: int) -> list[Notification]:
+        """Claim due notification rows for Kafka publication."""
         statement = (
             select(Notification)
-            .options(selectinload(Notification.booking))
             .where(
-                Notification.kind == "appointment_reminder",
-                Notification.status == "pending",
+                Notification.status.in_(("pending", "failed")),
                 Notification.available_at <= now,
+                Notification.dead_letter.is_(False),
             )
             .order_by(Notification.available_at.asc())
             .limit(limit)
@@ -98,12 +106,67 @@ class NotificationRepository:
         )
         notifications = list((await self.session.execute(statement)).scalars().all())
         for notification in notifications:
-            notification.status = (
-                "delivered"
-                if notification.booking is not None and notification.booking.status == "confirmed"
-                else "discarded"
-            )
-            notification.delivered_at = now
+            notification.status = "processing"
+            notification.attempt_count += 1
         if notifications:
             await self.session.flush()
         return notifications
+
+    async def mark_published(self, notification_id: UUID, now: datetime) -> None:
+        """Record successful Kafka publication without completing delivery."""
+        await self.session.execute(
+            update(Notification)
+            .where(Notification.id == notification_id, Notification.status == "processing")
+            .values(published_at=now, updated_at=now)
+        )
+
+    async def get_processing(self, notification_id: UUID) -> Notification | None:
+        """Load a Kafka-delivered row and its recipient without exposing other rows."""
+        statement = (
+            select(Notification).options(selectinload(Notification.user)).where(Notification.id == notification_id)
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def mark_delivered(self, notification_id: UUID, now: datetime) -> None:
+        """Complete one notification delivery idempotently."""
+        await self.session.execute(
+            update(Notification)
+            .where(Notification.id == notification_id, Notification.status == "processing")
+            .values(status="delivered", delivered_at=now, updated_at=now)
+        )
+
+    async def mark_failed(
+        self,
+        notification_id: UUID,
+        error: str,
+        now: datetime,
+        *,
+        max_attempts: int,
+        retry_backoff_seconds: int,
+        retry_backoff_max_seconds: int,
+    ) -> None:
+        """Schedule a retry or mark a notification as dead-lettered."""
+        notification = await self.get_processing(notification_id)
+        if notification is None or notification.status != "processing":
+            return
+        dead_letter = notification.attempt_count >= max_attempts
+        delay = min(
+            retry_backoff_seconds * (2 ** max(notification.attempt_count - 1, 0)),
+            retry_backoff_max_seconds,
+        )
+        notification.status = "failed"
+        notification.error = error[:2000]
+        notification.dead_letter = dead_letter
+        notification.available_at = now + timedelta(seconds=delay)
+        notification.updated_at = now
+        await self.session.flush()
+
+    async def requeue_stale_processing(self, now: datetime, timeout_seconds: int) -> int:
+        """Return rows abandoned by a crashed publisher/consumer to the queue."""
+        stale_before = now - timedelta(seconds=timeout_seconds)
+        result = await self.session.execute(
+            update(Notification)
+            .where(Notification.status == "processing", Notification.updated_at <= stale_before)
+            .values(status="pending", available_at=now, updated_at=now)
+        )
+        return int(result.rowcount or 0)

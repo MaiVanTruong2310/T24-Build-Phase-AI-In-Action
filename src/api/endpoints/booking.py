@@ -13,15 +13,13 @@ from src.models.user import User
 from src.schemas.booking import (
     BookingCancelRequest,
     BookingCreate,
-    BookingHoldCreate,
-    BookingHoldResponse,
     BookingRescheduleCreate,
     BookingResponse,
     StaffBookingResponse,
     StaffBookingStatusUpdate,
 )
 from src.schemas.common import ApiResponse
-from src.services.booking import BookingService, booking_hold_response, booking_response, staff_booking_response
+from src.services.booking import BookingService, booking_response, staff_booking_response
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 staff_router = APIRouter(prefix="/staff/bookings", tags=["staff-bookings"])
@@ -40,7 +38,7 @@ async def create_booking(
     current_user: User = Depends(require_patient),
     service: BookingService = Depends(get_booking_service),
 ) -> ApiResponse[BookingResponse]:
-    """Create a pending booking exactly once after consuming a valid hold."""
+    """Create a pending booking exactly once while reserving effective capacity."""
     if not idempotency_key:
         raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
     value, replay = await service.create_idempotent(current_user.id, request, idempotency_key)
@@ -50,34 +48,12 @@ async def create_booking(
     return success_response(booking_response(value), "Booking created", 201)
 
 
-@router.post("/hold", response_model=ApiResponse[BookingHoldResponse], status_code=status.HTTP_201_CREATED)
-async def create_booking_hold(
-    request: BookingHoldCreate,
-    current_user: User = Depends(require_patient),
-    service: BookingService = Depends(get_booking_service),
-) -> ApiResponse[BookingHoldResponse]:
-    """Reserve one available schedule before the patient confirms a booking."""
-    value = await service.hold(current_user.id, request)
-    return success_response(booking_hold_response(value), "Booking hold created", 201)
-
-
-@router.delete("/holds/{hold_id}", response_model=ApiResponse[None])
-async def release_booking_hold(
-    hold_id: UUID,
-    current_user: User = Depends(get_current_user),
-    service: BookingService = Depends(get_booking_service),
-) -> ApiResponse[None]:
-    """Release a patient's hold, or let staff release an operational hold."""
-    await service.release_hold(current_user.id, hold_id, is_staff=current_user.role == "staff")
-    return success_response(None, "Booking hold released")
-
-
 @router.get("", response_model=ApiResponse[list[BookingResponse]])
 async def list_bookings(
     booking_status: str | None = Query(
         default=None,
         alias="status",
-        pattern="^(pending_approval|confirmed|rejected|cancelled)$",
+        pattern="^(pending_approval|confirmed|rejected|cancelled|expired)$",
     ),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
@@ -119,7 +95,7 @@ async def reschedule_booking(
     current_user: User = Depends(require_patient),
     service: BookingService = Depends(get_booking_service),
 ) -> ApiResponse[BookingResponse]:
-    """Move a patient booking to a held schedule and return it to staff review."""
+    """Move a patient booking to a new schedule and return it to staff review."""
     value = await service.reschedule(current_user.id, booking_id, request)
     return success_response(booking_response(value), "Booking rescheduled")
 
@@ -129,7 +105,7 @@ async def staff_list_bookings(
     booking_status: str | None = Query(
         default=None,
         alias="status",
-        pattern="^(pending_approval|confirmed|rejected|cancelled)$",
+        pattern="^(pending_approval|confirmed|rejected|cancelled|expired)$",
     ),
     selected_date: date | None = Query(default=None, alias="date"),
     offset: int = Query(default=0, ge=0),

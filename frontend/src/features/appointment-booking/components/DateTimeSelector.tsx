@@ -134,8 +134,9 @@ export function DateTimeSelector({
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
               {group.slots.map((schedule) => {
                 const isDemo = schedule.source_system === 'ui-demo';
-                const hasCapacity = typeof schedule.capacity === 'number';
-                const isAvailable = isDemo || (schedule.status === 'available' && (!hasCapacity || schedule.capacity > 0));
+                const remainingCapacity = schedule.remaining_capacity ?? schedule.capacity;
+                const hasCapacity = typeof remainingCapacity === 'number';
+                const isAvailable = isDemo || (schedule.status === 'available' && (!hasCapacity || remainingCapacity > 0));
                 const isSelected = selectedSlot === schedule.id;
                 return (
                   <button
@@ -154,7 +155,7 @@ export function DateTimeSelector({
                     {isSelected && <Check className="absolute right-2 top-2 h-4 w-4 text-emerald-300" />}
                     <span className="block font-bold">{formatSlotRange(schedule, serviceDuration)}</span>
                     <span className={clsx('mt-1 block text-xs', isSelected ? 'text-sky-100' : isAvailable ? 'text-sky-600' : 'text-slate-400')}>
-                      {isAvailable ? (isDemo || !hasCapacity ? 'Còn trống' : `${schedule.capacity} chỗ trống`) : 'Không còn chỗ'}
+                      {isAvailable ? (isDemo || !hasCapacity ? 'Còn trống' : `${remainingCapacity} chỗ trống`) : 'Không còn chỗ'}
                     </span>
                   </button>
                 );

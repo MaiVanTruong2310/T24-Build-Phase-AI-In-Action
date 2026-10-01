@@ -7,7 +7,7 @@ import {
 
 // Local Vite development uses the shared development backend exposed through ngrok.
 // Set VITE_API_BASE_URL in frontend/.env.local to override this when needed.
-const LOCAL_API_ORIGIN = 'https://reclining-unlit-unused.ngrok-free.dev';
+const LOCAL_API_ORIGIN = 'http://localhost:8000/';
 
 function normalizeApiOrigin(value: string): string {
   const trimmedValue = value.trim().replace(/\/$/, '');

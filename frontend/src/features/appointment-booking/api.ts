@@ -44,7 +44,15 @@ export interface Doctor {
   facility_ids?: string[];
   service_ids?: string[];
   specialties?: Array<{ specialty_id: string; name: string }>;
-  services?: Array<{ service_id: string; name: string }>;
+  services?: Array<{ service_id: string; name: string; booking_mode?: 'group' | 'doctor_visit' }>;
+}
+
+export interface PatientOption {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string;
 }
 
 export interface DoctorFacility {
@@ -65,6 +73,7 @@ export interface Schedule {
   starts_at: string;
   ends_at: string;
   capacity: number;
+  remaining_capacity?: number | null;
   status: 'available' | 'inactive' | 'blocked' | 'cancelled';
   version: number;
   source_system?: string | null;
@@ -86,12 +95,25 @@ export interface ScheduleAuditEvent {
 export interface CreateSchedulePayload {
   doctor_id: string;
   facility_id: string;
+  service_id?: string;
+  specialty_id?: string;
   starts_at: string;
   ends_at: string;
   capacity: number;
   status: 'available' | 'inactive' | 'blocked';
   source_system?: string;
   external_schedule_id?: string;
+  patient_id?: string;
+  guest_patient?: { full_name: string; email: string; phone: string };
+  encounter_type?: 'in_person' | 'telehealth';
+  reason?: string;
+  patient_note?: string;
+}
+
+export interface CreateScheduleResult {
+  schedule: Schedule;
+  booking_id: string | null;
+  booking_status: 'confirmed' | null;
 }
 
 export interface UpdateSchedulePayload {
@@ -115,7 +137,6 @@ export class ScheduleApiError extends Error {
 }
 
 export interface CreateBookingPayload {
-  hold_id?: string;
   schedule_id?: string;
   doctor_id?: string;
   facility_id?: string;
@@ -128,13 +149,12 @@ export interface CreateBookingPayload {
   patient_note?: string;
 }
 
-export type BookingStatus = 'pending_approval' | 'confirmed' | 'rejected' | 'cancelled';
+export type BookingStatus = 'pending_approval' | 'confirmed' | 'rejected' | 'cancelled' | 'expired';
 
 export interface Booking {
   id: string;
   user_id: string;
   schedule_id: string | null;
-  hold_id: string | null;
   service_id: string;
   specialty_id: string;
   doctor_id: string;
@@ -146,6 +166,7 @@ export interface Booking {
   reason: string;
   patient_note: string | null;
   status: BookingStatus;
+  expired_at: string;
   cancellation_reason: string | null;
   created_at: string;
   updated_at: string;
@@ -153,21 +174,6 @@ export interface Booking {
 
 export interface RescheduleBookingPayload {
   schedule_id: string;
-  hold_id: string;
-}
-
-export type BookingHoldStatus = 'active' | 'released' | 'expired' | 'consumed';
-
-export interface BookingHold {
-  id: string;
-  user_id: string;
-  schedule_id: string;
-  service_id: string;
-  specialty_id: string;
-  status: BookingHoldStatus;
-  expires_at: string;
-  released_at: string | null;
-  created_at: string;
 }
 
 export class BookingApiError extends Error {
@@ -213,8 +219,9 @@ export async function fetchDoctors(
       specialty_id: item.specialty_id,
       name: item.specialty?.name || 'Chưa cập nhật',
     })),
-    services: ((doctor.services as Array<{ service_id: string; service?: { name: string } | null }> | undefined) || []).map((item) => ({
+    services: ((doctor.services as Array<{ service_id: string; service?: { name: string; booking_mode?: 'group' | 'doctor_visit' } | null }> | undefined) || []).map((item) => ({
       service_id: item.service_id,
+      booking_mode: item.service?.booking_mode,
       name: item.service?.name || 'Chưa cập nhật',
     })),
   })) as Doctor[];
@@ -225,6 +232,14 @@ export async function fetchFacilities(): Promise<Facility[]> {
   if (!res.ok) throw new Error('Failed to fetch facilities');
   const json = await res.json();
   return json.data || [];
+}
+
+export async function fetchPatients(search = ''): Promise<PatientOption[]> {
+  const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}&limit=100` : '?limit=100';
+  const res = await fetchWithAuth(`/users/patients${query}`);
+  if (!res.ok) throw new Error('Không thể tải danh sách bệnh nhân');
+  const json = await res.json();
+  return (json.data || []) as PatientOption[];
 }
 
 export async function fetchServices(filters: { specialtyId?: string; facilityId?: string } = {}): Promise<MedicalService[]> {
@@ -272,7 +287,7 @@ export async function fetchScheduleActivity(
   return json.data || [];
 }
 
-export async function createDoctorSchedule(payload: CreateSchedulePayload): Promise<Schedule> {
+export async function createDoctorSchedule(payload: CreateSchedulePayload): Promise<CreateScheduleResult> {
   const res = await fetchWithAuth('/staff/schedules', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -282,7 +297,7 @@ export async function createDoctorSchedule(payload: CreateSchedulePayload): Prom
     throw await toScheduleApiError(res);
   }
   const json = await res.json();
-  return json.data;
+  return json.data as CreateScheduleResult;
 }
 
 export async function updateDoctorSchedule(
@@ -342,31 +357,6 @@ export async function rescheduleBooking(
   return json.data as Booking;
 }
 
-export async function createBookingHold(
-  scheduleId: string,
-  serviceId: string,
-  specialtyId: string,
-  holdSeconds = 300,
-): Promise<BookingHold> {
-  const res = await fetchWithAuth('/bookings/hold', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      schedule_id: scheduleId,
-      service_id: serviceId,
-      specialty_id: specialtyId,
-      hold_seconds: holdSeconds,
-    }),
-  });
-  if (!res.ok) throw await toBookingApiError(res);
-  const json = await res.json();
-  return json.data as BookingHold;
-}
-
-export async function releaseBookingHold(holdId: string): Promise<void> {
-  const res = await fetchWithAuth(`/bookings/holds/${holdId}`, { method: 'DELETE' });
-  if (!res.ok) throw await toBookingApiError(res);
-}
 
 export async function fetchBookings(status?: BookingStatus): Promise<Booking[]> {
   const query = new URLSearchParams({ offset: '0', limit: '50' });

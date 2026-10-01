@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user, require_staff
@@ -161,6 +161,19 @@ async def update_me(
     """Update and return the authenticated user's profile."""
     user = await service.update_profile(current_user, request)
     return success_response(UserResponse.model_validate(user), "Profile updated")
+
+
+@user_router.get("/patients", response_model=ApiResponse[list[UserResponse]])
+async def list_patients(
+    search: str | None = Query(default=None, max_length=200),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    _: User = Depends(require_staff),
+    service: AuthService = Depends(get_auth_service),
+) -> ApiResponse[list[UserResponse]]:
+    """List patient names and contact identities for staff booking forms."""
+    values = await service.list_patients(search, offset, limit)
+    return success_response([UserResponse.model_validate(value) for value in values], "Patients retrieved")
 
 
 @user_router.get("/{user_id}", response_model=ApiResponse[UserResponse])

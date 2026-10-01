@@ -238,6 +238,10 @@ class AuthService:
             raise NotFoundError("User not found")
         return user
 
+    async def list_patients(self, search: str | None, offset: int, limit: int) -> list[User]:
+        """Return patient identities for staff booking selection."""
+        return await self.users.list_patients(search, offset=offset, limit=limit)
+
     async def update_profile(self, user: User, request: UpdateProfileRequest) -> User:
         """Apply allowed profile changes and flush them in a transaction."""
         async with self.session.begin():

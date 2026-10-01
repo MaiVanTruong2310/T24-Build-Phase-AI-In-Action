@@ -52,6 +52,18 @@ function facilityLabel(schedule: Schedule, doctor: Doctor): string {
   return assignment?.room ? `${facilityName} • P.${assignment.room}` : facilityName;
 }
 
+function hasRemainingCapacity(schedule: Schedule): boolean {
+  return (schedule.remaining_capacity ?? schedule.capacity) > 0;
+}
+
+function displayStatusLabel(schedule: Schedule): string {
+  if (schedule.status === 'available') {
+    const remaining = schedule.remaining_capacity ?? schedule.capacity;
+    return remaining > 0 ? `Còn ${remaining} lượt` : 'Đã kín';
+  }
+  return statusLabel(schedule);
+}
+
 function cardStyle(schedule: Schedule) {
   const startsAt = localMinutes(schedule.starts_at);
   const duration = Math.max(
@@ -124,13 +136,13 @@ export function ScheduleMatrix({
                         key={schedule.id}
                         type="button"
                         onClick={() => onScheduleClick(schedule)}
-                        className={clsx('absolute z-10 overflow-hidden rounded-lg border px-2 py-1 text-left shadow-sm transition hover:z-20 hover:shadow-md', schedule.status === 'available' && schedule.capacity > 0 ? 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100' : 'border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100')}
+                        className={clsx('absolute z-10 overflow-hidden rounded-lg border px-2 py-1 text-left shadow-sm transition hover:z-20 hover:shadow-md', schedule.status === 'available' && hasRemainingCapacity(schedule) ? 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100' : 'border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100')}
                         style={{ ...cardStyle(schedule), left: '4px', right: '4px' }}
                         title="Xem chi tiết và cập nhật lịch"
                       >
                         <span className="block truncate text-[10px] font-extrabold">{timeLabel(schedule.starts_at)} - {timeLabel(schedule.ends_at)}</span>
                         <span className="block truncate text-[10px] font-semibold">{facilityLabel(schedule, doctor)}</span>
-                        <span className="block truncate text-[10px]">{statusLabel(schedule)}</span>
+                         <span className="block truncate text-[10px]">{displayStatusLabel(schedule)}</span>
                       </button>
                     ))}
                     {daySchedules.length === 0 && <button type="button" onClick={() => onAddSchedule(day.iso)} className="absolute inset-x-3 bottom-3 z-10 rounded-lg border border-dashed border-slate-200 py-2 text-[10px] font-semibold text-slate-400 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600"><Plus size={13} className="mx-auto" /> Thêm mốc giờ</button>}

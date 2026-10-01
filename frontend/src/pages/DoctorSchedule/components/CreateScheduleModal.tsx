@@ -3,6 +3,8 @@ import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import {
   createDoctorSchedule,
   Doctor,
+  fetchPatients,
+  PatientOption,
   Schedule,
   ScheduleApiError,
 } from '../../../features/appointment-booking/api';
@@ -27,16 +29,53 @@ export function CreateScheduleModal({
   const facilities = doctor.facilities || [];
   const [date, setDate] = useState(defaultDate);
   const [facilityId, setFacilityId] = useState(facilities[0]?.facility_id || '');
+  const [serviceId, setServiceId] = useState(doctor.services?.[0]?.service_id || '');
+  const [specialtyId, setSpecialtyId] = useState(doctor.specialties?.[0]?.specialty_id || '');
+  const [patientMode, setPatientMode] = useState<'none' | 'registered' | 'guest'>('none');
+  const [patientId, setPatientId] = useState('');
+  const [patients, setPatients] = useState<PatientOption[]>([]);
+  const [loadingPatients, setLoadingPatients] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('12:00');
   const [capacity, setCapacity] = useState('5');
   const [status, setStatus] = useState<'available' | 'blocked' | 'inactive'>('available');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const selectedService = doctor.services?.find((item) => item.service_id === serviceId);
+  const supportsDirectPatientBooking = selectedService?.booking_mode === 'doctor_visit';
 
   useEffect(() => {
     setDate(defaultDate);
   }, [defaultDate]);
+
+  useEffect(() => {
+    if (!supportsDirectPatientBooking && patientMode !== 'none') {
+      setPatientMode('none');
+      setPatientId('');
+    }
+  }, [patientMode, supportsDirectPatientBooking]);
+
+  useEffect(() => {
+    if (patientMode !== 'registered') return;
+    let active = true;
+    setLoadingPatients(true);
+    fetchPatients()
+      .then((values) => {
+        if (active) setPatients(values);
+      })
+      .catch(() => {
+        if (active) setError('Không thể tải danh sách bệnh nhân. Vui lòng thử lại.');
+      })
+      .finally(() => {
+        if (active) setLoadingPatients(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [patientMode]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -44,6 +83,14 @@ export function CreateScheduleModal({
 
     if (!facilityId) {
       setError('Bác sĩ chưa được gán cơ sở. Hãy gán facility trước khi tạo lịch.');
+      return;
+    }
+    if (!serviceId) {
+      setError('Vui lòng chọn dịch vụ để backend xác định loại lịch.');
+      return;
+    }
+    if (patientMode === 'registered' && !patientId) {
+      setError('Vui lòng chọn bệnh nhân.');
       return;
     }
     if (endTime <= startTime) {
@@ -58,15 +105,23 @@ export function CreateScheduleModal({
 
     setSubmitting(true);
     try {
-      const schedule = await createDoctorSchedule({
+      const result = await createDoctorSchedule({
         doctor_id: doctor.id,
         facility_id: facilityId,
+        service_id: serviceId,
+        specialty_id: specialtyId || undefined,
         starts_at: toIsoString(date, startTime),
         ends_at: toIsoString(date, endTime),
         capacity: numericCapacity,
         status,
+        patient_id: patientMode === 'registered' ? patientId : undefined,
+        guest_patient: patientMode === 'guest' ? {
+          full_name: guestName,
+          email: guestEmail,
+          phone: guestPhone,
+        } : undefined,
       });
-      onCreated(schedule);
+      onCreated(result.schedule);
     } catch (cause) {
       if (cause instanceof ScheduleApiError && cause.status === 409) {
         setError(`Không thể tạo lịch vì bị trùng thời gian: ${cause.message}`);
@@ -98,6 +153,50 @@ export function CreateScheduleModal({
             <p className="font-bold">{doctor.title ? `${doctor.title} ` : ''}{doctor.full_name}</p>
             <p className="mt-1 text-xs text-sky-700">Mã bác sĩ: {doctor.code}</p>
           </div>
+
+          <div>
+            <label htmlFor="schedule-service" className="mb-1 block text-xs font-bold text-slate-600">Dịch vụ *</label>
+            <select id="schedule-service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required>
+              <option value="">Chọn dịch vụ</option>
+              {(doctor.services || []).map((item) => <option key={item.service_id} value={item.service_id}>{item.name} ({item.booking_mode === 'doctor_visit' ? 'khám riêng' : 'khám theo sức chứa'})</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="schedule-patient-mode" className="mb-1 block text-xs font-bold text-slate-600">Bệnh nhân (tuỳ chọn)</label>
+            {supportsDirectPatientBooking ? (
+              <select id="schedule-patient-mode" value={patientMode} onChange={(event) => setPatientMode(event.target.value as typeof patientMode)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+                <option value="none">Chỉ tạo lịch, chưa gắn bệnh nhân</option>
+                <option value="registered">Bệnh nhân đã có tài khoản</option>
+                <option value="guest">Bệnh nhân guest</option>
+              </select>
+            ) : (
+              <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm text-slate-600">Dịch vụ theo sức chứa: chỉ tạo lịch, patient sẽ tự chọn và tạo booking.</p>
+            )}
+          </div>
+
+          {doctor.specialties && doctor.specialties.length > 0 && (
+            <div>
+              <label htmlFor="schedule-specialty" className="mb-1 block text-xs font-bold text-slate-600">Chuyên khoa</label>
+              <select id="schedule-specialty" value={specialtyId} onChange={(event) => setSpecialtyId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+                {doctor.specialties.map((item) => <option key={item.specialty_id} value={item.specialty_id}>{item.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {patientMode === 'registered' && (
+            <select value={patientId} onChange={(event) => setPatientId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required>
+              <option value="">{loadingPatients ? 'Đang tải bệnh nhân...' : 'Chọn bệnh nhân'}</option>
+              {patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.full_name || 'Chưa có tên'} — {patient.email || patient.phone || patient.id}</option>)}
+            </select>
+          )}
+          {patientMode === 'guest' && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <input value={guestName} onChange={(event) => setGuestName(event.target.value)} placeholder="Tên bệnh nhân" className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required />
+              <input type="email" value={guestEmail} onChange={(event) => setGuestEmail(event.target.value)} placeholder="Email" className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required />
+              <input value={guestPhone} onChange={(event) => setGuestPhone(event.target.value)} placeholder="Số điện thoại" className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required />
+            </div>
+          )}
 
           <div>
             <label htmlFor="schedule-facility" className="mb-1 block text-xs font-bold text-slate-600">Cơ sở khám *</label>

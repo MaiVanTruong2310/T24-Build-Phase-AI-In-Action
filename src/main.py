@@ -35,21 +35,21 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
-async def _booking_hold_cleanup_loop(interval_seconds: int) -> None:
-    """Release expired booking holds periodically until application shutdown."""
+async def _booking_maintenance_loop(interval_seconds: int) -> None:
+    """Expire pending bookings and queue due reminders periodically."""
     while True:
         try:
             async with get_session_factory()() as session:
-                released_count = await BookingService(session).release_expired_holds()
-                if released_count:
-                    logger.info("main.booking_hold_cleanup released holds", extra={"count": released_count})
-                reminder_count = await NotificationService(session).process_due_reminders()
+                expired_count = await BookingService(session).expire_pending_bookings()
+                if expired_count:
+                    logger.info("main.booking_expiration expired bookings", extra={"count": expired_count})
+                reminder_count = await NotificationService(session).create_due_reminders()
                 if reminder_count:
-                    logger.info("main.notification_cleanup delivered reminders", extra={"count": reminder_count})
+                    logger.info("main.notification_cleanup queued reminders", extra={"count": reminder_count})
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("main.booking_hold_cleanup iteration failed")
+            logger.exception("main.booking_maintenance iteration failed")
         await asyncio.sleep(interval_seconds)
 
 
@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
             raise
     cleanup_task = None
     try:
-        cleanup_task = asyncio.create_task(_booking_hold_cleanup_loop(settings.booking_hold_cleanup_interval_seconds))
+        cleanup_task = asyncio.create_task(_booking_maintenance_loop(settings.booking_maintenance_interval_seconds))
         yield
     finally:
         if cleanup_task is not None:

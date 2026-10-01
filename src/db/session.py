@@ -59,11 +59,17 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 
 
 async def initialize_database() -> None:
-    """Create missing ORM tables during the first application startup."""
+    """Create missing ORM tables for explicit local bootstrap only.
+
+    Alembic is the normal schema-management path. The advisory transaction
+    lock keeps this legacy opt-in path safe when the API reload process and a
+    worker start at the same time.
+    """
     engine = get_engine()
     table_names = sorted(Base.metadata.tables)
     logger.info("database.initialize_database creating missing tables", extra={"table_count": len(table_names)})
     async with engine.begin() as connection:
+        await connection.execute(text("SELECT pg_advisory_xact_lock(124001)"))
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist"))
         await connection.run_sync(Base.metadata.create_all)
     logger.info("database.initialize_database tables ready", extra={"table_count": len(table_names)})

@@ -2,9 +2,7 @@
 
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 
 revision: str = "0011_booking_notifications"
@@ -15,45 +13,42 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Create durable in-app notifications and scheduled reminders."""
-    op.create_table(
-        "notifications",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("booking_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("kind", sa.String(length=32), nullable=False),
-        sa.Column("status", sa.String(length=16), server_default="pending", nullable=False),
-        sa.Column("title", sa.String(length=200), nullable=False),
-        sa.Column("message", sa.Text(), nullable=False),
-        sa.Column("dedupe_key", sa.String(length=160), nullable=False),
-        sa.Column("available_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("read_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["booking_id"], ["bookings.id"], ondelete="SET NULL"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.CheckConstraint(
-            "status IN ('pending', 'delivered', 'discarded')",
-            name="ck_notifications_status",
-        ),
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS notifications (
+            id uuid NOT NULL PRIMARY KEY,
+            user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            booking_id uuid REFERENCES bookings(id) ON DELETE SET NULL,
+            kind varchar(32) NOT NULL,
+            status varchar(16) DEFAULT 'pending' NOT NULL,
+            title varchar(200) NOT NULL,
+            message text NOT NULL,
+            dedupe_key varchar(160) NOT NULL,
+            available_at timestamptz NOT NULL,
+            delivered_at timestamptz,
+            read_at timestamptz,
+            created_at timestamptz DEFAULT now() NOT NULL,
+            updated_at timestamptz DEFAULT now() NOT NULL,
+            CONSTRAINT ck_notifications_status
+                CHECK (status IN ('pending', 'delivered', 'discarded'))
+        )
+        """
     )
-    op.create_index("ix_notifications_user_id", "notifications", ["user_id"])
-    op.create_index("ix_notifications_booking_id", "notifications", ["booking_id"])
-    op.create_index("ix_notifications_kind", "notifications", ["kind"])
-    op.create_index("ix_notifications_status", "notifications", ["status"])
-    op.create_index("ix_notifications_available_at", "notifications", ["available_at"])
-    op.create_index(
-        "ix_notifications_user_status_available",
-        "notifications",
-        ["user_id", "status", "available_at"],
+    op.execute("CREATE INDEX IF NOT EXISTS ix_notifications_user_id ON notifications (user_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_notifications_booking_id ON notifications (booking_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_notifications_kind ON notifications (kind)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_notifications_status ON notifications (status)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_notifications_available_at ON notifications (available_at)")
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_notifications_user_status_available "
+        "ON notifications (user_id, status, available_at)"
     )
-    op.create_index(
-        "uq_notifications_user_dedupe_key",
-        "notifications",
-        ["user_id", "dedupe_key"],
-        unique=True,
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_user_dedupe_key ON notifications (user_id, dedupe_key)"
     )
+    # Older Alembic bootstrap databases used VARCHAR(32), which is shorter
+    # than the newer revision identifiers.
+    op.execute("ALTER TABLE IF EXISTS alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)")
 
 
 def downgrade() -> None:

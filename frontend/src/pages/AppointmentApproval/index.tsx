@@ -42,7 +42,9 @@ export default function AppointmentApproval() {
     const pending = bookings.filter(b => b.status === 'pending_approval').length;
     const confirmed = bookings.filter(b => b.status === 'confirmed').length;
     const rejected = bookings.filter(b => b.status === 'rejected').length;
-    return { all: bookings.length, pending_approval: pending, confirmed, rejected };
+    const cancelled = bookings.filter(b => b.status === 'cancelled').length;
+    const expired = bookings.filter(b => b.status === 'expired').length;
+    return { all: bookings.length, pending_approval: pending, confirmed, rejected, cancelled, expired };
   }, [bookings]);
 
   /* ── Filter + sort ── */

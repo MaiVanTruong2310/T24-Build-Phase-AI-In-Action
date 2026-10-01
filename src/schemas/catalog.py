@@ -28,10 +28,13 @@ from src.schemas.schedule import (
     BulkImportResponse,
     BulkScheduleImportRequest,
     DoctorScheduleCreate,
+    StaffScheduleCreate,
     DoctorScheduleResponse,
     DoctorScheduleUpdate,
+    GuestPatientCreate,
     ScheduleCancellationRequest,
     ScheduleImportRecord,
+    StaffScheduleCreateResponse,
 )
 from src.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
 from src.schemas.specialty import SpecialtyCreate, SpecialtyResponse, SpecialtyUpdate
@@ -51,8 +54,11 @@ __all__ = [
     "DoctorResponse",
     "DoctorReviewRequest",
     "DoctorScheduleCreate",
+    "StaffScheduleCreate",
     "DoctorScheduleResponse",
     "DoctorScheduleUpdate",
+    "GuestPatientCreate",
+    "StaffScheduleCreateResponse",
     "DoctorServiceResponse",
     "DoctorServiceAssignment",
     "DoctorSpecialtyResponse",

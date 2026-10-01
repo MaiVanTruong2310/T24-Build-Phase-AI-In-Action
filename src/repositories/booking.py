@@ -1,16 +1,16 @@
 """Persistence queries for patient bookings."""
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import selectinload
 
 from src.models.booking import Booking
-from src.models.booking_hold import BookingHold
 from src.models.catalog import DoctorSchedule, Service, Specialty
 from src.models.doctor import Doctor, DoctorService, DoctorSpecialty
 from src.models.facility import Facility
+from src.models.notification import Notification
 
 
 class BookingRepository:
@@ -28,6 +28,27 @@ class BookingRepository:
             .with_for_update()
         )
         return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def find_schedule_conflict(
+        self, *, doctor_id: UUID, starts_at: datetime, ends_at: datetime
+    ) -> DoctorSchedule | None:
+        """Find an active schedule overlapping a requested appointment time."""
+        statement = (
+            select(DoctorSchedule)
+            .where(
+                DoctorSchedule.doctor_id == doctor_id,
+                DoctorSchedule.status != "cancelled",
+                DoctorSchedule.starts_at < ends_at,
+                DoctorSchedule.ends_at > starts_at,
+            )
+            .with_for_update()
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def add_schedule(self, schedule: DoctorSchedule) -> None:
+        """Stage a schedule created as part of staff booking approval."""
+        self.session.add(schedule)
+        await self.session.flush()
 
     async def get_schedules_for_update(self, schedule_ids: set[UUID]) -> dict[UUID, DoctorSchedule]:
         """Lock schedules in deterministic UUID order for safe rescheduling."""
@@ -87,80 +108,32 @@ class BookingRepository:
         return (await self.session.execute(statement)).scalar_one_or_none() is not None
 
     async def count_active_for_schedule(self, schedule_id: UUID) -> int:
-        """Count bookings and non-expired holds that consume a schedule slot."""
+        """Count bookings that currently reserve a schedule slot."""
         statement = select(func.count(Booking.id)).where(
             Booking.schedule_id == schedule_id,
-            Booking.status.notin_(("cancelled", "rejected")),
+            Booking.status.in_(("pending_approval", "confirmed")),
         )
-        bookings = int((await self.session.execute(statement)).scalar_one())
-        holds = await self.count_active_holds_for_schedule(schedule_id)
-        return bookings + holds
-
-    async def count_active_holds_for_schedule(self, schedule_id: UUID, *, exclude_hold_id: UUID | None = None) -> int:
-        """Count active, non-expired holds for a schedule."""
-        statement = select(func.count(BookingHold.id)).where(
-            BookingHold.schedule_id == schedule_id,
-            BookingHold.status == "active",
-            BookingHold.expires_at > datetime.now(UTC),
-        )
-        if exclude_hold_id:
-            statement = statement.where(BookingHold.id != exclude_hold_id)
         return int((await self.session.execute(statement)).scalar_one())
 
     async def count_reservations_for_schedule(
         self,
         schedule_id: UUID,
         *,
-        exclude_hold_id: UUID | None = None,
         exclude_booking_id: UUID | None = None,
     ) -> int:
-        """Count bookings and active holds, optionally excluding one hold."""
+        """Count active bookings, optionally excluding one booking."""
         statement = select(func.count(Booking.id)).where(
             Booking.schedule_id == schedule_id,
-            Booking.status.notin_(("cancelled", "rejected")),
+            Booking.status.in_(("pending_approval", "confirmed")),
         )
         if exclude_booking_id:
             statement = statement.where(Booking.id != exclude_booking_id)
-        bookings = int((await self.session.execute(statement)).scalar_one())
-        return bookings + await self.count_active_holds_for_schedule(schedule_id, exclude_hold_id=exclude_hold_id)
+        return int((await self.session.execute(statement)).scalar_one())
 
     async def add(self, booking: Booking) -> None:
         """Stage a booking for the current transaction."""
         self.session.add(booking)
         await self.session.flush()
-
-    async def add_hold(self, hold: BookingHold) -> None:
-        """Stage a hold for the current transaction."""
-        self.session.add(hold)
-        await self.session.flush()
-
-    async def get_active_hold_for_user_schedule(
-        self, user_id: UUID, schedule_id: UUID, *, for_update: bool = False
-    ) -> BookingHold | None:
-        """Find one active hold owned by a patient for a schedule."""
-        statement = select(BookingHold).where(
-            BookingHold.user_id == user_id,
-            BookingHold.schedule_id == schedule_id,
-            BookingHold.status == "active",
-            BookingHold.expires_at > datetime.now(UTC),
-        )
-        if for_update:
-            statement = statement.with_for_update()
-        return (await self.session.execute(statement)).scalar_one_or_none()
-
-    async def get_hold_for_user(self, hold_id: UUID, user_id: UUID, *, for_update: bool = False) -> BookingHold | None:
-        """Fetch a hold only when it belongs to the current user."""
-        statement = select(BookingHold).where(BookingHold.id == hold_id, BookingHold.user_id == user_id)
-        if for_update:
-            statement = statement.with_for_update()
-        return (await self.session.execute(statement)).scalar_one_or_none()
-
-    async def get_hold(self, hold_id: UUID, *, for_update: bool = False) -> BookingHold | None:
-        """Fetch a hold by ID for staff-owned maintenance flows."""
-        statement = select(BookingHold).where(BookingHold.id == hold_id)
-        if for_update:
-            statement = statement.with_for_update()
-        return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def get_booking_by_idempotency(self, user_id: UUID, key: str) -> Booking | None:
         """Find a previous booking attempt for the same user and key."""
@@ -173,15 +146,42 @@ class BookingRepository:
             )
         )
 
-    async def release_expired_holds(self, now: datetime | None = None) -> int:
-        """Mark expired active holds as released capacity."""
-        current_time = now or datetime.now(UTC)
-        result = await self.session.execute(
-            update(BookingHold)
-            .where(BookingHold.status == "active", BookingHold.expires_at <= current_time)
-            .values(status="expired", released_at=current_time, updated_at=current_time)
+    async def claim_expired_pending_bookings(self, now: datetime, limit: int) -> list[Booking]:
+        """Lock pending approvals whose 24-hour deadline has passed."""
+        statement = (
+            select(Booking)
+            .where(
+                Booking.status == "pending_approval",
+                Booking.expired_at <= now,
+            )
+            .order_by(Booking.expired_at.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
         )
-        return int(result.rowcount or 0)
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def list_confirmed_reminder_candidates(self, now: datetime, deadline: datetime, limit: int) -> list[Booking]:
+        """Find confirmed future appointments that have no reminder yet."""
+        reminder_exists = exists(
+            select(Notification.id).where(
+                Notification.booking_id == Booking.id,
+                Notification.kind == "appointment_reminder",
+                Notification.dedupe_key == func.concat("booking:", Booking.id, ":reminder:2d:in_app"),
+            )
+        )
+        statement = (
+            select(Booking)
+            .where(
+                Booking.status == "confirmed",
+                Booking.starts_at > now,
+                Booking.starts_at <= deadline,
+                ~reminder_exists,
+            )
+            .order_by(Booking.starts_at.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
 
     async def list_for_user(self, user_id: UUID, status: str | None, offset: int, limit: int) -> list[Booking]:
         """List only bookings owned by the authenticated user."""

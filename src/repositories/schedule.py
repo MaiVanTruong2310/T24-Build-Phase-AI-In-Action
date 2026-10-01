@@ -3,9 +3,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from src.models.booking import Booking
 from src.models.catalog import Doctor, DoctorSchedule, Facility, Service
 from src.models.doctor import DoctorService
 
@@ -44,6 +45,29 @@ class ScheduleRepositoryMixin:
         """Lock a doctor row so schedule conflict checks serialize per doctor."""
         statement = select(Doctor).where(Doctor.id == doctor_id).with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def has_doctor_service(self, doctor_id: UUID, service_id: UUID) -> bool:
+        """Check that a doctor offers a selected service."""
+        statement = select(DoctorService.id).where(
+            DoctorService.doctor_id == doctor_id,
+            DoctorService.service_id == service_id,
+            DoctorService.active.is_(True),
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none() is not None
+
+    async def count_active_bookings_for_schedules(self, schedule_ids: list[UUID]) -> dict[UUID, int]:
+        """Count pending and confirmed reservations for a schedule batch."""
+        if not schedule_ids:
+            return {}
+        statement = (
+            select(Booking.schedule_id, func.count(Booking.id))
+            .where(
+                Booking.schedule_id.in_(schedule_ids),
+                Booking.status.in_(("pending_approval", "confirmed")),
+            )
+            .group_by(Booking.schedule_id)
+        )
+        return {schedule_id: int(count) for schedule_id, count in (await self.session.execute(statement)).all()}
 
     async def find_schedule_conflict(
         self,
@@ -119,9 +143,18 @@ class ScheduleRepositoryMixin:
         if source_system:
             statement = statement.where(DoctorSchedule.source_system == source_system)
         if public_only:
+            active_count = (
+                select(func.count(Booking.id))
+                .where(
+                    Booking.schedule_id == DoctorSchedule.id,
+                    Booking.status.in_(("pending_approval", "confirmed")),
+                )
+                .correlate(DoctorSchedule)
+                .scalar_subquery()
+            )
             statement = statement.where(
                 DoctorSchedule.status == "available",
-                DoctorSchedule.capacity > 0,
+                DoctorSchedule.capacity > active_count,
                 Doctor.status == "active",
                 Doctor.review_status == "approved",
                 Doctor.booking_enabled.is_(True),

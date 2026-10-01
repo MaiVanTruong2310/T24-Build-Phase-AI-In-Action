@@ -106,6 +106,7 @@ export default function AppointmentProgress() {
     confirmed: bookings.filter((booking) => booking.status === 'confirmed').length,
     rejected: bookings.filter((booking) => booking.status === 'rejected').length,
     cancelled: bookings.filter((booking) => booking.status === 'cancelled').length,
+    expired: bookings.filter((booking) => booking.status === 'expired').length,
   }), [bookings]);
 
   const filteredBookings = useMemo(

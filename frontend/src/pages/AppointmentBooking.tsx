@@ -10,9 +10,7 @@ import { fetchCurrentUser, PatientProfile } from '../features/patient/api';
 import {
   BookingApiError,
   Booking,
-  BookingHold,
   createBooking,
-  createBookingHold,
   Doctor,
   Facility,
   fetchAvailability,
@@ -22,7 +20,6 @@ import {
   fetchSpecialties,
   fetchBooking,
   MedicalService,
-  releaseBookingHold,
   rescheduleBooking,
   Schedule,
   Specialty,
@@ -59,8 +56,6 @@ export default function AppointmentBooking() {
   const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   const [isBooking, setIsBooking] = useState(false);
-  const [hold, setHold] = useState<BookingHold | null>(null);
-  const [holdSecondsRemaining, setHoldSecondsRemaining] = useState(0);
   const [bookingError, setBookingError] = useState('');
   const [catalogError, setCatalogError] = useState('');
   const [availabilityError, setAvailabilityError] = useState('');
@@ -68,27 +63,9 @@ export default function AppointmentBooking() {
   const [patientNote, setPatientNote] = useState('');
   const [rescheduleSource, setRescheduleSource] = useState<Booking | null>(null);
   const [rescheduleLoading, setRescheduleLoading] = useState(false);
-  const holdRef = useRef<BookingHold | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    holdRef.current = hold;
-  }, [hold]);
-
-  useEffect(() => {
-    return () => {
-      const activeHold = holdRef.current;
-      if (activeHold) void releaseBookingHold(activeHold.id).catch(() => undefined);
-    };
-  }, []);
-
-  useEffect(() => {
-    const previousHold = holdRef.current;
-    if (previousHold) {
-      holdRef.current = null;
-      setHold(null);
-      void releaseBookingHold(previousHold.id).catch(() => undefined);
-    }
     let cancelled = false;
 
     Promise.all([fetchSpecialties(), fetchFacilities()])
@@ -222,36 +199,6 @@ export default function AppointmentBooking() {
   }, [selectedSpecialty, selectedFacility, selectedService, rescheduleSource?.doctor_id]);
 
   useEffect(() => {
-    const previousHold = holdRef.current;
-    if (!previousHold) return;
-    holdRef.current = null;
-    setHold(null);
-    void releaseBookingHold(previousHold.id).catch(() => undefined);
-  }, [selectedDoctorId, selectedDate]);
-
-  useEffect(() => {
-    if (!hold) {
-      setHoldSecondsRemaining(0);
-      return undefined;
-    }
-
-    const updateRemaining = () => {
-      const seconds = Math.max(0, Math.ceil((new Date(hold.expires_at).getTime() - Date.now()) / 1000));
-      setHoldSecondsRemaining(seconds);
-      if (seconds === 0) {
-        holdRef.current = null;
-        setHold(null);
-        setSelectedSlot('');
-        setBookingError('Thời gian giữ chỗ đã hết. Vui lòng chọn lại khung giờ.');
-      }
-    };
-
-    updateRemaining();
-    const timer = window.setInterval(updateRemaining, 1000);
-    return () => window.clearInterval(timer);
-  }, [hold]);
-
-  useEffect(() => {
     let cancelled = false;
     setSchedules([]);
     setSelectedSlot('');
@@ -299,31 +246,11 @@ export default function AppointmentBooking() {
 
   const handleSlotSelection = async (slotId: string) => {
     setBookingError('');
-    const previousHold = holdRef.current;
-    if (previousHold) {
-      holdRef.current = null;
-      setHold(null);
-      await releaseBookingHold(previousHold.id).catch(() => undefined);
-    }
     setSelectedSlot(slotId);
-    if (!slotId || !selectedService || !selectedSpecialty) return;
-
-    try {
-      const nextHold = await createBookingHold(slotId, selectedService, selectedSpecialty);
-      holdRef.current = nextHold;
-      setHold(nextHold);
-    } catch (error) {
-      setSelectedSlot('');
-      if (error instanceof BookingApiError && error.status === 409) {
-        setBookingError('Khung giờ vừa được giữ bởi người khác. Vui lòng chọn khung giờ khác.');
-      } else {
-        setBookingError('Không thể giữ khung giờ. Vui lòng thử lại.');
-      }
-    }
   };
 
   const handleBooking = async () => {
-    if (!selectedDoctorId || !selectedSpecialty || !selectedService || !selectedSlot || !hold) {
+    if (!selectedDoctorId || !selectedSpecialty || !selectedService || !selectedSlot) {
       setBookingError('Vui lòng chọn chuyên khoa, dịch vụ, bác sĩ và khung giờ.');
       return;
     }
@@ -340,9 +267,8 @@ export default function AppointmentBooking() {
     setBookingError('');
     try {
       const booking = rescheduleId
-        ? await rescheduleBooking(rescheduleId, { schedule_id: selectedSlot, hold_id: hold.id })
+        ? await rescheduleBooking(rescheduleId, { schedule_id: selectedSlot })
         : await createBooking({
-            hold_id: hold.id,
             schedule_id: selectedSlot,
             doctor_id: selectedDoctorId,
             facility_id: scheduleFacility.id,
@@ -442,11 +368,6 @@ export default function AppointmentBooking() {
           </main>
 
           <div className="lg:col-span-4">
-            {hold && (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Khung giờ đang được giữ trong <strong>{Math.floor(holdSecondsRemaining / 60)}:{String(holdSecondsRemaining % 60).padStart(2, '0')}</strong>.
-              </div>
-            )}
             <BookingSummary
               patientName={patient?.full_name || 'Chưa cập nhật họ tên'}
               patientPhone={patient?.phone || null}

@@ -65,21 +65,10 @@ def test_booking_routes_are_mounted_under_api_v1():
     }.issubset({(method.upper(), path) for path, operations in paths.items() for method in operations})
 
     assert {
-        ("POST", "/api/v1/bookings/hold"),
-        ("DELETE", "/api/v1/bookings/holds/{hold_id}"),
         ("GET", "/api/v1/staff/bookings"),
         ("GET", "/api/v1/staff/bookings/{booking_id}"),
         ("PATCH", "/api/v1/staff/bookings/{booking_id}/status"),
     }.issubset({(method.upper(), path) for path, operations in paths.items() for method in operations})
-
-
-@pytest.mark.asyncio
-async def test_hold_route_requires_patient_authentication(client):
-    """Unauthenticated users cannot reserve booking capacity."""
-    response = await client.post("/api/v1/bookings/hold", json={})
-
-    assert response.status_code == 401
-    assert response.json()["error"] == {"code": 401}
 
 
 @pytest.mark.asyncio

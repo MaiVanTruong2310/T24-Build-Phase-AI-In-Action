@@ -96,7 +96,7 @@ class CatalogService(
         """Check the non-query public availability rules for one slot."""
         return (
             value.status == "available"
-            and value.capacity > 0
+            and (getattr(value, "remaining_capacity", value.capacity) or 0) > 0
             and value.doctor.status == "active"
             and value.doctor.review_status == "approved"
             and value.doctor.booking_enabled

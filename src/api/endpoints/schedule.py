@@ -19,6 +19,8 @@ from src.schemas.catalog import (
     DoctorScheduleUpdate,
     ScheduleCancellationRequest,
     ScheduleStatus,
+    StaffScheduleCreate,
+    StaffScheduleCreateResponse,
 )
 from src.schemas.common import ApiResponse
 from src.services.catalog import CatalogService
@@ -113,16 +115,24 @@ async def staff_schedule_activity(
 
 
 @staff_router.post(
-    "/schedules", response_model=ApiResponse[DoctorScheduleResponse], status_code=status.HTTP_201_CREATED
+    "/schedules", response_model=ApiResponse[StaffScheduleCreateResponse], status_code=status.HTTP_201_CREATED
 )
 async def staff_create_schedule(
-    request: DoctorScheduleCreate,
+    request: StaffScheduleCreate,
     current_user: User = Depends(require_staff),
     service: CatalogService = Depends(get_catalog_service),
-) -> ApiResponse[DoctorScheduleResponse]:
+) -> ApiResponse[StaffScheduleCreateResponse]:
     """Create a schedule as staff."""
-    value = await service.create_schedule(request, current_user.id)
-    return success_response(DoctorScheduleResponse.model_validate(value), "Schedule created", 201)
+    schedule, booking = await service.create_schedule(request, current_user.id)
+    return success_response(
+        StaffScheduleCreateResponse(
+            schedule=DoctorScheduleResponse.model_validate(schedule),
+            booking_id=booking.id if booking else None,
+            booking_status="confirmed" if booking else None,
+        ),
+        "Schedule created",
+        201,
+    )
 
 
 @staff_router.put("/schedules/{schedule_id}", response_model=ApiResponse[DoctorScheduleResponse])
