@@ -42,6 +42,8 @@ export function CreateScheduleModal({
   const [endTime, setEndTime] = useState('12:00');
   const [capacity, setCapacity] = useState('5');
   const [status, setStatus] = useState<'available' | 'blocked' | 'inactive'>('available');
+  const [scheduleType, setScheduleType] = useState<'consultation' | 'busy' | 'leave' | 'other'>('consultation');
+  const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const selectedService = doctor.services?.find((item) => item.service_id === serviceId);
@@ -50,6 +52,20 @@ export function CreateScheduleModal({
   useEffect(() => {
     setDate(defaultDate);
   }, [defaultDate]);
+
+  useEffect(() => {
+    if (scheduleType !== 'consultation') {
+      setServiceId('');
+      setPatientMode('none');
+      setPatientId('');
+      setCapacity('0');
+      setStatus('blocked');
+    } else {
+      setServiceId((current) => current || doctor.services?.[0]?.service_id || '');
+      setCapacity((current) => current === '0' ? '5' : current);
+      setStatus((current) => current === 'blocked' ? 'available' : current);
+    }
+  }, [doctor.services, scheduleType]);
 
   useEffect(() => {
     if (!supportsDirectPatientBooking && patientMode !== 'none') {
@@ -81,15 +97,15 @@ export function CreateScheduleModal({
     event.preventDefault();
     setError('');
 
-    if (!facilityId) {
+    if (scheduleType === 'consultation' && !facilityId) {
       setError('Bác sĩ chưa được gán cơ sở. Hãy gán facility trước khi tạo lịch.');
       return;
     }
-    if (!serviceId) {
+    if (scheduleType === 'consultation' && !serviceId) {
       setError('Vui lòng chọn dịch vụ để backend xác định loại lịch.');
       return;
     }
-    if (patientMode === 'registered' && !patientId) {
+    if (scheduleType === 'consultation' && patientMode === 'registered' && !patientId) {
       setError('Vui lòng chọn bệnh nhân.');
       return;
     }
@@ -107,15 +123,17 @@ export function CreateScheduleModal({
     try {
       const result = await createDoctorSchedule({
         doctor_id: doctor.id,
-        facility_id: facilityId,
-        service_id: serviceId,
-        specialty_id: specialtyId || undefined,
+        facility_id: facilityId || undefined,
+        service_id: scheduleType === 'consultation' ? serviceId : undefined,
+        specialty_id: scheduleType === 'consultation' ? specialtyId || undefined : undefined,
         starts_at: toIsoString(date, startTime),
         ends_at: toIsoString(date, endTime),
-        capacity: numericCapacity,
-        status,
-        patient_id: patientMode === 'registered' ? patientId : undefined,
-        guest_patient: patientMode === 'guest' ? {
+        capacity: scheduleType === 'consultation' ? numericCapacity : 0,
+        status: scheduleType === 'consultation' ? status : 'blocked',
+        type: scheduleType,
+        note: note.trim() || undefined,
+        patient_id: scheduleType === 'consultation' && patientMode === 'registered' ? patientId : undefined,
+        guest_patient: scheduleType === 'consultation' && patientMode === 'guest' ? {
           full_name: guestName,
           email: guestEmail,
           phone: guestPhone,
@@ -155,14 +173,24 @@ export function CreateScheduleModal({
           </div>
 
           <div>
+            <label htmlFor="schedule-type" className="mb-1 block text-xs font-bold text-slate-600">Loại lịch *</label>
+            <select id="schedule-type" value={scheduleType} onChange={(event) => setScheduleType(event.target.value as typeof scheduleType)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+              <option value="consultation">Khám</option>
+              <option value="busy">Bận</option>
+              <option value="leave">Nghỉ phép</option>
+              <option value="other">Khác</option>
+            </select>
+          </div>
+
+          {scheduleType === 'consultation' && <div>
             <label htmlFor="schedule-service" className="mb-1 block text-xs font-bold text-slate-600">Dịch vụ *</label>
             <select id="schedule-service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required>
               <option value="">Chọn dịch vụ</option>
               {(doctor.services || []).map((item) => <option key={item.service_id} value={item.service_id}>{item.name} ({item.booking_mode === 'doctor_visit' ? 'khám riêng' : 'khám theo sức chứa'})</option>)}
             </select>
-          </div>
+          </div>}
 
-          <div>
+          {scheduleType === 'consultation' && <div>
             <label htmlFor="schedule-patient-mode" className="mb-1 block text-xs font-bold text-slate-600">Bệnh nhân (tuỳ chọn)</label>
             {supportsDirectPatientBooking ? (
               <select id="schedule-patient-mode" value={patientMode} onChange={(event) => setPatientMode(event.target.value as typeof patientMode)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500">
@@ -173,7 +201,7 @@ export function CreateScheduleModal({
             ) : (
               <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm text-slate-600">Dịch vụ theo sức chứa: chỉ tạo lịch, patient sẽ tự chọn và tạo booking.</p>
             )}
-          </div>
+          </div>}
 
           {doctor.specialties && doctor.specialties.length > 0 && (
             <div>
@@ -199,9 +227,9 @@ export function CreateScheduleModal({
           )}
 
           <div>
-            <label htmlFor="schedule-facility" className="mb-1 block text-xs font-bold text-slate-600">Cơ sở khám *</label>
-            <select id="schedule-facility" value={facilityId} onChange={(event) => setFacilityId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required>
-              <option value="">Chọn cơ sở</option>
+            <label htmlFor="schedule-facility" className="mb-1 block text-xs font-bold text-slate-600">Cơ sở khám {scheduleType === 'consultation' ? '*' : '(tuỳ chọn)'}</label>
+            <select id="schedule-facility" value={facilityId} onChange={(event) => setFacilityId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required={scheduleType === 'consultation'}>
+              <option value="">{scheduleType === 'consultation' ? 'Chọn cơ sở' : 'Tất cả cơ sở'}</option>
               {facilities.map((assignment) => (
                 <option key={assignment.facility_id} value={assignment.facility_id}>
                   {assignment.facility?.name || assignment.facility_id}{assignment.room ? ` - Phòng ${assignment.room}` : ''}
@@ -242,6 +270,11 @@ export function CreateScheduleModal({
             </div>
           </div>
 
+          <div>
+            <label htmlFor="schedule-note" className="mb-1 block text-xs font-bold text-slate-600">Ghi chú</label>
+            <textarea id="schedule-note" value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder={scheduleType === 'consultation' ? 'Ghi chú nội bộ (tuỳ chọn)' : 'Lý do bận/nghỉ/khác'} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required={scheduleType !== 'consultation'} />
+          </div>
+
           {error && (
             <div className="flex gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -252,7 +285,7 @@ export function CreateScheduleModal({
 
         <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
           <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200">Hủy</button>
-          <button type="submit" disabled={submitting || facilities.length === 0} className="flex items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="submit" disabled={submitting || (scheduleType === 'consultation' && facilities.length === 0)} className="flex items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50">
             {submitting ? 'Đang lưu...' : <><CheckCircle2 size={16} /> Tạo lịch</>}
           </button>
         </div>

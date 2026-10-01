@@ -32,6 +32,91 @@ function formatLocalDate(value: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+const DEFAULT_WORKING_START_MINUTES = 8 * 60;
+const DEFAULT_WORKING_END_MINUTES = 18 * 60;
+const BUSINESS_TIMEZONE_OFFSET = '+07:00';
+
+function buildRequestedTimeSlot(
+  date: string,
+  doctorId: string,
+  facilityId: string,
+  startMinutes: number,
+  durationMinutes: number,
+): Schedule[] {
+  const hours = String(Math.floor(startMinutes / 60)).padStart(2, '0');
+  const minutes = String(startMinutes % 60).padStart(2, '0');
+  const startsAt = new Date(`${date}T${hours}:${minutes}:00${BUSINESS_TIMEZONE_OFFSET}`);
+  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
+  return [{
+    id: `requested-${date}-${hours}${minutes}`,
+    doctor_id: doctorId,
+    facility_id: facilityId,
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+    capacity: 0,
+    status: 'available',
+    type: 'consultation',
+    version: 0,
+    source_system: 'ui-requested-time',
+  }];
+}
+
+function rangesOverlap(leftStart: string, leftEnd: string, rightStart: string, rightEnd: string): boolean {
+  return new Date(leftStart).getTime() < new Date(rightEnd).getTime()
+    && new Date(leftEnd).getTime() > new Date(rightStart).getTime();
+}
+
+function buildPatientSchedules(
+  date: string,
+  doctorId: string,
+  facilityId: string,
+  durationMinutes: number,
+  schedules: Schedule[],
+): Schedule[] {
+  const blockedSchedules = schedules.filter((schedule) => (
+    (schedule.type ?? 'consultation') !== 'consultation'
+    && schedule.status !== 'cancelled'
+  ));
+  const consultationSchedules = schedules.filter((schedule) => (
+    (schedule.type ?? 'consultation') === 'consultation'
+  ));
+  const generatedSlots: Schedule[] = [];
+
+  for (
+    let startMinutes = DEFAULT_WORKING_START_MINUTES;
+    startMinutes + durationMinutes <= DEFAULT_WORKING_END_MINUTES;
+    startMinutes += durationMinutes
+  ) {
+    const hours = String(Math.floor(startMinutes / 60)).padStart(2, '0');
+    const minutes = String(startMinutes % 60).padStart(2, '0');
+    const startsAt = new Date(`${date}T${hours}:${minutes}:00${BUSINESS_TIMEZONE_OFFSET}`);
+    const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
+    const startsAtIso = startsAt.toISOString();
+    const endsAtIso = endsAt.toISOString();
+
+    const isBlocked = blockedSchedules.some((schedule) => rangesOverlap(
+      startsAtIso,
+      endsAtIso,
+      schedule.starts_at,
+      schedule.ends_at,
+    ));
+    const isCoveredByExplicitSchedule = consultationSchedules.some((schedule) => rangesOverlap(
+      startsAtIso,
+      endsAtIso,
+      schedule.starts_at,
+      schedule.ends_at,
+    ));
+
+    if (!isBlocked && !isCoveredByExplicitSchedule) {
+      generatedSlots.push(...buildRequestedTimeSlot(date, doctorId, facilityId, startMinutes, durationMinutes));
+    }
+  }
+
+  return [...schedules, ...generatedSlots].sort(
+    (left, right) => new Date(left.starts_at).getTime() - new Date(right.starts_at).getTime(),
+  );
+}
+
 export default function AppointmentBooking() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -237,10 +322,19 @@ export default function AppointmentBooking() {
   const selectedServiceData = services.find((service) => service.id === selectedService);
   const selectedFacilityData = facilities.find((facility) => facility.id === selectedFacility);
   const serviceDuration = selectedServiceData?.duration_minutes ?? null;
-  const displaySchedules = schedules;
+  const displaySchedules = !rescheduleId
+    && !loadingAvailability
+    && !availabilityError
+    && selectedDoctorId
+    && selectedFacility
+    && serviceDuration
+    && serviceDuration > 0
+    ? buildPatientSchedules(selectedDate, selectedDoctorId, selectedFacility, serviceDuration, schedules)
+    : schedules;
   const selectedSchedule = displaySchedules.find((schedule) => schedule.id === selectedSlot);
+  const isRequestedTimeSlot = selectedSchedule?.source_system === 'ui-requested-time' || selectedSchedule?.source_system === 'ui-demo';
   const scheduleFacility = facilities.find((facility) => facility.id === selectedSchedule?.facility_id) || selectedFacilityData;
-  const selectedDisplayEndsAt = selectedSchedule && serviceDuration
+  const selectedDisplayEndsAt = selectedSchedule?.source_system === 'ui-requested-time' && serviceDuration
     ? new Date(new Date(selectedSchedule.starts_at).getTime() + serviceDuration * 60 * 1000).toISOString()
     : selectedSchedule?.ends_at || '';
 
@@ -269,7 +363,7 @@ export default function AppointmentBooking() {
       const booking = rescheduleId
         ? await rescheduleBooking(rescheduleId, { schedule_id: selectedSlot })
         : await createBooking({
-            schedule_id: selectedSlot,
+            schedule_id: isRequestedTimeSlot ? undefined : selectedSlot,
             doctor_id: selectedDoctorId,
             facility_id: scheduleFacility.id,
             starts_at: selectedSchedule.starts_at,

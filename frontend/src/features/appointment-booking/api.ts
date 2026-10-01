@@ -69,12 +69,14 @@ export interface DoctorFacility {
 export interface Schedule {
   id: string;
   doctor_id: string;
-  facility_id: string;
+  facility_id: string | null;
   starts_at: string;
   ends_at: string;
   capacity: number;
   remaining_capacity?: number | null;
   status: 'available' | 'inactive' | 'blocked' | 'cancelled';
+  type: 'consultation' | 'busy' | 'leave' | 'other';
+  note?: string | null;
   version: number;
   source_system?: string | null;
   external_schedule_id?: string | null;
@@ -94,13 +96,15 @@ export interface ScheduleAuditEvent {
 
 export interface CreateSchedulePayload {
   doctor_id: string;
-  facility_id: string;
+  facility_id?: string;
   service_id?: string;
   specialty_id?: string;
   starts_at: string;
   ends_at: string;
   capacity: number;
   status: 'available' | 'inactive' | 'blocked';
+  type?: 'consultation' | 'busy' | 'leave' | 'other';
+  note?: string;
   source_system?: string;
   external_schedule_id?: string;
   patient_id?: string;
@@ -121,6 +125,8 @@ export interface UpdateSchedulePayload {
   ends_at: string;
   capacity: number;
   status: 'available' | 'inactive' | 'blocked';
+  type?: 'consultation' | 'busy' | 'leave' | 'other';
+  note?: string | null;
   expected_version: number;
 }
 
