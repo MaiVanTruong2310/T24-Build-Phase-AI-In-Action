@@ -29,7 +29,7 @@ async function test() {
     'react/jsx-runtime':{jsx,jsxs:jsx},'react-router-dom':{Link:'Link'},'react-redux':{useDispatch:()=>async()=>{}},'lucide-react':{Pencil:'Pencil'},
     '../../features/auth/authSlice':{initializeAuth:()=>({})},'../../features/auth/session':{readAccessToken:()=>'test-token',readRefreshToken:()=>null},
     './api':{fetchPatientProfile:async()=>states[0],updateCurrentUser:async update=>{patch=update;return {...states[0],...update,patient_details:{...states[0].patient_details,...update.patient_details}};}},
-    './Header':{Header:'Header'}, './MedicalTabs':{MedicalTabs:'MedicalTabs'},
+    './MedicalHistory':{MedicalHistory:'MedicalHistory'}, './Header':{Header:'Header'}, './MedicalTabs':{MedicalTabs:'MedicalTabs'},
   });
   let tree=component();
   assert(text(tree).includes('Actual API Name'));

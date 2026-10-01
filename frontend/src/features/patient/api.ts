@@ -14,7 +14,14 @@ export interface PatientProfile {
   patient_details?: PatientDetails | null;
 }
 
+export interface MedicalCondition {
+  id: string;
+  name: string;
+  status: 'recovered' | 'in_treatment';
+}
+
 export interface PatientDetails {
+  medical_history?: MedicalCondition[];
   blood_type?: string | null;
   allergies?: string | null;
   current_medications?: string | null;

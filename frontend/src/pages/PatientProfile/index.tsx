@@ -9,9 +9,11 @@ import type { PatientProfile, PatientDetails, PatientProfileUpdate } from '../..
 import { fetchPatientProfile, updateCurrentUser } from './api';
 import { Header } from './Header';
 import { MedicalTabs } from './MedicalTabs';
+import { MedicalHistory } from './MedicalHistory';
 import type { MedicalTabKey } from './types';
 
-type Field = { key: keyof PatientProfile | keyof PatientDetails; label: string; details?: boolean; type?: 'date' | 'number' | 'tel' | 'text'; unit?: string; options?: { value: string; label: string }[]; min?: number; max?: number; maxLength?: number };
+type EditableDetailKey = Exclude<keyof PatientDetails, 'medical_history'>;
+type Field = { key: keyof PatientProfile | EditableDetailKey; label: string; details?: boolean; type?: 'date' | 'number' | 'tel' | 'text'; unit?: string; options?: { value: string; label: string }[]; min?: number; max?: number; maxLength?: number };
 const coreFields: Field[] = [
   { key: 'full_name', label: 'Họ và tên', maxLength: 200 },
   { key: 'phone', label: 'Số điện thoại liên hệ', type: 'tel', maxLength: 32 },
@@ -27,12 +29,8 @@ const healthFields: Field[] = [
   { key:'current_medications',label:'Thuốc đang sử dụng',details:true,maxLength:2000 },
 ];
 const vitalFields: Field[] = [
-  {key:'systolic',label:'Huyết áp tâm thu',details:true,type:'number',unit:'mmHg',min:40,max:300},
-  {key:'diastolic',label:'Huyết áp tâm trương',details:true,type:'number',unit:'mmHg',min:20,max:200},
-  {key:'heart_rate',label:'Nhịp tim',details:true,type:'number',unit:'nhịp/phút',min:20,max:300},
   {key:'height_cm',label:'Chiều cao',details:true,type:'number',unit:'cm',min:0.1,max:300},
   {key:'weight_kg',label:'Cân nặng',details:true,type:'number',unit:'kg',min:0.1,max:500},
-  {key:'blood_glucose',label:'Đường huyết',details:true,type:'number',unit:'mmol/L',min:0.1,max:100},
 ];
 const contactFields: Field[] = [
   {key:'emergency_name',label:'Họ tên người liên hệ khẩn cấp',details:true,maxLength:200},
@@ -50,7 +48,7 @@ const emptyMessages: Record<MedicalTabKey, string> = {
   tests:'Chưa có dữ liệu xét nghiệm hoặc chẩn đoán hình ảnh.', timeline:'Chưa có dữ liệu tiêm chủng.',
 };
 function valueOf(profile: PatientProfile, field: Field): string | number | null | undefined {
-  return field.details ? profile.patient_details?.[field.key as keyof PatientDetails] : profile[field.key as keyof PatientProfile] as string | null;
+  return field.details ? profile.patient_details?.[field.key as EditableDetailKey] : profile[field.key as keyof PatientProfile] as string | null;
 }
 function displayValue(profile: PatientProfile, field: Field): string {
   const value = valueOf(profile, field);
@@ -137,6 +135,10 @@ export default function PatientProfilePage() {
         {notice && <p role="status" className="rounded-xl bg-green-50 p-3 text-sm text-green-700">{notice}</p>}
         {section('Thông tin cá nhân',coreFields)}
         {section('Thông tin sức khỏe',healthFields,'Thông tin do bạn cung cấp.')}
+        <MedicalHistory history={profile.patient_details?.medical_history || []} onSave={async medical_history => {
+          const updated = await updateCurrentUser({ patient_details: { medical_history } });
+          setProfile(updated); setNotice('Đã lưu tiền sử bệnh.');
+        }} />
         {section('Chỉ số sức khỏe',vitalFields,'Số đo do bạn tự nhập; chưa được nhân viên y tế xác minh.')}
         {profile.patient_details?.height_cm && profile.patient_details?.weight_kg ? <p className="px-2 text-sm text-slate-600">BMI tính từ chiều cao và cân nặng: {(profile.patient_details.weight_kg / (profile.patient_details.height_cm / 100) ** 2).toFixed(1)} kg/m²</p> : null}
         <MedicalTabs tabs={tabs} activeTab={activeTab} onTabChange={key => setActiveTab(key as MedicalTabKey)} />

@@ -107,9 +107,17 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+class MedicalCondition(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    id: str = Field(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+    name: str = Field(min_length=1, max_length=200)
+    status: Literal["recovered", "in_treatment"]
+
+
 class PatientDetails(BaseModel):
     """Patient-reported details; these do not certify a clinical diagnosis."""
     model_config = ConfigDict(extra="forbid")
+    medical_history: list[MedicalCondition] = Field(default_factory=list, max_length=100)
     blood_type: Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] | None = None
     allergies: str | None = Field(default=None, max_length=2000)
     current_medications: str | None = Field(default=None, max_length=2000)
