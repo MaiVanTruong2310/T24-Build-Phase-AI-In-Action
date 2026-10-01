@@ -1,34 +1,327 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Inter", sans-serif;
-  --color-medicare-primary: #0284c7;
-  --color-medicare-navy: #0f172a;
-  --color-triage-critical: #dc2626;
-  --color-triage-warning: #d97706;
-  --color-triage-online: #16a34a;
-  --color-ai-cyan: #0891b2;
+  --font-sans: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-clinical-navy: #0B1329;
+  --color-clinical-deep: #070D1E;
+  --color-clinical-blue: #2563EB;
+  --color-clinical-cyan: #06B6D4;
+  --color-clinical-emerald: #10B981;
+  --color-clinical-crimson: #DC2626;
+  --color-clinical-slate: #94A3B8;
+  --color-clinical-text: #F1F5F9;
 }
 
 :root {
-  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
-  color: #0f172a;
-  background: #f8fafc;
+  font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  color-scheme: light dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
+/* Light Mode Defaults */
 html {
   overflow-y: scroll;
+  scroll-behavior: smooth;
+  background-color: #F8FAFC;
+  color: #0F172A;
+  transition: background-color 0.35s ease-out, color 0.35s ease-out;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background-color: #F8FAFC;
+  color: #0F172A;
+  transition: background-color 0.35s ease-out, color 0.35s ease-out;
+}
+
+/* Dark Mode Overrides */
+html.dark,
+html[data-theme="dark"],
+html.dark body {
+  background-color: #0B1329;
+  color: #F1F5F9;
 }
 
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes gentleFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-gentle-float {
+  animation: gentleFloat 3.8s ease-in-out infinite;
+}
+
+.animate-gentle-float:hover {
+  animation-play-state: paused;
+}
+
+.fade-hover {
+  transition: opacity 0.3s ease-out, background-color 0.3s ease-out, border-color 0.3s ease-out, transform 0.3s ease-out;
+}
+
+/* ─── CLINICAL TECH / MEDICAL CLEAN SYSTEM ────────────────────── */
+
+/* Ambient Medical Glow Orbs */
+.medical-glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  will-change: transform;
+  opacity: 0.18;
+  pointer-events: none;
+  transition: opacity 0.4s ease-out;
+}
+
+html.dark .medical-glow-orb {
+  opacity: 0.35;
+}
+
+.orb-clinical-blue {
+  background: radial-gradient(circle, #2563EB 0%, transparent 70%);
+  animation: floatOrbBlue 20s ease-in-out infinite alternate;
+}
+
+.orb-clinical-cyan {
+  background: radial-gradient(circle, #06B6D4 0%, transparent 70%);
+  animation: floatOrbCyan 24s ease-in-out infinite alternate;
+}
+
+.orb-clinical-teal {
+  background: radial-gradient(circle, #0D9488 0%, transparent 70%);
+  animation: floatOrbBlue 28s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes floatOrbBlue {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(50px, 60px, 0) scale(1.08); }
+}
+
+@keyframes floatOrbCyan {
+  0% { transform: translate3d(0, 0, 0) scale(1.05); }
+  100% { transform: translate3d(-60px, -40px, 0) scale(0.95); }
+}
+
+/* Elegant Medical Gradient Headline (Adaptive Light & Dark) */
+.clinical-heading-gradient {
+  background: linear-gradient(
+    135deg,
+    #0F172A 0%,
+    #1D4ED8 45%,
+    #0284C7 80%,
+    #0D9488 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html.dark .clinical-heading-gradient {
+  background: linear-gradient(
+    135deg,
+    #FFFFFF 0%,
+    #E2E8F0 45%,
+    #93C5FD 75%,
+    #67E8F9 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Soft Cyan & Blue Spotlight Bento Card (Adaptive Light & Dark) */
+.clinical-bento-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 1rem; /* 16px */
+  overflow: hidden;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.4s ease-out,
+              box-shadow 0.4s ease-out,
+              background-color 0.4s ease-out;
+}
+
+html.dark .clinical-bento-card {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.clinical-bento-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(6, 182, 212, 0.45);
+  box-shadow: 0 12px 32px -8px rgba(6, 182, 212, 0.15),
+              0 4px 16px -4px rgba(37, 99, 235, 0.1);
+}
+
+.clinical-bento-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    480px circle at var(--mouse-x, -500px) var(--mouse-y, -500px),
+    rgba(6, 182, 212, 0.15),
+    rgba(37, 99, 235, 0.08),
+    transparent 65%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+html.dark .clinical-bento-card::before {
+  background: radial-gradient(
+    480px circle at var(--mouse-x, -500px) var(--mouse-y, -500px),
+    rgba(6, 182, 212, 0.12),
+    rgba(37, 99, 235, 0.06),
+    transparent 65%
+  );
+}
+
+.clinical-bento-card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 1rem;
+  border: 1px solid transparent;
+  background: radial-gradient(
+    380px circle at var(--mouse-x, -500px) var(--mouse-y, -500px),
+    rgba(6, 182, 212, 0.6),
+    rgba(37, 99, 235, 0.3),
+    transparent 60%
+  ) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Subtle Shimmer for Primary Button */
+.btn-clinical-primary {
+  background-color: #2563EB;
+  color: #FFFFFF;
+  border-radius: 0.75rem; /* 12px */
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.28);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-clinical-primary:hover {
+  background-color: #1D4ED8;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.42);
+  transform: translateY(-1px);
+}
+
+.btn-clinical-primary::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 30%;
+  height: 200%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%
+  );
+  transform: rotate(25deg);
+  animation: clinicalSweep 4.5s infinite ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes clinicalSweep {
+  0% { transform: translateX(-150%) rotate(25deg); }
+  25%, 100% { transform: translateX(500%) rotate(25deg); }
+}
+
+/* Ghost Button (Adaptive Light & Dark) */
+.btn-clinical-ghost {
+  background: rgba(241, 245, 249, 0.9);
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  color: #1E293B;
+  border-radius: 0.75rem; /* 12px */
+  font-weight: 500;
+  transition: all 0.3s ease-out;
+}
+
+.btn-clinical-ghost:hover {
+  background: #E2E8F0;
+  border-color: rgba(2, 132, 199, 0.4);
+  color: #0F172A;
+  transform: translateY(-1px);
+}
+
+html.dark .btn-clinical-ghost {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #F1F5F9;
+}
+
+html.dark .btn-clinical-ghost:hover {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(6, 182, 212, 0.3);
+  color: #FFFFFF;
+}
+
+/* Scroll-triggered Reveal (Smooth and Calm) */
+.reveal-item {
+  opacity: 0;
+  transform: translate3d(0, 24px, 0);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.reveal-item.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  .medical-glow-orb,
+  .btn-clinical-primary::after {
+    animation: none !important;
+  }
+  .reveal-item {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .clinical-bento-card:hover,
+  .btn-clinical-primary:hover,
+  .btn-clinical-ghost:hover {
+    transform: none !important;
+  }
 }

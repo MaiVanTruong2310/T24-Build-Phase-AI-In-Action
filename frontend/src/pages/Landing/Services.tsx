@@ -1,69 +1,91 @@
-import { MessageSquare, Calendar, Activity, FileText } from 'lucide-react'
+import React from 'react'
+import { Stethoscope, CalendarCheck, HeartPulse, FileText, CheckCircle2, ShieldCheck } from 'lucide-react'
 
 export function Services() {
+  const services = [
+    {
+      icon: Stethoscope,
+      title: 'AI Sàng Lọc Triệu Chứng Chuyên Sâu',
+      desc: 'Phân tích ngữ nghĩa ngôn ngữ tự nhiên tiếng Việt y khoa, đối chiếu với ngân hàng phác đồ lâm sàng thế giới để dự báo nguy cơ tức thì.',
+      highlights: ['Hiểu ngữ cảnh tiếng Việt tự nhiên', 'Nhận diện tổ hợp bệnh lý đa cơ quan'],
+      iconColor: 'text-blue-600 dark:text-cyan-400',
+      boxColor: 'border-blue-200 dark:border-cyan-500/30 bg-blue-50 dark:bg-cyan-950/40'
+    },
+    {
+      icon: CalendarCheck,
+      title: 'Điều Phối Khám Đúng Chuyên Khoa',
+      desc: 'Tự động sắp xếp thứ tự ưu tiên dựa trên mức độ nghiêm trọng và kết nối trực tiếp đến bác sĩ đúng chuyên khoa phù hợp.',
+      highlights: ['Tiết kiệm hơn 85% thời gian chờ', 'Đặt khám đúng chuyên gia đầu ngành'],
+      iconColor: 'text-sky-600 dark:text-blue-400',
+      boxColor: 'border-sky-200 dark:border-blue-500/30 bg-sky-50 dark:bg-blue-950/40'
+    },
+    {
+      icon: HeartPulse,
+      title: 'Hỗ Trợ Tiếp Nhận Cấp Cứu Trực Tuyến',
+      desc: 'Khi phát hiện dấu hiệu đe dọa tính mạng (nhồi máu cơ tim, đột quỵ, khó thở cấp), hệ thống lập tức mở kênh cấp cứu 115 và chỉ dẫn sơ cứu.',
+      highlights: ['Kích hoạt đường dây khẩn cấp 1-chạm', 'Hướng dẫn xử trí tại chỗ an toàn'],
+      iconColor: 'text-red-600 dark:text-red-400',
+      boxColor: 'border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-950/40'
+    },
+    {
+      icon: FileText,
+      title: 'Bệnh Án Điện Tử Chuẩn HL7 / FHIR',
+      desc: 'Lưu trữ trọn đời tiền sử bệnh, đơn thuốc và kết quả xét nghiệm theo chuẩn quốc tế HIPAA, bảo mật đa tầng, dễ dàng liên thông bệnh viện.',
+      highlights: ['Tra cứu hồ sơ sức khỏe 24/7', 'Mã hóa cấp độ cao AES-256'],
+      iconColor: 'text-emerald-600 dark:text-emerald-400',
+      boxColor: 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40'
+    }
+  ]
+
   return (
-    <div className="py-20 bg-white">
+    <section className="py-24 bg-white dark:bg-[#0B1329] border-b border-slate-200 dark:border-slate-800/80 text-slate-900 dark:text-white relative z-10 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <div className="inline-block bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-full mb-6">
-            HỆ SINH THÁI TOÀN DIỆN
+        <div className="text-center mb-16 reveal-item">
+          <div className="inline-flex items-center gap-2 text-xs font-medium text-blue-700 dark:text-cyan-300 border border-blue-500/30 dark:border-cyan-500/30 bg-blue-50 dark:bg-cyan-950/40 px-3.5 py-1.5 mb-4 rounded-full">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+            <span>HỆ SINH THÁI Y KHOA TOÀN DIỆN</span>
           </div>
-          <h2 className="text-3xl font-bold text-slate-900 mb-4">Dịch Vụ & Tính Năng Y Tế Thông Minh</h2>
-          <p className="text-slate-500 max-w-2xl mx-auto">
-            Trang bị các công nghệ lâm sàng tiên tiến nhất nhằm đem lại trải nghiệm chăm sóc y tế toàn vẹn, tiện lợi và chính xác.
+          <h2 className="text-3xl lg:text-4xl font-semibold text-slate-900 dark:text-slate-100 mb-4 tracking-tight">
+            Giải Pháp Chăm Sóc Sức Khỏe Thông Minh Đạt Chuẩn
+          </h2>
+          <p className="text-slate-600 dark:text-slate-400 text-sm lg:text-base max-w-2xl mx-auto leading-relaxed">
+            Ứng dụng các chuẩn mực lâm sàng tiên tiến nhất nhằm đem lại trải nghiệm chăm sóc y tế chuẩn xác, ân cần và an tâm tuyệt đối cho người bệnh.
           </p>
         </div>
+
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Service 1 */}
-          <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:border-sky-100 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mb-6">
-              <MessageSquare className="w-6 h-6" />
-            </div>
-            <h3 className="font-bold text-slate-900 mb-3">AI Sàng Lọc Triệu Chứng Chuyên Sâu</h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">Sử dụng Natural Language Processing y khoa chuyên biệt, phân tích ngữ nghĩa các mô tả triệu chứng và đối chiếu ngân hàng dữ liệu y văn thế giới.</p>
-            <ul className="space-y-2 text-xs text-slate-600 font-medium">
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div> Tương thích tiếng Việt tự nhiên</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div> Dự đoán yếu tố nguy cơ tức thì</li>
-            </ul>
-          </div>
-          {/* Service 2 */}
-          <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:border-sky-100 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-6">
-              <Calendar className="w-6 h-6" />
-            </div>
-            <h3 className="font-bold text-slate-900 mb-3">Đặt Lịch Khám Thông Minh</h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">Trực ban lâm sàng liên tục không gián đoạn, tự động xếp lịch ưu tiên theo mức độ nghiêm trọng và phân bổ bác sĩ chuyên môn phù hợp nhất.</p>
-            <ul className="space-y-2 text-xs text-slate-600 font-medium">
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div> Tiết kiệm 90% thời gian chờ</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div> Đặt khám đúng chuyên gia phụ trách</li>
-            </ul>
-          </div>
-          {/* Service 3 */}
-          <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:border-sky-100 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-red-100 text-red-600 flex items-center justify-center mb-6">
-              <Activity className="w-6 h-6" />
-            </div>
-            <h3 className="font-bold text-slate-900 mb-3">Tiếp Quản Cấp Cứu Trực Tuyến</h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">Khi phát hiện các dấu hiệu sinh tử nguy cấp (nhồi máu cơ tim, đột quỵ, sốc phản vệ), hệ thống lập tức mở kênh liên lạc 115 và bác sĩ cấp cứu.</p>
-            <ul className="space-y-2 text-xs text-slate-600 font-medium">
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div> Kích hoạt Hotline cấp cứu 1 chạm</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div> Hướng dẫn sơ cứu sơ bộ tức thời</li>
-            </ul>
-          </div>
-          {/* Service 4 */}
-          <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:border-sky-100 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-6">
-              <FileText className="w-6 h-6" />
-            </div>
-            <h3 className="font-bold text-slate-900 mb-3">Hồ Sơ Điện Tử Chuẩn HL7/FHIR</h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">Lưu trữ lịch sử khám, đơn thuốc và kết quả xét nghiệm trọn đời theo chuẩn y tế quốc tế HIPAA, bảo mật đa tầng, dễ dàng chia sẻ liên viện.</p>
-            <ul className="space-y-2 text-xs text-slate-600 font-medium">
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div> Tra cứu kết quả xét nghiệm 24/7</li>
-              <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div> Mã hóa chuẩn ngân hàng và y tế</li>
-            </ul>
-          </div>
+          {services.map((s, i) => {
+            const Icon = s.icon
+            return (
+              <div
+                key={i}
+                className="bg-slate-50 dark:bg-slate-900/60 rounded-2xl p-6 border border-slate-200 dark:border-slate-800/80 hover:border-cyan-500/40 hover:-translate-y-1 transition-all duration-300 shadow-xs dark:shadow-none reveal-item flex flex-col justify-between"
+              >
+                <div>
+                  <div className={`w-12 h-12 rounded-xl border flex items-center justify-center mb-6 ${s.boxColor} ${s.iconColor}`}>
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100 mb-2.5">
+                    {s.title}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
+                    {s.desc}
+                  </p>
+                </div>
+
+                <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-slate-800/60 pt-4">
+                  {s.highlights.map((h, j) => (
+                    <li key={j} className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400 shrink-0" />
+                      <span>{h}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

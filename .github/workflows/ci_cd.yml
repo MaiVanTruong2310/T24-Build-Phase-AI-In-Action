@@ -234,7 +234,7 @@ jobs:
             OTP_MAX_ATTEMPTS=5
             # TEMPORARY DEMO ONLY: remove when real OTP delivery is enabled.
             MOCK_OTP_CODE=123456
-            CORS_ORIGINS=http://localhost:5173,${FRONTEND_ORIGIN},https://ai20k-build-phase-dev.vercel.app,https://ai20k-build-phase-dev.vercel.app
+            CORS_ORIGINS=http://localhost:5173,${FRONTEND_ORIGIN},https://ai20k-build-phase-dev.vercel.app,https://ai20k-build-phase.vercel.app
             POSTGRES_DB=${{ vars.POSTGRES_DB || 'ai20k' }}
             POSTGRES_USER=${{ vars.POSTGRES_USER || 'ai20k_app' }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}

@@ -128,6 +128,17 @@ export async function sendChat(message: string, sessionId: string, signal?: Abor
   return payload as ChatResponse;
 }
 
+export async function checkAgentStatus(signal?: AbortSignal): Promise<boolean> {
+  try {
+    const response = await fetchPublicApi('/status', { signal });
+    if (!response.ok) return false;
+    const payload = await response.json();
+    return payload.status === 'ready';
+  } catch {
+    return false;
+  }
+}
+
 export async function submitBooking(
   endpoint: string,
   payload: Record<string, unknown>,
