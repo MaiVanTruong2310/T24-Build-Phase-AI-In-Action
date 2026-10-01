@@ -6,6 +6,7 @@ import {
   publishSession,
   readAccessToken,
   readRefreshToken,
+  readPublishedSession,
   saveTokens,
   type SessionUser,
 } from './session'
@@ -25,10 +26,16 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   registerSuccess: boolean;
+  initialized: boolean;
+  restoreError: string | null;
+  restoreRequestId: string | null;
 }
 
 const initialState: AuthState = {
-  user: null,
+  user: (readAccessToken() || readRefreshToken()) && readPublishedSession() ? toUser(readPublishedSession()!) : null,
+  initialized: false,
+  restoreError: null,
+  restoreRequestId: null,
   loading: false,
   error: null,
   registerSuccess: false,
@@ -72,29 +79,31 @@ function toSessionUser(profile: User): SessionUser {
 export const initializeAuth = createAsyncThunk(
   'auth/initializeAuth',
   async (_, { rejectWithValue }) => {
-    if (!readAccessToken() && !readRefreshToken()) {
-      return null;
-    }
-
+    if (!readAccessToken() && !readRefreshToken()) return null;
+    const originalUserId = readPublishedSession()?.id;
     try {
       const response = await fetchWithAuth('/users/me');
       if (!response.ok) {
-        return rejectWithValue('Session expired');
+        if (response.status === 401 || response.status === 403) {
+          clearSession();
+          return rejectWithValue({ kind: 'invalid' });
+        }
+        return rejectWithValue({ kind: 'unavailable' });
       }
-
       const payload = await response.json();
       const profile = payload?.data as SessionUser | undefined;
-      if (!profile?.id || !profile.role) {
-        return rejectWithValue('Invalid session profile');
-      }
-
+      if (!profile?.id || !profile.role) return rejectWithValue({ kind: 'unavailable' });
+      // A response received after logout must not resurrect the old session.
+      if (!readAccessToken() && !readRefreshToken()) return null;
+      if (readPublishedSession()?.id !== originalUserId) return rejectWithValue({ kind: 'unavailable' });
       const user = toUser(profile);
       publishSession(toSessionUser(user));
       return user;
     } catch {
-      return rejectWithValue('Unable to restore session');
+      return rejectWithValue({ kind: 'unavailable' });
     }
   },
+  { condition: (_, { getState }) => !(getState() as RootState).auth.restoreRequestId },
 );
 
 export const loginUser = createAsyncThunk(
@@ -328,6 +337,10 @@ export const authSlice = createSlice({
       state.user = null
       state.error = null
       state.registerSuccess = false
+      state.restoreRequestId = null
+      state.restoreError = null
+      state.initialized = true
+      state.loading = false
     },
     sessionChanged: (state, action: PayloadAction<SessionUser | null>) => {
       state.user = action.payload ? toUser(action.payload) : null
@@ -339,19 +352,31 @@ export const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(initializeAuth.pending, (state) => {
+      .addCase(initializeAuth.pending, (state, action) => {
         state.loading = true
+        state.restoreError = null
+        state.restoreRequestId = action.meta.requestId
       })
       .addCase(initializeAuth.fulfilled, (state, action) => {
+        if (state.restoreRequestId !== action.meta.requestId) return
         state.loading = false
+        state.initialized = true
+        state.restoreRequestId = null
         state.user = action.payload
       })
-      .addCase(initializeAuth.rejected, (state) => {
+      .addCase(initializeAuth.rejected, (state, action) => {
+        if (state.restoreRequestId !== action.meta.requestId) return
         state.loading = false
-        state.user = null
+        state.initialized = true
+        state.restoreRequestId = null
+        const failure = action.payload as { kind?: string } | undefined
+        if (failure?.kind === 'invalid') state.user = null
+        else state.restoreError = 'Kết nối tạm thời gián đoạn. Phiên đăng nhập đã lưu được giữ lại.'
       })
       // Login
       .addCase(loginUser.pending, (state) => {
+        state.restoreRequestId = null
+        state.restoreError = null
         state.loading = true
         state.error = null
       })
@@ -364,7 +389,11 @@ export const authSlice = createSlice({
         state.error = action.payload as string
       })
       // Logout
+      .addCase(logoutUser.pending, (state) => {
+        state.restoreRequestId = null
+      })
       .addCase(logoutUser.fulfilled, (state) => {
+        state.restoreError = null
         state.user = null
         state.error = null
         state.registerSuccess = false

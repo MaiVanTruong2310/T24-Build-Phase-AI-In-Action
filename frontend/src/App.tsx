@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
-import { useDispatch } from 'react-redux'
-import type { AppDispatch } from './app/store'
+import { useDispatch, useSelector } from 'react-redux'
+import type { AppDispatch, RootState } from './app/store'
 import { initializeAuth, logout, sessionChanged } from './features/auth/authSlice'
 import {
   ACCESS_TOKEN_KEY,
@@ -99,6 +99,7 @@ const router = createBrowserRouter([
 
 export function App() {
   const dispatch = useDispatch<AppDispatch>()
+  const { initialized, restoreError, loading } = useSelector((state: RootState) => state.auth)
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
@@ -121,5 +122,13 @@ export function App() {
     }
   }, [dispatch])
 
-  return <RouterProvider router={router} />
+  if (!initialized) return <main className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600" role="status">Đang khôi phục phiên đăng nhập…</main>
+
+  return <>
+    <RouterProvider router={router} />
+    {restoreError && <div role="status" className="fixed bottom-4 left-1/2 z-[100] flex max-w-[90vw] -translate-x-1/2 items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-lg">
+      <span>{restoreError}</span>
+      <button type="button" disabled={loading} onClick={() => void dispatch(initializeAuth())} className="shrink-0 font-semibold underline disabled:opacity-50">Thử lại</button>
+    </div>}
+  </>
 }

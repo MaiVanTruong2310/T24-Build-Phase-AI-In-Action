@@ -110,37 +110,35 @@ export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<
 }
 
 async function performRefresh(refreshToken: string): Promise<string | null> {
-  try {
-    const response = await fetch(REFRESH_PATH, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store',
-        [NGROK_SKIP_BROWSER_WARNING_HEADER]: 'true',
-      },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-
-    if (!response.ok) {
+  const response = await fetch(REFRESH_PATH, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      [NGROK_SKIP_BROWSER_WARNING_HEADER]: 'true',
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  // Another login/logout may have replaced this session while refresh was in flight.
+  if (readRefreshToken() !== refreshToken) return readAccessToken();
+  if (!response.ok) {
+    if ([400, 401, 403].includes(response.status)) {
       notifyUnauthorized();
       return null;
     }
-
-    const payload = await response.json();
-    const accessToken = payload?.data?.access_token;
-    const rotatedRefreshToken = payload?.data?.refresh_token;
-
-    if (typeof accessToken !== 'string' || typeof rotatedRefreshToken !== 'string') {
-      notifyUnauthorized();
-      return null;
-    }
-
-    saveTokens(accessToken, rotatedRefreshToken);
-    return accessToken;
-  } catch {
-    notifyUnauthorized();
-    return null;
+    // Rate limits, server errors and network failures do not invalidate tokens.
+    throw new Error('Không thể gia hạn phiên lúc này. Vui lòng thử lại.');
   }
+  const payload = await response.json();
+  const accessToken = payload?.data?.access_token;
+  const rotatedRefreshToken = payload?.data?.refresh_token;
+  if (typeof accessToken !== 'string' || typeof rotatedRefreshToken !== 'string') {
+    throw new Error('Phản hồi gia hạn phiên chưa hợp lệ. Vui lòng thử lại.');
+  }
+  // A refresh finishing after logout must not sign the browser back in.
+  if (!readRefreshToken()) return null;
+  saveTokens(accessToken, rotatedRefreshToken);
+  return accessToken;
 }
 
 async function refreshAccessToken(): Promise<string | null> {
