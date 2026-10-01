@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class FactObservation(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     code: str | None = None
     polarity: Literal["positive", "negative", "uncertain"]
@@ -14,8 +14,9 @@ class FactObservation(BaseModel):
     subject: Literal["self", "other", "unknown"]
     evidence: str
 
+
 class FactCorrection(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     field: str
     evidence: str
@@ -32,8 +33,9 @@ class ComplaintDelta(BaseModel):
     evidence: str
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
+
 class FactsDelta(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     subject: Literal["self", "other", "unknown"]
     chief_complaint: str | None = None
@@ -51,20 +53,23 @@ class FactsDelta(BaseModel):
     corrections: list[FactCorrection] = Field(default_factory=list)
     patient_name: str | None = None
 
+
 class SafetyConcern(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     observation_indexes: list[int]
     reason: str
 
+
 class MissingFact(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     field: str
     reason: str
 
+
 class ActionArgs(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     specialty_key: str | None = None
     slot_id: str | None = None
@@ -76,28 +81,70 @@ class ActionArgs(BaseModel):
     department_key: str | None = None
     comparison_requested: bool | None = False
 
+
 class CandidateSpecialty(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     specialty_key: str
     reason: str
 
+
 class HybridDialogueResponse(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["2.0"]
     language: Literal["vi", "en"]
-    primary_intent: Literal["symptom_report", "visit_request", "schedule_request", "slot_selection", "faq", "department_info", "facility_info", "medication_request", "diagnosis_request", "human_request", "language_change", "out_of_scope", "unclear"]
-    secondary_intents: list[Literal["symptom_report", "visit_request", "schedule_request", "slot_selection", "faq", "department_info", "facility_info", "medication_request", "diagnosis_request", "human_request", "language_change", "out_of_scope", "unclear"]] = Field(default_factory=list)
+    primary_intent: Literal[
+        "symptom_report",
+        "visit_request",
+        "schedule_request",
+        "slot_selection",
+        "faq",
+        "department_info",
+        "facility_info",
+        "medication_request",
+        "diagnosis_request",
+        "human_request",
+        "language_change",
+        "out_of_scope",
+        "unclear",
+    ]
+    secondary_intents: list[
+        Literal[
+            "symptom_report",
+            "visit_request",
+            "schedule_request",
+            "slot_selection",
+            "faq",
+            "department_info",
+            "facility_info",
+            "medication_request",
+            "diagnosis_request",
+            "human_request",
+            "language_change",
+            "out_of_scope",
+            "unclear",
+        ]
+    ] = Field(default_factory=list)
     topic_change: Literal["none", "administrative_detour", "symptom_changed", "patient_changed", "correction"]
     facts_delta: FactsDelta
     safety_concerns: list[SafetyConcern] = Field(default_factory=list)
     missing_facts: list[MissingFact] = Field(default_factory=list)
     proposed_action: Literal[
-        "clarify_visit_purpose", "ask_clarifying_question", "suggest_specialty",
-        "search_available_slot", "hold_slot", "answer_faq", "show_department_info", "show_facility_info",
-        "decline_medication_request", "respond_to_diagnosis_request", "request_safety_review",
-        "request_human_help", "acknowledge_language_change", "out_of_scope_decline"
+        "clarify_visit_purpose",
+        "ask_clarifying_question",
+        "suggest_specialty",
+        "search_available_slot",
+        "hold_slot",
+        "answer_faq",
+        "show_department_info",
+        "show_facility_info",
+        "decline_medication_request",
+        "respond_to_diagnosis_request",
+        "request_safety_review",
+        "request_human_help",
+        "acknowledge_language_change",
+        "out_of_scope_decline",
     ]
     action_args: ActionArgs
     candidate_specialties: list[CandidateSpecialty] = Field(default_factory=list)

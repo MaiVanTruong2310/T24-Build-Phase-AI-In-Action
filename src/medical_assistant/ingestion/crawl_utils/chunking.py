@@ -47,9 +47,7 @@ class TokenChunker:
         context_tokens = self.count_tokens(prefix_text) + self.count_tokens(suffix_text)
         capacity = self.chunk_size - context_tokens
         if capacity <= self.overlap:
-            raise ValueError(
-                "chunk_size is too small for the repeated context and requested overlap"
-            )
+            raise ValueError("chunk_size is too small for the repeated context and requested overlap")
 
         body_tokens = self.encoding.encode(body.strip())
         if not body_tokens:
@@ -66,9 +64,7 @@ class TokenChunker:
                 window = body_tokens[start:end]
                 rendered = f"{prefix_text}{self.encoding.decode(window)}{suffix_text}"
             if not window or (end < len(body_tokens) and end - start <= self.overlap):
-                raise ValueError(
-                    "chunk_size leaves too little room for content after tokenization"
-                )
+                raise ValueError("chunk_size leaves too little room for content after tokenization")
             windows.append(window)
             if end == len(body_tokens):
                 break

@@ -152,19 +152,21 @@ async def test_agent_asks_one_combined_question_instead_of_collapsing_to_gastro(
 
 @pytest.mark.asyncio
 async def test_response_names_primary_and_secondary_specialties() -> None:
-    result = await respond_node({
-        "query": "Tôi đau đầu và đau bụng",
-        "language": "vi",
-        "workflow_status": "TRIAGED_AWAITING_SCHEDULE",
-        "suggested_department_name": "Thần kinh",
-        "candidate_specialties": [
-            {"code": "THAN_KINH", "name": "Thần kinh", "score": 1.25},
-            {"code": "TIEU_HOA", "name": "Tiêu hóa - Gan mật", "score": 1.0},
-        ],
-        "metadata": {},
-        "collected_details": ["Tôi đau đầu và đau bụng"],
-        "messages": [],
-    })
+    result = await respond_node(
+        {
+            "query": "Tôi đau đầu và đau bụng",
+            "language": "vi",
+            "workflow_status": "TRIAGED_AWAITING_SCHEDULE",
+            "suggested_department_name": "Thần kinh",
+            "candidate_specialties": [
+                {"code": "THAN_KINH", "name": "Thần kinh", "score": 1.25},
+                {"code": "TIEU_HOA", "name": "Tiêu hóa - Gan mật", "score": 1.0},
+            ],
+            "metadata": {},
+            "collected_details": ["Tôi đau đầu và đau bụng"],
+            "messages": [],
+        }
+    )
 
     assert "Khoa Thần kinh" in result["response"]
     assert "Tiêu hóa - Gan mật" in result["response"]
@@ -236,10 +238,12 @@ async def test_chest_headache_blurred_vision_sequence_blocks_routine_booking(mon
         if index == 0:
             first_question = state["metadata"]["clarification_question"]
         state.setdefault("messages", []).append({"role": "user", "content": query})
-        state["messages"].append({
-            "role": "assistant",
-            "content": state.get("metadata", {}).get("clarification_question") or "",
-        })
+        state["messages"].append(
+            {
+                "role": "assistant",
+                "content": state.get("metadata", {}).get("clarification_question") or "",
+            }
+        )
 
     assert "lan ra cánh tay trái" in first_question
     assert state["workflow_status"] == "SAFETY_REVIEW"

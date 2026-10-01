@@ -98,9 +98,7 @@ def get_supabase_client() -> SupabaseRestClient:
     if _supabase_client is None:
         settings = get_settings()
         if not settings.supabase_url or not settings.supabase_key:
-            raise ValueError(
-                "SUPABASE_URL and SUPABASE_KEY must be set in environment or .env"
-            )
+            raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment or .env")
         _supabase_client = SupabaseRestClient(
             base_url=settings.supabase_url,
             api_key=settings.supabase_key,
@@ -118,9 +116,7 @@ def get_supabase_admin_client() -> SupabaseRestClient:
     if _supabase_admin_client is None:
         settings = get_settings()
         if not settings.supabase_url or not settings.supabase_service_role_key:
-            raise ValueError(
-                "SUPABASE_URL and server-only SUPABASE_SERVICE_ROLE_KEY must be configured"
-            )
+            raise ValueError("SUPABASE_URL and server-only SUPABASE_SERVICE_ROLE_KEY must be configured")
         _supabase_admin_client = SupabaseRestClient(
             base_url=settings.supabase_url,
             api_key=settings.supabase_service_role_key,

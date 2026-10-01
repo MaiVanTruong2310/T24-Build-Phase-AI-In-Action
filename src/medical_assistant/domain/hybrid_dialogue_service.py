@@ -112,6 +112,7 @@ Trả duy nhất JSON đúng schema. Không cung cấp chuỗi suy luận nội 
 Các trường reason chỉ chứa giải thích ngắn và bằng chứng cần thiết để kiểm tra đề xuất.
 """
 
+
 class HybridDialogueService:
     @staticmethod
     def _fallback_response(text: str, state: dict[str, Any]) -> HybridDialogueResponse:
@@ -143,9 +144,17 @@ class HybridDialogueService:
 
         observations: list[FactObservation] = []
         for code in facts.get("positive_facts", []):
-            observations.append(FactObservation(code=code, polarity="positive", temporality="current", subject="self", evidence=text[:240]))
+            observations.append(
+                FactObservation(
+                    code=code, polarity="positive", temporality="current", subject="self", evidence=text[:240]
+                )
+            )
         for code in facts.get("negative_facts", []):
-            observations.append(FactObservation(code=code, polarity="negative", temporality="current", subject="self", evidence=text[:240]))
+            observations.append(
+                FactObservation(
+                    code=code, polarity="negative", temporality="current", subject="self", evidence=text[:240]
+                )
+            )
         complaint_deltas = [
             ComplaintDelta(
                 code=item["code"],
@@ -157,11 +166,14 @@ class HybridDialogueService:
             for item in facts.get("complaints", [])
         ]
 
-        guard = get_guardrail_service().check_intent(
-            text,
-            current_department=state.get("suggested_department_name"),
-            language=language,
-        ) or {}
+        guard = (
+            get_guardrail_service().check_intent(
+                text,
+                current_department=state.get("suggested_department_name"),
+                language=language,
+            )
+            or {}
+        )
         guard_intent = guard.get("intent")
         action_map = {
             "MEDICATION_GUARDRAIL": "decline_medication_request",
@@ -181,7 +193,9 @@ class HybridDialogueService:
             current_department = get_triage_service().evaluate_symptoms(text, language=language).suggested_specialty
 
         if language == "en":
-            draft = "Please tell me when the symptom started, how severe it is, and whether you have any new warning signs."
+            draft = (
+                "Please tell me when the symptom started, how severe it is, and whether you have any new warning signs."
+            )
         else:
             prefix = f"Dạ {patient_name}, " if patient_name else "Dạ, "
             if facts.get("chief_complaint") == "abdominal_pain":
@@ -195,10 +209,13 @@ class HybridDialogueService:
             else:
                 draft = "Dạ, em có thể hỗ trợ bác làm rõ nhu cầu khám, tìm chuyên khoa, cơ sở hoặc lịch khám phù hợp."
 
-        comparison = bool(re.search(r"hơn\s+(?:so\s+với\s+)?(?:bệnh\s+viện|nơi)|so\s+sánh|ưu\s+điểm|superior|compare", lower))
+        comparison = bool(
+            re.search(r"hơn\s+(?:so\s+với\s+)?(?:bệnh\s+viện|nơi)|so\s+sánh|ưu\s+điểm|superior|compare", lower)
+        )
         candidates = (
             [CandidateSpecialty(specialty_key=current_department, reason="Retained from verified conversation context")]
-            if current_department else []
+            if current_department
+            else []
         )
         primary_intent = {
             "MEDICATION_GUARDRAIL": "medication_request",
@@ -213,7 +230,9 @@ class HybridDialogueService:
             schema_version="2.0",
             language=language,
             primary_intent=primary_intent,
-            secondary_intents=["diagnosis_request"] if facts.get("chief_complaint") and guard_intent == "DIAGNOSIS_GUARDRAIL" else [],
+            secondary_intents=["diagnosis_request"]
+            if facts.get("chief_complaint") and guard_intent == "DIAGNOSIS_GUARDRAIL"
+            else [],
             topic_change="none",
             facts_delta=FactsDelta(
                 subject="self",
@@ -248,7 +267,7 @@ class HybridDialogueService:
         state: dict[str, Any],
         recent_turns: list[str],
         last_assistant_question: str | None,
-        allowed_actions: list[str]
+        allowed_actions: list[str],
     ) -> tuple[HybridDialogueResponse, bool]:
         import json
         from datetime import datetime
@@ -282,7 +301,7 @@ class HybridDialogueService:
                 or [max(0, 2 - int(state.get("probing_turn", 0) or 0))]
             ),
             "current_time": current_time,
-            "verified_data": state.get("metadata", {}).get("verified_data", [])
+            "verified_data": state.get("metadata", {}).get("verified_data", []),
         }
 
         # Trích xuất và định dạng lịch sử hội thoại gần nhất (Conversation Context Memory)
@@ -303,7 +322,10 @@ class HybridDialogueService:
         lang = state.get("language", "vi")
         prompt_messages = [
             {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT_V2},
-            {"role": "user", "content": f"Ngữ cảnh hệ thống:\n{context_msg}\n\nDiễn biến các lượt trò chuyện gần nhất:\n{chat_history_str}\n\nTin nhắn người dùng hiện tại: \"{text}\"\n\nIMPORTANT: You MUST maintain full context across the conversation. Write the draft_response in {lang} language. If {lang} is 'en', write in English. If {lang} is 'vi', write in Vietnamese."},
+            {
+                "role": "user",
+                "content": f"Ngữ cảnh hệ thống:\n{context_msg}\n\nDiễn biến các lượt trò chuyện gần nhất:\n{chat_history_str}\n\nTin nhắn người dùng hiện tại: \"{text}\"\n\nIMPORTANT: You MUST maintain full context across the conversation. Write the draft_response in {lang} language. If {lang} is 'en', write in English. If {lang} is 'vi', write in Vietnamese.",
+            },
         ]
 
         try:
@@ -362,10 +384,12 @@ class HybridDialogueService:
             # Giữ lại thông tin nguyên bản theo yêu cầu
             "subject": v2_response.facts_delta.subject,
             "observations": [obs.model_dump() for obs in v2_response.facts_delta.observations],
-            "corrections": [corr.model_dump() for corr in v2_response.facts_delta.corrections]
+            "corrections": [corr.model_dump() for corr in v2_response.facts_delta.corrections],
         }
 
+
 _hybrid_dialogue_instance: HybridDialogueService | None = None
+
 
 def get_hybrid_dialogue_service() -> HybridDialogueService:
     global _hybrid_dialogue_instance

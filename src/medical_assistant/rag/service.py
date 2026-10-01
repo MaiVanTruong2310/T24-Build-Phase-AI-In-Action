@@ -43,22 +43,59 @@ Answer factual questions about listed services or operating days directly when a
 states them. Do not claim information is missing before checking the provided passages."""
 
 DIAGNOSIS_PATTERNS = (
-    "toi bi benh gi", "toi mac benh gi", "chan doan cho toi", "co phai toi bi",
-    "toi co bi", "kha nang mac", "la benh gi", "mac benh nao",
-    "benh cua toi la gi", "benh toi la gi", "toi bi sao", "bi sao", "bi lam sao",
+    "toi bi benh gi",
+    "toi mac benh gi",
+    "chan doan cho toi",
+    "co phai toi bi",
+    "toi co bi",
+    "kha nang mac",
+    "la benh gi",
+    "mac benh nao",
+    "benh cua toi la gi",
+    "benh toi la gi",
+    "toi bi sao",
+    "bi sao",
+    "bi lam sao",
 )
 TREATMENT_PATTERNS = (
-    "chua the nao", "dieu tri the nao", "uong thuoc gi", "dung thuoc gi",
-    "lieu thuoc", "ke don",
+    "chua the nao",
+    "dieu tri the nao",
+    "uong thuoc gi",
+    "dung thuoc gi",
+    "lieu thuoc",
+    "ke don",
 )
 SYMPTOM_TERMS = (
-    "đau", "sốt", " ho ", "chóng mặt", "buồn nôn", "mệt", "khó thở",
-    "tê ", "ngứa", "sưng", "triệu chứng", "dau dau", "chong mat",
-    "buon non", "kho tho", "trieu chung",
+    "đau",
+    "sốt",
+    " ho ",
+    "chóng mặt",
+    "buồn nôn",
+    "mệt",
+    "khó thở",
+    "tê ",
+    "ngứa",
+    "sưng",
+    "triệu chứng",
+    "dau dau",
+    "chong mat",
+    "buon non",
+    "kho tho",
+    "trieu chung",
 )
 SYMPTOM_PHRASES = (
-    "đau đầu", "chóng mặt", "buồn nôn", "khó thở", "đau ngực", "đau bụng",
-    "tê bì", "đau lưng", "đau cổ", "đau khớp", "sổ mũi", "nôn ói",
+    "đau đầu",
+    "chóng mặt",
+    "buồn nôn",
+    "khó thở",
+    "đau ngực",
+    "đau bụng",
+    "tê bì",
+    "đau lưng",
+    "đau cổ",
+    "đau khớp",
+    "sổ mũi",
+    "nôn ói",
 )
 
 
@@ -81,7 +118,9 @@ def _intake_questions(query: str) -> list[str]:
     if "dau bung" in folded:
         questions.append("Bạn đau ở vùng nào của bụng; cơn đau có liên quan đến ăn uống hoặc đi vệ sinh không?")
     if "dau lung" in folded:
-        questions.append("Bạn đau ở vùng nào của lưng; vận động có làm đau tăng và có tê hoặc yếu tay chân đi kèm không?")
+        questions.append(
+            "Bạn đau ở vùng nào của lưng; vận động có làm đau tăng và có tê hoặc yếu tay chân đi kèm không?"
+        )
     if "buon non" in folded or "non" in folded:
         questions.append("Bạn buồn nôn hoặc nôn bao nhiêu lần; nếu có nôn thì dịch nôn có gì bất thường không?")
     if "so mui" in folded:
@@ -209,10 +248,10 @@ def classify_intent(query: str) -> str:
         return "diagnosis_request"
     if any(pattern in folded for pattern in TREATMENT_PATTERNS):
         return "treatment_request"
-    if _requested_category(query) == "hospital" or (
-        "vinmec" in folded and "o dau" in folded
-    ) or any(
-        phrase in folded for phrase in ("danh sach benh vien", "benh vien nao", "co so nao")
+    if (
+        _requested_category(query) == "hospital"
+        or ("vinmec" in folded and "o dau" in folded)
+        or any(phrase in folded for phrase in ("danh sach benh vien", "benh vien nao", "co so nao"))
     ):
         return "facility_search"
     if _requested_category(query) in {"doctor", "specialty"}:
@@ -278,9 +317,7 @@ class RagStore:
         ).fetchall()
         return [Passage(*row) for row in rows]
 
-    def search(
-        self, query: str, limit: int = 6, categories: set[str] | None = None
-    ) -> list[Passage]:
+    def search(self, query: str, limit: int = 6, categories: set[str] | None = None) -> list[Passage]:
         entity = self.matching_entity(query)
         if entity and (categories is None or entity[1] in categories):
             title, category = entity
@@ -289,19 +326,20 @@ class RagStore:
                 "FROM passages WHERE title = ? AND category = ? ORDER BY rowid",
                 (title, category),
             ).fetchall()
-            passages = [
-                Passage(*row) for row in rows
-                if categories is None or row[3] in categories
-            ]
+            passages = [Passage(*row) for row in rows if categories is None or row[3] in categories]
             section = _requested_section(query)
             focused = [item for item in passages if item.section == section]
             return (focused or passages)[:limit]
 
         folded_query = _fold(query)
-        symptom_phrase = next(
-            (phrase for phrase in SYMPTOM_PHRASES if _fold(phrase) in folded_query),
-            None,
-        ) if categories and categories.intersection({"symptom_specialty", "specialty_facility"}) else None
+        symptom_phrase = (
+            next(
+                (phrase for phrase in SYMPTOM_PHRASES if _fold(phrase) in folded_query),
+                None,
+            )
+            if categories and categories.intersection({"symptom_specialty", "specialty_facility"})
+            else None
+        )
         if symptom_phrase:
             # Exact symptom phrases are substantially safer than broad OR matching:
             # "đau đầu" must not be dominated by unrelated pages containing "đau".
@@ -309,15 +347,12 @@ class RagStore:
             match = f'"{symptom_phrase}"'
         else:
             terms = re.findall(r"\w+", query.casefold(), flags=re.UNICODE)
-        # FTS syntax is assembled only from quoted alphanumeric tokens.
+            # FTS syntax is assembled only from quoted alphanumeric tokens.
             terms = [term for term in terms if len(term) > 1][:20]
             if not terms:
                 return []
             match = " OR ".join(f'"{term}"' for term in terms)
-        sql = (
-            "SELECT text, source_url, title, category, language, section FROM passages "
-            "WHERE passages MATCH ?"
-        )
+        sql = "SELECT text, source_url, title, category, language, section FROM passages WHERE passages MATCH ?"
         parameters: list[Any] = [match]
         if categories:
             placeholders = ", ".join("?" for _ in categories)
@@ -347,16 +382,13 @@ class ChatService:
     def __init__(self, store: RagStore, api_key: str, model: str, client: Any | None = None) -> None:
         self.store = store
         self.model = model
-        self.client = client or (
-            OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1") if api_key else None
-        )
+        self.client = client or (OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1") if api_key else None)
 
     def answer(self, question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
         history = history or []
         intent = classify_intent(question)
         intake_was_asked = any(
-            item.get("role") == "assistant" and INTAKE_MARKER in item.get("content", "")
-            for item in history[-6:]
+            item.get("role") == "assistant" and INTAKE_MARKER in item.get("content", "") for item in history[-6:]
         )
         if intent == "treatment_request":
             return {"answer": SAFETY_REFUSAL, "sources": [], "intent": intent}
@@ -390,7 +422,8 @@ class ChatService:
         if not passages:
             return {
                 "answer": (
-                    SAFETY_REFUSAL if intent == "symptom_navigation"
+                    SAFETY_REFUSAL
+                    if intent == "symptom_navigation"
                     else "Tôi chưa tìm thấy thông tin liên quan trong dữ liệu Vinmec đã thu thập."
                 ),
                 "sources": [],
@@ -406,8 +439,7 @@ class ChatService:
             suggestion = ""
             if specialties:
                 suggestion = (
-                    " Dựa trên thông tin điều hướng đã thu thập, bạn có thể liên hệ "
-                    + ", ".join(specialties[:3]) + "."
+                    " Dựa trên thông tin điều hướng đã thu thập, bạn có thể liên hệ " + ", ".join(specialties[:3]) + "."
                 )
             return {
                 "answer": SAFETY_REFUSAL + suggestion,
@@ -420,7 +452,11 @@ class ChatService:
                 address_match = re.search(r"^- (?:Địa chỉ|Address):\s*(.+)$", item.text, re.MULTILINE)
                 hotline_match = re.search(r"^- Hotline:\s*(.+)$", item.text, re.MULTILINE)
                 facilities.append(
-                    (item, address_match.group(1).strip() if address_match else "", hotline_match.group(1).strip() if hotline_match else "")
+                    (
+                        item,
+                        address_match.group(1).strip() if address_match else "",
+                        hotline_match.group(1).strip() if hotline_match else "",
+                    )
                 )
             lines = ["Các cơ sở phù hợp trong dữ liệu hiện có:"]
             for item, address, hotline in facilities[:10]:

@@ -29,13 +29,30 @@ class DLPService:
             # Supabase Keys
             (re.compile(r"\bsbp_[a-zA-Z0-9_]{20,}\b"), "[REDACTED_SUPABASE_KEY]"),
             # JWT Tokens (3 phần phân tách bằng dấu chấm)
-            (re.compile(r"\beyJ[a-zA-Z0-9_\-]{10,}\.eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\b"), "[REDACTED_JWT_TOKEN]"),
+            (
+                re.compile(r"\beyJ[a-zA-Z0-9_\-]{10,}\.eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\b"),
+                "[REDACTED_JWT_TOKEN]",
+            ),
             # Database Connection Strings (Postgres, Mongo, MySQL)
-            (re.compile(r"(?:postgres|postgresql|mysql|mongodb|redis):\/\/[^\s:]+:[^\s@]+@[^\s\/]+"), "[REDACTED_DATABASE_URL]"),
+            (
+                re.compile(r"(?:postgres|postgresql|mysql|mongodb|redis):\/\/[^\s:]+:[^\s@]+@[^\s\/]+"),
+                "[REDACTED_DATABASE_URL]",
+            ),
             # Private Keys
-            (re.compile(r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----[^-]+-----END (?:[A-Z]+ )?PRIVATE KEY-----", re.DOTALL), "[REDACTED_PRIVATE_KEY]"),
+            (
+                re.compile(
+                    r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----[^-]+-----END (?:[A-Z]+ )?PRIVATE KEY-----", re.DOTALL
+                ),
+                "[REDACTED_PRIVATE_KEY]",
+            ),
             # Generic password / secret assignments
-            (re.compile(r"(?:api[_-]?key|secret[_-]?key|db[_-]?password|access[_-]?token)\s*[:=]\s*['\"][^\s'\"]{6,}['\"]", re.IGNORECASE), "[REDACTED_CREDENTIAL]"),
+            (
+                re.compile(
+                    r"(?:api[_-]?key|secret[_-]?key|db[_-]?password|access[_-]?token)\s*[:=]\s*['\"][^\s'\"]{6,}['\"]",
+                    re.IGNORECASE,
+                ),
+                "[REDACTED_CREDENTIAL]",
+            ),
         ]
 
         # 2. Regex cho Thông Tin Cá Nhân Bệnh Nhân (PII / PHI)

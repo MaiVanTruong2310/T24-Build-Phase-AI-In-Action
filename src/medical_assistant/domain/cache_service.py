@@ -86,10 +86,21 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
             "3. 📅 **Slot Reservation (15-min Hold):** Temporarily reserve your preferred slot and notify reception.\n\n"
             "Please share: **What symptoms or health concerns are you experiencing today?**"
         ),
-        quick_replies_vi=["Đau tức ngực / khó thở", "Đau đầu / chóng mặt", "Đau bụng / khó tiêu", "Đau mỏi vai gáy / lưng", "Khám sức khỏe tổng quát"],
-        quick_replies_en=["Chest discomfort / shortness of breath", "Headache / dizziness", "Abdominal pain / indigestion", "Neck / back / joint pain", "General health checkup"]
+        quick_replies_vi=[
+            "Đau tức ngực / khó thở",
+            "Đau đầu / chóng mặt",
+            "Đau bụng / khó tiêu",
+            "Đau mỏi vai gáy / lưng",
+            "Khám sức khỏe tổng quát",
+        ],
+        quick_replies_en=[
+            "Chest discomfort / shortness of breath",
+            "Headache / dizziness",
+            "Abdominal pain / indigestion",
+            "Neck / back / joint pain",
+            "General health checkup",
+        ],
     ),
-
     # 2. Hướng dẫn nhịn ăn / chuẩn bị trước khám
     FAQEntry(
         key="FASTING_PREPARATION",
@@ -119,9 +130,8 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
             "4. **Documents:** Please bring your Passport/National ID, health insurance cards, and any prior medical records."
         ),
         quick_replies_vi=["Đặt lịch khám tổng quát", "Bảng giá gói khám", "Quay lại mô tả triệu chứng"],
-        quick_replies_en=["Book health screening", "Pricing & package fees", "Describe current symptoms"]
+        quick_replies_en=["Book health screening", "Pricing & package fees", "Describe current symptoms"],
     ),
-
     # 3. Bảng giá dịch vụ chung
     FAQEntry(
         key="PRICING_INFO",
@@ -153,9 +163,8 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
             "*Note: Booking an appointment in advance secures preferential rates compared to walk-in consultations (1,100,000 VND). Vinmec accepts international private health insurance direct billing and national health insurance (BHYT).* "
         ),
         quick_replies_vi=["Đặt lịch khám chuyên khoa", "Xem gói tổng quát", "Tư vấn bảo hiểm"],
-        quick_replies_en=["Book specialist consultation", "View screening packages", "Insurance inquiries"]
+        quick_replies_en=["Book specialist consultation", "View screening packages", "Insurance inquiries"],
     ),
-
     # 4. Giờ làm việc & Hotline các cơ sở
     FAQEntry(
         key="WORKING_HOURS_HOTLINE",
@@ -190,9 +199,8 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
             "• Danang: `+84 23 6371 1111` | Hai Phong: `+84 22 5730 9888`"
         ),
         quick_replies_vi=["Đặt lịch khám ngay", "Đăng ký cấp cứu 115", "Tư vấn triệu chứng"],
-        quick_replies_en=["Book an appointment", "Emergency 115 contact", "Consult symptoms"]
+        quick_replies_en=["Book an appointment", "Emergency 115 contact", "Consult symptoms"],
     ),
-
     # 5. Chính sách đổi / hủy lịch hẹn
     FAQEntry(
         key="CANCEL_RESCHEDULE_POLICY",
@@ -221,8 +229,8 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
             "3. **Slot Availability:** Upon cancellation, the slot is immediately returned to the active schedule."
         ),
         quick_replies_vi=["Quay lại đặt lịch khám", "Kiểm tra mã đặt lịch", "Gặp lễ tân"],
-        quick_replies_en=["Return to booking", "Check booking status", "Contact receptionist"]
-    )
+        quick_replies_en=["Return to booking", "Check booking status", "Contact receptionist"],
+    ),
 ]
 
 
@@ -236,11 +244,42 @@ class ZeroTokenCacheService:
         """Kiểm tra xem câu hỏi có chứa triệu chứng bệnh hay không để không chặn nhầm vào cache."""
         norm = _normalize_text(text)
         indicators = [
-            "dau", "sot", "ho", "met", "kho tho", "non", "chong mat", "tuc nguc",
-            "tao bon", "tieu chay", "phat ban", "di ung", "o chua", "ngua", "chay mau",
-            "co giat", "bat tinh", "mo mat", "day bung", "kho tieu", "buon non", "te bi",
-            "pain", "ache", "fever", "cough", "breath", "vomit", "nausea", "dizzy",
-            "bleed", "rash", "cramp", "seizure", "swelling", "numb"
+            "dau",
+            "sot",
+            "ho",
+            "met",
+            "kho tho",
+            "non",
+            "chong mat",
+            "tuc nguc",
+            "tao bon",
+            "tieu chay",
+            "phat ban",
+            "di ung",
+            "o chua",
+            "ngua",
+            "chay mau",
+            "co giat",
+            "bat tinh",
+            "mo mat",
+            "day bung",
+            "kho tieu",
+            "buon non",
+            "te bi",
+            "pain",
+            "ache",
+            "fever",
+            "cough",
+            "breath",
+            "vomit",
+            "nausea",
+            "dizzy",
+            "bleed",
+            "rash",
+            "cramp",
+            "seizure",
+            "swelling",
+            "numb",
         ]
         tokens = set(norm.split())
         for ind in indicators:

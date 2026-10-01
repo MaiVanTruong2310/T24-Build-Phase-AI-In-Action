@@ -46,9 +46,7 @@ def _specialties(record: dict[str, Any]) -> list[str]:
     return result or ["Nội tổng quát"]
 
 
-def route_to_documents(
-    record: dict[str, Any], chunk_size: int = 500, chunk_overlap: int = 80
-) -> list[dict[str, Any]]:
+def route_to_documents(record: dict[str, Any], chunk_size: int = 500, chunk_overlap: int = 80) -> list[dict[str, Any]]:
     content = str((record.get("content") or {}).get("text") or "").strip()
     source_url = str(record.get("source_url") or "")
     title = str(record.get("title") or "Thông tin điều hướng chuyên khoa")
@@ -56,7 +54,9 @@ def route_to_documents(
     if not content or not source_url:
         return []
     chunker = TokenChunker(chunk_size=chunk_size, overlap=chunk_overlap)
-    parent_id = "symptom-route-" + str((record.get("structured_data") or {}).get("service", {}).get("id") or abs(hash(source_url)))
+    parent_id = "symptom-route-" + str(
+        (record.get("structured_data") or {}).get("service", {}).get("id") or abs(hash(source_url))
+    )
     prefix = "# Điều hướng chuyên khoa\n\nChuyên khoa phù hợp để thăm khám: " + ", ".join(specialties)
     return [
         {

@@ -120,14 +120,16 @@ class FacilityService:
                         if not line.strip():
                             continue
                         rec = json.loads(line)
-                        fallback_facilities.append({
-                            "id": rec.get("facility_key"),
-                            "code": rec.get("facility_key"),
-                            "name": rec.get("name"),
-                            "address": rec.get("address"),
-                            "phone": rec.get("hotline_display") or rec.get("hotline_normalized") or "1900 232 389",
-                            "status": "active"
-                        })
+                        fallback_facilities.append(
+                            {
+                                "id": rec.get("facility_key"),
+                                "code": rec.get("facility_key"),
+                                "name": rec.get("name"),
+                                "address": rec.get("address"),
+                                "phone": rec.get("hotline_display") or rec.get("hotline_normalized") or "1900 232 389",
+                                "status": "active",
+                            }
+                        )
                 if fallback_facilities:
                     self._cached_facilities = fallback_facilities
                     return fallback_facilities
@@ -176,7 +178,9 @@ class FacilityService:
 
         if language == "en":
             facility_type = "International General Clinic" if is_clinic else "International General Hospital"
-            specs_str = ", ".join(specialties[:6]) if specialties else "General Medicine, Cardiology, Neurology, Pediatrics"
+            specs_str = (
+                ", ".join(specialties[:6]) if specialties else "General Medicine, Cardiology, Neurology, Pediatrics"
+            )
             lines = [
                 f"🏥 **{name}**\n",
                 f"• 🏨 **Facility Type:** {facility_type}",
@@ -189,8 +193,12 @@ class FacilityService:
                 f"• 🩺 **Key Specialties & Strengths:**\n  {specs_str}",
             ]
             if enable_citation:
-                lines.append(f"• 🌐 **Official Profile & Equipment Details:**\n  👉 [View full facility details & photos on Vinmec.com]({detail_url})\n")
-            lines.append("💡 *Would you like me to look up doctors working at this facility or help you schedule a consultation?*")
+                lines.append(
+                    f"• 🌐 **Official Profile & Equipment Details:**\n  👉 [View full facility details & photos on Vinmec.com]({detail_url})\n"
+                )
+            lines.append(
+                "💡 *Would you like me to look up doctors working at this facility or help you schedule a consultation?*"
+            )
             quick_replies = [
                 f"View doctors at {short_name}",
                 f"Book appointment at {short_name}",
@@ -198,7 +206,11 @@ class FacilityService:
             ]
         else:
             facility_type = "Phòng khám Đa khoa Quốc tế" if is_clinic else "Bệnh viện Đa khoa Quốc tế"
-            specs_str = ", ".join(specialties[:6]) if specialties else "Nội đa khoa, Thần kinh - Đột quỵ, Tim mạch, Cơ xương khớp, Nhi"
+            specs_str = (
+                ", ".join(specialties[:6])
+                if specialties
+                else "Nội đa khoa, Thần kinh - Đột quỵ, Tim mạch, Cơ xương khớp, Nhi"
+            )
             lines = [
                 f"🏥 **{name}**\n",
                 f"• 🏨 **Phân loại cơ sở:** {facility_type}",
@@ -211,8 +223,12 @@ class FacilityService:
                 f"• 🩺 **Chuyên khoa & Dịch vụ nổi bật:**\n  {specs_str}...",
             ]
             if enable_citation:
-                lines.append(f"• 🌐 **Hồ sơ chuyên sâu & Cơ sở vật chất:**\n  👉 [Xem giới thiệu chi tiết, trang thiết bị & viện trưởng trên Vinmec.com]({detail_url})\n")
-            lines.append("💡 *Bác có muốn em tìm bác sĩ chuyên khoa đang làm việc tại cơ sở này hoặc hỗ trợ đặt lịch khám tại đây không ạ?*")
+                lines.append(
+                    f"• 🌐 **Hồ sơ chuyên sâu & Cơ sở vật chất:**\n  👉 [Xem giới thiệu chi tiết, trang thiết bị & viện trưởng trên Vinmec.com]({detail_url})\n"
+                )
+            lines.append(
+                "💡 *Bác có muốn em tìm bác sĩ chuyên khoa đang làm việc tại cơ sở này hoặc hỗ trợ đặt lịch khám tại đây không ạ?*"
+            )
             quick_replies = [
                 f"Xem bác sĩ tại {short_name}",
                 f"Đặt lịch khám tại {short_name}",
@@ -245,9 +261,7 @@ class FacilityService:
                         "limit": 1000,
                     },
                 )
-                relation_by_doctor = {
-                    str(row["doctor_id"]): row for row in relations if row.get("doctor_id")
-                }
+                relation_by_doctor = {str(row["doctor_id"]): row for row in relations if row.get("doctor_id")}
                 if relation_by_doctor:
                     doctors = client.select(
                         "doctors",
@@ -268,8 +282,7 @@ class FacilityService:
                             "sections": {
                                 "Chức vụ": [doctor.get("title")] if doctor.get("title") else [],
                                 "Nơi làm việc": [
-                                    relation_by_doctor[str(doctor["id"])].get("department")
-                                    or facility.get("name")
+                                    relation_by_doctor[str(doctor["id"])].get("department") or facility.get("name")
                                 ],
                             },
                         }
@@ -308,7 +321,9 @@ class FacilityService:
                 url_str = f" — [Hồ sơ bác sĩ]({source_url})" if (source_url and enable_citation) else ""
                 lines.append(f"**{idx}. {doc.get('name')}**{pos_str}\n   • Chuyên môn: {specs}{url_str}\n")
 
-            lines.append("💡 *Bác có muốn đặt lịch khám với bác sĩ hoặc tìm hiểu chuyên khoa cụ thể nào tại cơ sở này không ạ?*")
+            lines.append(
+                "💡 *Bác có muốn đặt lịch khám với bác sĩ hoặc tìm hiểu chuyên khoa cụ thể nào tại cơ sở này không ạ?*"
+            )
             quick_replies = [
                 f"Đặt lịch tại {fac_display}",
                 "Khám Sức khỏe tổng quát",
@@ -387,7 +402,8 @@ class FacilityService:
         if district_filter and facility_name_query:
             norm_q = _normalize_text(facility_name_query)
             matched = [
-                f for f in all_facilities
+                f
+                for f in all_facilities
                 if norm_q in _normalize_text(f.get("name", "")) or norm_q in _normalize_text(f.get("code", ""))
             ]
             if matched:
@@ -406,7 +422,9 @@ class FacilityService:
                 )
 
                 if language == "en":
-                    dept_intro = f" to examine and treat conditions for **{department_context}**" if department_context else ""
+                    dept_intro = (
+                        f" to examine and treat conditions for **{department_context}**" if department_context else ""
+                    )
                     lines = [
                         f"🏥 **Recommended Nearest Vinmec Facility from {district_filter}:**\n",
                         f"For patients in **{district_filter}**, the most accessible and comprehensive facility{dept_intro} is:\n",
@@ -416,10 +434,16 @@ class FacilityService:
                         "• ⏰ **Operating Hours:** 08:00 - 17:00 (Mon - Fri) | 08:00 - 12:00 (Sat) | **Emergency 24/7**.",
                     ]
                     if department_context:
-                        lines.append(f"• 🩺 **Clinical Strength:** Fully equipped departments and experienced specialists for **{department_context}**.")
+                        lines.append(
+                            f"• 🩺 **Clinical Strength:** Fully equipped departments and experienced specialists for **{department_context}**."
+                        )
                     if enable_citation:
-                        lines.append(f"• 🌐 👉 [View facility details & specialist doctors on Vinmec.com]({detail_url})\n")
-                    lines.append(f"💡 *Would you like me to check available doctor schedules or help you book an appointment at {short_name}?*")
+                        lines.append(
+                            f"• 🌐 👉 [View facility details & specialist doctors on Vinmec.com]({detail_url})\n"
+                        )
+                    lines.append(
+                        f"💡 *Would you like me to check available doctor schedules or help you book an appointment at {short_name}?*"
+                    )
                     quick_replies = [
                         f"Book at {short_name}",
                         f"View doctors at {short_name}",
@@ -436,10 +460,16 @@ class FacilityService:
                         "• ⏰ **Thời gian làm việc:** 08:00 - 17:00 (Thứ 2 - Thứ 6) | 08:00 - 12:00 (Thứ 7) | **Cấp cứu 24/7** liên tục.",
                     ]
                     if department_context:
-                        lines.append(f"• 🩺 **Năng lực chuyên môn:** Có đội ngũ chuyên gia hàng đầu và trang thiết bị chuyên sâu của **{department_context}** để trực tiếp thăm khám triệu chứng cho bác.")
+                        lines.append(
+                            f"• 🩺 **Năng lực chuyên môn:** Có đội ngũ chuyên gia hàng đầu và trang thiết bị chuyên sâu của **{department_context}** để trực tiếp thăm khám triệu chứng cho bác."
+                        )
                     if enable_citation:
-                        lines.append(f"• 🌐 👉 [Xem chi tiết cơ sở vật chất & đội ngũ chuyên gia tại {short_name}]({detail_url})\n")
-                    lines.append(f"💡 *Bác có muốn em kiểm tra lịch khám của bác sĩ chuyên khoa hoặc hỗ trợ đặt hẹn tại {short_name} không ạ?*")
+                        lines.append(
+                            f"• 🌐 👉 [Xem chi tiết cơ sở vật chất & đội ngũ chuyên gia tại {short_name}]({detail_url})\n"
+                        )
+                    lines.append(
+                        f"💡 *Bác có muốn em kiểm tra lịch khám của bác sĩ chuyên khoa hoặc hỗ trợ đặt hẹn tại {short_name} không ạ?*"
+                    )
                     quick_replies = [
                         f"Đặt lịch tại {short_name}",
                         f"Xem bác sĩ tại {short_name}",
@@ -451,7 +481,8 @@ class FacilityService:
         if facility_name_query:
             norm_q = _normalize_text(facility_name_query)
             matched = [
-                f for f in all_facilities
+                f
+                for f in all_facilities
                 if norm_q in _normalize_text(f.get("name", "")) or norm_q in _normalize_text(f.get("code", ""))
             ]
             if matched:
@@ -460,14 +491,18 @@ class FacilityService:
         # 2. TRƯỜNG HỢP HỎI DANH SÁCH HOẶC THEO KHU VỰC
         if language == "en":
             filtered = [
-                f for f in all_facilities
-                if f.get("name", "").startswith("Vinmec") or "Hospital" in f.get("name", "") or "Clinic" in f.get("name", "")
+                f
+                for f in all_facilities
+                if f.get("name", "").startswith("Vinmec")
+                or "Hospital" in f.get("name", "")
+                or "Clinic" in f.get("name", "")
             ]
             if not filtered:
                 filtered = all_facilities
         else:
             filtered = [
-                f for f in all_facilities
+                f
+                for f in all_facilities
                 if f.get("name", "").startswith(("Bệnh viện", "Phòng khám", "Bệnh Viện", "Phòng Khám"))
             ]
             if not filtered:
@@ -477,7 +512,8 @@ class FacilityService:
         if region_filter:
             rf = _normalize_text(region_filter)
             matching = [
-                f for f in filtered
+                f
+                for f in filtered
                 if rf in _normalize_text(f.get("address", "")) or rf in _normalize_text(f.get("name", ""))
             ]
             if matching:

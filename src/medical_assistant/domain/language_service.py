@@ -43,30 +43,145 @@ for code, names in SPECIALTY_BILINGUAL_MAP.items():
 
 # Regex phát hiện dấu tiếng Việt
 VIETNAMESE_ACCENTS_REGEX = re.compile(
-    r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]",
-    re.IGNORECASE
+    r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]", re.IGNORECASE
 )
 
 # Từ khóa đặc trưng tiếng Việt không dấu
 VI_COMMON_WORDS = {
-    "toi", "dau", "nguc", "sot", "bac", "kham", "khong", "em", "khoa", "thuoc",
-    "dat", "hen", "lich", "cho", "biet", "bi", "sao", "gi", "uong", "tiem", "bung",
-    "co", "va", "nhung", "nguoi", "thay", "kho", "tho", "chong", "mat", "muon", "nhe"
+    "toi",
+    "dau",
+    "nguc",
+    "sot",
+    "bac",
+    "kham",
+    "khong",
+    "em",
+    "khoa",
+    "thuoc",
+    "dat",
+    "hen",
+    "lich",
+    "cho",
+    "biet",
+    "bi",
+    "sao",
+    "gi",
+    "uong",
+    "tiem",
+    "bung",
+    "co",
+    "va",
+    "nhung",
+    "nguoi",
+    "thay",
+    "kho",
+    "tho",
+    "chong",
+    "mat",
+    "muon",
+    "nhe",
 }
 
 # Từ khóa đặc trưng tiếng Anh (Clinical & General English)
 EN_COMMON_WORDS = {
-    "i", "my", "me", "you", "your", "he", "she", "it", "we", "they", "them",
-    "have", "has", "had", "pain", "chest", "fever", "cough", "doctor", "appointment",
-    "help", "hello", "hi", "am", "is", "are", "was", "were", "be", "been",
-    "with", "for", "severe", "headache", "shortness", "breath", "breathing",
-    "dizzy", "stomach", "booking", "slot", "schedule", "please", "and", "or",
-    "the", "a", "an", "in", "on", "at", "to", "of", "from", "patient", "collapsed",
-    "unresponsive", "unconscious", "stopped", "stroke", "bleed", "bleeding",
-    "blood", "vomit", "vomiting", "spasm", "face", "facial", "arm", "leg", "heart",
-    "rate", "attack", "can", "cannot", "could", "should", "would", "do", "does",
-    "did", "not", "no", "yes", "what", "where", "when", "why", "how", "who",
-    "which", "disease", "illness", "feeling", "feel", "felt", "days", "hours"
+    "i",
+    "my",
+    "me",
+    "you",
+    "your",
+    "he",
+    "she",
+    "it",
+    "we",
+    "they",
+    "them",
+    "have",
+    "has",
+    "had",
+    "pain",
+    "chest",
+    "fever",
+    "cough",
+    "doctor",
+    "appointment",
+    "help",
+    "hello",
+    "hi",
+    "am",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "with",
+    "for",
+    "severe",
+    "headache",
+    "shortness",
+    "breath",
+    "breathing",
+    "dizzy",
+    "stomach",
+    "booking",
+    "slot",
+    "schedule",
+    "please",
+    "and",
+    "or",
+    "the",
+    "a",
+    "an",
+    "in",
+    "on",
+    "at",
+    "to",
+    "of",
+    "from",
+    "patient",
+    "collapsed",
+    "unresponsive",
+    "unconscious",
+    "stopped",
+    "stroke",
+    "bleed",
+    "bleeding",
+    "blood",
+    "vomit",
+    "vomiting",
+    "spasm",
+    "face",
+    "facial",
+    "arm",
+    "leg",
+    "heart",
+    "rate",
+    "attack",
+    "can",
+    "cannot",
+    "could",
+    "should",
+    "would",
+    "do",
+    "does",
+    "did",
+    "not",
+    "no",
+    "yes",
+    "what",
+    "where",
+    "when",
+    "why",
+    "how",
+    "who",
+    "which",
+    "disease",
+    "illness",
+    "feeling",
+    "feel",
+    "felt",
+    "days",
+    "hours",
 }
 
 
@@ -149,9 +264,9 @@ def canonicalize_specialty_code(specialty_input: str) -> str:
     if not specialty_input:
         return "TONG_QUAT"
 
-    text = unicodedata.normalize('NFD', specialty_input)
-    text = re.sub(r'[\u0300-\u036f]', '', text)
-    text = text.replace('đ', 'd').replace('Đ', 'D')
+    text = unicodedata.normalize("NFD", specialty_input)
+    text = re.sub(r"[\u0300-\u036f]", "", text)
+    text = text.replace("đ", "d").replace("Đ", "D")
     clean = re.sub(r"[\s\-_/]+", "", text.lower())
 
     if any(k in clean for k in ["hohap", "noihohap", "pulmon", "respir"]):
@@ -178,7 +293,6 @@ def canonicalize_specialty_code(specialty_input: str) -> str:
         return "TONG_QUAT"
 
     return "TONG_QUAT"
-
 
 
 def get_medical_disclaimer(language: str = "vi") -> str:
@@ -224,7 +338,9 @@ def get_emergency_guidance(flag_name: str, specialty: str, ats_level: int = 1, l
             )
 
 
-def get_triage_guidance(specialty: str, disease_name: str = "", ats_level: int = 4, max_days: int = 7, language: str = "vi") -> str:
+def get_triage_guidance(
+    specialty: str, disease_name: str = "", ats_level: int = 4, max_days: int = 7, language: str = "vi"
+) -> str:
     """Trả về hướng dẫn điều phối chuyên khoa song ngữ."""
     spec_display = get_specialty_display_name(specialty, language)
     if language == "en":

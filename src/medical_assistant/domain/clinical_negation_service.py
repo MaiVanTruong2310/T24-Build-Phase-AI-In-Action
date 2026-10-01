@@ -54,12 +54,11 @@ class ClinicalNegationService:
         # Liên từ / ranh giới ngắt phạm vi phủ định (Boundaries)
         self.boundary_pattern = re.compile(
             r"([.,;!?\n]|\b(?:nhưng|tuy\s+nhiên|song|còn|mà|chứ|nhung|tuy\s+nhien|con|ma|chu|but|however|although|yet|except|instead)\b)",
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         self._all_negation_regex = re.compile(
-            r"(" + "|".join(self.negation_patterns_vi + self.negation_patterns_en) + r")",
-            re.IGNORECASE
+            r"(" + "|".join(self.negation_patterns_vi + self.negation_patterns_en) + r")", re.IGNORECASE
         )
 
     @staticmethod
@@ -138,10 +137,7 @@ class ClinicalNegationService:
             else:
                 positive.append(sym)
 
-        return {
-            "positive": positive,
-            "negative": negative
-        }
+        return {"positive": positive, "negative": negative}
 
     def contains_any_positive(self, keywords: list[str], full_text: str) -> bool:
         """

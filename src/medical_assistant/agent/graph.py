@@ -13,14 +13,25 @@ def should_continue(state: AgentState) -> str:
     # Nếu là Cấp cứu, câu hỏi thường gặp (FAQ), Guardrail an toàn hoặc đang trong vòng lặp hỏi làm rõ (Probing)
     # -> Bỏ qua truy vấn bác sĩ, nhảy thẳng tới respond để tiết kiệm thời gian & tài nguyên
     status = state.get("workflow_status")
-    if (
-        state.get("is_emergency")
-        or status in (
-            "FAQ_ANSWERED", "VISIT_PURPOSE_CLARIFICATION", "GUARDRAIL_MEDICATION",
-            "GUARDRAIL_DIAGNOSIS", "DEPARTMENT_INFO", "FACILITY_INFO", "FACILITY_DOCTORS", "FACILITY_BOOKING_START", "HOLD_BOOKING", "BOOKING_CONTACT_REQUIRED", "SECURITY_BLOCKED",
-            "TRIAGED_AWAITING_SCHEDULE", "SAFETY_REVIEW", "HUMAN_HELP_REQUESTED",
-            "LANGUAGE_CHANGED", "OUT_OF_SCOPE", "SOCIAL_REDIRECT", "THIRD_PARTY_HEALTH_GUIDANCE"
-        )
+    if state.get("is_emergency") or status in (
+        "FAQ_ANSWERED",
+        "VISIT_PURPOSE_CLARIFICATION",
+        "GUARDRAIL_MEDICATION",
+        "GUARDRAIL_DIAGNOSIS",
+        "DEPARTMENT_INFO",
+        "FACILITY_INFO",
+        "FACILITY_DOCTORS",
+        "FACILITY_BOOKING_START",
+        "HOLD_BOOKING",
+        "BOOKING_CONTACT_REQUIRED",
+        "SECURITY_BLOCKED",
+        "TRIAGED_AWAITING_SCHEDULE",
+        "SAFETY_REVIEW",
+        "HUMAN_HELP_REQUESTED",
+        "LANGUAGE_CHANGED",
+        "OUT_OF_SCOPE",
+        "SOCIAL_REDIRECT",
+        "THIRD_PARTY_HEALTH_GUIDANCE",
     ):
         return "respond"
     meta = state.get("metadata", {})

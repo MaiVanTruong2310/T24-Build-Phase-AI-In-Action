@@ -47,8 +47,11 @@ def primary_path(output_dir: Path) -> Path:
 
 
 def _archive_for_fresh(output_dir: Path) -> None:
-    candidates = [primary_path(output_dir), output_dir / "errors" / "failed_urls.jsonl",
-                  output_dir / "processed" / "json" / "crawl_summary.json"]
+    candidates = [
+        primary_path(output_dir),
+        output_dir / "errors" / "failed_urls.jsonl",
+        output_dir / "processed" / "json" / "crawl_summary.json",
+    ]
     existing = [path for path in candidates if path.exists()]
     if not existing:
         return
@@ -86,7 +89,7 @@ def read_urls_file(path: Path) -> list[str]:
         if not value or value.startswith("#"):
             continue
         parsed = urlparse(value)
-        tail = parsed.path[len(DETAIL_PREFIX):].strip("/") if parsed.path.startswith(DETAIL_PREFIX) else ""
+        tail = parsed.path[len(DETAIL_PREFIX) :].strip("/") if parsed.path.startswith(DETAIL_PREFIX) else ""
         if parsed.netloc.lower() != "www.vinmec.com" or not tail or "/" in tail:
             LOGGER.warning("Skipping unsupported URL: %s", value)
             continue
@@ -109,7 +112,7 @@ class DiseaseCrawler(VinmecCrawler):
             for loc in root.findall(".//{*}loc"):
                 value = loc.text or ""
                 parsed = urlparse(value)
-                tail = parsed.path[len(DETAIL_PREFIX):].strip("/") if parsed.path.startswith(DETAIL_PREFIX) else ""
+                tail = parsed.path[len(DETAIL_PREFIX) :].strip("/") if parsed.path.startswith(DETAIL_PREFIX) else ""
                 if parsed.netloc.lower() == "www.vinmec.com" and tail and "/" not in tail:
                     sitemap_urls.add(canonical(value))
             diseases.update(sitemap_urls)
@@ -141,10 +144,15 @@ class DiseaseCrawler(VinmecCrawler):
                 anomalies.append({"url": url, "reason": str(exc)})
                 LOGGER.error("Could not read listing %s: %s", url, exc)
         complete = not queue
-        report = {"discovered_at": datetime.now(UTC).isoformat(), "listing_count": len(seen),
-                  "sitemap_url_count": len(sitemap_urls), "disease_url_count": len(diseases),
-                  "complete_traversal": complete,
-                  "unvisited_listings": list(queue), "anomalies": anomalies}
+        report = {
+            "discovered_at": datetime.now(UTC).isoformat(),
+            "listing_count": len(seen),
+            "sitemap_url_count": len(sitemap_urls),
+            "disease_url_count": len(diseases),
+            "complete_traversal": complete,
+            "unvisited_listings": list(queue),
+            "anomalies": anomalies,
+        }
         atomic_write_json(self.options.output_dir / "discovery_summary.json", report)
         return {"urls": sorted(diseases), **report}
 
@@ -167,28 +175,51 @@ class DiseaseCrawler(VinmecCrawler):
         failed_path = output_dir / "errors" / "failed_urls.jsonl"
         failed = load_failed_urls(failed_path)
         if self.options.max_profiles is not None:
-            urls = urls[:self.options.max_profiles]
+            urls = urls[: self.options.max_profiles]
         remaining = [url for url in urls if not store.contains(url) and (retry_failed or url not in failed)]
         checkpoint = output_dir / "checkpoints" / "vi_state.json"
-        update_checkpoint(checkpoint, language="vi", status="running", total_urls=len(urls),
-                          completed_count=len(store.records), remaining_count=len(remaining),
-                          failed_count=len(failed - store.keys))
+        update_checkpoint(
+            checkpoint,
+            language="vi",
+            status="running",
+            total_urls=len(urls),
+            completed_count=len(store.records),
+            remaining_count=len(remaining),
+            failed_count=len(failed - store.keys),
+        )
         for index, url in enumerate(remaining, 1):
             try:
                 LOGGER.info("[vi %d/%d remaining] %s", index, len(remaining), url)
                 store.append(self.crawl_disease(url))
             except (httpx.HTTPError, PermissionError, ValueError) as exc:
                 LOGGER.error("Could not crawl %s: %s", url, exc)
-                append_jsonl(failed_path, {"language": "vi", "url": url,
-                             "error_type": type(exc).__name__, "error": str(exc),
-                             "failed_at": datetime.now(UTC).isoformat()})
+                append_jsonl(
+                    failed_path,
+                    {
+                        "language": "vi",
+                        "url": url,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                        "failed_at": datetime.now(UTC).isoformat(),
+                    },
+                )
                 failed.add(url)
-            update_checkpoint(checkpoint, status="running", last_url=url,
-                              completed_count=len(store.records), remaining_count=len(remaining)-index,
-                              failed_count=len(failed-store.keys))
-        update_checkpoint(checkpoint, status="complete", completed_count=len(store.records),
-                          remaining_count=0, failed_count=len(failed-store.keys),
-                          finished_at=datetime.now(UTC).isoformat())
+            update_checkpoint(
+                checkpoint,
+                status="running",
+                last_url=url,
+                completed_count=len(store.records),
+                remaining_count=len(remaining) - index,
+                failed_count=len(failed - store.keys),
+            )
+        update_checkpoint(
+            checkpoint,
+            status="complete",
+            completed_count=len(store.records),
+            remaining_count=0,
+            failed_count=len(failed - store.keys),
+            finished_at=datetime.now(UTC).isoformat(),
+        )
         return rebuild_outputs(output_dir)
 
 
@@ -215,9 +246,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.fresh and args.rebuild:
         raise SystemExit("--fresh and --rebuild cannot be combined")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    options = CrawlOptions(languages=("vi",), delay=args.delay, timeout=args.timeout,
-                           retries=args.retries, max_profiles=args.max_diseases,
-                           save_raw=not args.no_raw, output_dir=args.output_dir)
+    options = CrawlOptions(
+        languages=("vi",),
+        delay=args.delay,
+        timeout=args.timeout,
+        retries=args.retries,
+        max_profiles=args.max_diseases,
+        save_raw=not args.no_raw,
+        output_dir=args.output_dir,
+    )
     with CrawlRunLock(args.output_dir / "checkpoints" / "crawler.lock"):
         if args.rebuild:
             result = rebuild_outputs(args.output_dir)
@@ -227,7 +264,9 @@ def main(argv: Iterable[str] | None = None) -> int:
             reliable = result["complete_traversal"] and result["sitemap_url_count"] > 0
             if reliable:
                 args.urls_file.parent.mkdir(parents=True, exist_ok=True)
-                args.urls_file.write_text("\n".join(result["urls"]) + ("\n" if result["urls"] else ""), encoding="utf-8")
+                args.urls_file.write_text(
+                    "\n".join(result["urls"]) + ("\n" if result["urls"] else ""), encoding="utf-8"
+                )
             else:
                 LOGGER.warning("Discovery was partial or sitemap unavailable; keeping existing URL file unchanged")
             result = {key: value for key, value in result.items() if key != "urls"}
@@ -247,4 +286,3 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

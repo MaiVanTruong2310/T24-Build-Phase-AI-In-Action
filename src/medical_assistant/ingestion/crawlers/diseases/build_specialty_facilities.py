@@ -14,7 +14,9 @@ from src.medical_assistant.ingestion.crawl_utils.chunking import TokenChunker
 
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
 DEFAULT_ROUTES = PROJECT_ROOT / "data" / "reference" / "service_policy" / "symptom_specialty_mapping.jsonl"
-DEFAULT_HOSPITALS = PROJECT_ROOT / "data" / "crawled" / "hospitals" / "processed" / "jsonl" / "vinmec_hospitals_all.jsonl"
+DEFAULT_HOSPITALS = (
+    PROJECT_ROOT / "data" / "crawled" / "hospitals" / "processed" / "jsonl" / "vinmec_hospitals_all.jsonl"
+)
 DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "datalake" / "rag" / "specialty_facilities.jsonl"
 
 
@@ -40,7 +42,8 @@ def _find_hospital(name: str, hospitals: list[dict[str, Any]]) -> dict[str, Any]
     if exact:
         return exact[0]
     contained = [
-        item for item in hospitals
+        item
+        for item in hospitals
         if target in _fold(str(item.get("name") or "")) or _fold(str(item.get("name") or "")) in target
     ]
     return max(contained, key=lambda item: len(_fold(str(item.get("name") or ""))), default=None)

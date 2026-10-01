@@ -26,12 +26,12 @@ from src.medical_assistant.domain.triage_service import get_triage_service  # no
 
 def test_negated_gastrointestinal_warning_signs_do_not_force_ats3():
     result = get_triage_service().evaluate_symptoms(
-        "Bụng bên trái đau âm ỉ 4 trên 10 đã ba ngày, "
-        "không sốt, không nôn, không tiêu chảy và không đi ngoài ra máu."
+        "Bụng bên trái đau âm ỉ 4 trên 10 đã ba ngày, không sốt, không nôn, không tiêu chảy và không đi ngoài ra máu."
     )
 
     assert result.ats_level in {ATSLevel.LEVEL_4_STANDARD, ATSLevel.LEVEL_5_NON_URGENT}
     assert result.max_booking_days >= 7
+
 
 TEST_CASES = [
     # Nhóm 1: Ca Cấp cứu tối khẩn (Phải Block)
@@ -39,19 +39,19 @@ TEST_CASES = [
         "input": "Tôi bị đau thắt ngực dữ dội lan ra cánh tay trái, vã mồ hôi lạnh và khó thở quá",
         "expected_level": ATSLevel.LEVEL_2_EMERGENT,
         "expected_block": True,
-        "case_name": "Nhồi máu cơ tim cấp"
+        "case_name": "Nhồi máu cơ tim cấp",
     },
     {
         "input": "Người nhà tôi đột nhiên méo miệng, yếu liệt nửa người bên phải không nói rõ tiếng được",
         "expected_level": ATSLevel.LEVEL_2_EMERGENT,
         "expected_block": True,
-        "case_name": "Đột quỵ não FAST"
+        "case_name": "Đột quỵ não FAST",
     },
     {
         "input": "Cháu bé uống nhầm thuốc diệt chuột đang nôn ói nhiều",
         "expected_level": ATSLevel.LEVEL_1_RESUSCITATION,
         "expected_block": True,
-        "case_name": "Ngộ độc cấp tính"
+        "case_name": "Ngộ độc cấp tính",
     },
     # Nhóm 2: Ca Bán khẩn (Chỉ đặt trong ngày)
     {
@@ -59,7 +59,7 @@ TEST_CASES = [
         "expected_level": ATSLevel.LEVEL_3_URGENT,
         "expected_block": False,
         "expected_max_days": 1,
-        "case_name": "Cơn đau quặn thận cấp"
+        "case_name": "Cơn đau quặn thận cấp",
     },
     # Nhóm 3: Ca Mạn tính / Thông thường (Linh hoạt trong tuần)
     {
@@ -67,14 +67,14 @@ TEST_CASES = [
         "expected_level": ATSLevel.LEVEL_4_STANDARD,
         "expected_block": False,
         "expected_max_days": 7,
-        "case_name": "Thoái hóa / Đau mỏi cơ xương khớp"
+        "case_name": "Thoái hóa / Đau mỏi cơ xương khớp",
     },
     {
         "input": "Tôi muốn đăng ký kiểm tra sức khỏe tổng quát định kỳ",
         "expected_level": ATSLevel.LEVEL_4_STANDARD,
         "expected_block": False,
-        "case_name": "Khám sức khỏe tổng quát"
-    }
+        "case_name": "Khám sức khỏe tổng quát",
+    },
 ]
 
 
@@ -89,8 +89,8 @@ def run_benchmark():
 
     for idx, tc in enumerate(TEST_CASES, 1):
         result = service.evaluate_symptoms(tc["input"])
-        is_level_match = (result.ats_level == tc["expected_level"])
-        is_block_match = (result.is_emergency == tc["expected_block"])
+        is_level_match = result.ats_level == tc["expected_level"]
+        is_block_match = result.is_emergency == tc["expected_block"]
 
         success = is_level_match and is_block_match
 
@@ -100,11 +100,13 @@ def run_benchmark():
 
         print(f"\n[{idx}/{total}] {tc['case_name']} -> {status_str}")
         print(f"   Input: '{tc['input']}'")
-        print(f"   Kết quả: ATS {result.ats_level.value} | Max days: {result.max_booking_days} | Khoa: {result.suggested_specialty}")
+        print(
+            f"   Kết quả: ATS {result.ats_level.value} | Max days: {result.max_booking_days} | Khoa: {result.suggested_specialty}"
+        )
         print(f"   Chỉ dẫn: {result.patient_guidance[:100]}...")
 
     print("\n" + "=" * 70)
-    print(f"🏆 KẾT QUẢ KIỂM THỬ: {passed}/{total} ca đạt chuẩn ({passed/total*100:.1f}%)")
+    print(f"🏆 KẾT QUẢ KIỂM THỬ: {passed}/{total} ca đạt chuẩn ({passed / total * 100:.1f}%)")
     print("=" * 70)
 
     if passed == total:

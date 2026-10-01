@@ -42,7 +42,9 @@ async def test_llm_clinical_extractor_unit():
     assert "headache" in res_simple["positive_facts"]
 
     # Truy vấn phức tạp có phủ định
-    res_complex = await extractor.extract_async("Bác sĩ ơi em đau nửa đầu dữ dội từ hôm kia, nhìn mờ nhưng không bị tê tay chân")
+    res_complex = await extractor.extract_async(
+        "Bác sĩ ơi em đau nửa đầu dữ dội từ hôm kia, nhìn mờ nhưng không bị tê tay chân"
+    )
     assert "headache" in res_complex["positive_facts"]
     assert "numbness_weakness" in res_complex["negative_facts"]
 

@@ -9,16 +9,14 @@ def has_clinical_evidence(clinical_facts: dict[str, Any], v2_response: Any) -> b
         return True
     if clinical_facts.get("duration_days") is not None or clinical_facts.get("location"):
         return True
-    if hasattr(v2_response.facts_delta, "observations") and any(obs.polarity != "negative" for obs in v2_response.facts_delta.observations):
+    if hasattr(v2_response.facts_delta, "observations") and any(
+        obs.polarity != "negative" for obs in v2_response.facts_delta.observations
+    ):
         return True
     return False
 
-def validate_action(
-    action: str,
-    clinical_facts: dict[str, Any],
-    v2_response: Any,
-    allowed_actions: list[str]
-) -> str:
+
+def validate_action(action: str, clinical_facts: dict[str, Any], v2_response: Any, allowed_actions: list[str]) -> str:
     """Validate and safely fallback LLM actions based on clinical rules."""
     if action not in allowed_actions:
         action = "ask_clarifying_question"
