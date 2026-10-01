@@ -195,11 +195,14 @@ jobs:
 
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: GITHUB_SHA,GITHUB_REF_NAME
+          envs: GITHUB_SHA,GITHUB_REF_NAME,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
             set -euo pipefail
             cd /opt/app
@@ -239,6 +242,12 @@ jobs:
             POSTGRES_USER=${{ vars.POSTGRES_USER || 'ai20k_app' }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             DATABASE_URL=postgresql+psycopg://${{ vars.POSTGRES_USER || 'ai20k_app' }}:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/${{ vars.POSTGRES_DB || 'ai20k' }}
+            DATABASE_AUTO_CREATE=false
+            GMAIL_SMTP_HOST=smtp.gmail.com
+            GMAIL_SMTP_PORT=587
+            GMAIL_SMTP_USERNAME=${{ secrets.GMAIL_SMTP_USERNAME }}
+            GMAIL_SMTP_APP_PASSWORD=${{ secrets.GMAIL_SMTP_APP_PASSWORD }}
+            GMAIL_FROM_EMAIL=${{ secrets.GMAIL_FROM_EMAIL }}
             LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}
             LANGCHAIN_PROJECT=ai20k-agent
             LANGCHAIN_TRACING_V2=true
@@ -248,12 +257,32 @@ jobs:
             EOF
             chmod 600 .env
 
+            if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+              echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            fi
+
             docker compose -f docker-compose.yml -f "$OVERRIDE" pull
             docker compose -f docker-compose.yml -f "$OVERRIDE" up -d --remove-orphans
 
+            if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+              docker logout
+            fi
+
             # đợi healthcheck rồi dọn image cũ
-            sleep 15
             docker compose -f docker-compose.yml -f "$OVERRIDE" ps
+
+            READY=false
+            for attempt in $(seq 1 60); do
+              if curl -fsS http://127.0.0.1:8000/health/ready >/dev/null; then
+                READY=true
+                break
+              fi
+              sleep 5
+            done
+            if [ "$READY" != "true" ]; then
+              docker compose -f docker-compose.yml -f "$OVERRIDE" logs --tail=100 backend db-migrate
+              exit 1
+            fi
 
             # Fail the deployment if the running container does not allow the
             # deployed Vercel origin for authenticated browser requests.
