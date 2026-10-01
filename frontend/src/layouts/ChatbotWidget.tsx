@@ -5,8 +5,6 @@ import {
   Bot,
   Calendar,
   CheckCircle2,
-  ChevronRight,
-  Clock,
   LoaderCircle,
   Maximize2,
   Mic,
@@ -17,8 +15,6 @@ import {
   ShieldCheck,
   Sparkles,
   Stethoscope,
-  User,
-  X,
 } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { closeChat, toggleChat, type RootState } from '../app/store';
@@ -351,7 +347,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         onMetadata: (metadata) => updateBot(botId, { metadata }),
       });
       updateBot(botId, { pending: false });
-    } catch (streamError) {
+    } catch {
       if (request.signal.aborted) return;
       try {
         const result = await sendChat(text, sessionId, request.signal);

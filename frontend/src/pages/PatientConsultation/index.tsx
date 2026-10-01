@@ -3,13 +3,8 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
-  Clock,
-  FileText,
   Lock,
-  MessageSquareText,
   PhoneCall,
-  ShieldCheck,
-  Sparkles,
   Stethoscope,
   UserCheck,
 } from 'lucide-react';

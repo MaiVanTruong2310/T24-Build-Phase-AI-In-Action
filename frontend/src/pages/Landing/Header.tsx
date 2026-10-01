@@ -8,8 +8,6 @@ import {
   LogOut,
   Menu,
   MessageSquare,
-  PlusSquare,
-  Settings,
   ShieldCheck,
   Stethoscope,
   User,
@@ -140,6 +138,7 @@ export function Header() {
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
+      </div>
       </div>
       
       {/* ─── Navigation tabs (Desktop / Tablet horizontal scroll) ─────────────────────────── */}
