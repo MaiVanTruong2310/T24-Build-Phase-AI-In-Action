@@ -111,7 +111,7 @@ jobs:
 
   frontend_deploy:
     name: Deploy frontend to Vercel
-    needs: [lint-and-test, frontend_detection, frontend_check]
+    needs: [lint-and-test, frontend_detection, frontend_check, backend_deploy]
     if: >-
       github.event_name == 'push' &&
       needs.frontend_detection.outputs.has_frontend == 'true' &&
@@ -184,13 +184,113 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy compose files to EC2
+      - name: Set up Python for deployment configuration
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Prepare backend environment
+        shell: bash
+        env:
+          IMAGE_REPO: ${{ vars.DOCKERHUB_REPO }}
+          FRONTEND_PROD_URL: ${{ secrets.FRONTEND_PROD_URL }}
+          FRONTEND_DEV_URL: ${{ secrets.FRONTEND_DEV_URL }}
+          POSTGRES_DB: ${{ vars.POSTGRES_DB || 'ai20k' }}
+          POSTGRES_USER: ${{ vars.POSTGRES_USER || 'ai20k_app' }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          AUTH_DATABASE_URL: ${{ secrets.AUTH_DATABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_BACKUP_KEYS: ${{ secrets.OPENROUTER_BACKUP_KEYS }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          LANGCHAIN_API_KEY: ${{ secrets.LANGCHAIN_API_KEY }}
+          AI_LOG_API_KEY: ${{ secrets.AI_LOG_API_KEY }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+
+          # Pass secrets as environment values, never interpolate them into shell code.
+          required = ('IMAGE_REPO', 'POSTGRES_PASSWORD', 'JWT_SECRET_KEY',
+                      'SUPABASE_URL', 'SUPABASE_KEY', 'AUTH_DATABASE_URL')
+          missing = [name for name in required if not os.environ.get(name, '').strip()]
+          if missing:
+              raise SystemExit('Missing deployment secrets/variables: ' + ', '.join(missing))
+          production = os.environ['GITHUB_REF_NAME'] == 'main'
+          origin = os.environ.get('FRONTEND_PROD_URL' if production else 'FRONTEND_DEV_URL') or (
+              'https://ai20k-build-phase.vercel.app' if production
+              else 'https://ai20k-build-phase-dev.vercel.app'
+          )
+          origin = origin.rstrip('/')
+          parsed = urlsplit(origin)
+          if parsed.scheme != 'https' or not parsed.hostname or parsed.path or parsed.query or parsed.fragment or parsed.username:
+              raise SystemExit('Frontend URL must be an HTTPS origin without a path.')
+          supabase = os.environ['SUPABASE_URL'].rstrip('/')
+          if supabase != 'https://uxtpazhbzpoohlhncwbh.supabase.co':
+              raise SystemExit('SUPABASE_URL must point to project uxtpazhbzpoohlhncwbh.')
+          auth_url = os.environ['AUTH_DATABASE_URL'].strip()
+          try:
+              auth = urlsplit(auth_url)
+              valid = auth.scheme in ('postgresql', 'postgresql+psycopg') and auth.password and auth.path == '/postgres'
+              valid = valid and auth.port in (None, 5432) and auth_url.count('@') == 1
+              valid = valid and (
+                  auth.hostname == 'db.uxtpazhbzpoohlhncwbh.supabase.co'
+                  or (auth.hostname.endswith('.pooler.supabase.com') and auth.username.endswith('.uxtpazhbzpoohlhncwbh'))
+              )
+              query = dict(parse_qsl(auth.query))
+              query['sslmode'] = 'require'
+              auth_url = urlunsplit(auth._replace(query=urlencode(query)))
+          except (AttributeError, ValueError):
+              valid = False
+          if not valid:
+              raise SystemExit('AUTH_DATABASE_URL must be a Supabase PostgreSQL URI for this project on port 5432; percent-encode the password.')
+          values = {name: os.environ.get(name, '') for name in (
+              'IMAGE_REPO', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
+              'JWT_SECRET_KEY', 'SUPABASE_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
+              'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_KEYS',
+              'GOOGLE_AI_API_KEY', 'LANGCHAIN_API_KEY', 'AI_LOG_API_KEY'
+          )}
+          values.update(
+              IMAGE_TAG=os.environ['GITHUB_SHA'], APP_ENV='production' if production else 'development',
+              AUTH_PROVIDER='supabase', AUTH_DATABASE_URL=auth_url, SUPABASE_URL=supabase,
+              SUPABASE_AUTH_REDIRECT_URL=origin, AUTH_COOKIE_SECURE='true', AUTH_COOKIE_SAMESITE='none',
+              DATABASE_URL='postgresql+psycopg://' + quote(values['POSTGRES_USER'], safe='') + ':'
+                  + quote(values['POSTGRES_PASSWORD'], safe='') + '@postgres:5432/' + quote(values['POSTGRES_DB'], safe=''),
+              DATABASE_AUTO_CREATE='true', JWT_ALGORITHM='HS256', JWT_ACCESS_TOKEN_EXPIRE_MINUTES='15',
+              JWT_REFRESH_TOKEN_EXPIRE_DAYS='30', OTP_EXPIRE_MINUTES='5', OTP_MAX_ATTEMPTS='5', MOCK_OTP_CODE='',
+              CORS_ORIGINS='http://localhost:5173,' + origin,
+              OPENROUTER_BASE_URL='https://openrouter.ai/api/v1', OPENROUTER_MODEL_NAME='openai/gpt-4o-mini',
+              GOOGLE_AI_BASE_URL='https://generativelanguage.googleapis.com/v1beta/openai/',
+              GOOGLE_AI_MODEL_NAME='gemini-3.1-flash-lite', LLM_REQUEST_TIMEOUT_SECONDS='12',
+              LLM_HEDGE_DELAY_SECONDS='3', LLM_TOTAL_TIMEOUT_SECONDS='15',
+              LANGCHAIN_PROJECT='ai20k-agent', LANGCHAIN_TRACING_V2='true' if values['LANGCHAIN_API_KEY'] else 'false',
+              AI_LOG_SERVER='https://ai-logs.note.transformerlabs.ai/api/ingest', AI_LOG_DIR='.ai-log',
+          )
+          if not any(values[name] for name in ('OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GOOGLE_AI_API_KEY')):
+              raise SystemExit('Set at least one LLM provider API key.')
+          if any('\n' in value or '\r' in value or '\0' in value for value in values.values()):
+              raise SystemExit('Deployment environment values must be single-line strings.')
+          output = Path('.env.deploy')
+          os.umask(0o077)
+          output.write_text(''.join(key + '=' + json.dumps(value.replace('$', '$$')) + '\n'
+                                    for key, value in values.items()), encoding='utf-8')
+          output.chmod(0o600)
+          print('Prepared backend configuration for Supabase Auth (secret values omitted).')
+          PY
+
+      - name: Copy compose files and environment to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.yml,docker-compose.prod.yml,docker-compose.dev.yml"
+          source: "docker-compose.yml,docker-compose.prod.yml,docker-compose.dev.yml,.env.deploy"
           target: "/opt/app"
 
       - name: Deploy on EC2
@@ -199,73 +299,68 @@ jobs:
           host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: GITHUB_SHA,GITHUB_REF_NAME
+          envs: GITHUB_REF_NAME
           script: |
             set -euo pipefail
             cd /opt/app
-
             if [ "$GITHUB_REF_NAME" = "main" ]; then
               OVERRIDE=docker-compose.prod.yml
-              ENV_TAG=production
-              FRONTEND_ORIGIN="${{ secrets.FRONTEND_PROD_URL || 'https://ai20k-build-phase.vercel.app' }}"
             else
               OVERRIDE=docker-compose.dev.yml
-              ENV_TAG=development
-              FRONTEND_ORIGIN="${{ secrets.FRONTEND_DEV_URL || 'https://ai20k-build-phase-dev.vercel.app' }}"
             fi
-
-            # CORS compares the browser Origin exactly: no trailing slash or path.
-            FRONTEND_ORIGIN="${FRONTEND_ORIGIN%/}"
-            if [[ ! "$FRONTEND_ORIGIN" =~ ^https?://[^/]+$ ]]; then
-              echo "Invalid frontend origin for CORS: $FRONTEND_ORIGIN"
-              exit 1
-            fi
-
-            cat > .env <<EOF
-            IMAGE_REPO=${{ vars.DOCKERHUB_REPO }}
-            IMAGE_TAG=${GITHUB_SHA}
-            APP_ENV=${ENV_TAG}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-            JWT_ALGORITHM=HS256
-            JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
-            JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
-            OTP_EXPIRE_MINUTES=5
-            OTP_MAX_ATTEMPTS=5
-            # TEMPORARY DEMO ONLY: remove when real OTP delivery is enabled.
-            MOCK_OTP_CODE=123456
-            CORS_ORIGINS=http://localhost:5173,${FRONTEND_ORIGIN},https://ai20k-build-phase-dev.vercel.app,https://ai20k-build-phase.vercel.app
-            POSTGRES_DB=${{ vars.POSTGRES_DB || 'ai20k' }}
-            POSTGRES_USER=${{ vars.POSTGRES_USER || 'ai20k_app' }}
-            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            DATABASE_URL=postgresql+psycopg://${{ vars.POSTGRES_USER || 'ai20k_app' }}:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/${{ vars.POSTGRES_DB || 'ai20k' }}
-            LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}
-            LANGCHAIN_PROJECT=ai20k-agent
-            LANGCHAIN_TRACING_V2=true
-            AI_LOG_SERVER=https://ai-logs.note.transformerlabs.ai/api/ingest
-            AI_LOG_API_KEY=${{ secrets.AI_LOG_API_KEY }}
-            AI_LOG_DIR=.ai-log
-            EOF
-            chmod 600 .env
+            chmod 600 .env.deploy
+            mv -f .env.deploy .env
 
             docker compose -f docker-compose.yml -f "$OVERRIDE" pull
             docker compose -f docker-compose.yml -f "$OVERRIDE" up -d --remove-orphans
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent --max-time 5 http://127.0.0.1:8000/health/ready >/dev/null; then
+                break
+              fi
+              sleep 5
+            done
+            curl --fail --silent --max-time 10 http://127.0.0.1:8000/health/ready >/dev/null
 
-            # đợi healthcheck rồi dọn image cũ
-            sleep 15
+            # Verify Supabase Auth, private profile tables and cookie CORS without creating users.
+            docker compose -f docker-compose.yml -f "$OVERRIDE" exec -T backend python - <<'PY'
+            import asyncio
+            import httpx
+            from sqlalchemy import text
+            from src.config import get_settings
+            from src.db.session import get_auth_engine
+            from src.services.cookie_session import cookie_options
+
+            async def verify():
+                settings = get_settings()
+                assert settings.auth_provider == 'supabase', 'Supabase Auth is not enabled'
+                assert cookie_options()['secure'] and cookie_options()['samesite'] == 'none', 'Invalid cookie configuration'
+                async with get_auth_engine().connect() as connection:
+                    for name in ('users', 'chat_conversations', 'chat_turns'):
+                        exists = await connection.scalar(text('SELECT to_regclass(:name)'), {'name': 'public.' + name})
+                        assert exists is not None, 'Missing Supabase profile/history table: ' + name
+                async with httpx.AsyncClient(timeout=20) as client:
+                    auth = await client.get(settings.supabase_url + '/auth/v1/settings', headers={'apikey': settings.supabase_key})
+                    assert auth.status_code == 200, 'Supabase Auth endpoint is unavailable'
+                    assert auth.json().get('external', {}).get('email') is True, 'Supabase email provider must be enabled'
+                    origin = settings.supabase_auth_redirect_url
+                    cors = await client.options('http://127.0.0.1:8000/api/v1/users/me', headers={
+                        'Origin': origin, 'Access-Control-Request-Method': 'GET',
+                        'Access-Control-Request-Headers': 'x-auth-transport,x-session-expected',
+                    })
+                    assert cors.headers.get('access-control-allow-origin') == origin, 'Frontend origin is not allowed'
+                    assert cors.headers.get('access-control-allow-credentials') == 'true', 'Cookie CORS is not enabled'
+                await get_auth_engine().dispose()
+            try:
+                asyncio.run(verify())
+            except Exception as error:
+                # Database exceptions can contain connection details; only log the class.
+                raise SystemExit('Supabase deployment verification failed: ' + type(error).__name__) from None
+            print('Supabase Auth, profile/history database and cookie CORS checks passed.')
+            PY
             docker compose -f docker-compose.yml -f "$OVERRIDE" ps
-
-            # Fail the deployment if the running container does not allow the
-            # deployed Vercel origin for authenticated browser requests.
-            CORS_HEADERS=$(curl -sS -D - -o /dev/null -X OPTIONS \
-              http://127.0.0.1:8000/api/v1/users/me \
-              -H "Origin: $FRONTEND_ORIGIN" \
-              -H "Access-Control-Request-Method: GET" \
-              -H "Access-Control-Request-Headers: authorization")
-            if ! printf '%s\n' "$CORS_HEADERS" | grep -Fqi "access-control-allow-origin: $FRONTEND_ORIGIN"; then
-              echo "CORS preflight failed for $FRONTEND_ORIGIN"
-              printf '%s\n' "$CORS_HEADERS"
-              exit 1
-            fi
-
             docker image prune -f
+
+      - name: Clean up deployment environment on runner
+        if: always()
+        shell: bash
+        run: python -c "from pathlib import Path; Path('.env.deploy').unlink(missing_ok=True)"
