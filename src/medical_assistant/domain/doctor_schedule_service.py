@@ -65,9 +65,14 @@ def _fold(value: Any) -> str:
 def _specialty_terms(name: str | None) -> list[str]:
     folded = _fold(name)
     code_aliases = {
-        "tieu_hoa": "tieu hoa", "than_kinh": "than kinh", "tim_mach": "tim mach",
-        "tai_mui_hong": "tai mui hong", "xuong_khop": "xuong khop", "ho_hap": "ho hap",
-        "tong_quat": "suc khoe tong quat", "da_khoa": "suc khoe tong quat",
+        "tieu_hoa": "tieu hoa",
+        "than_kinh": "than kinh",
+        "tim_mach": "tim mach",
+        "tai_mui_hong": "tai mui hong",
+        "xuong_khop": "xuong khop",
+        "ho_hap": "ho hap",
+        "tong_quat": "suc khoe tong quat",
+        "da_khoa": "suc khoe tong quat",
     }
     folded = code_aliases.get(folded, folded)
     terms = {folded} if folded else set()
@@ -160,10 +165,7 @@ class DoctorScheduleService:
             params={"select": "id,code,name,address", "status": "eq.active", "limit": 200},
         )
         folded = normalize_text(raw)
-        exact = [
-            row for row in rows
-            if folded in {normalize_text(row.get("code")), normalize_text(row.get("name"))}
-        ]
+        exact = [row for row in rows if folded in {normalize_text(row.get("code")), normalize_text(row.get("name"))}]
         if exact:
             return exact[0]
         requested_key = facility_key(raw)
@@ -208,11 +210,7 @@ class DoctorScheduleService:
                     "limit": max(100, limit_doctors * 20),
                 },
             )
-            facility_ids = {
-                str(row["doctor_id"])
-                for row in facility_relations
-                if row.get("doctor_id")
-            }
+            facility_ids = {str(row["doctor_id"]) for row in facility_relations if row.get("doctor_id")}
             doctor_ids = [doctor_id for doctor_id in doctor_ids if doctor_id in facility_ids]
             facility_departments = {
                 str(row["doctor_id"]): str(row.get("department") or "")
@@ -268,12 +266,14 @@ class DoctorScheduleService:
                 continue
             doctor_slots = slots_by_doctor.setdefault(str(slot.get("doctor_id")), [])
             if len(doctor_slots) < slots_per_doctor:
-                doctor_slots.append({
-                    "schedule_id": str(slot["id"]),
-                    "starts_at": format_utc_to_vn_time(raw_start),
-                    "ends_at": str(slot.get("ends_at") or ""),
-                    "verified": True,
-                })
+                doctor_slots.append(
+                    {
+                        "schedule_id": str(slot["id"]),
+                        "starts_at": format_utc_to_vn_time(raw_start),
+                        "ends_at": str(slot.get("ends_at") or ""),
+                        "verified": True,
+                    }
+                )
 
         return [
             {
@@ -331,28 +331,29 @@ class DoctorScheduleService:
                 workplaces = [workplaces]
             if requested_facility_key:
                 workplaces = [
-                    workplace for workplace in workplaces
-                    if facility_key(workplace) == requested_facility_key
+                    workplace for workplace in workplaces if facility_key(workplace) == requested_facility_key
                 ]
             credentials = record.get("credentials") or []
             positions = record.get("positions") or []
             title = ", ".join(credentials) or (positions[0] if positions else "Bác sĩ chuyên khoa")
             identifier = str(record.get("profile_id") or record.get("source_url"))
-            results.append({
-                "id": f"crawl-{identifier}",
-                "full_name": record.get("name") or "Bác sĩ chuyên khoa",
-                "title": title,
-                "years_of_experience": years,
-                "languages": [record.get("language") or "vi"],
-                "specialties": record.get("specialties") or [],
-                "workplace": workplaces[0] if workplaces else "",
-                "overview": str(record.get("overview") or "").strip(),
-                "source_url": record.get("source_url"),
-                "image_url": record.get("image_url"),
-                "data_source": "vinmec_crawl",
-                "schedule_verified": False,
-                "available_slots": [],
-            })
+            results.append(
+                {
+                    "id": f"crawl-{identifier}",
+                    "full_name": record.get("name") or "Bác sĩ chuyên khoa",
+                    "title": title,
+                    "years_of_experience": years,
+                    "languages": [record.get("language") or "vi"],
+                    "specialties": record.get("specialties") or [],
+                    "workplace": workplaces[0] if workplaces else "",
+                    "overview": str(record.get("overview") or "").strip(),
+                    "source_url": record.get("source_url"),
+                    "image_url": record.get("image_url"),
+                    "data_source": "vinmec_crawl",
+                    "schedule_verified": False,
+                    "available_slots": [],
+                }
+            )
         return results
 
     def get_available_doctors_and_slots(
@@ -367,13 +368,17 @@ class DoctorScheduleService:
         facility = None
         try:
             facility = self.find_facility(facility_id) if facility_id else None
-            doctors = [] if facility_id and not facility else self._database_doctors(
-                specialty_name,
-                limit_doctors,
-                slots_per_doctor,
-                requested_days,
-                preferred_period,
-                facility,
+            doctors = (
+                []
+                if facility_id and not facility
+                else self._database_doctors(
+                    specialty_name,
+                    limit_doctors,
+                    slots_per_doctor,
+                    requested_days,
+                    preferred_period,
+                    facility,
+                )
             )
             if doctors:
                 return doctors

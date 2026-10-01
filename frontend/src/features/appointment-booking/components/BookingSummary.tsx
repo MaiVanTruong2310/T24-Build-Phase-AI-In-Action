@@ -19,6 +19,7 @@ interface Props {
   onPatientNoteChange: (value: string) => void;
   onBook: () => void;
   isBooking: boolean;
+  submitLabel?: string;
 }
 
 function formatDateTime(value: string): string {
@@ -62,6 +63,7 @@ export function BookingSummary({
   onPatientNoteChange,
   onBook,
   isBooking,
+  submitLabel = 'Xác nhận đặt lịch',
 }: Props) {
   return (
     <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
@@ -134,7 +136,7 @@ export function BookingSummary({
             disabled={isBooking}
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-sky-700 py-3.5 font-bold text-white shadow-md shadow-sky-700/20 transition-colors hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {isBooking ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</> : <><CalendarDays className="h-4 w-4" /> Xác nhận đặt lịch</>}
+            {isBooking ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</> : <><CalendarDays className="h-4 w-4" /> {submitLabel}</>}
           </button>
         </div>
       </div>

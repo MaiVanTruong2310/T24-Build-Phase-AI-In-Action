@@ -5,18 +5,19 @@ from pydantic import BaseModel, Field, model_validator
 
 class ATSLevel(int, Enum):
     """Thang phân cấp cấp cứu ATS (Australasian Triage Scale)"""
+
     LEVEL_1_RESUSCITATION = 1  # Đe dọa mạng sống ngay lập tức -> 115
-    LEVEL_2_EMERGENT = 2       # Nguy kịch cao / Time-sensitive -> Đến phòng Cấp cứu ngay
-    LEVEL_3_URGENT = 3         # Bán khẩn -> Khám trong ngày (Same-day / < 24h)
-    LEVEL_4_STANDARD = 4       # Tiêu chuẩn mạn tính -> Trong tuần (2-7 ngày)
-    LEVEL_5_NON_URGENT = 5     # Không khẩn / Gói khám / Định kỳ -> Linh hoạt (1-4 tuần)
+    LEVEL_2_EMERGENT = 2  # Nguy kịch cao / Time-sensitive -> Đến phòng Cấp cứu ngay
+    LEVEL_3_URGENT = 3  # Bán khẩn -> Khám trong ngày (Same-day / < 24h)
+    LEVEL_4_STANDARD = 4  # Tiêu chuẩn mạn tính -> Trong tuần (2-7 ngày)
+    LEVEL_5_NON_URGENT = 5  # Không khẩn / Gói khám / Định kỳ -> Linh hoạt (1-4 tuần)
 
 
 class UrgencyTier(StrEnum):
     EMERGENCY_BLOCK = "EMERGENCY_BLOCK"  # Khóa đặt lịch hẹn, chuyển cấp cứu
-    SAME_DAY = "SAME_DAY"                # Chỉ mở slot trong ngày hôm nay hoặc sáng mai
-    WITHIN_WEEK = "WITHIN_WEEK"          # Mở slot khám trong tuần (1-7 ngày)
-    FLEXIBLE = "FLEXIBLE"                # Đặt lịch tự do theo nhu cầu (đến 30 ngày)
+    SAME_DAY = "SAME_DAY"  # Chỉ mở slot trong ngày hôm nay hoặc sáng mai
+    WITHIN_WEEK = "WITHIN_WEEK"  # Mở slot khám trong tuần (1-7 ngày)
+    FLEXIBLE = "FLEXIBLE"  # Đặt lịch tự do theo nhu cầu (đến 30 ngày)
 
 
 class AcuityProfile(BaseModel):
@@ -29,15 +30,14 @@ class AcuityProfile(BaseModel):
 class SymptomHierarchy(BaseModel):
     red_flags: list[str] = Field(
         default_factory=list,
-        description="Các triệu chứng báo động cấp tính / tối khẩn (Gặp là ép Level 1 hoặc Level 2 ngay)"
+        description="Các triệu chứng báo động cấp tính / tối khẩn (Gặp là ép Level 1 hoặc Level 2 ngay)",
     )
     warning_signs: list[str] = Field(
         default_factory=list,
-        description="Các dấu hiệu cảnh báo tiến triển xấu hoặc triệu chứng cấp tính (Level 3 - Khám trong ngày)"
+        description="Các dấu hiệu cảnh báo tiến triển xấu hoặc triệu chứng cấp tính (Level 3 - Khám trong ngày)",
     )
     typical_or_mild: list[str] = Field(
-        default_factory=list,
-        description="Các triệu chứng mạn tính hoặc mức độ nhẹ/ổn định (Level 4/5)"
+        default_factory=list, description="Các triệu chứng mạn tính hoặc mức độ nhẹ/ổn định (Level 4/5)"
     )
 
 
@@ -56,12 +56,10 @@ class DiseaseTriageRecord(BaseModel):
     acuity: AcuityProfile = Field(..., description="Hồ sơ phân cấp khẩn cấp của bệnh")
     symptom_hierarchy: SymptomHierarchy = Field(..., description="Phân cấp triệu chứng 3 tầng")
     syndrome_combinations: list[SyndromeCombination] = Field(
-        default_factory=list,
-        description="Danh sách các tổ hợp triệu chứng đặc thù dẫn đến biến chứng nguy hiểm"
+        default_factory=list, description="Danh sách các tổ hợp triệu chứng đặc thù dẫn đến biến chứng nguy hiểm"
     )
     probing_questions: list[str] = Field(
-        default_factory=list,
-        description="Câu hỏi làm rõ Agent dùng khi bệnh nhân chỉ mô tả mơ hồ 1 triệu chứng"
+        default_factory=list, description="Câu hỏi làm rõ Agent dùng khi bệnh nhân chỉ mô tả mơ hồ 1 triệu chứng"
     )
 
 
@@ -82,6 +80,7 @@ class TriageSpecialtyCandidate(BaseModel):
 
 class TriageEvaluationResult(BaseModel):
     """Kết quả phân tích khi bệnh nhân nhập triệu chứng vào Agent"""
+
     matched_disease_key: str | None = None
     matched_disease_name: str | None = None
     ats_level: ATSLevel

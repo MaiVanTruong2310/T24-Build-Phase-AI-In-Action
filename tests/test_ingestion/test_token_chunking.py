@@ -44,9 +44,7 @@ def test_specialty_chunks_preserve_block_parent() -> None:
         "specialty_key": "tim-mach",
         "language": "vi",
         "name": "Tim mạch",
-        "overview": [
-            {"title": "Điều trị", "content": [" ".join(["Nội dung."] * 200)]}
-        ],
+        "overview": [{"title": "Điều trị", "content": [" ".join(["Nội dung."] * 200)]}],
         "services": [],
         "technologies": [],
         "source_url": "https://example.test/specialty",

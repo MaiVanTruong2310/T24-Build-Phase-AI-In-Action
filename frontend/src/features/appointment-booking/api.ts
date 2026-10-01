@@ -115,6 +115,7 @@ export class ScheduleApiError extends Error {
 }
 
 export interface CreateBookingPayload {
+  hold_id?: string;
   schedule_id?: string;
   doctor_id?: string;
   facility_id?: string;
@@ -133,6 +134,7 @@ export interface Booking {
   id: string;
   user_id: string;
   schedule_id: string | null;
+  hold_id: string | null;
   service_id: string;
   specialty_id: string;
   doctor_id: string;
@@ -147,6 +149,25 @@ export interface Booking {
   cancellation_reason: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface RescheduleBookingPayload {
+  schedule_id: string;
+  hold_id: string;
+}
+
+export type BookingHoldStatus = 'active' | 'released' | 'expired' | 'consumed';
+
+export interface BookingHold {
+  id: string;
+  user_id: string;
+  schedule_id: string;
+  service_id: string;
+  specialty_id: string;
+  status: BookingHoldStatus;
+  expires_at: string;
+  released_at: string | null;
+  created_at: string;
 }
 
 export class BookingApiError extends Error {
@@ -293,18 +314,58 @@ async function toScheduleApiError(response: Response): Promise<ScheduleApiError>
   }
 }
 
-export async function createBooking(payload: CreateBookingPayload): Promise<Booking> {
+export async function createBooking(payload: CreateBookingPayload, idempotencyKey?: string): Promise<Booking> {
   const res = await fetchWithAuth('/bookings', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Idempotency-Key': crypto.randomUUID(),
+      'Idempotency-Key': idempotencyKey || crypto.randomUUID(),
     },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw await toBookingApiError(res);
   const json = await res.json();
   return json.data as Booking;
+}
+
+export async function rescheduleBooking(
+  bookingId: string,
+  payload: RescheduleBookingPayload,
+): Promise<Booking> {
+  const res = await fetchWithAuth(`/bookings/${bookingId}/reschedule`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw await toBookingApiError(res);
+  const json = await res.json();
+  return json.data as Booking;
+}
+
+export async function createBookingHold(
+  scheduleId: string,
+  serviceId: string,
+  specialtyId: string,
+  holdSeconds = 300,
+): Promise<BookingHold> {
+  const res = await fetchWithAuth('/bookings/hold', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      schedule_id: scheduleId,
+      service_id: serviceId,
+      specialty_id: specialtyId,
+      hold_seconds: holdSeconds,
+    }),
+  });
+  if (!res.ok) throw await toBookingApiError(res);
+  const json = await res.json();
+  return json.data as BookingHold;
+}
+
+export async function releaseBookingHold(holdId: string): Promise<void> {
+  const res = await fetchWithAuth(`/bookings/holds/${holdId}`, { method: 'DELETE' });
+  if (!res.ok) throw await toBookingApiError(res);
 }
 
 export async function fetchBookings(status?: BookingStatus): Promise<Booking[]> {

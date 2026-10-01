@@ -18,7 +18,9 @@ from src.medical_assistant.domain.security.deobfuscator import Deobfuscator, get
 @dataclass
 class SecurityCheckResult:
     is_safe: bool
-    violation_type: str | None = None  # PROMPT_INJECTION | SYSTEM_EXFILTRATION | PRIVILEGE_ESCALATION | CROSS_PATIENT_SNOOP | DANGEROUS_CONTENT
+    violation_type: str | None = (
+        None  # PROMPT_INJECTION | SYSTEM_EXFILTRATION | PRIVILEGE_ESCALATION | CROSS_PATIENT_SNOOP | DANGEROUS_CONTENT
+    )
     detected_technique: str | None = None
     matched_pattern: str | None = None
     safe_response: str | None = None
@@ -115,11 +117,7 @@ class SecurityGuardrailService:
             # Common human typo: two adjacent characters are transposed.
             if len(mismatches) == 2:
                 first, second = mismatches
-                return (
-                    second == first + 1
-                    and left[first] == right[second]
-                    and left[second] == right[first]
-                )
+                return second == first + 1 and left[first] == right[second] and left[second] == right[first]
             return False
         short, long = (left, right) if len(left) < len(right) else (right, left)
         i = j = edits = 0
@@ -140,8 +138,7 @@ class SecurityGuardrailService:
             if " " in keyword and keyword in folded_text:
                 return True
             if len(keyword) >= 5 and any(
-                len(token) >= 4 and self._edit_distance_at_most_one(token, keyword)
-                for token in tokens
+                len(token) >= 4 and self._edit_distance_at_most_one(token, keyword) for token in tokens
             ):
                 return True
             if keyword in tokens:
@@ -201,46 +198,102 @@ class SecurityGuardrailService:
 
             # Phát hiện theo tổ hợp ý định để bắt cách nói tự nhiên mà không phụ thuộc
             # một câu regex cố định. Chỉ chặn khi có ít nhất hai nhóm tín hiệu độc lập.
-            override_signal = bool(re.search(
-                r"(?:bỏ|quên|ghi\s+đè|phớt\s+lờ|ignore|override).{0,35}(?:luật|quy\s+tắc|chỉ\s+thị|hướng\s+dẫn|instruction|rule)",
-                var_lower,
-            )) or (
-                self._has_security_keyword(folded, ("ignore", "override", "bo qua", "quen"))
-                and self._has_security_keyword(folded, ("instruction", "instructions", "rules", "luat", "chi thi", "huong dan"))
+            override_signal = (
+                bool(
+                    re.search(
+                        r"(?:bỏ|quên|ghi\s+đè|phớt\s+lờ|ignore|override).{0,35}(?:luật|quy\s+tắc|chỉ\s+thị|hướng\s+dẫn|instruction|rule)",
+                        var_lower,
+                    )
+                )
+                or (
+                    self._has_security_keyword(folded, ("ignore", "override", "bo qua", "quen"))
+                    and self._has_security_keyword(
+                        folded, ("instruction", "instructions", "rules", "luat", "chi thi", "huong dan")
+                    )
+                )
+                or (
+                    self._has_security_keyword(
+                        folded,
+                        (
+                            "khong co rang buoc",
+                            "coi nhu khong co rang buoc",
+                            "tat rao chan",
+                            "bo gioi han",
+                            "unrestricted",
+                        ),
+                    )
+                )
+            )
+            authority_signal = bool(
+                re.search(
+                    r"(?:quản\s+trị\s+viên|admin|developer|chế\s+độ\s+nội\s+bộ|internal\s+mode)",
+                    var_lower,
+                )
+            ) or self._has_security_keyword(
+                folded, ("admin", "developer", "quan tri vien", "che do noi bo", "internal mode")
+            )
+            secret_signal = bool(
+                re.search(
+                    r"(?:system\s+prompt|chỉ\s+dẫn\s+hệ\s+thống|chỉ\s+thị\s+hệ\s+thống|khóa\s+bí\s+mật|api\s*key|secret|credential)",
+                    var_lower,
+                )
+            ) or self._has_security_keyword(
+                folded,
+                (
+                    "system prompt",
+                    "secret",
+                    "credential",
+                    "api key",
+                    "khoa api",
+                    "khoa bi mat",
+                    "chi thi he thong",
+                    "cau hinh an",
+                    "cau hinh noi bo",
+                    "ma ket noi he thong",
+                    "ket noi he thong",
+                    "phia sau man hinh",
+                    "nguoi ta da dan",
+                    "loi dan he thong",
+                ),
+            )
+            extraction_signal = bool(
+                re.search(
+                    r"(?:chép|in|đưa|gửi|hiện|tiết\s+lộ|reveal|print|show|dump|output).{0,45}(?:prompt|chỉ\s+dẫn|chỉ\s+thị|khóa|secret|key)",
+                    var_lower,
+                )
             ) or (
                 self._has_security_keyword(
                     folded,
-                    ("khong co rang buoc", "coi nhu khong co rang buoc", "tat rao chan", "bo gioi han", "unrestricted"),
-                )
-            )
-            authority_signal = bool(re.search(
-                r"(?:quản\s+trị\s+viên|admin|developer|chế\s+độ\s+nội\s+bộ|internal\s+mode)",
-                var_lower,
-            )) or self._has_security_keyword(
-                folded, ("admin", "developer", "quan tri vien", "che do noi bo", "internal mode")
-            )
-            secret_signal = bool(re.search(
-                r"(?:system\s+prompt|chỉ\s+dẫn\s+hệ\s+thống|chỉ\s+thị\s+hệ\s+thống|khóa\s+bí\s+mật|api\s*key|secret|credential)",
-                var_lower,
-            )) or self._has_security_keyword(
-                folded,
-                (
-                    "system prompt", "secret", "credential", "api key", "khoa api", "khoa bi mat",
-                    "chi thi he thong", "cau hinh an", "cau hinh noi bo", "ma ket noi he thong",
-                    "ket noi he thong", "phia sau man hinh", "nguoi ta da dan", "loi dan he thong",
-                ),
-            )
-            extraction_signal = bool(re.search(
-                r"(?:chép|in|đưa|gửi|hiện|tiết\s+lộ|reveal|print|show|dump|output).{0,45}(?:prompt|chỉ\s+dẫn|chỉ\s+thị|khóa|secret|key)",
-                var_lower,
-            )) or (
-                self._has_security_keyword(
-                    folded,
-                    ("reveal", "print", "show", "dump", "output", "chep", "dua", "gui", "tiet lo", "noi nho", "nghe thu", "cho coi"),
+                    (
+                        "reveal",
+                        "print",
+                        "show",
+                        "dump",
+                        "output",
+                        "chep",
+                        "dua",
+                        "gui",
+                        "tiet lo",
+                        "noi nho",
+                        "nghe thu",
+                        "cho coi",
+                    ),
                 )
                 and self._has_security_keyword(
                     folded,
-                    ("prompt", "secret", "key", "khoa", "chi dan", "chi thi", "cau hinh", "ma ket noi", "ket noi he thong", "loi dan", "da dan"),
+                    (
+                        "prompt",
+                        "secret",
+                        "key",
+                        "khoa",
+                        "chi dan",
+                        "chi thi",
+                        "cau hinh",
+                        "ma ket noi",
+                        "ket noi he thong",
+                        "loi dan",
+                        "da dan",
+                    ),
                 )
             )
             if sum((override_signal, authority_signal, secret_signal, extraction_signal)) >= 2:

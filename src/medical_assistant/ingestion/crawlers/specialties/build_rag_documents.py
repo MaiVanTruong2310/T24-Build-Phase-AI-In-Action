@@ -55,9 +55,7 @@ def specialty_to_documents(
             if title:
                 prefix_lines.extend(["", f"### {title}"])
             body = "\n".join(f"- {item}" for item in content) if content else title
-            parent_id = (
-                f"vinmec-specialty-{specialty_key}-{language}-{section}-{block_index}"
-            )
+            parent_id = f"vinmec-specialty-{specialty_key}-{language}-{section}-{block_index}"
             suffix = f"Source: {source_url}" if source_url else ""
             for chunk in chunker.split(body, prefix="\n".join(prefix_lines), suffix=suffix):
                 documents.append(

@@ -163,4 +163,3 @@ def load_failed_urls(failure_path: Path, legacy_summary_path: Path | None = None
             if isinstance(url, str) and url:
                 urls.add(url.rstrip("/"))
     return urls
-

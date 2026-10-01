@@ -97,9 +97,7 @@ def profile_to_documents(
         items = _as_items(profile.get(section))
         if not items:
             continue
-        body = "\n\n".join(items) if section == "overview" else "\n".join(
-            f"- {item}" for item in items
-        )
+        body = "\n\n".join(items) if section == "overview" else "\n".join(f"- {item}" for item in items)
         parent_id = f"vinmec-{profile_key}-{section}"
         prefix = f"{header}\n\n## {labels[language]}"
         suffix = f"Source: {source_url}" if source_url else ""

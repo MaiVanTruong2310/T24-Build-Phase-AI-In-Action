@@ -51,7 +51,9 @@ class TestBilingualTriageEngine:
         assert "115" in res.patient_guidance
 
     def test_english_ats2_stemi_chest_pain(self):
-        res = self.triage.evaluate_symptoms("I have severe crushing chest pain radiating to my left arm with cold sweats")
+        res = self.triage.evaluate_symptoms(
+            "I have severe crushing chest pain radiating to my left arm with cold sweats"
+        )
         assert res.ats_level.value == 2
         assert res.is_emergency is True
         assert res.care_setting == "EMERGENCY_DEPT"
@@ -95,9 +97,7 @@ class TestBilingualGuardrails:
         assert intent["intent"] == "MEDICATION_GUARDRAIL"
 
         resp, quick_replies = self.guardrail.get_medication_guardrail_response(
-            symptoms_summary="chest pain",
-            suggested_dept="Trung tâm Tim mạch",
-            language="en"
+            symptoms_summary="chest pain", suggested_dept="Trung tâm Tim mạch", language="en"
         )
         assert "Pharmaceutical Safety Warning (SAF-02)" in resp
         assert "prohibited from prescribing" in resp
@@ -110,9 +110,7 @@ class TestBilingualGuardrails:
         assert intent["intent"] == "DIAGNOSIS_GUARDRAIL"
 
         resp, quick_replies = self.guardrail.get_diagnosis_guardrail_response(
-            symptoms_summary="severe headache",
-            suggested_dept="Thần kinh",
-            language="en"
+            symptoms_summary="severe headache", suggested_dept="Thần kinh", language="en"
         )
         assert "Safe clinical guidance (SAF-02)" in resp
         assert "cannot determine a specific disease" in resp

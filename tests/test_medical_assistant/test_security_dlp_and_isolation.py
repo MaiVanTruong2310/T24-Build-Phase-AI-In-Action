@@ -22,7 +22,9 @@ def test_redact_supabase_keys_and_jwt(dlp):
     res = dlp.sanitize(supabase_key_text)
     assert "[REDACTED_SUPABASE_KEY]" in res.sanitized_text
 
-    jwt_text = "JWT auth token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozGz_wT_testsignature123."
+    jwt_text = (
+        "JWT auth token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozGz_wT_testsignature123."
+    )
     res_jwt = dlp.sanitize(jwt_text)
     assert "[REDACTED_JWT_TOKEN]" in res_jwt.sanitized_text
 

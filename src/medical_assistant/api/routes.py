@@ -64,6 +64,7 @@ async def chat_stream(request: ChatRequest, http_request: Request):
     - Duy trì state và conversation history theo session_id (thread_id).
     - Truyền metadata (quick_replies, ats_level, max_booking_days, token_usage) ở cuối stream.
     """
+
     async def event_generator():
         try:
             config = {"configurable": {"thread_id": request.session_id}}
@@ -108,22 +109,26 @@ async def chat_stream(request: ChatRequest, http_request: Request):
                 await asyncio.sleep(0.015)  # Hiệu ứng gõ mượt 15ms
 
             # 4. Bắn event metadata (chuyên khoa, quick replies, ATS level, token_usage, analysis)
-            meta_payload = json.dumps({
-                "type": "metadata",
-                "analysis": result.get("analysis", ""),
-                "ats_level": ats_level,
-                "max_booking_days": max_booking_days,
-                "is_emergency": is_emergency,
-                "quick_replies": quick_replies,
-                "suggested_department": result.get("suggested_department_name"),
-                "token_usage": token_usage,
-                "workflow_status": result.get("workflow_status"),
-                "booking_intake": meta.get("booking_intake"),
-                "candidate_specialties": result.get("candidate_specialties") or meta.get("candidate_specialties", []),
-                "conflict_reason": result.get("conflict_reason") or meta.get("conflict_reason"),
-                "acuity_status": result.get("acuity_status") or meta.get("acuity_status"),
-                "disposition": result.get("disposition") or meta.get("disposition"),
-            }, ensure_ascii=False)
+            meta_payload = json.dumps(
+                {
+                    "type": "metadata",
+                    "analysis": result.get("analysis", ""),
+                    "ats_level": ats_level,
+                    "max_booking_days": max_booking_days,
+                    "is_emergency": is_emergency,
+                    "quick_replies": quick_replies,
+                    "suggested_department": result.get("suggested_department_name"),
+                    "token_usage": token_usage,
+                    "workflow_status": result.get("workflow_status"),
+                    "booking_intake": meta.get("booking_intake"),
+                    "candidate_specialties": result.get("candidate_specialties")
+                    or meta.get("candidate_specialties", []),
+                    "conflict_reason": result.get("conflict_reason") or meta.get("conflict_reason"),
+                    "acuity_status": result.get("acuity_status") or meta.get("acuity_status"),
+                    "disposition": result.get("disposition") or meta.get("disposition"),
+                },
+                ensure_ascii=False,
+            )
             yield f"data: {meta_payload}\n\n"
 
             # 5. Kết thúc stream chuẩn SSE
@@ -144,8 +149,8 @@ async def chat_stream(request: ChatRequest, http_request: Request):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Content-Type": "text/event-stream",
-            "X-Accel-Buffering": "no"  # Chống Nginx buffer làm chậm SSE
-        }
+            "X-Accel-Buffering": "no",  # Chống Nginx buffer làm chậm SSE
+        },
     )
 
 
@@ -159,7 +164,9 @@ async def create_booking_request(request: BookingIntakeRequest) -> BookingIntake
     snapshot = await agent.aget_state(config)
     state = dict(snapshot.values or {})
     if not state:
-        raise HTTPException(status_code=409, detail="Phiên tư vấn không còn hiệu lực. Vui lòng trao đổi lại với trợ lý.")
+        raise HTTPException(
+            status_code=409, detail="Phiên tư vấn không còn hiệu lực. Vui lòng trao đổi lại với trợ lý."
+        )
     if state.get("is_emergency"):
         raise HTTPException(status_code=409, detail="Ca có dấu hiệu cấp cứu không được chuyển sang đặt lịch thường.")
 
@@ -176,14 +183,20 @@ async def create_booking_request(request: BookingIntakeRequest) -> BookingIntake
     if request.selected_slot_id:
         for doctor in available_doctors:
             slot = next(
-                (item for item in doctor.get("available_slots", []) if str(item.get("schedule_id")) == request.selected_slot_id),
+                (
+                    item
+                    for item in doctor.get("available_slots", [])
+                    if str(item.get("schedule_id")) == request.selected_slot_id
+                ),
                 None,
             )
             if slot:
                 chosen_doctor, chosen_slot = doctor, slot
                 break
         if chosen_slot is None or not chosen_slot.get("verified"):
-            raise HTTPException(status_code=400, detail="Khung giờ này chưa được database xác minh hoặc không còn trong phiên.")
+            raise HTTPException(
+                status_code=400, detail="Khung giờ này chưa được database xác minh hoặc không còn trong phiên."
+            )
 
     context = {
         "user_id": state.get("user_id"),
@@ -220,5 +233,5 @@ async def agent_status():
     return {
         "status": "ready",
         "agent": "LangGraph Clinical Triage Agent v1.0",
-        "features": ["session_memory", "sse_streaming", "ats_triage"]
+        "features": ["session_memory", "sse_streaming", "ats_triage"],
     }

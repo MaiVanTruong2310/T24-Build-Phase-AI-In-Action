@@ -37,7 +37,6 @@ DDXPLUS_PATHOLOGY_SPECIALTY_MAP: dict[str, dict[str, str]] = {
     "Acute pulmonary edema": {"code": "TIM_MACH", "name": "Trung tâm Tim mạch"},
     "Anemia": {"code": "TIM_MACH", "name": "Trung tâm Tim mạch"},
     "SLE": {"code": "TIM_MACH", "name": "Miễn dịch - Dị ứng"},
-
     # Hô hấp
     "Pneumonia": {"code": "HO_HAP", "name": "Nội hô hấp"},
     "Bronchitis": {"code": "HO_HAP", "name": "Nội hô hấp"},
@@ -53,60 +52,49 @@ DDXPLUS_PATHOLOGY_SPECIALTY_MAP: dict[str, dict[str, str]] = {
     "Pulmonary neoplasm": {"code": "HO_HAP", "name": "Nội hô hấp"},
     "Bronchiectasis": {"code": "HO_HAP", "name": "Nội hô hấp"},
     "Sarcoidosis": {"code": "HO_HAP", "name": "Nội hô hấp"},
-
     # Tiêu hóa - Gan mật
     "GERD": {"code": "TIEU_HOA", "name": "Tiêu hóa - Gan mật"},
     "Boerhaave": {"code": "TIEU_HOA", "name": "Tiêu hóa - Gan mật"},
     "Pancreatic neoplasm": {"code": "TIEU_HOA", "name": "Tiêu hóa - Gan mật"},
     "Acute pancreatitis": {"code": "TIEU_HOA", "name": "Tiêu hóa - Gan mật"},
     "Peptic ulcer disease": {"code": "TIEU_HOA", "name": "Tiêu hóa - Gan mật"},
-
     # Tai mũi họng
     "Viral pharyngitis": {"code": "TAI_MUI_HONG", "name": "Tai - Mũi - Họng"},
     "Epiglottitis": {"code": "TAI_MUI_HONG", "name": "Tai - Mũi - Họng"},
     "Acute otitis media": {"code": "TAI_MUI_HONG", "name": "Tai - Mũi - Họng"},
     "Chronic rhinosinusitis": {"code": "TAI_MUI_HONG", "name": "Tai - Mũi - Họng"},
     "Acute rhinosinusitis": {"code": "TAI_MUI_HONG", "name": "Tai - Mũi - Họng"},
-
     # Truyền nhiễm
     "HIV (initial infection)": {"code": "TRUYEN_NHIEM", "name": "Truyền nhiễm"},
     "Ebola": {"code": "TRUYEN_NHIEM", "name": "Truyền nhiễm"},
     "Chagas": {"code": "TRUYEN_NHIEM", "name": "Truyền nhiễm"},
     "Scombroid food poisoning": {"code": "TRUYEN_NHIEM", "name": "Truyền nhiễm"},
-
     # Dị ứng - Miễn dịch
     "Allergic sinusitis": {"code": "DI_UNG", "name": "Miễn dịch - Dị ứng"},
     "Anaphylaxis": {"code": "DI_UNG", "name": "Miễn dịch - Dị ứng"},
-
     # Thần kinh
     "Cluster headache": {"code": "THAN_KINH", "name": "Thần kinh"},
     "Guillain-Barré syndrome": {"code": "THAN_KINH", "name": "Thần kinh"},
     "Myasthenia gravis": {"code": "THAN_KINH", "name": "Thần kinh"},
     "Acute dystonic reactions": {"code": "THAN_KINH", "name": "Thần kinh"},
-
     # Cơ xương khớp
     "Costochondritis": {"code": "XUONG_KHOP", "name": "Chấn thương chỉnh hình - Y học thể thao"},
     "Rib fracture": {"code": "XUONG_KHOP", "name": "Chấn thương chỉnh hình - Y học thể thao"},
     "Spontaneous rib fracture": {"code": "XUONG_KHOP", "name": "Chấn thương chỉnh hình - Y học thể thao"},
-
     # Da liễu
     "Localized edema": {"code": "DA_LIEU", "name": "Da liễu"},
-
     # Bổ sung các bệnh DDXPlus còn thiếu
     "Spontaneous pneumothorax": {"code": "HO_HAP", "name": "Nội hô hấp"},
     "Inguinal hernia": {"code": "TIEU_HOA", "name": "Tiêu hóa - Gan mật"},
     "Larygospasm": {"code": "HO_HAP", "name": "Nội hô hấp"},
     "Bronchospasm / acute asthma exacerbation": {"code": "HO_HAP", "name": "Nội hô hấp"},
     "Acute COPD exacerbation / infection": {"code": "HO_HAP", "name": "Nội hô hấp"},
-
     # Tâm thần
     "Panic attack": {"code": "TAM_THAN", "name": "Trung tâm chăm sóc sức khỏe tinh thần tích hợp"},
 }
 
 # Reverse index: lowercase pathology → specialty info
-_PATHOLOGY_INDEX: dict[str, dict[str, str]] = {
-    k.lower(): v for k, v in DDXPLUS_PATHOLOGY_SPECIALTY_MAP.items()
-}
+_PATHOLOGY_INDEX: dict[str, dict[str, str]] = {k.lower(): v for k, v in DDXPLUS_PATHOLOGY_SPECIALTY_MAP.items()}
 
 # Bổ sung ánh xạ tên bệnh tiếng Việt phổ biến vào index
 VI_PATHOLOGY_MAP: dict[str, dict[str, str]] = {
@@ -182,81 +170,210 @@ SPECIALTY_PROTOTYPES: dict[str, dict[str, Any]] = {
     "Trung tâm Tim mạch": {
         "code": "TIM_MACH",
         "keywords": [
-            "chest pain", "heart", "palpitation", "angina", "infarction", "embolism",
-            "atrial fibrillation", "cardiac", "tachycardia", "arrhythmia", "dyspnea on exertion",
-            "pulmonary embolism", "coughing up blood", "leg swelling",
-            "đau ngực", "tim đập nhanh", "đau thắt ngực", "nhồi máu", "rung nhĩ",
-            "tức ngực", "khó thở khi gắng sức", "phù chân", "thuyên tắc phổi",
+            "chest pain",
+            "heart",
+            "palpitation",
+            "angina",
+            "infarction",
+            "embolism",
+            "atrial fibrillation",
+            "cardiac",
+            "tachycardia",
+            "arrhythmia",
+            "dyspnea on exertion",
+            "pulmonary embolism",
+            "coughing up blood",
+            "leg swelling",
+            "đau ngực",
+            "tim đập nhanh",
+            "đau thắt ngực",
+            "nhồi máu",
+            "rung nhĩ",
+            "tức ngực",
+            "khó thở khi gắng sức",
+            "phù chân",
+            "thuyên tắc phổi",
         ],
     },
     "Nội hô hấp": {
         "code": "HO_HAP",
         "keywords": [
-            "cough", "shortness of breath", "wheezing", "sputum", "phlegm",
-            "pneumonia", "bronchitis", "lung", "respiratory", "dyspnea", "breathe",
-            "tuberculosis", "copd", "asthma",
-            "ho", "khó thở", "đờm", "viêm phổi", "hen suyễn", "thở rít",
-            "lao phổi", "phổi tắc nghẽn",
+            "cough",
+            "shortness of breath",
+            "wheezing",
+            "sputum",
+            "phlegm",
+            "pneumonia",
+            "bronchitis",
+            "lung",
+            "respiratory",
+            "dyspnea",
+            "breathe",
+            "tuberculosis",
+            "copd",
+            "asthma",
+            "ho",
+            "khó thở",
+            "đờm",
+            "viêm phổi",
+            "hen suyễn",
+            "thở rít",
+            "lao phổi",
+            "phổi tắc nghẽn",
         ],
     },
     "Tiêu hóa - Gan mật": {
         "code": "TIEU_HOA",
         "keywords": [
-            "abdominal pain", "stomach", "nausea", "vomit", "diarrhea", "constipation",
-            "epigastric", "gerd", "reflux", "heartburn", "pancreatitis", "liver",
-            "đau bụng", "buồn nôn", "tiêu chảy", "đau dạ dày", "trào ngược",
-            "đau thượng vị", "viêm tụy", "gan mật", "ợ nóng",
+            "abdominal pain",
+            "stomach",
+            "nausea",
+            "vomit",
+            "diarrhea",
+            "constipation",
+            "epigastric",
+            "gerd",
+            "reflux",
+            "heartburn",
+            "pancreatitis",
+            "liver",
+            "đau bụng",
+            "buồn nôn",
+            "tiêu chảy",
+            "đau dạ dày",
+            "trào ngược",
+            "đau thượng vị",
+            "viêm tụy",
+            "gan mật",
+            "ợ nóng",
         ],
     },
     "Tai - Mũi - Họng": {
         "code": "TAI_MUI_HONG",
         "keywords": [
-            "sore throat", "ear pain", "nasal", "sinusitis", "hoarse", "swallow",
-            "pharyngitis", "otitis", "rhinorrhea", "runny nose",
-            "đau họng", "đau tai", "ngạt mũi", "viêm xoang", "nuốt đau",
-            "chảy nước mũi", "khàn giọng",
+            "sore throat",
+            "ear pain",
+            "nasal",
+            "sinusitis",
+            "hoarse",
+            "swallow",
+            "pharyngitis",
+            "otitis",
+            "rhinorrhea",
+            "runny nose",
+            "đau họng",
+            "đau tai",
+            "ngạt mũi",
+            "viêm xoang",
+            "nuốt đau",
+            "chảy nước mũi",
+            "khàn giọng",
         ],
     },
     "Thần kinh": {
         "code": "THAN_KINH",
         "keywords": [
-            "headache", "migraine", "seizure", "numbness", "tingling", "weakness",
-            "dizziness", "vertigo", "paralysis", "stroke",
-            "đau đầu", "chóng mặt", "co giật", "tê bì", "yếu liệt",
-            "đột quỵ", "liệt",
+            "headache",
+            "migraine",
+            "seizure",
+            "numbness",
+            "tingling",
+            "weakness",
+            "dizziness",
+            "vertigo",
+            "paralysis",
+            "stroke",
+            "đau đầu",
+            "chóng mặt",
+            "co giật",
+            "tê bì",
+            "yếu liệt",
+            "đột quỵ",
+            "liệt",
         ],
     },
     "Miễn dịch - Dị ứng": {
         "code": "DI_UNG",
         "keywords": [
-            "allergy", "rash", "hives", "urticaria", "anaphylaxis", "swelling",
-            "itching", "lupus", "autoimmune",
-            "dị ứng", "mề đay", "phát ban", "ngứa", "sưng phù", "phản vệ",
+            "allergy",
+            "rash",
+            "hives",
+            "urticaria",
+            "anaphylaxis",
+            "swelling",
+            "itching",
+            "lupus",
+            "autoimmune",
+            "dị ứng",
+            "mề đay",
+            "phát ban",
+            "ngứa",
+            "sưng phù",
+            "phản vệ",
         ],
     },
     "Truyền nhiễm": {
         "code": "TRUYEN_NHIEM",
         "keywords": [
-            "fever", "infection", "hiv", "tuberculosis", "ebola", "malaria",
-            "viral", "bacteria", "contagious", "epidemic",
-            "sốt", "nhiễm trùng", "lây nhiễm", "dịch", "virus",
+            "fever",
+            "infection",
+            "hiv",
+            "tuberculosis",
+            "ebola",
+            "malaria",
+            "viral",
+            "bacteria",
+            "contagious",
+            "epidemic",
+            "sốt",
+            "nhiễm trùng",
+            "lây nhiễm",
+            "dịch",
+            "virus",
         ],
     },
     "Chấn thương chỉnh hình - Y học thể thao": {
         "code": "XUONG_KHOP",
         "keywords": [
-            "joint pain", "back pain", "fracture", "bone", "muscle pain",
-            "sprain", "orthopedic", "rib", "costochondritis",
-            "đau khớp", "đau lưng", "gãy xương", "đau cơ", "bong gân",
-            "đau cổ", "mỏi cổ", "đau vai", "vai gáy", "cổ vai gáy",
-            "ngồi máy tính", "làm văn phòng", "sai tư thế",
+            "joint pain",
+            "back pain",
+            "fracture",
+            "bone",
+            "muscle pain",
+            "sprain",
+            "orthopedic",
+            "rib",
+            "costochondritis",
+            "đau khớp",
+            "đau lưng",
+            "gãy xương",
+            "đau cơ",
+            "bong gân",
+            "đau cổ",
+            "mỏi cổ",
+            "đau vai",
+            "vai gáy",
+            "cổ vai gáy",
+            "ngồi máy tính",
+            "làm văn phòng",
+            "sai tư thế",
         ],
     },
     "Da liễu": {
         "code": "DA_LIEU",
         "keywords": [
-            "skin", "rash", "lesion", "dermatitis", "eczema", "acne", "edema",
-            "da", "mẩn ngứa", "chàm", "mụn", "phù nề",
+            "skin",
+            "rash",
+            "lesion",
+            "dermatitis",
+            "eczema",
+            "acne",
+            "edema",
+            "da",
+            "mẩn ngứa",
+            "chàm",
+            "mụn",
+            "phù nề",
         ],
     },
 }
@@ -267,7 +384,7 @@ TIER2_CONFIDENCE_THRESHOLD = 0.15
 
 def _tokenize(text: str) -> list[str]:
     """Tách tokens đơn giản: lowercase, split theo non-alphanum."""
-    return re.findall(r'[a-zàáạảãăắằặẳẵâấầậẩẫđèéẹẻẽêếềệểễìíịỉĩòóọỏõôốồộổỗơớờợởỡùúụủũưứừựửữỳýỵỷỹ0-9]+', text.lower())
+    return re.findall(r"[a-zàáạảãăắằặẳẵâấầậẩẫđèéẹẻẽêếềệểễìíịỉĩòóọỏõôốồộổỗơớờợởỡùúụủũưứừựửữỳýỵỷỹ0-9]+", text.lower())
 
 
 def _compute_keyword_score(tokens: list[str], keywords: list[str]) -> float:
@@ -282,7 +399,7 @@ def _compute_keyword_score(tokens: list[str], keywords: list[str]) -> float:
         keyword_tokens.update(kw_parts)
         # Thêm bigrams cho precision cao hơn
         for i in range(len(kw_parts) - 1):
-            keyword_bigrams.add(f"{kw_parts[i]}_{kw_parts[i+1]}")
+            keyword_bigrams.add(f"{kw_parts[i]}_{kw_parts[i + 1]}")
 
     # Unigram matching
     query_set = set(tokens)
@@ -291,7 +408,7 @@ def _compute_keyword_score(tokens: list[str], keywords: list[str]) -> float:
     # Bigram matching (trọng số x2)
     query_bigrams = set()
     for i in range(len(tokens) - 1):
-        query_bigrams.add(f"{tokens[i]}_{tokens[i+1]}")
+        query_bigrams.add(f"{tokens[i]}_{tokens[i + 1]}")
     bigram_hits = len(query_bigrams & keyword_bigrams)
 
     # Weighted score, normalize bởi tổng keyword count
@@ -387,6 +504,7 @@ async def tier3_llm_route(query_text: str) -> tuple[str, float, str] | None:
 
     try:
         from src.medical_assistant.config import get_settings
+
         settings = get_settings()
 
         if not settings.openai_api_key or settings.openai_api_key == "sk-your-key-here":
@@ -394,6 +512,7 @@ async def tier3_llm_route(query_text: str) -> tuple[str, float, str] | None:
             return None
 
         from openai import OpenAI
+
         client = OpenAI(api_key=settings.openai_api_key)
 
         specialties_text = "\n".join([f"- {s}" for s in VINMEC_SPECIALTIES_FOR_LLM])
@@ -440,6 +559,7 @@ async def tier3_llm_route(query_text: str) -> tuple[str, float, str] | None:
 # ────────────────────────────────────────────────────────────────
 # UNIFIED ROUTER — Kết hợp 3 tầng
 # ────────────────────────────────────────────────────────────────
+
 
 class SpecialtyRouter:
     """

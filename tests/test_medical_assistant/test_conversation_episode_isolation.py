@@ -7,13 +7,19 @@ from src.medical_assistant.domain.guardrail_service import get_guardrail_service
 def test_conversation_boundary_intents_are_general_not_exact_sentence_rules():
     guard = get_guardrail_service()
 
-    assert guard.check_intent("Tui rất ghét người kia", current_department="Tiêu hóa - Gan mật")["intent"] == "SOCIAL_STATEMENT"
+    assert (
+        guard.check_intent("Tui rất ghét người kia", current_department="Tiêu hóa - Gan mật")["intent"]
+        == "SOCIAL_STATEMENT"
+    )
     third_party = guard.check_intent(
         "Chồng chị tôi bị hiếm muộn thì nên làm gì?",
         current_department="Tiêu hóa - Gan mật",
     )
     assert third_party == {"intent": "THIRD_PARTY_HEALTH_QUERY", "topic": "infertility"}
-    assert guard.check_intent("Vậy tôi nên khám khoa nào?", current_department="Tiêu hóa - Gan mật")["intent"] == "SELF_CARE_FOLLOWUP"
+    assert (
+        guard.check_intent("Vậy tôi nên khám khoa nào?", current_department="Tiêu hóa - Gan mật")["intent"]
+        == "SELF_CARE_FOLLOWUP"
+    )
 
 
 @pytest.mark.asyncio

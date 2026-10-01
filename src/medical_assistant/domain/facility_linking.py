@@ -66,8 +66,7 @@ def canonical_facilities(rows: Iterable[dict[str, Any]]) -> dict[tuple[str, str]
         )
         current_code = str((current or {}).get("code") or "")
         current_score = int(bool(current) and not current_code.startswith("VINMEC_")) + int(
-            bool(current)
-            and normalize_text(current.get("name")).startswith(("benh vien", "phong kham"))
+            bool(current) and normalize_text(current.get("name")).startswith(("benh vien", "phong kham"))
         )
         if current is None or score > current_score:
             selected[key] = row

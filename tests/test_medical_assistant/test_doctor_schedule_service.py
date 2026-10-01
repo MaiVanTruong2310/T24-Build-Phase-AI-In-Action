@@ -8,9 +8,7 @@ class EmptyDatabaseClient:
 
 def test_crawled_doctor_fallback_is_sourced_and_has_no_fake_slots():
     svc = DoctorScheduleService(client=EmptyDatabaseClient())
-    docs = svc.get_available_doctors_and_slots(
-        specialty_name="Tiêu hóa - Gan mật", limit_doctors=3, slots_per_doctor=2
-    )
+    docs = svc.get_available_doctors_and_slots(specialty_name="Tiêu hóa - Gan mật", limit_doctors=3, slots_per_doctor=2)
 
     assert len(docs) == 3
     assert all(doc["data_source"] == "vinmec_crawl" for doc in docs)

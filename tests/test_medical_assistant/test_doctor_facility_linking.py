@@ -12,18 +12,20 @@ DOCTOR_TWO_ID = "11111111-1111-4111-8111-111111111111"
 
 
 def test_workplace_maps_to_canonical_facility_and_extracts_department():
-    facilities = canonical_facilities([
-        {
-            "id": TIMES_CITY_ID,
-            "code": "BENH_VIEN_DA_KHOA_QUOC_TE_VINMEC_TIMES_CITY",
-            "name": "Bệnh viện Đa khoa Quốc tế Vinmec Times City",
-        },
-        {
-            "id": "22222222-2222-4222-8222-222222222222",
-            "code": "VINMEC_TIMES_CITY_INTERNATIONAL_HOSPITAL",
-            "name": "Vinmec Times City International Hospital",
-        },
-    ])
+    facilities = canonical_facilities(
+        [
+            {
+                "id": TIMES_CITY_ID,
+                "code": "BENH_VIEN_DA_KHOA_QUOC_TE_VINMEC_TIMES_CITY",
+                "name": "Bệnh viện Đa khoa Quốc tế Vinmec Times City",
+            },
+            {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "code": "VINMEC_TIMES_CITY_INTERNATIONAL_HOSPITAL",
+                "name": "Vinmec Times City International Hospital",
+            },
+        ]
+    )
     workplace = "Khoa Nội Tiêu hóa - Gan mật - Bệnh viện Đa khoa Quốc tế Vinmec Times City"
 
     assert facility_key(workplace) == ("times_city", "hospital")
@@ -53,14 +55,16 @@ class FacilityAwareClient:
             return [{"doctor_id": DOCTOR_ONE_ID, "department": "Khoa Nội Tiêu hóa - Gan mật"}]
         if table == "doctors":
             assert params["id"] == f"in.({DOCTOR_ONE_ID})"
-            return [{
-                "id": DOCTOR_ONE_ID,
-                "full_name": "Nguyễn Xuân Mười",
-                "title": "Thạc sĩ, Bác sĩ",
-                "years_of_experience": 21,
-                "languages": ["vi"],
-                "source_url": "https://www.vinmec.com/vie/chuyen-gia-y-te/nguyen-xuan-muoi-51490-vi",
-            }]
+            return [
+                {
+                    "id": DOCTOR_ONE_ID,
+                    "full_name": "Nguyễn Xuân Mười",
+                    "title": "Thạc sĩ, Bác sĩ",
+                    "years_of_experience": 21,
+                    "languages": ["vi"],
+                    "source_url": "https://www.vinmec.com/vie/chuyen-gia-y-te/nguyen-xuan-muoi-51490-vi",
+                }
+            ]
         if table == "doctor_schedules":
             assert params["facility_id"] == f"eq.{TIMES_CITY_ID}"
             return []

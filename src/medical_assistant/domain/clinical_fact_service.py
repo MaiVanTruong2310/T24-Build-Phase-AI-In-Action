@@ -39,15 +39,17 @@ FACT_PATTERNS = {
     "diarrhea": [r"tieu chay", r"di ngoai phan long", r"di long"],
     "heartburn": [r"o chua", r"o nong", r"trao nguoc"],
     "abdominal_pain": [
-        r"dau bung", r"dau thuong vi", r"bung dau",
+        r"dau bung",
+        r"dau thuong vi",
+        r"bung dau",
         r"bung(?:\s+\w+){0,6}\s+dau",
         r"(?:dau|bi dau)\s+(?:them\s+(?:ca\s+)?)?bung",
         r"bung\s+(?:cung\s+)?(?:bi\s+)?dau",
         r"(?:ngoai ra|them vao|va con)\s+(?:bi\s+)?dau\s+bung",
-        r"stomach\s+(?:ache|pain|hurts?)", r"abdominal pain",
+        r"stomach\s+(?:ache|pain|hurts?)",
+        r"abdominal pain",
     ],
     "constipation": [r"tao bon", r"kho di ngoai", r"phan (?:kho|cung)", r"ngay moi di (?:cau|ngoai)"],
-
     # Thần kinh / Đau đầu
     "headache": [r"dau dau", r"nhuc dau", r"dau nua dau", r"buot dau", r"nang dau", r"headache", r"migraine"],
     "one_sided_headache": [r"nua dau (?:ben )?(?:trai|phai)", r"dau mot ben"],
@@ -57,26 +59,35 @@ FACT_PATTERNS = {
     "dizziness": [r"chong mat", r"choang vang", r"dizzy", r"dizziness"],
     "numbness_weakness": [r"te (?:yeu|bi)", r"yeu nua nguoi", r"yeu tay chan", r"te tay", r"te chan"],
     "fatigue": [
-        r"(?:rat |qua |thay )?met(?: moi| la| lu)?", r"co the (?:rat )?met",
-        r"kiet suc", r"u oai", r"fatigue", r"lethargy", r"exhausted",
+        r"(?:rat |qua |thay )?met(?: moi| la| lu)?",
+        r"co the (?:rat )?met",
+        r"kiet suc",
+        r"u oai",
+        r"fatigue",
+        r"lethargy",
+        r"exhausted",
     ],
     "sore_throat": [
-        r"dau hong", r"rat hong", r"kho chiu o hong", r"viem hong", r"sore throat",
+        r"dau hong",
+        r"rat hong",
+        r"kho chiu o hong",
+        r"viem hong",
+        r"sore throat",
         r"throat\s+(?:pain|ache|sore)",
         # Bounded tolerance for the common phrase-level typo "đau học".
         r"\bdau hoc\b",
     ],
-
     # Tim mạch / Hô hấp
     "chest_pain": [
-        r"dau nguc", r"tuc nguc", r"that nguc",
+        r"dau nguc",
+        r"tuc nguc",
+        r"that nguc",
         r"dau\s+(?:tuc|that|nang|de)\s+(?:long\s+)?nguc",
         r"(?:tuc|that|nang|de)\s+(?:vung\s+|long\s+)?nguc",
         r"chest (?:pain|tightness|pressure|heaviness|discomfort)",
     ],
     "shortness_of_breath": [r"kho tho", r"hut hoi", r"tho gap", r"shortness of breath", r"dyspnea"],
     "cough": [r"\bho khan\b", r"\bho co dom\b", r"\bbi ho\b", r"\bcon ho\b", r"\bcough\b"],
-
     # Cơ xương khớp
     "joint_pain": [r"dau khop", r"dau xuong khop", r"nhuc khop"],
     "back_pain": [r"dau lung", r"moi lung", r"dau cot song"],
@@ -107,13 +118,22 @@ NEGATION_PATTERNS = {
     "joint_pain": [r"khong dau khop", r"het dau khop", r"khong con dau khop"],
     "neck_shoulder_pain": [r"khong dau vai gay", r"het dau vai gay", r"khong con dau vai gay"],
     "vision_changes": [
-        r"khong mo mat", r"mat van ro", r"nhin binh thuong", r"nhin ro",
-        r"mat (?:em |toi )?nhin ro", r"mat binh thuong", r"khong (?:bi )?nhin (?:mo|doi)",
+        r"khong mo mat",
+        r"mat van ro",
+        r"nhin binh thuong",
+        r"nhin ro",
+        r"mat (?:em |toi )?nhin ro",
+        r"mat binh thuong",
+        r"khong (?:bi )?nhin (?:mo|doi)",
     ],
     "numbness_weakness": [
-        r"khong (?:bi )?te", r"khong (?:bi )?yeu", r"khong te yeu",
-        r"tay chan binh thuong", r"khong (?:bi )?te (?:\w+\s+)?tay chan",
-        r"khong te tay", r"khong te chan",
+        r"khong (?:bi )?te",
+        r"khong (?:bi )?yeu",
+        r"khong te yeu",
+        r"tay chan binh thuong",
+        r"khong (?:bi )?te (?:\w+\s+)?tay chan",
+        r"khong te tay",
+        r"khong te chan",
     ],
 }
 
@@ -138,25 +158,38 @@ COMPLAINT_SYSTEMS = {code: system for code, system, _ in COMPLAINT_RULES}
 def _is_resolution(text: str, code: str) -> bool:
     return bool(
         re.search(r"\b(?:het|khong con|da khoi)\b", text)
-        and code in {"headache", "abdominal_pain", "constipation", "sore_throat", "back_pain", "joint_pain", "neck_shoulder_pain"}
+        and code
+        in {
+            "headache",
+            "abdominal_pain",
+            "constipation",
+            "sore_throat",
+            "back_pain",
+            "joint_pain",
+            "neck_shoulder_pain",
+        }
     )
 
 
 def _normalize_complaint(value: Any) -> dict[str, Any] | None:
     if isinstance(value, str):
         code = value.strip()
-        return {
-            "code": code,
-            "system": COMPLAINT_SYSTEMS.get(code, "unknown"),
-            "status": "active",
-            "first_seen_turn": None,
-            "last_seen_turn": None,
-            "severity": None,
-            "duration_days": None,
-            "evidence": [],
-            "confidence": 1.0,
-            "source": "legacy",
-        } if code else None
+        return (
+            {
+                "code": code,
+                "system": COMPLAINT_SYSTEMS.get(code, "unknown"),
+                "status": "active",
+                "first_seen_turn": None,
+                "last_seen_turn": None,
+                "severity": None,
+                "duration_days": None,
+                "evidence": [],
+                "confidence": 1.0,
+                "source": "legacy",
+            }
+            if code
+            else None
+        )
     if not isinstance(value, dict) or not value.get("code"):
         return None
     code = str(value["code"])
@@ -189,6 +222,7 @@ class ClinicalFactService:
 
         # Kiểm tra bổ sung qua ClinicalNegationService để chống sót câu phủ định
         from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
+
         negation_svc = get_clinical_negation_service()
         for fact in list(positive):
             patterns = FACT_PATTERNS.get(fact, [])
@@ -238,27 +272,37 @@ class ClinicalFactService:
 
         complaints: list[dict[str, Any]] = []
         for code, system, patterns in COMPLAINT_RULES:
-            matched = next((re.search(pattern, normalized) for pattern in patterns if re.search(pattern, normalized)), None)
+            matched = next(
+                (re.search(pattern, normalized) for pattern in patterns if re.search(pattern, normalized)), None
+            )
             is_negative = code in negative
             if not matched and not is_negative:
                 continue
-            status = "resolved" if is_negative and _is_resolution(normalized, code) else ("denied" if is_negative else "active")
-            complaints.append({
-                "code": code,
-                "system": system,
-                "status": status,
-                "first_seen_turn": turn_index,
-                "last_seen_turn": turn_index,
-                "severity": (
-                    "severe" if code == "abdominal_pain" and "severe_abdominal_pain" in positive
-                    else "mild" if code == "abdominal_pain" and "mild_abdominal_pain" in positive
-                    else None
-                ),
-                "duration_days": duration_days,
-                "evidence": [matched.group(0) if matched else text.strip()[:240]],
-                "confidence": 1.0 if matched else 0.95,
-                "source": "deterministic",
-            })
+            status = (
+                "resolved"
+                if is_negative and _is_resolution(normalized, code)
+                else ("denied" if is_negative else "active")
+            )
+            complaints.append(
+                {
+                    "code": code,
+                    "system": system,
+                    "status": status,
+                    "first_seen_turn": turn_index,
+                    "last_seen_turn": turn_index,
+                    "severity": (
+                        "severe"
+                        if code == "abdominal_pain" and "severe_abdominal_pain" in positive
+                        else "mild"
+                        if code == "abdominal_pain" and "mild_abdominal_pain" in positive
+                        else None
+                    ),
+                    "duration_days": duration_days,
+                    "evidence": [matched.group(0) if matched else text.strip()[:240]],
+                    "confidence": 1.0 if matched else 0.95,
+                    "source": "deterministic",
+                }
+            )
 
         active_complaints = [item["code"] for item in complaints if item["status"] == "active"]
         chief_complaint = active_complaints[0] if active_complaints else None
@@ -267,7 +311,10 @@ class ClinicalFactService:
             for code, _, patterns in COMPLAINT_RULES:
                 if code not in active_complaints:
                     continue
-                if any(re.search(rf"(?:{pattern}).{{0,32}}\b(?:la chinh|kho chiu hon|nang hon|uu tien)\b", normalized) for pattern in patterns):
+                if any(
+                    re.search(rf"(?:{pattern}).{{0,32}}\b(?:la chinh|kho chiu hon|nang hon|uu tien)\b", normalized)
+                    for pattern in patterns
+                ):
                     explicit_primary = code
                     break
             explicit_primary = explicit_primary or chief_complaint
@@ -299,8 +346,7 @@ class ClinicalFactService:
         merged["negative_facts"] = sorted(negative)
 
         existing_items = [
-            item for value in (merged.get("complaints") or [])
-            if (item := _normalize_complaint(value)) is not None
+            item for value in (merged.get("complaints") or []) if (item := _normalize_complaint(value)) is not None
         ]
         if not existing_items and merged.get("chief_complaint"):
             legacy = _normalize_complaint(merged["chief_complaint"])
@@ -337,21 +383,21 @@ class ClinicalFactService:
                 current["source"] = incoming["source"]
             if current.get("first_seen_turn") is None:
                 current["first_seen_turn"] = incoming.get("first_seen_turn")
-            current["evidence"] = list(dict.fromkeys([
-                *(current.get("evidence") or []), *(incoming.get("evidence") or [])
-            ]))[-6:]
+            current["evidence"] = list(
+                dict.fromkeys([*(current.get("evidence") or []), *(incoming.get("evidence") or [])])
+            )[-6:]
 
         merged["complaints"] = [by_code[code] for code in order]
-        active_codes = [
-            item["code"] for item in merged["complaints"] if item.get("status") == "active"
-        ]
+        active_codes = [item["code"] for item in merged["complaints"] if item.get("status") == "active"]
         previous_primary = merged.get("primary_complaint") or merged.get("chief_complaint")
         requested_primary = new.get("primary_complaint") or new.get("chief_complaint")
         if new.get("primary_complaint_explicit") and requested_primary in active_codes:
             primary = requested_primary
             merged["primary_complaint_explicit_code"] = requested_primary
         else:
-            primary = previous_primary if previous_primary in active_codes else (active_codes[0] if active_codes else None)
+            primary = (
+                previous_primary if previous_primary in active_codes else (active_codes[0] if active_codes else None)
+            )
         if merged.get("primary_complaint_explicit_code") not in active_codes:
             merged["primary_complaint_explicit_code"] = None
         merged["primary_complaint_explicit"] = bool(merged.get("primary_complaint_explicit_code"))
@@ -360,8 +406,13 @@ class ClinicalFactService:
         merged["active_complaint_codes"] = active_codes
 
         for key in (
-            "duration_days", "bowel_interval_days", "subject",
-            "location", "severity", "pain_severity_0_10", "onset",
+            "duration_days",
+            "bowel_interval_days",
+            "subject",
+            "location",
+            "severity",
+            "pain_severity_0_10",
+            "onset",
         ):
             if new.get(key) is not None:
                 merged[key] = new[key]

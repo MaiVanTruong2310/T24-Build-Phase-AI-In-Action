@@ -145,7 +145,9 @@ class ClinicalGuardrailService:
             re.IGNORECASE,
         )
 
-    def check_intent(self, user_query: str, current_department: str | None = None, language: str = "vi") -> dict[str, Any] | None:
+    def check_intent(
+        self, user_query: str, current_department: str | None = None, language: str = "vi"
+    ) -> dict[str, Any] | None:
         """
         Kiểm tra intent an ninh mạng, de-obfuscation và an toàn y tế lâm sàng.
         Trả về dict intent hoặc None nếu là triệu chứng thông thường.
@@ -217,17 +219,27 @@ class ClinicalGuardrailService:
             return {"intent": "DESCRIBE_MORE_SYMPTOMS"}
 
         contact_request_phrases = (
-            "de lai thong tin", "dieu phoi vien lien he", "nhan vien lien he",
-            "goi lai cho toi", "gap nhan vien ho tro", "request coordinator contact",
-            "leave contact details", "contact me to book",
+            "de lai thong tin",
+            "dieu phoi vien lien he",
+            "nhan vien lien he",
+            "goi lai cho toi",
+            "gap nhan vien ho tro",
+            "request coordinator contact",
+            "leave contact details",
+            "contact me to book",
         )
         if any(phrase in query_normalized for phrase in contact_request_phrases):
             return {"intent": "BOOKING_CONTACT_REQUEST"}
 
         doctor_info_phrases = (
-            "thong tin bac si", "thong tin cua cac bac si", "cac bac si trong khoa",
-            "bac si nao trong khoa", "doi ngu bac si", "doctor information",
-            "which doctors", "doctors in this department",
+            "thong tin bac si",
+            "thong tin cua cac bac si",
+            "cac bac si trong khoa",
+            "bac si nao trong khoa",
+            "doi ngu bac si",
+            "doctor information",
+            "which doctors",
+            "doctors in this department",
         )
         if any(phrase in query_normalized for phrase in doctor_info_phrases):
             if not current_department:
@@ -237,10 +249,39 @@ class ClinicalGuardrailService:
         # PHẢN HỒI KHẲNG ĐỊNH / ĐỒNG Ý XEM LỊCH TIẾP NỐI (Contextual Affirmative Followup)
         # Khi bot vừa gợi ý chuyên khoa và hỏi "Bác có muốn tìm lịch không?" -> người dùng đáp "Có", "Vâng", "Ok"...
         affirmative_tokens = {
-            "co", "có", "vang", "vâng", "ok", "oke", "okay", "duoc", "được", "dong y", "đồng ý",
-            "yes", "yep", "tim giup", "tìm giúp", "xem giup", "xem giúp", "tim lich", "tìm lịch",
-            "co chu", "có chứ", "duoc chu", "được chứ", "vang a", "vâng ạ", "co a", "có ạ",
-            "tim di", "tìm đi", "kiem tra giup", "kiểm tra giúp", "check giup", "check giúp"
+            "co",
+            "có",
+            "vang",
+            "vâng",
+            "ok",
+            "oke",
+            "okay",
+            "duoc",
+            "được",
+            "dong y",
+            "đồng ý",
+            "yes",
+            "yep",
+            "tim giup",
+            "tìm giúp",
+            "xem giup",
+            "xem giúp",
+            "tim lich",
+            "tìm lịch",
+            "co chu",
+            "có chứ",
+            "duoc chu",
+            "được chứ",
+            "vang a",
+            "vâng ạ",
+            "co a",
+            "có ạ",
+            "tim di",
+            "tìm đi",
+            "kiem tra giup",
+            "kiểm tra giúp",
+            "check giup",
+            "check giúp",
         }
         if (query_normalized in affirmative_tokens or query_clean in affirmative_tokens) and current_department:
             return {"intent": "VIEW_SCHEDULE"}
@@ -255,8 +296,16 @@ class ClinicalGuardrailService:
         )
         if comparison_match:
             known_departments = (
-                "tiêu hóa", "tim mạch", "thần kinh", "tai mũi họng", "hô hấp",
-                "xương khớp", "da liễu", "nhi", "sản phụ khoa", "cấp cứu",
+                "tiêu hóa",
+                "tim mạch",
+                "thần kinh",
+                "tai mũi họng",
+                "hô hấp",
+                "xương khớp",
+                "da liễu",
+                "nhi",
+                "sản phụ khoa",
+                "cấp cứu",
             )
             target = next(
                 (name for name in known_departments if name in query_clean),
@@ -271,25 +320,40 @@ class ClinicalGuardrailService:
         # --- BỘ ĐIỀU HƯỚNG CƠ SỞ Y TẾ (FACILITY ROUTER & NAVIGATION) ---
         direct_facility_names = {
             "riverside": "riverside",
-            "times city": "times city", "timescity": "times city",
-            "central park": "central park", "centralpark": "central park",
-            "smart city": "smart city", "smartcity": "smart city",
-            "ocean park 2": "ocean park 2", "ocean park": "ocean park",
-            "royal city": "royal city", "royalcity": "royal city",
-            "royal island": "royal island", "royalisland": "royal island",
-            "grand park": "grand park", "grandpark": "grand park",
-            "duong dong": "duong dong", "dương đông": "duong dong",
-            "hai phong": "hai phong", "hải phòng": "hai phong",
-            "ha long": "ha long", "hạ long": "ha long",
-            "da nang": "da nang", "đà nẵng": "da nang",
+            "times city": "times city",
+            "timescity": "times city",
+            "central park": "central park",
+            "centralpark": "central park",
+            "smart city": "smart city",
+            "smartcity": "smart city",
+            "ocean park 2": "ocean park 2",
+            "ocean park": "ocean park",
+            "royal city": "royal city",
+            "royalcity": "royal city",
+            "royal island": "royal island",
+            "royalisland": "royal island",
+            "grand park": "grand park",
+            "grandpark": "grand park",
+            "duong dong": "duong dong",
+            "dương đông": "duong dong",
+            "hai phong": "hai phong",
+            "hải phòng": "hai phong",
+            "ha long": "ha long",
+            "hạ long": "ha long",
+            "da nang": "da nang",
+            "đà nẵng": "da nang",
             "nha trang": "nha trang",
-            "phu quoc": "phu quoc", "phú quốc": "phu quoc",
-            "can tho": "can tho", "cần thơ": "can tho",
+            "phu quoc": "phu quoc",
+            "phú quốc": "phu quoc",
+            "can tho": "can tho",
+            "cần thơ": "can tho",
         }
 
         # A. ĐIỀU HƯỚNG: Xem danh sách bác sĩ tại cơ sở cụ thể
         for fkey, fval in direct_facility_names.items():
-            if fkey in query_normalized and any(k in query_normalized for k in ["bac si", "doctor", "chuyen gia", "doi ngu", "ai kham", "nguoi kham"]):
+            if fkey in query_normalized and any(
+                k in query_normalized for k in ["bac si", "doctor", "chuyen gia", "doi ngu", "ai kham", "nguoi kham"]
+            ):
                 return {
                     "intent": "FACILITY_DOCTORS",
                     "matched_pattern": fkey,
@@ -298,13 +362,18 @@ class ClinicalGuardrailService:
 
         # B. ĐIỀU HƯỚNG: Đặt lịch khám tại cơ sở cụ thể
         for fkey, fval in direct_facility_names.items():
-            if fkey in query_normalized and any(k in query_normalized for k in ["dat lich", "kham tai", "dang ky", "book"]):
+            if fkey in query_normalized and any(
+                k in query_normalized for k in ["dat lich", "kham tai", "dang ky", "book"]
+            ):
                 return {
                     "intent": "FACILITY_BOOKING_START",
                     "matched_pattern": fkey,
                     "facility_name_query": fval,
                 }
-        if any(k in query_normalized for k in ["dat lich kham tai day", "dat lich tai day", "kham tai day", "dang ky tai day"]):
+        if any(
+            k in query_normalized
+            for k in ["dat lich kham tai day", "dat lich tai day", "kham tai day", "dang ky tai day"]
+        ):
             return {
                 "intent": "FACILITY_BOOKING_START",
                 "matched_pattern": "tai day",
@@ -313,7 +382,22 @@ class ClinicalGuardrailService:
 
         # C. Tra cứu thông tin cơ sở khi có tên cơ sở cụ thể
         for fkey, fval in direct_facility_names.items():
-            if fkey in query_normalized and any(k in query_normalized for k in ["benh vien", "phong kham", "vinmec", "thong tin", "o dau", "dia chi", "hotline", "co so", "gio lam viec", "gio mo cua", "gio kham"]):
+            if fkey in query_normalized and any(
+                k in query_normalized
+                for k in [
+                    "benh vien",
+                    "phong kham",
+                    "vinmec",
+                    "thong tin",
+                    "o dau",
+                    "dia chi",
+                    "hotline",
+                    "co so",
+                    "gio lam viec",
+                    "gio mo cua",
+                    "gio kham",
+                ]
+            ):
                 return {
                     "intent": "FACILITY_INFO",
                     "matched_pattern": fkey,
@@ -326,18 +410,35 @@ class ClinicalGuardrailService:
             if re.search(pattern, query_clean, re.IGNORECASE) or re.search(pattern, query_normalized, re.IGNORECASE):
                 # Phát hiện khu vực tỉnh/thành
                 regions = {
-                    "hà nội": "Hà Nội", "ha noi": "Hà Nội",
-                    "hồ chí minh": "Hồ Chí Minh", "ho chi minh": "Hồ Chí Minh", "tphcm": "Hồ Chí Minh", "sài gòn": "Hồ Chí Minh", "sai gon": "Hồ Chí Minh",
-                    "đà nẵng": "Đà Nẵng", "da nang": "Đà Nẵng",
-                    "hải phòng": "Hải Phòng", "hai phong": "Hải Phòng",
-                    "hạ long": "Hạ Long", "ha long": "Hạ Long", "quảng ninh": "Quảng Ninh", "quang ninh": "Quảng Ninh",
-                    "nha trang": "Nha Trang", "khánh hòa": "Khánh Hòa", "khanh hoa": "Khánh Hòa",
-                    "phú quốc": "Phú Quốc", "phu quoc": "Phú Quốc",
-                    "cần thơ": "Cần Thơ", "can tho": "Cần Thơ",
-                    "hưng yên": "Hưng Yên", "hung yen": "Hưng Yên",
+                    "hà nội": "Hà Nội",
+                    "ha noi": "Hà Nội",
+                    "hồ chí minh": "Hồ Chí Minh",
+                    "ho chi minh": "Hồ Chí Minh",
+                    "tphcm": "Hồ Chí Minh",
+                    "sài gòn": "Hồ Chí Minh",
+                    "sai gon": "Hồ Chí Minh",
+                    "đà nẵng": "Đà Nẵng",
+                    "da nang": "Đà Nẵng",
+                    "hải phòng": "Hải Phòng",
+                    "hai phong": "Hải Phòng",
+                    "hạ long": "Hạ Long",
+                    "ha long": "Hạ Long",
+                    "quảng ninh": "Quảng Ninh",
+                    "quang ninh": "Quảng Ninh",
+                    "nha trang": "Nha Trang",
+                    "khánh hòa": "Khánh Hòa",
+                    "khanh hoa": "Khánh Hòa",
+                    "phú quốc": "Phú Quốc",
+                    "phu quoc": "Phú Quốc",
+                    "cần thơ": "Cần Thơ",
+                    "can tho": "Cần Thơ",
+                    "hưng yên": "Hưng Yên",
+                    "hung yen": "Hưng Yên",
                 }
                 detected_region = next((val for key, val in regions.items() if key in query_normalized), None)
-                detected_fac = next((val for key, val in direct_facility_names.items() if key in query_normalized), None)
+                detected_fac = next(
+                    (val for key, val in direct_facility_names.items() if key in query_normalized), None
+                )
 
                 # Phát hiện quận / huyện và gán cơ sở Vinmec gần nhất
                 districts = {
@@ -374,7 +475,9 @@ class ClinicalGuardrailService:
                     "quan 3": ("Hồ Chí Minh", "Quận 3", "central park"),
                     "thu duc": ("Hồ Chí Minh", "TP. Thủ Đức", "central park"),
                 }
-                detected_district_info = next((val for key, val in districts.items() if key in query_normalized or key in query_clean), None)
+                detected_district_info = next(
+                    (val for key, val in districts.items() if key in query_normalized or key in query_clean), None
+                )
                 detected_district = None
                 if detected_district_info:
                     detected_region = detected_district_info[0]
@@ -409,31 +512,57 @@ class ClinicalGuardrailService:
         # Yêu cầu xem lịch là intent tiếp nối, không phải một triệu chứng mới.
         # Hỗ trợ nhận diện linh hoạt: xem lịch, kiếm lịch, tìm lịch, tra lịch trong N ngày / buổi chiều / sáng
         schedule_keywords = [
-            "xem lich", "tim lich", "kiem lich", "tra lich", "cho xem lich", "dat lich",
-            "lich kham", "show schedule", "find schedule", "check schedule"
+            "xem lich",
+            "tim lich",
+            "kiem lich",
+            "tra lich",
+            "cho xem lich",
+            "dat lich",
+            "lich kham",
+            "show schedule",
+            "find schedule",
+            "check schedule",
         ]
         if any(sk in query_normalized for sk in schedule_keywords):
             # Trích xuất chuyên khoa trong câu hỏi nếu có
             detected_spec = current_department
             for sp_k, sp_v in [
-                ("tieu hoa", "Tiêu hóa - Gan mật"), ("tim mach", "Tim mạch"),
-                ("than kinh", "Thần kinh"), ("nhi", "Nhi"), ("san", "Sản - Phụ khoa"),
-                ("co xuong khop", "Cơ xương khớp"), ("tai mui hong", "Tai - Mũi - Họng"),
-                ("mat", "Mắt"), ("da lieu", "Da liễu"), ("ho hap", "Hô hấp"),
-                ("tong quat", "Sức khỏe tổng quát")
+                ("tieu hoa", "Tiêu hóa - Gan mật"),
+                ("tim mach", "Tim mạch"),
+                ("than kinh", "Thần kinh"),
+                ("nhi", "Nhi"),
+                ("san", "Sản - Phụ khoa"),
+                ("co xuong khop", "Cơ xương khớp"),
+                ("tai mui hong", "Tai - Mũi - Họng"),
+                ("mat", "Mắt"),
+                ("da lieu", "Da liễu"),
+                ("ho hap", "Hô hấp"),
+                ("tong quat", "Sức khỏe tổng quát"),
             ]:
                 if sp_k in query_normalized:
                     detected_spec = sp_v
                     break
 
             # Chỉ hỏi làm rõ mục đích nếu người dùng không hề đề cập chuyên khoa nào cả
-            if not detected_spec and ("bac si nao cung duoc" in query_normalized or "ai cung duoc" in query_normalized or not any(k in query_normalized for k in ["khoa", "chuyen khoa"])):
+            if not detected_spec and (
+                "bac si nao cung duoc" in query_normalized
+                or "ai cung duoc" in query_normalized
+                or not any(k in query_normalized for k in ["khoa", "chuyen khoa"])
+            ):
                 return {"intent": "VISIT_PURPOSE_CLARIFICATION"}
 
             days = None
-            if re.search(r"trong\s+(?:2|hai)\s+ngay", query_normalized) or "2 ngay toi" in query_normalized or "hai ngay toi" in query_normalized:
+            if (
+                re.search(r"trong\s+(?:2|hai)\s+ngay", query_normalized)
+                or "2 ngay toi" in query_normalized
+                or "hai ngay toi" in query_normalized
+            ):
                 days = 2
-            elif re.search(r"trong\s+(?:3|ba)\s+ngay", query_normalized) or "3 ngay toi" in query_normalized or "ba ngay toi" in query_normalized:
+            elif (
+                re.search(r"trong\s+(?:3|ba)\s+ngay", query_normalized)
+                or "3 ngay toi" in query_normalized
+                or "ba ngay toi" in query_normalized
+            ):
                 days = 3
             elif "hom nay" in query_normalized or "today" in query_normalized:
                 days = 1
@@ -484,14 +613,20 @@ class ClinicalGuardrailService:
                     suggested_spec = current_department
                     if not suggested_spec or suggested_spec == "Thần kinh":
                         from src.medical_assistant.domain.triage_service import get_triage_service
+
                         med_triage = get_triage_service().evaluate_symptoms(user_query, language=language)
-                        if med_triage.suggested_specialty and med_triage.suggested_specialty not in {"Sức khỏe tổng quát", "General Health"}:
+                        if med_triage.suggested_specialty and med_triage.suggested_specialty not in {
+                            "Sức khỏe tổng quát",
+                            "General Health",
+                        }:
                             suggested_spec = med_triage.suggested_specialty
 
                     return {
                         "intent": "MEDICATION_GUARDRAIL",
                         "matched_pattern": pattern,
-                        "detected_technique": ", ".join(deob_res.detected_encodings) if deob_res.detected_encodings else None,
+                        "detected_technique": ", ".join(deob_res.detected_encodings)
+                        if deob_res.detected_encodings
+                        else None,
                         "suggested_department": suggested_spec,
                     }
 
@@ -504,7 +639,9 @@ class ClinicalGuardrailService:
                     return {
                         "intent": "DIAGNOSIS_GUARDRAIL",
                         "matched_pattern": pattern,
-                        "detected_technique": ", ".join(deob_res.detected_encodings) if deob_res.detected_encodings else None,
+                        "detected_technique": ", ".join(deob_res.detected_encodings)
+                        if deob_res.detected_encodings
+                        else None,
                     }
 
         # 4. Kiểm tra Hỏi thông tin chuyên khoa
@@ -512,8 +649,16 @@ class ClinicalGuardrailService:
             match = re.search(pattern, query_clean)
             if match:
                 known_departments = (
-                    "tiêu hóa", "tim mạch", "thần kinh", "tai mũi họng", "hô hấp",
-                    "xương khớp", "da liễu", "nhi", "sản phụ khoa", "cấp cứu",
+                    "tiêu hóa",
+                    "tim mạch",
+                    "thần kinh",
+                    "tai mũi họng",
+                    "hô hấp",
+                    "xương khớp",
+                    "da liễu",
+                    "nhi",
+                    "sản phụ khoa",
+                    "cấp cứu",
                 )
                 extracted_dept = next((name for name in known_departments if name in query_clean), "")
                 if not extracted_dept:
@@ -522,7 +667,9 @@ class ClinicalGuardrailService:
                 return {
                     "intent": "DEPARTMENT_INFO",
                     "department_query": target_dept,
-                    "comparison_requested": bool(re.search(r"so\s+với|hơn\s+(?:các\s+)?bệnh\s+viện|ưu\s+điểm|compare|superior", query_clean)),
+                    "comparison_requested": bool(
+                        re.search(r"so\s+với|hơn\s+(?:các\s+)?bệnh\s+viện|ưu\s+điểm|compare|superior", query_clean)
+                    ),
                 }
 
         # Kiểm tra nhanh: nếu query chứa "thông tin về khia" hoặc "thông tin về khoa"
@@ -551,9 +698,8 @@ class ClinicalGuardrailService:
                 "Find a specific specialty",
                 "Find a suitable or nearby hospital",
             ]
-            response = (
-                "Yes, I can help. What would you like to do?\n\n"
-                + "\n".join(f"- {item}" for item in quick_replies)
+            response = "Yes, I can help. What would you like to do?\n\n" + "\n".join(
+                f"- {item}" for item in quick_replies
             )
             return response, quick_replies
 
@@ -563,13 +709,12 @@ class ClinicalGuardrailService:
             "Tìm một chuyên khoa cụ thể",
             "Tìm cơ sở bệnh viện gần hoặc phù hợp",
         ]
-        response = (
-            "Dạ, em có thể hỗ trợ bác. Bác muốn:\n\n"
-            + "\n".join(f"- {item}" for item in quick_replies)
-        )
+        response = "Dạ, em có thể hỗ trợ bác. Bác muốn:\n\n" + "\n".join(f"- {item}" for item in quick_replies)
         return response, quick_replies
 
-    def get_medication_guardrail_response(self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa", language: str = "vi") -> tuple[str, list[str]]:
+    def get_medication_guardrail_response(
+        self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa", language: str = "vi"
+    ) -> tuple[str, list[str]]:
         """Tạo câu trả lời từ chối kê đơn chuẩn an toàn y tế SAF-02 (Bilingual EN-VI)."""
         if language == "en":
             spec_en = get_specialty_display_name(suggested_dept, "en")
@@ -605,7 +750,9 @@ class ClinicalGuardrailService:
         ]
         return response, quick_replies
 
-    def get_diagnosis_guardrail_response(self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa phù hợp", language: str = "vi") -> tuple[str, list[str]]:
+    def get_diagnosis_guardrail_response(
+        self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa phù hợp", language: str = "vi"
+    ) -> tuple[str, list[str]]:
         """Từ chối kết luận bệnh, định tuyến khám và không tự liệt kê chẩn đoán phân biệt."""
         if language == "en":
             spec_en = get_specialty_display_name(suggested_dept, "en")
@@ -647,6 +794,7 @@ class ClinicalGuardrailService:
         spec_display = get_specialty_display_name(dept_name_query, language)
 
         from src.medical_assistant.rag.store_cache import get_global_rag_store
+
         try:
             store = get_global_rag_store()
             # Retrieve a wider candidate set, then keep only the requested
@@ -660,8 +808,7 @@ class ClinicalGuardrailService:
             passages = []
         target_folded = remove_accents(spec_display).replace("trung tam ", "").strip()
         exact_passages = [
-            p for p in passages
-            if target_folded in remove_accents(p.title) or remove_accents(p.title) in target_folded
+            p for p in passages if target_folded in remove_accents(p.title) or remove_accents(p.title) in target_folded
         ]
         selected = exact_passages[:3]
 
@@ -669,7 +816,9 @@ class ClinicalGuardrailService:
             if len(value) <= limit:
                 return value
             candidate = value[:limit]
-            sentence_end = max(candidate.rfind(". "), candidate.rfind("; "), candidate.rfind("! "), candidate.rfind("? "))
+            sentence_end = max(
+                candidate.rfind(". "), candidate.rfind("; "), candidate.rfind("! "), candidate.rfind("? ")
+            )
             if sentence_end >= limit // 2:
                 return candidate[: sentence_end + 1].strip()
             return candidate.rsplit(" ", 1)[0].strip() + "…"
@@ -700,18 +849,23 @@ class ClinicalGuardrailService:
 
             if comparison_requested:
                 desc = (
-                    f"I don't have uniform comparative data to claim how {dept_title} is superior to other hospitals. "
-                    f"The verified hospital information currently describes these services:\n\n{verified_text}"
-                ) if verified_text else (
-                    f"I don't have comparative data or a verified department profile for {dept_title} in the current knowledge base."
+                    (
+                        f"I don't have uniform comparative data to claim how {dept_title} is superior to other hospitals. "
+                        f"The verified hospital information currently describes these services:\n\n{verified_text}"
+                    )
+                    if verified_text
+                    else (
+                        f"I don't have comparative data or a verified department profile for {dept_title} in the current knowledge base."
+                    )
                 )
             else:
                 desc = (
-                    f"**Department of {dept_title} — verified profile**\n\n"
-                    f"{verified_text}"
-                ) if verified_text else (
-                    f"**Department of {dept_title}**\n\n"
-                    f"I could not find a verified profile for this department in the current knowledge base."
+                    (f"**Department of {dept_title} — verified profile**\n\n{verified_text}")
+                    if verified_text
+                    else (
+                        f"**Department of {dept_title}**\n\n"
+                        f"I could not find a verified profile for this department in the current knowledge base."
+                    )
                 )
 
             sources_block = f"\n\n**Sources**\n{source_text}" if (source_text and enable_citation) else ""
@@ -735,32 +889,32 @@ class ClinicalGuardrailService:
             and "tam soat" not in remove_accents(verified_text)
         ):
             verified_text = (
-                "Nội dung xác minh tập trung vào khám sức khỏe định kỳ và các gói tầm soát tổng quát. "
-                + verified_text
+                "Nội dung xác minh tập trung vào khám sức khỏe định kỳ và các gói tầm soát tổng quát. " + verified_text
             )
 
         if comparison_requested:
             desc = (
-                f"Dạ, em chưa có dữ liệu đối chiếu đồng nhất để khẳng định {dept_title} hơn các bệnh viện khác. "
-                f"Thông tin bệnh viện đã được truy xuất hiện ghi nhận các dịch vụ sau:\n\n{verified_text}"
-            ) if verified_text else (
-                f"Dạ, em chưa có dữ liệu so sánh hoặc hồ sơ chuyên khoa đã xác minh cho {dept_title} trong kho dữ liệu hiện tại."
+                (
+                    f"Dạ, em chưa có dữ liệu đối chiếu đồng nhất để khẳng định {dept_title} hơn các bệnh viện khác. "
+                    f"Thông tin bệnh viện đã được truy xuất hiện ghi nhận các dịch vụ sau:\n\n{verified_text}"
+                )
+                if verified_text
+                else (
+                    f"Dạ, em chưa có dữ liệu so sánh hoặc hồ sơ chuyên khoa đã xác minh cho {dept_title} trong kho dữ liệu hiện tại."
+                )
             )
         else:
             desc = (
-                f"**Thông tin chuyên khoa: {dept_heading}**\n\n"
-                f"{verified_text}"
-            ) if verified_text else (
-                f"**Thông tin chuyên khoa: {dept_heading}**\n\n"
-                "Em chưa tìm thấy hồ sơ đã xác minh cho chuyên khoa này trong kho dữ liệu hiện tại."
+                (f"**Thông tin chuyên khoa: {dept_heading}**\n\n{verified_text}")
+                if verified_text
+                else (
+                    f"**Thông tin chuyên khoa: {dept_heading}**\n\n"
+                    "Em chưa tìm thấy hồ sơ đã xác minh cho chuyên khoa này trong kho dữ liệu hiện tại."
+                )
             )
 
         sources_block = f"\n\n**Nguồn**\n{source_text}" if (source_text and enable_citation) else ""
-        response = (
-            f"🏥 {desc}\n\n"
-            f"{sources_block}\n\n"
-            f"Bác có muốn em kiểm tra lịch khám của chuyên khoa này không ạ?"
-        )
+        response = f"🏥 {desc}\n\n{sources_block}\n\nBác có muốn em kiểm tra lịch khám của chuyên khoa này không ạ?"
         quick_replies = [
             f"Xem bác sĩ {dept_title}",
             "Đặt lịch khám ngay",

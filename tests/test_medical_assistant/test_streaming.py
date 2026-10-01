@@ -22,10 +22,7 @@ async def main():
     print("📡 TEST STREAMING ENDPOINT (SERVER-SENT EVENTS - SSE)")
     print("=" * 60)
 
-    req = ChatRequest(
-        message="Tôi bị đau ngực dữ dội lan ra cánh tay trái",
-        session_id="stream_test_session"
-    )
+    req = ChatRequest(message="Tôi bị đau ngực dữ dội lan ra cánh tay trái", session_id="stream_test_session")
 
     response = await chat_stream(req)
 

@@ -27,6 +27,7 @@ export default function ScheduleApprove() {
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<'confirmed' | 'rejected' | null>(null);
   const [error, setError] = useState('');
+  const [staffNote, setStaffNote] = useState('');
 
   useEffect(() => {
     if (!id) {
@@ -45,11 +46,11 @@ export default function ScheduleApprove() {
 
   const handleReview = async (nextStatus: 'confirmed' | 'rejected') => {
     if (!id || !booking || booking.status !== 'pending_approval' || action) return;
-    const note = nextStatus === 'rejected'
-      ? window.prompt('Nhập lý do từ chối lịch hẹn:')?.trim()
-      : window.prompt('Ghi chú duyệt lịch (không bắt buộc):')?.trim();
-
-    if (nextStatus === 'rejected' && !note) return;
+    const note = staffNote.trim();
+    if (nextStatus === 'rejected' && !note) {
+      setError('Vui lòng nhập lý do từ chối lịch hẹn.');
+      return;
+    }
 
     setError('');
     setAction(nextStatus);
@@ -144,6 +145,14 @@ export default function ScheduleApprove() {
             {isPending ? (
               <>
                 <p className="text-sm leading-6 text-slate-600">Kiểm tra thông tin bệnh nhân, dịch vụ và khung giờ trước khi ghi nhận quyết định.</p>
+                <textarea
+                  value={staffNote}
+                  onChange={(event) => setStaffNote(event.target.value)}
+                  maxLength={2000}
+                  rows={4}
+                  placeholder="Ghi chú duyệt hoặc lý do từ chối"
+                  className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                />
                 <div className="mt-5 space-y-3">
                   <button onClick={() => handleReview('confirmed')} disabled={Boolean(action)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
                     {action === 'confirmed' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Duyệt lịch hẹn

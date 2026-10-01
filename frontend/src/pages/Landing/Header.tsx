@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
+
 import {
-  LogOut, 
-  MessageSquare, 
-  Calendar, 
-  Clock, 
-  FileText, 
-  ArrowRightLeft, 
-  User, 
-  Stethoscope, 
-  ShieldCheck,
+  ArrowRightLeft,
+  Calendar,
+  Clock,
+  FileText,
+  LogOut,
   Menu,
-  X
+  MessageSquare,
+  ShieldCheck,
+  Stethoscope,
+  User,
+  X,
 } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../../app/store';
 import { logoutUser } from '../../features/auth/authSlice';
 import { getUserAvatarUrl } from '../../features/auth/session';
+import { NotificationBell } from '../../features/notification/NotificationBell';
 import { ThemeToggle } from '../../components/ThemeToggle';
 
 export function Header() {
@@ -73,6 +75,8 @@ export function Header() {
           </div>
         </div>
 
+            <div className="flex items-center gap-3 sm:border-l border-slate-200 sm:pl-4">
+              <NotificationBell enabled={Boolean(user)} />
         <div className="flex items-center gap-2 sm:gap-3">
           {/* HITL Doctor Safety Badge (Desktop & Tablet) */}
           <div className="hidden md:flex items-center gap-2 border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-3 py-1 text-xs font-medium rounded-xl">
@@ -134,6 +138,7 @@ export function Header() {
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
+      </div>
       </div>
       
       {/* ─── Navigation tabs (Desktop / Tablet horizontal scroll) ─────────────────────────── */}

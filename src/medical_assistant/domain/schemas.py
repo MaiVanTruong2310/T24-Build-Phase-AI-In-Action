@@ -6,9 +6,13 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000, description="Tin nhắn từ user")
-    session_id: str = Field(default="default_patient_session", description="Thread ID / Session ID định danh phiên chat của bệnh nhân")
+    session_id: str = Field(
+        default="default_patient_session", description="Thread ID / Session ID định danh phiên chat của bệnh nhân"
+    )
     user_id: str | None = Field(default=None, description="Mã bệnh nhân nếu đã đăng nhập")
-    enable_citation: bool = Field(default=True, description="Bật/tắt hiển thị link nguồn trích dẫn tài liệu y khoa (Citations)")
+    enable_citation: bool = Field(
+        default=True, description="Bật/tắt hiển thị link nguồn trích dẫn tài liệu y khoa (Citations)"
+    )
 
 
 class TokenUsage(BaseModel):

@@ -32,8 +32,13 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
     ProbingClarificationTree(
         category_key="TAO_BON",
         trigger_keywords=[
-            "táo bón", "khó đi ngoài", "không đi ngoài", "phân cứng",
-            "constipation", "hard stool", "unable to pass stool"
+            "táo bón",
+            "khó đi ngoài",
+            "không đi ngoài",
+            "phân cứng",
+            "constipation",
+            "hard stool",
+            "unable to pass stool",
         ],
         turn_1_question_vi=(
             "Dạ, để đánh giá tình trạng táo bón của bác, bác cho em biết thêm:\n"
@@ -46,12 +51,16 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "- Are the stools hard, do you need to strain, and can you still pass gas?"
         ),
         turn_1_quick_replies_vi=[
-            "Mới bị 1-2 ngày", "Đã trên 3 ngày chưa đi ngoài",
-            "Phân khô cứng, phải rặn", "Không trung tiện được"
+            "Mới bị 1-2 ngày",
+            "Đã trên 3 ngày chưa đi ngoài",
+            "Phân khô cứng, phải rặn",
+            "Không trung tiện được",
         ],
         turn_1_quick_replies_en=[
-            "Started 1-2 days ago", "No bowel movement for over 3 days",
-            "Hard stool with straining", "Unable to pass gas"
+            "Started 1-2 days ago",
+            "No bowel movement for over 3 days",
+            "Hard stool with straining",
+            "Unable to pass gas",
         ],
         turn_2_question_vi=(
             "Bác có dấu hiệu nào kèm theo không ạ: đau bụng tăng nhiều, bụng chướng căng, "
@@ -62,19 +71,26 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "blood in the stool, or unintentional weight loss?"
         ),
         turn_2_quick_replies_vi=[
-            "Có đau bụng/chướng bụng nhiều", "Có nôn hoặc sốt",
-            "Có máu trong phân", "Không có dấu hiệu trên"
+            "Có đau bụng/chướng bụng nhiều",
+            "Có nôn hoặc sốt",
+            "Có máu trong phân",
+            "Không có dấu hiệu trên",
         ],
-        turn_2_quick_replies_en=[
-            "Severe pain or bloating", "Vomiting or fever",
-            "Blood in stool", "None of these"
-        ],
+        turn_2_quick_replies_en=["Severe pain or bloating", "Vomiting or fever", "Blood in stool", "None of these"],
     ),
     ProbingClarificationTree(
         category_key="DAU_DAU",
         trigger_keywords=[
-            "đau đầu", "nhức đầu", "nặng đầu", "chóng mặt", "đau nửa đầu", "buốt đầu",
-            "headache", "dizziness", "migraine", "head pain"
+            "đau đầu",
+            "nhức đầu",
+            "nặng đầu",
+            "chóng mặt",
+            "đau nửa đầu",
+            "buốt đầu",
+            "headache",
+            "dizziness",
+            "migraine",
+            "head pain",
         ],
         turn_1_question_vi=(
             "Bác cho em hỏi cụ thể hơn một chút ạ:\n"
@@ -86,8 +102,20 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "- Where is the pain located (one-sided, back of the neck, or all over)?\n"
             "- How long have you experienced this pain (sudden onset hours ago, or persistent for weeks)?"
         ),
-        turn_1_quick_replies_vi=["Đau nửa đầu trái/phải", "Đau sau gáy vùng cổ", "Đau cả đầu âm ỉ", "Mới đau đột ngột", "Đã đau nhiều tuần"],
-        turn_1_quick_replies_en=["One-sided headache", "Back of neck/head", "Dull ache all over", "Sudden onset today", "Persistent for weeks"],
+        turn_1_quick_replies_vi=[
+            "Đau nửa đầu trái/phải",
+            "Đau sau gáy vùng cổ",
+            "Đau cả đầu âm ỉ",
+            "Mới đau đột ngột",
+            "Đã đau nhiều tuần",
+        ],
+        turn_1_quick_replies_en=[
+            "One-sided headache",
+            "Back of neck/head",
+            "Dull ache all over",
+            "Sudden onset today",
+            "Persistent for weeks",
+        ],
         turn_2_question_vi=(
             "Dạ em đã ghi nhận vị trí đau. Bác có kèm theo dấu hiệu nào dưới đây không ạ:\n"
             "- Buồn nôn, sợ ánh sáng/tiếng ồn?\n"
@@ -98,15 +126,37 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "- Nausea, vomiting, or sensitivity to light/sound?\n"
             "- Blurred/double vision, facial numbness, or limb weakness?"
         ),
-        turn_2_quick_replies_vi=["Có buồn nôn / sợ ánh sáng", "Có nhìn mờ / tê tay chân", "Không có triệu chứng kèm theo", "Không chắc chắn"],
-        turn_2_quick_replies_en=["Nausea / light sensitive", "Blurred vision / numbness", "No accompanying symptoms", "Not sure"]
+        turn_2_quick_replies_vi=[
+            "Có buồn nôn / sợ ánh sáng",
+            "Có nhìn mờ / tê tay chân",
+            "Không có triệu chứng kèm theo",
+            "Không chắc chắn",
+        ],
+        turn_2_quick_replies_en=[
+            "Nausea / light sensitive",
+            "Blurred vision / numbness",
+            "No accompanying symptoms",
+            "Not sure",
+        ],
     ),
     ProbingClarificationTree(
         category_key="DAU_BUNG",
         trigger_keywords=[
-            "đau bụng", "nhức bụng", "quặn bụng", "đầy bụng", "chướng bụng", "khó tiêu",
-            "bụng bên trái", "bụng bên phải", "bụng trái", "bụng phải",
-            "abdominal pain", "stomach pain", "stomach ache", "indigestion", "cramping"
+            "đau bụng",
+            "nhức bụng",
+            "quặn bụng",
+            "đầy bụng",
+            "chướng bụng",
+            "khó tiêu",
+            "bụng bên trái",
+            "bụng bên phải",
+            "bụng trái",
+            "bụng phải",
+            "abdominal pain",
+            "stomach pain",
+            "stomach ache",
+            "indigestion",
+            "cramping",
         ],
         turn_1_question_vi=(
             "Để hỗ trợ bác chuẩn xác nhất, bác có thể chia sẻ thêm:\n"
@@ -118,23 +168,39 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "- Which area of the abdomen hurts (upper stomach, around navel, or lower right/left)?\n"
             "- Is the pain constant and dull, or severe and cramping?"
         ),
-        turn_1_quick_replies_vi=["Trên rốn (vùng dạ dày)", "Quanh rốn", "Bụng dưới bên phải", "Bụng dưới bên trái", "Đau quặn từng cơn"],
-        turn_1_quick_replies_en=["Upper stomach (epigastric)", "Around the navel", "Lower right abdomen", "Lower left abdomen", "Cramping in waves"],
-        turn_2_question_vi=(
-            "Dạ, bác có kèm theo sốt, buồn nôn, đi ngoài phân lỏng, hoặc nôn ói nhiều không ạ?"
-        ),
-        turn_2_question_en=(
-            "Are you also experiencing fever, nausea, persistent vomiting, or diarrhea?"
-        ),
+        turn_1_quick_replies_vi=[
+            "Trên rốn (vùng dạ dày)",
+            "Quanh rốn",
+            "Bụng dưới bên phải",
+            "Bụng dưới bên trái",
+            "Đau quặn từng cơn",
+        ],
+        turn_1_quick_replies_en=[
+            "Upper stomach (epigastric)",
+            "Around the navel",
+            "Lower right abdomen",
+            "Lower left abdomen",
+            "Cramping in waves",
+        ],
+        turn_2_question_vi=("Dạ, bác có kèm theo sốt, buồn nôn, đi ngoài phân lỏng, hoặc nôn ói nhiều không ạ?"),
+        turn_2_question_en=("Are you also experiencing fever, nausea, persistent vomiting, or diarrhea?"),
         turn_2_quick_replies_vi=["Có sốt nhẹ / buồn nôn", "Có tiêu chảy / nôn", "Không có sốt hay nôn", "Không rõ"],
-        turn_2_quick_replies_en=["Mild fever / nausea", "Diarrhea / vomiting", "No fever or vomiting", "Not sure"]
+        turn_2_quick_replies_en=["Mild fever / nausea", "Diarrhea / vomiting", "No fever or vomiting", "Not sure"],
     ),
     ProbingClarificationTree(
         category_key="DAU_NGUC",
         trigger_keywords=[
-            "tức ngực", "tức lồng ngực", "đau tức lồng ngực", "đau tức ngực",
-            "nặng ngực", "nhói ngực", "đau ngực",
-            "chest pain", "chest pressure", "chest tightness", "angina"
+            "tức ngực",
+            "tức lồng ngực",
+            "đau tức lồng ngực",
+            "đau tức ngực",
+            "nặng ngực",
+            "nhói ngực",
+            "đau ngực",
+            "chest pain",
+            "chest pressure",
+            "chest tightness",
+            "angina",
         ],
         turn_1_question_vi=(
             "Triệu chứng vùng ngực cần được theo dõi kỹ lưỡng ạ. Bác cho em hỏi:\n"
@@ -146,8 +212,18 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "- Is the pain a heavy crushing sensation, or a sharp pain when moving/breathing?\n"
             "- Does the pain radiate to your left arm, back, or jaw?"
         ),
-        turn_1_quick_replies_vi=["Đè nặng / bóp nghẹt", "Chỉ nhói nhẹ khi thở/xoay người", "Có lan ra cánh tay / cằm", "Không lan"],
-        turn_1_quick_replies_en=["Heavy / crushing pressure", "Sharp with breathing/movement", "Radiating to arm/jaw", "No radiation"],
+        turn_1_quick_replies_vi=[
+            "Đè nặng / bóp nghẹt",
+            "Chỉ nhói nhẹ khi thở/xoay người",
+            "Có lan ra cánh tay / cằm",
+            "Không lan",
+        ],
+        turn_1_quick_replies_en=[
+            "Heavy / crushing pressure",
+            "Sharp with breathing/movement",
+            "Radiating to arm/jaw",
+            "No radiation",
+        ],
         turn_2_question_vi=(
             "Bác có cảm thấy khó thở, vã mồ hôi lạnh, hoặc cơn đau tăng khi đi bộ/vận động gắng sức không ạ?"
         ),
@@ -155,13 +231,27 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "Do you feel shortness of breath, cold sweats, or does the pain worsen during exertion/walking?"
         ),
         turn_2_quick_replies_vi=["Có khó thở / vã mồ hôi", "Đau khi gắng sức", "Không khó thở", "Không rõ"],
-        turn_2_quick_replies_en=["Short of breath / sweating", "Worse with exertion", "No breathing difficulty", "Not sure"]
+        turn_2_quick_replies_en=[
+            "Short of breath / sweating",
+            "Worse with exertion",
+            "No breathing difficulty",
+            "Not sure",
+        ],
     ),
     ProbingClarificationTree(
         category_key="CO_XUONG_KHOP",
         trigger_keywords=[
-            "đau lưng", "mỏi gáy", "đau khớp", "mỏi vai", "tê tay", "tê chân",
-            "back pain", "neck pain", "joint pain", "shoulder pain", "numbness"
+            "đau lưng",
+            "mỏi gáy",
+            "đau khớp",
+            "mỏi vai",
+            "tê tay",
+            "tê chân",
+            "back pain",
+            "neck pain",
+            "joint pain",
+            "shoulder pain",
+            "numbness",
         ],
         turn_1_question_vi=(
             "Bác có thể mô tả rõ hơn:\n"
@@ -173,17 +263,39 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "- Where is the discomfort most pronounced (knee joints, neck/shoulders, or lower spine)?\n"
             "- Does the pain radiate with numbness down your arm or leg?"
         ),
-        turn_1_quick_replies_vi=["Cổ vai gáy", "Cột sống thắt lưng", "Khớp gối", "Có tê lan xuống tay/chân", "Không tê lan"],
-        turn_1_quick_replies_en=["Neck and shoulders", "Lower back (lumbar)", "Knee joints", "Radiating numbness to limbs", "No numbness"],
+        turn_1_quick_replies_vi=[
+            "Cổ vai gáy",
+            "Cột sống thắt lưng",
+            "Khớp gối",
+            "Có tê lan xuống tay/chân",
+            "Không tê lan",
+        ],
+        turn_1_quick_replies_en=[
+            "Neck and shoulders",
+            "Lower back (lumbar)",
+            "Knee joints",
+            "Radiating numbness to limbs",
+            "No numbness",
+        ],
         turn_2_question_vi=(
             "Cơn đau của bác tăng nhiều khi ngồi lâu, làm việc hay lúc sáng sớm ngủ dậy bị cứng khớp ạ?"
         ),
         turn_2_question_en=(
             "Does the discomfort worsen after prolonged sitting/working, or do you experience morning joint stiffness?"
         ),
-        turn_2_quick_replies_vi=["Cứng khớp buổi sáng", "Đau khi ngồi làm việc lâu", "Đau liên tục cả ngày", "Không rõ"],
-        turn_2_quick_replies_en=["Morning stiffness", "Worse after sitting long", "Continuous pain all day", "Not sure"]
-    )
+        turn_2_quick_replies_vi=[
+            "Cứng khớp buổi sáng",
+            "Đau khi ngồi làm việc lâu",
+            "Đau liên tục cả ngày",
+            "Không rõ",
+        ],
+        turn_2_quick_replies_en=[
+            "Morning stiffness",
+            "Worse after sitting long",
+            "Continuous pain all day",
+            "Not sure",
+        ],
+    ),
 ]
 
 
@@ -204,6 +316,7 @@ class DynamicProbingService:
         """Return every non-negated probing tree mentioned in one utterance."""
         text_lower = text.lower()
         from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
+
         negation_svc = get_clinical_negation_service()
         matches: list[ProbingClarificationTree] = []
         seen: set[str] = set()
@@ -224,9 +337,7 @@ class DynamicProbingService:
     ) -> dict[str, dict[str, Any]]:
         """Keep an independent probing budget for each active complaint."""
         synced: dict[str, dict[str, Any]] = {
-            code: dict(value)
-            for code, value in (existing or {}).items()
-            if isinstance(value, dict)
+            code: dict(value) for code, value in (existing or {}).items() if isinstance(value, dict)
         }
         for complaint in (clinical_facts or {}).get("complaints") or []:
             if isinstance(complaint, str):
@@ -270,10 +381,7 @@ class DynamicProbingService:
 
     @staticmethod
     def should_ask_multi_question(probing_by_complaint: dict[str, dict[str, Any]]) -> bool:
-        active = [
-            item for item in probing_by_complaint.values()
-            if item.get("status") == "active"
-        ]
+        active = [item for item in probing_by_complaint.values() if item.get("status") == "active"]
         return len(active) >= 2 and any(int(item.get("questions_asked") or 0) == 0 for item in active)
 
     def find_probing_tree(self, text: str) -> ProbingClarificationTree | None:
@@ -297,8 +405,18 @@ class DynamicProbingService:
 
         # Kiểm tra nếu bệnh nhân không muốn trả lời hoặc không biết
         stop_keywords = [
-            "không biết", "không rõ", "bỏ qua", "không nói được", "thôi", "đặt luôn",
-            "skip", "dont know", "not sure", "pass", "no idea", "just book"
+            "không biết",
+            "không rõ",
+            "bỏ qua",
+            "không nói được",
+            "thôi",
+            "đặt luôn",
+            "skip",
+            "dont know",
+            "not sure",
+            "pass",
+            "no idea",
+            "just book",
         ]
         if any(w in user_lower for w in stop_keywords):
             return None
@@ -347,13 +465,21 @@ class DynamicProbingService:
                 prompts = missing_initial[:2]
                 if len(prompts) == 1 and missing_red_flags:
                     prompts.append(missing_red_flags[0])
-                question = "Dạ, em đã ghi nhận các thông tin bác vừa cung cấp. Em chỉ cần làm rõ thêm: " + "; ".join(prompts) + " ạ?"
+                question = (
+                    "Dạ, em đã ghi nhận các thông tin bác vừa cung cấp. Em chỉ cần làm rõ thêm: "
+                    + "; ".join(prompts)
+                    + " ạ?"
+                )
                 replies = ["Trả lời chi tiết", "Không rõ", "Bỏ qua để xem hướng khám"]
                 return question, replies, tree.category_key
 
             if missing_red_flags:
                 prompts = missing_red_flags[:2]
-                question = "Dạ, em không hỏi lại các thông tin đã có. Bác cho em xác nhận thêm: " + " và ".join(prompts) + " không ạ?"
+                question = (
+                    "Dạ, em không hỏi lại các thông tin đã có. Bác cho em xác nhận thêm: "
+                    + " và ".join(prompts)
+                    + " không ạ?"
+                )
                 replies = ["Có một trong các dấu hiệu trên", "Không có", "Không rõ"]
                 return question, replies, tree.category_key
 
@@ -384,7 +510,11 @@ class DynamicProbingService:
                             q = "Thank you. Do you have any accompanying symptoms: " + " or ".join(prompts) + "?"
                             qr = ["Yes, experiencing some", "No accompanying symptoms", "Not sure"]
                         else:
-                            q = "Dạ, em đã ghi nhận vị trí và thời gian đau. Bác cho em xác nhận thêm: bác có kèm theo " + " hoặc ".join(prompts) + " không ạ?"
+                            q = (
+                                "Dạ, em đã ghi nhận vị trí và thời gian đau. Bác cho em xác nhận thêm: bác có kèm theo "
+                                + " hoặc ".join(prompts)
+                                + " không ạ?"
+                            )
                             qr = ["Có một trong các dấu hiệu trên", "Không có", "Không rõ"]
                         return q, qr, tree.category_key
                     return None
@@ -426,7 +556,11 @@ class DynamicProbingService:
                     q = "I've noted the pain location and nature. Could you clarify " + ", ".join(prompts) + "?"
                     qr = ["Started today", "Several days", "None of those warning signs", "Not sure"]
                 else:
-                    q = "Dạ, em đã ghi nhận vị trí và tính chất đau. Bác cho em biết thêm " + ", ".join(prompts) + " không ạ?"
+                    q = (
+                        "Dạ, em đã ghi nhận vị trí và tính chất đau. Bác cho em biết thêm "
+                        + ", ".join(prompts)
+                        + " không ạ?"
+                    )
                     qr = ["Mới đau hôm nay", "Đã đau vài ngày", "Không có dấu hiệu kèm theo", "Không rõ"]
                 return q, qr, tree.category_key
 
@@ -446,7 +580,11 @@ class DynamicProbingService:
                         q = "Are you experiencing any accompanying symptoms: " + " or ".join(prompts) + "?"
                         qr = ["Yes", "No", "Not sure"]
                     else:
-                        q = "Dạ, em đã ghi nhận tính chất đau bụng. Bác có kèm theo " + " hoặc ".join(prompts) + " không ạ?"
+                        q = (
+                            "Dạ, em đã ghi nhận tính chất đau bụng. Bác có kèm theo "
+                            + " hoặc ".join(prompts)
+                            + " không ạ?"
+                        )
                         qr = ["Có dấu hiệu trên", "Không có", "Không rõ"]
                     return q, qr, tree.category_key
                 return None
@@ -465,6 +603,7 @@ class DynamicProbingService:
 
 # Singleton
 _probing_service = DynamicProbingService()
+
 
 def get_probing_service() -> DynamicProbingService:
     return _probing_service

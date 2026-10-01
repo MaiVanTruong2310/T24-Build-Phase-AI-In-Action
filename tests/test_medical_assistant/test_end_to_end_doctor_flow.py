@@ -24,5 +24,6 @@ async def run_end_to_end_test():
     res2 = await agent.ainvoke({"query": msg2}, config=config)
     print(f"[Agent]:\n{res2.get('response')}")
 
+
 if __name__ == "__main__":
     asyncio.run(run_end_to_end_test())

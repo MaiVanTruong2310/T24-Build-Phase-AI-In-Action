@@ -41,7 +41,9 @@ async def test_full_clinical_guardrails_conversation_flow():
     assert "Đau đầu căng thẳng" not in r4["response"]
     assert "Migraine" not in r4["response"]
     # Kiểm tra không bị reset hay nhồi vào chuỗi triệu chứng làm lệch khoa
-    assert r4.get("suggested_department_name") == "Khoa Thần kinh" or "Thần kinh" in r4.get("suggested_department_name", "")
+    assert r4.get("suggested_department_name") == "Khoa Thần kinh" or "Thần kinh" in r4.get(
+        "suggested_department_name", ""
+    )
 
     # Turn 5: Hỏi "Tôi nên uống thuốc gì?" -> Kích hoạt Guardrail từ chối kê đơn SAF-02
     r5 = await agent.ainvoke({"query": "Tôi nên uống thuốc gì?"}, config=config)

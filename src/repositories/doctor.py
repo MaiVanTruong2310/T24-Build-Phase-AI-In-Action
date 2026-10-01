@@ -71,10 +71,14 @@ class DoctorRepositoryMixin:
         if facility_id:
             statement = statement.join(DoctorFacility).where(DoctorFacility.facility_id == facility_id)
         if service_id:
-            statement = statement.join(DoctorService).join(Service, Service.id == DoctorService.service_id).where(
-                DoctorService.service_id == service_id,
-                DoctorService.active.is_(True),
-                Service.status == "active",
+            statement = (
+                statement.join(DoctorService)
+                .join(Service, Service.id == DoctorService.service_id)
+                .where(
+                    DoctorService.service_id == service_id,
+                    DoctorService.active.is_(True),
+                    Service.status == "active",
+                )
             )
         if specialty_id or facility_id or service_id:
             statement = statement.distinct()

@@ -28,48 +28,33 @@ logger = logging.getLogger(__name__)
 
 class ClinicalFactModel(BaseModel):
     """Mô hình dữ kiện lâm sàng cấu trúc chuẩn y khoa."""
+
     chief_complaint: str | None = Field(
         None,
-        description="Triệu chứng chính hoặc lý do khám chính (e.g. constipation, headache, abdominal_pain, chest_pain, cough, fever, dizziness, back_pain, rash, nausea, sore_throat)."
+        description="Triệu chứng chính hoặc lý do khám chính (e.g. constipation, headache, abdominal_pain, chest_pain, cough, fever, dizziness, back_pain, rash, nausea, sore_throat).",
     )
     positive_facts: list[str] = Field(
         default_factory=list,
-        description="Các triệu chứng / dấu hiệu người bệnh XÁC NHẬN CÓ (e.g. hard_stool, straining, abdominal_bloating, nausea, throbbing_pain, fever, cough, fatigue)."
+        description="Các triệu chứng / dấu hiệu người bệnh XÁC NHẬN CÓ (e.g. hard_stool, straining, abdominal_bloating, nausea, throbbing_pain, fever, cough, fatigue).",
     )
     negative_facts: list[str] = Field(
         default_factory=list,
-        description="Các triệu chứng / dấu hiệu người bệnh PHỦ ĐỊNH, KHÔNG CÓ, hoặc ĐÃ HẾT (e.g. no_fever, no_vomiting, no_chest_pain, unable_to_pass_gas_denied)."
+        description="Các triệu chứng / dấu hiệu người bệnh PHỦ ĐỊNH, KHÔNG CÓ, hoặc ĐÃ HẾT (e.g. no_fever, no_vomiting, no_chest_pain, unable_to_pass_gas_denied).",
     )
-    duration_days: int | None = Field(
-        None,
-        description="Thời gian kéo dài tính theo ngày (nếu người bệnh đề cập)."
-    )
+    duration_days: int | None = Field(None, description="Thời gian kéo dài tính theo ngày (nếu người bệnh đề cập).")
     bowel_interval_days: int | None = Field(
-        None,
-        description="Số ngày giữa các lần đi ngoài nếu liên quan đến tiêu hóa/táo bón."
+        None, description="Số ngày giữa các lần đi ngoài nếu liên quan đến tiêu hóa/táo bón."
     )
     location: str | None = Field(
-        None,
-        description="Vị trí giải phẫu cụ thể (e.g. nửa đầu phải, sau gáy, thượng vị, hạ sườn, ngực trái)."
+        None, description="Vị trí giải phẫu cụ thể (e.g. nửa đầu phải, sau gáy, thượng vị, hạ sườn, ngực trái)."
     )
-    severity: str | None = Field(
-        None,
-        description="Mức độ đau / khó chịu nếu được miêu tả: mild, moderate, severe."
-    )
+    severity: str | None = Field(None, description="Mức độ đau / khó chịu nếu được miêu tả: mild, moderate, severe.")
     qualifiers: list[str] = Field(
         default_factory=list,
-        description="Tính chất cơn đau hoặc đặc điểm: nhói, âm ỉ, quặn thắt, lan ra tay, sợ ánh sáng, lạnh run."
+        description="Tính chất cơn đau hoặc đặc điểm: nhói, âm ỉ, quặn thắt, lan ra tay, sợ ánh sáng, lạnh run.",
     )
-    confidence: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Độ tin cậy của việc trích xuất."
-    )
-    reasoning: str | None = Field(
-        None,
-        description="Tóm tắt ngắn gọn lý do phân loại dữ kiện."
-    )
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Độ tin cậy của việc trích xuất.")
+    reasoning: str | None = Field(None, description="Tóm tắt ngắn gọn lý do phân loại dữ kiện.")
 
 
 EXTRACTION_SYSTEM_PROMPT = """Bạn là Chuyên gia Trích xuất Dữ kiện Lâm sàng Y tế (Clinical Facts Extractor) cho hệ thống tiếp đón bệnh viện.
@@ -108,18 +93,52 @@ class LLMClinicalExtractor:
 
         # Các từ biểu thị đối lập / mô tả hội thoại đời thường phức tạp
         conversational_markers = [
-            "tưởng là", "nghĩ là", "uống thuốc mà", "nhưng mà", "tuy nhiên",
-            "khó chịu kiểu", "cứ ngỡ", "mấy hôm trước", "tự nhiên lại",
-            "thấy lạ", "cảm giác như", "hơi hơi", "lúc đau lúc không",
-            "nhưng không", "nhưng", "tuy vậy", "dữ dội", "từ hôm kia"
+            "tưởng là",
+            "nghĩ là",
+            "uống thuốc mà",
+            "nhưng mà",
+            "tuy nhiên",
+            "khó chịu kiểu",
+            "cứ ngỡ",
+            "mấy hôm trước",
+            "tự nhiên lại",
+            "thấy lạ",
+            "cảm giác như",
+            "hơi hơi",
+            "lúc đau lúc không",
+            "nhưng không",
+            "nhưng",
+            "tuy vậy",
+            "dữ dội",
+            "từ hôm kia",
         ]
         has_complex_phrasing = any(m in text_clean for m in conversational_markers)
 
         # Kiểm tra xem có từ chỉ triệu chứng tổng quát không
         clinical_keywords = [
-            "đau", "nhức", "mỏi", "sốt", "ho", "mệt", "tức", "buốt", "chóng mặt",
-            "nôn", "ói", "tiêu", "chảy", "ngứa", "phát ban", "khó thở", "hụt hơi",
-            "nặng đầu", "ê ẩm", "khó chịu", "sụt cân", "chướng", "ì ạch"
+            "đau",
+            "nhức",
+            "mỏi",
+            "sốt",
+            "ho",
+            "mệt",
+            "tức",
+            "buốt",
+            "chóng mặt",
+            "nôn",
+            "ói",
+            "tiêu",
+            "chảy",
+            "ngứa",
+            "phát ban",
+            "khó thở",
+            "hụt hơi",
+            "nặng đầu",
+            "ê ẩm",
+            "khó chịu",
+            "sụt cân",
+            "chướng",
+            "ì ạch",
         ]
         has_clinical_word = any(w in text_clean for w in clinical_keywords)
 
@@ -163,7 +182,7 @@ class LLMClinicalExtractor:
 
             prompt_messages = [
                 {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Lời mô tả của bệnh nhân: \"{text}\""},
+                {"role": "user", "content": f'Lời mô tả của bệnh nhân: "{text}"'},
             ]
 
             llm_result: ClinicalFactModel = await structured_llm.ainvoke(prompt_messages)

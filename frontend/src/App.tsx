@@ -3,7 +3,13 @@ import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import type { AppDispatch } from './app/store'
 import { initializeAuth, logout, sessionChanged } from './features/auth/authSlice'
-import { AUTH_SESSION_KEY, readPublishedSession } from './features/auth/session'
+import {
+  ACCESS_TOKEN_KEY,
+  AUTH_SESSION_KEY,
+  AUTH_TOKENS_UPDATED_EVENT,
+  REFRESH_TOKEN_KEY,
+  readPublishedSession,
+} from './features/auth/session'
 import { PatientLayout, RootLayout, StaffLayout, AuthLayout } from './layouts'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
@@ -75,7 +81,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <StaffDashboard /> },
       { path: 'overview', element: <StaffDashboard /> },
-      { path: 'queue', element: <EmergencyCoordinator /> },
+      { path: 'queue', element: <AppointmentApproval /> },
+      { path: 'emergency', element: <EmergencyCoordinator /> },
       { path: 'chat', element: <ChatTakeover /> },
       { path: 'doctors', element: <DoctorManagement /> },
       { path: 'doctors/create', element: <CreateDoctor /> },
@@ -95,18 +102,21 @@ export function App() {
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === AUTH_SESSION_KEY) {
+      if (event.key && [AUTH_SESSION_KEY, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY].includes(event.key)) {
         dispatch(sessionChanged(readPublishedSession()))
       }
     }
+    const handleTokensUpdated = () => dispatch(sessionChanged(readPublishedSession()))
     const handleUnauthorized = () => dispatch(logout())
 
     window.addEventListener('storage', handleStorageChange)
+    window.addEventListener(AUTH_TOKENS_UPDATED_EVENT, handleTokensUpdated)
     window.addEventListener('auth:unauthorized', handleUnauthorized)
     void dispatch(initializeAuth())
 
     return () => {
       window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener(AUTH_TOKENS_UPDATED_EVENT, handleTokensUpdated)
       window.removeEventListener('auth:unauthorized', handleUnauthorized)
     }
   }, [dispatch])

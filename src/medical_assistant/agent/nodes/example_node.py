@@ -17,6 +17,7 @@ from src.medical_assistant.domain.triage_service import get_triage_service
 
 MAX_DETAILS_HISTORY = 4
 
+
 async def analyze_node(state: AgentState) -> dict:
     query = state.get("query") or state.get("user_input", "")
     current_lang = state.get("language")
@@ -34,7 +35,9 @@ async def analyze_node(state: AgentState) -> dict:
 
     current_turn = state.get("probing_turn") or 0
     active_category = state.get("active_probing_category")
-    active_categories = list(state.get("active_probing_categories") or ([] if not active_category else [active_category]))
+    active_categories = list(
+        state.get("active_probing_categories") or ([] if not active_category else [active_category])
+    )
     probing_by_complaint = dict(state.get("probing_by_complaint") or {})
     collected_details = state.get("collected_details") or []
     current_dept = state.get("suggested_department_name")
@@ -97,7 +100,9 @@ async def analyze_node(state: AgentState) -> dict:
                 "patient_guidance": emergency_fast_check.patient_guidance,
                 "triggered_red_flags": emergency_fast_check.triggered_red_flags,
                 "triggered_rule_ids": emergency_fast_check.triggered_rule_ids,
-                "quick_replies": ["Gọi cấp cứu 115 ngay", "Đến phòng Cấp cứu gần nhất"] if lang == "vi" else ["Call Emergency 115", "Go to Emergency Room"],
+                "quick_replies": ["Gọi cấp cứu 115 ngay", "Đến phòng Cấp cứu gần nhất"]
+                if lang == "vi"
+                else ["Call Emergency 115", "Go to Emergency Room"],
                 "tokens_saved": True,
             },
         }
@@ -129,11 +134,22 @@ async def analyze_node(state: AgentState) -> dict:
     # HYBRID DIALOGUE V2 INTEGRATION
     hybrid_service = get_hybrid_dialogue_service()
     allowed_actions = [
-        "clarify_visit_purpose", "ask_clarifying_question", "suggest_specialty",
-        "search_available_slot", "hold_slot", "answer_faq", "show_department_info", "show_facility_info",
-        "show_facility_doctors", "start_facility_booking",
-        "decline_medication_request", "respond_to_diagnosis_request", "request_safety_review",
-        "request_human_help", "acknowledge_language_change", "out_of_scope_decline"
+        "clarify_visit_purpose",
+        "ask_clarifying_question",
+        "suggest_specialty",
+        "search_available_slot",
+        "hold_slot",
+        "answer_faq",
+        "show_department_info",
+        "show_facility_info",
+        "show_facility_doctors",
+        "start_facility_booking",
+        "decline_medication_request",
+        "respond_to_diagnosis_request",
+        "request_safety_review",
+        "request_human_help",
+        "acknowledge_language_change",
+        "out_of_scope_decline",
     ]
 
     last_assistant_question = state.get("metadata", {}).get("clarification_question")
@@ -180,7 +196,7 @@ async def analyze_node(state: AgentState) -> dict:
         state={**state, "language": lang},
         recent_turns=collected_details,
         last_assistant_question=last_assistant_question,
-        allowed_actions=allowed_actions
+        allowed_actions=allowed_actions,
     )
     skip_llm = False
 
@@ -210,14 +226,20 @@ async def analyze_node(state: AgentState) -> dict:
             v2_response.action_args.slot_id = intent_check.get("slot_id")
         elif intent_name == "BOOKING_CONTACT_REQUEST":
             v2_response.proposed_action = "request_human_help"
-        elif intent_name == "VISIT_PURPOSE_CLARIFICATION" and v2_response.proposed_action not in {"search_available_slot", "show_facility_info", "show_department_info"}:
+        elif intent_name == "VISIT_PURPOSE_CLARIFICATION" and v2_response.proposed_action not in {
+            "search_available_slot",
+            "show_facility_info",
+            "show_department_info",
+        }:
             v2_response.proposed_action = "clarify_visit_purpose"
         elif intent_name == "DESCRIBE_MORE_SYMPTOMS":
             v2_response.proposed_action = "clarify_visit_purpose"
             if lang == "vi":
                 v2_response.draft_response = "Dạ, bác hãy chia sẻ rõ hơn về triệu chứng hoặc cảm giác khó chịu/đau đang gặp, bắt đầu từ khi nào và mức độ hiện tại ạ?"
             else:
-                v2_response.draft_response = "Please describe the symptom or discomfort, when it began, and how severe it is now."
+                v2_response.draft_response = (
+                    "Please describe the symptom or discomfort, when it began, and how severe it is now."
+                )
         elif intent_name == "VIEW_SCHEDULE":
             v2_response.proposed_action = "search_available_slot"
             if intent_check.get("requested_days"):
@@ -290,6 +312,7 @@ async def analyze_node(state: AgentState) -> dict:
     triage_result = triage_service.evaluate_symptoms(combined_symptoms_text, language=lang)
     triage_result = triage_service.resolve_multi_symptom(triage_result, clinical_facts, language=lang)
     current_query_triage = triage_service.evaluate_symptoms(query, language=lang)
+
     def serialize_candidate(candidate):
         return {
             "code": candidate.code,
@@ -306,14 +329,8 @@ async def analyze_node(state: AgentState) -> dict:
             "suppression_reason": candidate.suppression_reason,
         }
 
-    routing_candidates = [
-        serialize_candidate(candidate)
-        for candidate in triage_result.candidate_specialties
-    ]
-    candidate_specialties = [
-        serialize_candidate(candidate)
-        for candidate in triage_result.recommended_specialties
-    ]
+    routing_candidates = [serialize_candidate(candidate) for candidate in triage_result.candidate_specialties]
+    candidate_specialties = [serialize_candidate(candidate) for candidate in triage_result.recommended_specialties]
 
     # Validation against safety rules (Rule vs LLM)
     is_emergency = triage_result.is_emergency
@@ -334,7 +351,7 @@ async def analyze_node(state: AgentState) -> dict:
                 "patient_guidance": triage_result.patient_guidance,
                 "needs_more_probing": False,
                 "tokens_saved": False,
-                "v2_draft_response": v2_response.draft_response
+                "v2_draft_response": v2_response.draft_response,
             },
         }
 
@@ -347,11 +364,7 @@ async def analyze_node(state: AgentState) -> dict:
         suggested_dept_code = triage_result.recommended_specialties[0].code
     elif rule_facts.get("chief_complaint") and not department_query:
         suggested_dept_code = current_query_triage.suggested_specialty
-    elif (
-        not department_query
-        and v2_response.candidate_specialties
-        and not clinical_facts.get("complaints")
-    ):
+    elif not department_query and v2_response.candidate_specialties and not clinical_facts.get("complaints"):
         suggested_dept_code = v2_response.candidate_specialties[0].specialty_key
     if not suggested_dept_code:
         suggested_dept_code = triage_result.suggested_specialty
@@ -368,16 +381,17 @@ async def analyze_node(state: AgentState) -> dict:
         }
         if triage_result.ats_level.value > ATSLevel.LEVEL_3_URGENT.value:
             has_explicit_clinical_evidence = bool(
-                clinical_facts.get("active_complaint_codes")
-                or clinical_facts.get("positive_facts")
+                clinical_facts.get("active_complaint_codes") or clinical_facts.get("positive_facts")
             )
             if has_explicit_clinical_evidence:
-                safety_update.update({
-                "ats_level": ATSLevel.LEVEL_3_URGENT,
-                "urgency_tier": UrgencyTier.SAME_DAY,
-                "care_setting": "URGENT_CLINICAL_ASSESSMENT",
-                "acuity_status": "PROVISIONAL",
-                })
+                safety_update.update(
+                    {
+                        "ats_level": ATSLevel.LEVEL_3_URGENT,
+                        "urgency_tier": UrgencyTier.SAME_DAY,
+                        "care_setting": "URGENT_CLINICAL_ASSESSMENT",
+                        "acuity_status": "PROVISIONAL",
+                    }
+                )
         triage_result = triage_result.model_copy(update=safety_update)
     probing_service = get_probing_service()
     probing_by_complaint = probing_service.sync_probing_state(clinical_facts, probing_by_complaint)
@@ -394,7 +408,12 @@ async def analyze_node(state: AgentState) -> dict:
         action = "ask_clarifying_question"
     # A model may jump straight to a specialty while duration/severity/red flags
     # are still unknown. Keep one bounded clinical clarification before routing.
-    if rule_facts.get("chief_complaint") and current_turn < 2 and action == "suggest_specialty" and not triage_result.needs_multi_symptom_clarification:
+    if (
+        rule_facts.get("chief_complaint")
+        and current_turn < 2
+        and action == "suggest_specialty"
+        and not triage_result.needs_multi_symptom_clarification
+    ):
         if probing_service.find_probing_tree(query) or active_category:
             action = "ask_clarifying_question"
 
@@ -433,9 +452,11 @@ async def analyze_node(state: AgentState) -> dict:
                 if complaint_code:
                     top_complaints.append(complaint_labels[complaint_code][0 if lang == "vi" else 1])
             quick_replies = (
-                [f"{name} là chính" for name in top_complaints] + ["Các triệu chứng tương đương", "Có dấu hiệu nặng lên"]
-                if lang == "vi" else
-                [f"{name} is the main concern" for name in top_complaints] + ["Symptoms are similar", "Symptoms are worsening"]
+                [f"{name} là chính" for name in top_complaints]
+                + ["Các triệu chứng tương đương", "Có dấu hiệu nặng lên"]
+                if lang == "vi"
+                else [f"{name} is the main concern" for name in top_complaints]
+                + ["Symptoms are similar", "Symptoms are worsening"]
             )
             active_codes = list(clinical_facts.get("active_complaint_codes") or [])
             probing_by_complaint = probing_service.mark_multi_question_asked(probing_by_complaint, active_codes)
@@ -453,7 +474,8 @@ async def analyze_node(state: AgentState) -> dict:
         if probing_result:
             next_question, quick_replies, new_category = probing_result
             category_codes = [
-                code for code, item in probing_by_complaint.items()
+                code
+                for code, item in probing_by_complaint.items()
                 if item.get("status") == "active" and item.get("category") == new_category
             ]
             probing_by_complaint = probing_service.mark_multi_question_asked(
@@ -512,12 +534,14 @@ async def analyze_node(state: AgentState) -> dict:
         workflow_status = "TRIAGED_AWAITING_SCHEDULE"
 
     from src.medical_assistant.domain.language_service import canonicalize_specialty_code
+
     canonical_dept = canonicalize_specialty_code(suggested_dept_code)
     department_display = get_specialty_display_name(canonical_dept, "vi")
 
     available_slots = state.get("available_slots") or []
     if action == "search_available_slot":
         from src.medical_assistant.domain.doctor_schedule_service import get_doctor_schedule_service
+
         doctor_service = get_doctor_schedule_service()
         doctors = await asyncio.to_thread(
             doctor_service.get_available_doctors_and_slots,
@@ -579,7 +603,9 @@ async def analyze_node(state: AgentState) -> dict:
         "emergency_warning": triage_result.patient_guidance if is_emergency else None,
         "ats_level": None if is_non_clinical else triage_result.ats_level.value,
         "urgency_tier": None if is_non_clinical else triage_result.urgency_tier.value,
-        "max_booking_days": 0 if workflow_status == "SAFETY_REVIEW" else (None if is_non_clinical else current_max_days),
+        "max_booking_days": 0
+        if workflow_status == "SAFETY_REVIEW"
+        else (None if is_non_clinical else current_max_days),
         "acuity_status": triage_result.acuity_status,
         "disposition": triage_result.disposition,
         "suggested_department_code": None if workflow_status == "VISIT_PURPOSE_CLARIFICATION" else canonical_dept,
@@ -622,7 +648,7 @@ async def analyze_node(state: AgentState) -> dict:
             "conflict_reason": triage_result.conflict_reason,
             "acuity_status": triage_result.acuity_status,
             "disposition": triage_result.disposition,
-        }
+        },
     }
 
 
@@ -655,10 +681,7 @@ async def respond_node(state: AgentState) -> dict:
         response, quick_replies = get_guardrail_service().get_diagnosis_guardrail_response(symptoms, spec_name, lang)
         candidates = state.get("candidate_specialties") or []
         if len(candidates) >= 2:
-            secondary_names = ", ".join(
-                item.get("name") or item.get("code", "")
-                for item in candidates[1:3]
-            )
+            secondary_names = ", ".join(item.get("name") or item.get("code", "") for item in candidates[1:3])
             if lang == "vi":
                 response += (
                     "\n\nDo triệu chứng thuộc nhiều nhóm cơ quan, hướng ưu tiên vẫn là "
@@ -697,10 +720,14 @@ async def respond_node(state: AgentState) -> dict:
             response = (
                 "Dạ, thông tin hiện có cần được nhân viên y tế đánh giá trực tiếp trong hôm nay trước khi tìm lịch khám thường. "
                 "Nếu triệu chứng đang tăng nhanh, đau dữ dội, khó thở, lơ mơ hoặc chảy máu nhiều, bác hãy gọi 115 hoặc đến Cấp cứu gần nhất."
-                if lang == "vi" else
-                "Your information requires an in-person clinical assessment today before routine scheduling. If symptoms are ongoing, severe, or worsening, seek emergency care now."
+                if lang == "vi"
+                else "Your information requires an in-person clinical assessment today before routine scheduling. If symptoms are ongoing, severe, or worsening, seek emergency care now."
             )
-        quick_replies = ["Các triệu chứng vẫn đang tiếp diễn", "Có thêm dấu hiệu nguy hiểm"] if lang == "vi" else ["Symptoms are still ongoing", "There are additional warning signs"]
+        quick_replies = (
+            ["Các triệu chứng vẫn đang tiếp diễn", "Có thêm dấu hiệu nguy hiểm"]
+            if lang == "vi"
+            else ["Symptoms are still ongoing", "There are additional warning signs"]
+        )
     elif workflow_status == "DEPARTMENT_INFO":
         # Retrieve comparison flag from meta
         comparison_requested = meta.get("comparison_requested", False)
@@ -716,6 +743,7 @@ async def respond_node(state: AgentState) -> dict:
         quick_replies = info_replies
     elif workflow_status == "FACILITY_INFO":
         from src.medical_assistant.domain.facility_service import get_facility_service
+
         region_filter = meta.get("region_filter")
         district_filter = meta.get("district_filter")
         facility_name_query = meta.get("facility_name_query")
@@ -733,6 +761,7 @@ async def respond_node(state: AgentState) -> dict:
         )
     elif workflow_status == "FACILITY_DOCTORS":
         from src.medical_assistant.domain.facility_service import get_facility_service
+
         fac_q = meta.get("facility_name_query") or state.get("metadata", {}).get("facility_preference") or "Vinmec"
         response, quick_replies = await asyncio.to_thread(
             get_facility_service().get_facility_doctors_response,
@@ -742,6 +771,7 @@ async def respond_node(state: AgentState) -> dict:
         )
     elif workflow_status == "FACILITY_BOOKING_START":
         from src.medical_assistant.domain.facility_service import get_facility_service
+
         fac_q = meta.get("facility_name_query") or state.get("metadata", {}).get("facility_preference") or "Vinmec"
         response, quick_replies = await asyncio.to_thread(
             get_facility_service().get_facility_booking_guidance_response,
@@ -756,7 +786,11 @@ async def respond_node(state: AgentState) -> dict:
         if slot_id:
             for doctor in available_docs:
                 candidate = next(
-                    (slot for slot in doctor.get("available_slots", []) if str(slot.get("schedule_id", "")).lower() == slot_id),
+                    (
+                        slot
+                        for slot in doctor.get("available_slots", [])
+                        if str(slot.get("schedule_id", "")).lower() == slot_id
+                    ),
                     None,
                 )
                 if candidate:
@@ -766,10 +800,14 @@ async def respond_node(state: AgentState) -> dict:
             response = (
                 "Dạ, mã lịch này chưa được database xác minh hoặc không còn trong kết quả hiện tại. "
                 "Em chưa thể báo đã giữ chỗ. Bác có thể xem lại lịch hoặc gửi yêu cầu để điều phối viên hỗ trợ."
-                if lang == "vi" else
-                "This slot is not verified by the database. I cannot claim it is reserved. You may review availability or request coordinator assistance."
+                if lang == "vi"
+                else "This slot is not verified by the database. I cannot claim it is reserved. You may review availability or request coordinator assistance."
             )
-            quick_replies = ["Xem lịch trống", "Để lại thông tin liên hệ"] if lang == "vi" else ["View availability", "Leave contact details"]
+            quick_replies = (
+                ["Xem lịch trống", "Để lại thông tin liên hệ"]
+                if lang == "vi"
+                else ["View availability", "Leave contact details"]
+            )
         else:
             booking_intake = {
                 "required": True,
@@ -793,8 +831,8 @@ async def respond_node(state: AgentState) -> dict:
                 "Dạ, vì bác chưa đăng nhập nên em chưa thể tự xác nhận hay khóa lịch. "
                 "Bác vui lòng điền phiếu liên hệ bên dưới. Chỉ khi phiếu được lưu thành công, hệ thống mới cấp mã yêu cầu; "
                 "điều phối viên sẽ gọi lại để xác minh thông tin và chốt lịch chính thức."
-                if lang == "vi" else
-                "Because you are not signed in, I cannot confirm or lock an appointment automatically. Please complete the contact form below. A coordinator will verify the details and finalize the appointment."
+                if lang == "vi"
+                else "Because you are not signed in, I cannot confirm or lock an appointment automatically. Please complete the contact form below. A coordinator will verify the details and finalize the appointment."
             )
             quick_replies = []
     elif workflow_status == "TRIAGED_READY_FOR_BOOKING":
@@ -804,27 +842,27 @@ async def respond_node(state: AgentState) -> dict:
         doctors_text = ""
         if available_docs:
             has_verified_slots = any(
-                slot.get("verified")
-                for doctor in available_docs
-                for slot in doctor.get("available_slots", [])
+                slot.get("verified") for doctor in available_docs for slot in doctor.get("available_slots", [])
             )
             if lang == "en":
                 doctors_text = f"\n\n👨‍⚕️ **Sourced specialists for {spec_display}:**\n"
                 for idx, doc in enumerate(available_docs, 1):
-                    exp = doc.get('years_of_experience', 0)
+                    exp = doc.get("years_of_experience", 0)
                     exp_text = f" - {exp} years of experience" if exp else ""
                     doctors_text += f"\n**{idx}. Dr. {doc['full_name']}** ({doc['title']}{exp_text})\n"
                     if doc.get("workplace"):
                         doctors_text += f"   • Workplace: {doc['workplace']}\n"
                     for slot in doc.get("available_slots", []):
                         if slot.get("verified"):
-                            doctors_text += f"   • Verified time: `{slot['starts_at']}` (Slot ID: `{slot['schedule_id']}`)\n"
+                            doctors_text += (
+                                f"   • Verified time: `{slot['starts_at']}` (Slot ID: `{slot['schedule_id']}`)\n"
+                            )
                     if doc.get("source_url"):
                         doctors_text += f"   • [Official profile]({doc['source_url']})\n"
             else:
                 doctors_text = f"\n\n👨‍⚕️ **Bác sĩ phù hợp có hồ sơ nguồn ({spec_display}):**\n"
                 for idx, doc in enumerate(available_docs, 1):
-                    exp = doc.get('years_of_experience', 0)
+                    exp = doc.get("years_of_experience", 0)
                     exp_text = f" - {exp} năm kinh nghiệm" if exp else ""
                     doctors_text += f"\n**{idx}. {doc['full_name']}** ({doc['title']}{exp_text})\n"
                     specialties = ", ".join(doc.get("specialties") or [])
@@ -840,26 +878,38 @@ async def respond_node(state: AgentState) -> dict:
             if has_verified_slots:
                 prefix = (
                     f"Em đã kiểm tra lịch được database xác minh tại **Khoa {spec_display}** trong {max_days} ngày tới."
-                    if lang == "vi" else
-                    f"I found database-verified availability at **{spec_display}** for the next {max_days} days."
+                    if lang == "vi"
+                    else f"I found database-verified availability at **{spec_display}** for the next {max_days} days."
                 )
                 quick_replies = []
             else:
                 prefix = (
                     "Database hiện chưa có lịch trống được xác minh. Em chỉ hiển thị hồ sơ bác sĩ từ dữ liệu crawl có URL nguồn; "
                     "đây không phải xác nhận bác sĩ đang rảnh."
-                    if lang == "vi" else
-                    "The database currently has no verified availability. These sourced doctor profiles do not confirm that the doctors are free."
+                    if lang == "vi"
+                    else "The database currently has no verified availability. These sourced doctor profiles do not confirm that the doctors are free."
                 )
-                quick_replies = ["Để lại thông tin để điều phối viên liên hệ", "Chọn cơ sở khác"] if lang == "vi" else ["Request coordinator contact", "Choose another facility"]
+                quick_replies = (
+                    ["Để lại thông tin để điều phối viên liên hệ", "Chọn cơ sở khác"]
+                    if lang == "vi"
+                    else ["Request coordinator contact", "Choose another facility"]
+                )
             response = f"{prefix}{doctors_text}"
         else:
-            response = "Xin lỗi bác, hiện tại em chưa tìm thấy lịch khám phù hợp. Bác có muốn chọn ngày khác hoặc để em hỗ trợ thêm không ạ?" if lang == "vi" else "Sorry, I couldn't find any available slots. Would you like to try another date?"
+            response = (
+                "Xin lỗi bác, hiện tại em chưa tìm thấy lịch khám phù hợp. Bác có muốn chọn ngày khác hoặc để em hỗ trợ thêm không ạ?"
+                if lang == "vi"
+                else "Sorry, I couldn't find any available slots. Would you like to try another date?"
+            )
             quick_replies = ["Chọn ngày khác"] if lang == "vi" else ["Choose another date"]
     elif workflow_status in ["PROBING_IN_PROGRESS", "TRIAGED_AWAITING_SCHEDULE", "VISIT_PURPOSE_CLARIFICATION"]:
         if workflow_status == "VISIT_PURPOSE_CLARIFICATION" and meta.get("describe_more_requested"):
             response = v2_draft
-            quick_replies = ["Mô tả triệu chứng chính", "Triệu chứng mới xuất hiện", "Quay lại"] if lang == "vi" else ["Describe the main symptom", "New symptom", "Go back"]
+            quick_replies = (
+                ["Mô tả triệu chứng chính", "Triệu chứng mới xuất hiện", "Quay lại"]
+                if lang == "vi"
+                else ["Describe the main symptom", "New symptom", "Go back"]
+            )
         elif workflow_status == "VISIT_PURPOSE_CLARIFICATION":
             response, quick_replies = get_guardrail_service().get_visit_purpose_clarification_response(lang)
         elif workflow_status == "TRIAGED_AWAITING_SCHEDULE":
@@ -870,16 +920,20 @@ async def respond_node(state: AgentState) -> dict:
                     f"Dạ, bác đang có triệu chứng thuộc nhiều nhóm cơ quan. Hướng ưu tiên hiện tại là **Khoa {spec_display}**; "
                     f"đồng thời cần cân nhắc **{other_names}** dựa trên diễn biến và các dấu hiệu kèm theo. "
                     "Bác có muốn em tìm lịch theo hướng ưu tiên này không ạ?"
-                    if lang == "vi" else
-                    f"Your symptoms span more than one clinical system. The current priority is **{spec_display}**, while **{other_names}** also remains relevant. Would you like me to check appointments for the priority specialty?"
+                    if lang == "vi"
+                    else f"Your symptoms span more than one clinical system. The current priority is **{spec_display}**, while **{other_names}** also remains relevant. Would you like me to check appointments for the priority specialty?"
                 )
             else:
                 response = (
                     f"Dạ, dựa trên thông tin đã ghi nhận, hướng khám phù hợp là **Khoa {spec_display}**. Bác có muốn em tìm lịch khám phù hợp không ạ?"
-                    if lang == "vi" else
-                    f"Based on the information provided, an evaluation at **{spec_display}** is appropriate. Would you like me to check available appointments?"
+                    if lang == "vi"
+                    else f"Based on the information provided, an evaluation at **{spec_display}** is appropriate. Would you like me to check available appointments?"
                 )
-            quick_replies = [f"Xem lịch {spec_display}", "Mô tả thêm triệu chứng"] if lang == "vi" else [f"View {spec_display} schedule", "Add symptom details"]
+            quick_replies = (
+                [f"Xem lịch {spec_display}", "Mô tả thêm triệu chứng"]
+                if lang == "vi"
+                else [f"View {spec_display} schedule", "Add symptom details"]
+            )
         else:
             clinical_facts = state.get("clinical_facts") or {}
             chief = clinical_facts.get("chief_complaint")
@@ -887,21 +941,37 @@ async def respond_node(state: AgentState) -> dict:
                 response = f"I've noted your {chief.replace('_', ' ')}. {clarification or v2_draft}"
             elif lang == "vi":
                 detail = clarification or v2_draft
-                response = detail if detail.startswith("Dạ, em đã ghi nhận") else f"Dạ, em đã ghi nhận triệu chứng của bác.\n\n{detail}"
+                response = (
+                    detail
+                    if detail.startswith("Dạ, em đã ghi nhận")
+                    else f"Dạ, em đã ghi nhận triệu chứng của bác.\n\n{detail}"
+                )
             else:
                 response = clarification or v2_draft or "How may I help further?"
     elif workflow_status == "HUMAN_HELP_REQUESTED":
-        response = "Dạ, em chưa thể xác nhận đã kết nối nhân viên ngay trong cuộc trò chuyện này. Bác có thể chọn kênh hỗ trợ trực tiếp để được tiếp nhận." if lang == "vi" else "I cannot confirm a live handoff in this chat. Please choose a direct support channel."
+        response = (
+            "Dạ, em chưa thể xác nhận đã kết nối nhân viên ngay trong cuộc trò chuyện này. Bác có thể chọn kênh hỗ trợ trực tiếp để được tiếp nhận."
+            if lang == "vi"
+            else "I cannot confirm a live handoff in this chat. Please choose a direct support channel."
+        )
     elif workflow_status == "LANGUAGE_CHANGED":
-        response = "Dạ, em đã chuyển sang tiếng Việt. Bác muốn em tiếp tục hỗ trợ nội dung nào ạ?" if lang == "vi" else "I've switched to English. How may I continue helping you?"
+        response = (
+            "Dạ, em đã chuyển sang tiếng Việt. Bác muốn em tiếp tục hỗ trợ nội dung nào ạ?"
+            if lang == "vi"
+            else "I've switched to English. How may I continue helping you?"
+        )
     elif workflow_status == "SOCIAL_REDIRECT":
         response = (
             "Dạ, em hiểu đây có vẻ là chuyện cá nhân. Em không đánh giá hay suy đoán về người đó. "
             "Nếu bác muốn, em có thể tiếp tục hỗ trợ vấn đề sức khỏe hoặc yêu cầu đặt lịch đang trao đổi."
-            if lang == "vi" else
-            "That sounds like a personal matter. I won't judge or speculate about that person. I can continue helping with your health or appointment request."
+            if lang == "vi"
+            else "That sounds like a personal matter. I won't judge or speculate about that person. I can continue helping with your health or appointment request."
         )
-        quick_replies = ["Tiếp tục vấn đề sức khỏe của tôi", "Xem lại chuyên khoa đã gợi ý"] if lang == "vi" else ["Continue my health concern", "Review the suggested specialty"]
+        quick_replies = (
+            ["Tiếp tục vấn đề sức khỏe của tôi", "Xem lại chuyên khoa đã gợi ý"]
+            if lang == "vi"
+            else ["Continue my health concern", "Review the suggested specialty"]
+        )
     elif workflow_status == "THIRD_PARTY_HEALTH_GUIDANCE":
         topic = meta.get("third_party_topic")
         if topic == "infertility":
@@ -909,35 +979,51 @@ async def respond_node(state: AgentState) -> dict:
                 "Dạ, nếu đây là tình trạng của một người khác, em không thể xác nhận chẩn đoán từ lời kể gián tiếp. "
                 "Nếu người đó đã được đánh giá hoặc đang lo về vô sinh/hiếm muộn, hướng phù hợp là **Trung tâm Hỗ trợ sinh sản**, "
                 "nơi có thể phối hợp đánh giá cả nam khoa và sản phụ khoa. Chính người cần khám nên trực tiếp cung cấp thông tin hoặc đồng ý trước khi tạo yêu cầu đặt lịch."
-                if lang == "vi" else
-                "I cannot confirm another person's diagnosis from a second-hand account. For infertility concerns, a reproductive medicine service can coordinate male and female fertility assessment. The patient should provide or consent to their own booking details."
+                if lang == "vi"
+                else "I cannot confirm another person's diagnosis from a second-hand account. For infertility concerns, a reproductive medicine service can coordinate male and female fertility assessment. The patient should provide or consent to their own booking details."
             )
-            quick_replies = ["Xem thông tin Hỗ trợ sinh sản", "Quay lại vấn đề sức khỏe của tôi"] if lang == "vi" else ["View fertility service information", "Return to my health concern"]
+            quick_replies = (
+                ["Xem thông tin Hỗ trợ sinh sản", "Quay lại vấn đề sức khỏe của tôi"]
+                if lang == "vi"
+                else ["View fertility service information", "Return to my health concern"]
+            )
         else:
             response = (
                 "Dạ, em có thể cung cấp định hướng chung, nhưng không thể đánh giá sức khỏe của người khác từ lời kể gián tiếp. "
                 "Người cần khám nên trực tiếp mô tả triệu chứng hoặc đồng ý để cung cấp thông tin đặt lịch."
-                if lang == "vi" else
-                "I can provide general guidance, but I cannot assess another person's health from a second-hand account. The patient should describe their symptoms directly or consent to booking."
+                if lang == "vi"
+                else "I can provide general guidance, but I cannot assess another person's health from a second-hand account. The patient should describe their symptoms directly or consent to booking."
             )
             quick_replies = ["Quay lại vấn đề sức khỏe của tôi"] if lang == "vi" else ["Return to my health concern"]
     elif workflow_status == "OUT_OF_SCOPE":
-        response = "Dạ, em chỉ có thể hỗ trợ định hướng khám, thông tin bệnh viện và lịch hẹn trong phạm vi hệ thống." if lang == "vi" else "I can only help with care navigation, hospital information, and appointments within this system."
+        response = (
+            "Dạ, em chỉ có thể hỗ trợ định hướng khám, thông tin bệnh viện và lịch hẹn trong phạm vi hệ thống."
+            if lang == "vi"
+            else "I can only help with care navigation, hospital information, and appointments within this system."
+        )
     else:
         response = v2_draft if v2_draft else "Xin lỗi, tôi không thể xử lý yêu cầu của bạn."
 
     full_response = response if workflow_status in {"SECURITY_BLOCKED", "SOCIAL_REDIRECT"} else response + disclaimer
 
     from src.medical_assistant.domain.security.dlp_service import get_dlp_service
+
     dlp_service = get_dlp_service()
-    dlp_scan = dlp_service.sanitize(full_response, allowed_user_id=state.get("user_id"), allowed_user_phone=state.get("patient_phone"))
+    dlp_scan = dlp_service.sanitize(
+        full_response, allowed_user_id=state.get("user_id"), allowed_user_phone=state.get("patient_phone")
+    )
     full_response = dlp_scan.sanitized_text
 
     from src.medical_assistant.domain.token_counter import get_token_counter
+
     token_counter = get_token_counter()
     llm_fallback = bool(meta.get("llm_invoked")) and meta.get("llm_succeeded") is False
-    zero_token = bool(meta.get("tokens_saved")) or llm_fallback or workflow_status in {"SECURITY_BLOCKED", "FAQ_ANSWERED"}
-    token_metrics = token_counter.calculate_turn_metrics(state.get("query") or "", full_response, " ".join(state.get("collected_details") or []), zero_token)
+    zero_token = (
+        bool(meta.get("tokens_saved")) or llm_fallback or workflow_status in {"SECURITY_BLOCKED", "FAQ_ANSWERED"}
+    )
+    token_metrics = token_counter.calculate_turn_metrics(
+        state.get("query") or "", full_response, " ".join(state.get("collected_details") or []), zero_token
+    )
     if llm_fallback:
         token_metrics["model"] = "fallback-rule"
         token_metrics["execution_mode"] = "llm_fallback_rule"

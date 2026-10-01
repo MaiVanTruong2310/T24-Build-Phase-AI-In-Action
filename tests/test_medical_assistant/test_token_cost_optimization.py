@@ -67,8 +67,7 @@ async def test_zero_token_emergency_red_flag():
     """Kiểm tra ca cấp cứu tối khẩn được ngắt tức thì 0 token"""
     config = {"configurable": {"thread_id": "test_cost_emergency"}}
     result = await agent.ainvoke(
-        {"query": "Bệnh nhân bị đau thắt ngực dữ dội, vã mồ hôi và khó thở cấp tính"},
-        config=config
+        {"query": "Bệnh nhân bị đau thắt ngực dữ dội, vã mồ hôi và khó thở cấp tính"}, config=config
     )
 
     assert result.get("is_emergency") is True
@@ -112,6 +111,7 @@ def test_supabase_triage_warm_cache():
 
 if __name__ == "__main__":
     import asyncio
+
     print("=" * 65)
     print("🚀 BẮT ĐẦU CHẠY KIỂM THỬ BỘ TỐI ƯU HÓA TOKEN & CHI PHÍ LLM")
     print("=" * 65)

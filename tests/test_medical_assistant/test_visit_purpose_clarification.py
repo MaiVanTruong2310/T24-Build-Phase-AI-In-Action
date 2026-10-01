@@ -7,9 +7,7 @@ from src.medical_assistant.domain.guardrail_service import ClinicalGuardrailServ
 def test_generic_hospital_visit_is_detected_without_swallowing_symptoms():
     service = ClinicalGuardrailService()
 
-    assert service.check_intent("Tôi đang muốn khám bệnh ở bệnh viện") == {
-        "intent": "VISIT_PURPOSE_CLARIFICATION"
-    }
+    assert service.check_intent("Tôi đang muốn khám bệnh ở bệnh viện") == {"intent": "VISIT_PURPOSE_CLARIFICATION"}
     assert service.check_intent("Tôi muốn khám vì đau ngực dữ dội") is None
 
 
