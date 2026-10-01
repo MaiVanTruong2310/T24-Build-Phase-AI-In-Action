@@ -1,9 +1,11 @@
 """Supabase-managed email/password identity, with private application profiles."""
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
+
 import httpx
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.config import get_settings
 from src.core.exceptions import AppError, AuthenticationError, ConflictError
 from src.models.user import User

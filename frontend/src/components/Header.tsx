@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
-import { Stethoscope, Phone } from 'lucide-react'
+import { Phone } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 
 export const Header = memo(function Header() {

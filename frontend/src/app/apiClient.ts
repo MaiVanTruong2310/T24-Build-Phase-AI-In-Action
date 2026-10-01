@@ -1,44 +1,22 @@
-import {
-  clearSession,
-  readAccessToken,
-  readRefreshToken,
-  saveTokens,
-} from '../features/auth/session';
-
-// Default matches the local backend started by run.ps1.
-// Set VITE_API_BASE_URL in frontend/.env.local to override this when needed.
+import { clearSession, markCookieSession, readPublishedSession } from '../features/auth/session';
 const LOCAL_API_ORIGIN = 'http://localhost:8000';
-
 function normalizeApiOrigin(value: string): string {
-  const trimmedValue = value.trim().replace(/\/$/, '');
-  if (!trimmedValue) return LOCAL_API_ORIGIN;
-  if (trimmedValue.startsWith('http://') || trimmedValue.startsWith('https://')) {
-    return trimmedValue.replace(/\/api\/v1$/, '');
-  }
-  return `http://${trimmedValue}`.replace(/\/api\/v1$/, '');
+  const trimmed = value.trim().replace(/\/$/, '');
+  return (!trimmed ? LOCAL_API_ORIGIN : /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`).replace(/\/api\/v1$/, '');
 }
-
-// API_DOMAIN_PROD/API_DOMAIN_DEV are injected by CI/CD as the backend URL.
 const API_ORIGIN = normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
 const API_BASE = `${API_ORIGIN}/api/v1`;
-const REFRESH_PATH = `${API_BASE}/auth/refresh-token`;
-const NGROK_SKIP_BROWSER_WARNING_HEADER = 'ngrok-skip-browser-warning';
-const UNAUTHORIZED_EVENT = 'auth:unauthorized';
-const REFRESH_LOCK_NAME = 'medicare-auth-refresh';
+const REVISION_KEY = 'p124_cookie_revision';
+let refreshPromise: Promise<boolean> | null = null;
+
 const REFRESH_LOCK_KEY = 'medicare_auth_refresh_lock';
 const TAB_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-let refreshPromise: Promise<string | null> | null = null;
-
-const wait = (milliseconds: number): Promise<void> => new Promise((resolve) => {
-  window.setTimeout(resolve, milliseconds);
-});
-
+const wait = (milliseconds: number): Promise<void> => new Promise(resolve => window.setTimeout(resolve,milliseconds));
 async function acquireFallbackRefreshLock(): Promise<() => void> {
   const owner = `${TAB_ID}-${Date.now()}`;
-  const expiresAt = Date.now() + 10_000;
+  const expiresAt = Date.now() + 45_000;
 
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+  for (let attempt = 0; attempt < 900; attempt += 1) {
     const raw = localStorage.getItem(REFRESH_LOCK_KEY);
     let lockExpired = true;
     if (raw) {
@@ -79,157 +57,79 @@ async function acquireFallbackRefreshLock(): Promise<() => void> {
   throw new Error('Unable to acquire refresh lock');
 }
 
-function notifyUnauthorized(): void {
-  clearSession();
-  window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
-
-  // The API client is outside the React Router tree, so use a hard redirect
-  // to guarantee that stale Redux auth state is discarded as well.
-  if (window.location.pathname !== '/login') {
-    window.location.replace('/login');
-  }
+let sessionWrite: Promise<unknown> = Promise.resolve();
+function withSessionLock<T>(fn: () => Promise<T>): Promise<T> {
+  const queued = sessionWrite.then(() => typeof navigator !== 'undefined' && navigator.locks
+    ? navigator.locks.request('medicare-auth-refresh', fn) : (async () => {
+      const release = await acquireFallbackRefreshLock();
+      try { return await fn(); } finally { release(); }
+    })());
+  sessionWrite = queued.catch(() => undefined);
+  return queued;
 }
 
 export function resolveApiUrl(url: string): string {
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-  if (url.startsWith('/api/')) {
-    return `${API_ORIGIN}${url}`;
-  }
+  if (/^https?:\/\//.test(url)) return url;
+  if (url.startsWith('/api/')) return `${API_ORIGIN}${url}`;
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }
-
 export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<Response> {
-  const resolvedUrl = resolveApiUrl(url);
+  const resolved = resolveApiUrl(url);
   const headers = new Headers(options.headers);
-  if (/\.ngrok(?:-free\.(?:dev|app)|\.io)$/.test(new URL(resolvedUrl).hostname)) {
-    headers.set(NGROK_SKIP_BROWSER_WARNING_HEADER, 'true');
-  }
-  return fetch(resolvedUrl, { ...options, headers });
+  headers.set('X-Auth-Transport', 'cookie');
+  if (readPublishedSession()) headers.set('X-Session-Expected', '1');
+  if (/\.ngrok(?:-free\.(?:dev|app)|\.io)$/.test(new URL(resolved).hostname)) headers.set('ngrok-skip-browser-warning', 'true');
+  const send = () => fetch(resolved, {...options, headers, credentials: 'include'});
+  if (/\/auth\/(login|logout)$/.test(resolved)) return withSessionLock(send);
+  return send();
 }
-
-async function performRefresh(refreshToken: string): Promise<string | null> {
-  const response = await fetch(REFRESH_PATH, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-      [NGROK_SKIP_BROWSER_WARNING_HEADER]: 'true',
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-  // Another login/logout may have replaced this session while refresh was in flight.
-  if (readRefreshToken() !== refreshToken) return readAccessToken();
+function unauthorized(): void {
+  clearSession();
+  window.dispatchEvent(new Event('auth:unauthorized'));
+}
+async function performRefresh(): Promise<boolean> {
+  const response = await fetchPublicApi('/auth/refresh-token', {method:'POST'});
   if (!response.ok) {
-    if ([400, 401, 403].includes(response.status)) {
-      notifyUnauthorized();
-      return null;
-    }
-    // Rate limits, server errors and network failures do not invalidate tokens.
+    if ([400,401,403].includes(response.status)) { unauthorized(); return false; }
     throw new Error('Không thể gia hạn phiên lúc này. Vui lòng thử lại.');
   }
   const payload = await response.json();
-  const accessToken = payload?.data?.access_token;
-  const rotatedRefreshToken = payload?.data?.refresh_token;
-  if (typeof accessToken !== 'string' || typeof rotatedRefreshToken !== 'string') {
-    throw new Error('Phản hồi gia hạn phiên chưa hợp lệ. Vui lòng thử lại.');
-  }
-  // A refresh finishing after logout must not sign the browser back in.
-  if (!readRefreshToken()) return null;
-  saveTokens(accessToken, rotatedRefreshToken);
-  return accessToken;
+  if (payload?.data?.authenticated !== true) throw new Error('Phản hồi gia hạn phiên chưa hợp lệ.');
+  localStorage.setItem(REVISION_KEY, `${Date.now()}-${Math.random()}`);
+  markCookieSession();
+  return true;
 }
-
-async function refreshAccessToken(): Promise<string | null> {
-  if (refreshPromise) {
-    return refreshPromise;
-  }
-
-  const refreshToken = readRefreshToken();
-  if (!refreshToken) {
-    notifyUnauthorized();
-    return null;
-  }
-
-  refreshPromise = (async () => {
-    try {
-      const refreshWithLock = async (release: () => void) => {
-        try {
-          const latestRefreshToken = readRefreshToken();
-          if (!latestRefreshToken) {
-            notifyUnauthorized();
-            return null;
-          }
-
-          // Another tab may have rotated the shared refresh token while this
-          // tab was waiting. Reuse the new access token instead of rotating
-          // the already-revoked token and triggering reuse detection.
-          if (latestRefreshToken !== refreshToken) {
-            return readAccessToken();
-          }
-
-          return performRefresh(latestRefreshToken);
-        } finally {
-          release();
-        }
-      };
-
-      if (typeof navigator !== 'undefined' && navigator.locks) {
-        return navigator.locks.request(REFRESH_LOCK_NAME, (lock) => {
-          if (!lock) return null;
-          return refreshWithLock(() => undefined);
-        });
-      }
-
-      const release = await acquireFallbackRefreshLock();
-      return refreshWithLock(release);
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-
+async function refreshCookieSession(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+  const before = localStorage.getItem(REVISION_KEY);
+  const run = async () => {
+    if (before !== localStorage.getItem(REVISION_KEY)) return true;
+    return performRefresh();
+  };
+  refreshPromise = withSessionLock(run).finally(() => { refreshPromise = null; });
   return refreshPromise;
 }
-
+async function migrateLegacyUnlocked(): Promise<void> {
+  const legacyRefresh = localStorage.getItem('refresh_token');
+  if (!legacyRefresh) { localStorage.removeItem('access_token'); return; }
+  const response = await fetchPublicApi('/auth/refresh-token', {
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:legacyRefresh}),
+  });
+  if (!response.ok) {
+    if ([400,401,403].includes(response.status)) {clearSession();return;}
+    throw new Error('Chưa thể chuyển phiên đăng nhập. Vui lòng thử lại.');
+  }
+  const payload = await response.json();
+  if (payload?.data?.authenticated !== true) throw new Error('Chưa thể xác nhận phiên cookie.');
+  markCookieSession();
+}
+export function migrateLegacySession(): Promise<void> { return withSessionLock(migrateLegacyUnlocked); }
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-  const fullUrl = resolveApiUrl(url);
-  const headers = new Headers(options.headers || {});
-  headers.set(NGROK_SKIP_BROWSER_WARNING_HEADER, 'true');
-
-  // An explicitly supplied token must take precedence over a stale token in
-  // localStorage, which matters immediately after a successful login.
-  if (!headers.has('Authorization')) {
-    const accessToken = readAccessToken();
-    if (accessToken) {
-      headers.set('Authorization', `Bearer ${accessToken}`);
-    }
-  }
-
-  let response = await fetch(fullUrl, { ...options, headers });
-  const isRefreshRequest = fullUrl === REFRESH_PATH;
-
-  if (response.status !== 401 || isRefreshRequest) {
-    return response;
-  }
-
-  const newAccessToken = await refreshAccessToken();
-  if (!newAccessToken) {
-    return response;
-  }
-
-  // Rebuild headers from the original options so a stale Authorization
-  // header cannot overwrite the newly rotated access token.
-  const retryHeaders = new Headers(options.headers || {});
-  retryHeaders.set(NGROK_SKIP_BROWSER_WARNING_HEADER, 'true');
-  retryHeaders.set('Authorization', `Bearer ${newAccessToken}`);
-  response = await fetch(fullUrl, { ...options, headers: retryHeaders });
-
-  // If the newly refreshed token is rejected immediately, end the session
-  // instead of repeatedly retrying the same request.
-  if (response.status === 401) {
-    notifyUnauthorized();
-  }
-
+  let response = await fetchPublicApi(url,options);
+  // Authentication actions have their own error semantics and must never be replayed.
+  if (response.status !== 401 || resolveApiUrl(url).startsWith(`${API_BASE}/auth/`)) return response;
+  if (!(await refreshCookieSession())) return response;
+  response = await fetchPublicApi(url,options);
+  if (response.status === 401) unauthorized();
   return response;
 }

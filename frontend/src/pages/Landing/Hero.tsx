@@ -1,5 +1,5 @@
 import React from 'react'
-import { Stethoscope, ShieldCheck, ChevronRight, Activity, Lock, HeartPulse, CheckCircle2 } from 'lucide-react'
+import { Stethoscope, ChevronRight, Activity, Lock, HeartPulse } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import type { RootState } from '../../app/store'

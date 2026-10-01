@@ -9,7 +9,6 @@ import {
   Menu,
   MessageSquare,
   ShieldCheck,
-  Stethoscope,
   User,
   X,
 } from 'lucide-react';

@@ -2,11 +2,10 @@ import asyncio
 import sys
 from contextlib import asynccontextmanager
 
-from sqlalchemy.exc import OperationalError
-
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.endpoints.auth import router as auth_router
@@ -30,6 +29,7 @@ from src.db.session import check_database_connection, close_database, get_sessio
 from src.medical_assistant.api.routes import router as medical_assistant_router
 from src.medical_assistant.db.supabase_client import close_supabase_clients
 from src.services.booking import BookingService
+from src.services.cookie_session import CookieOriginMiddleware
 from src.services.notification import NotificationService
 
 logger = get_logger(__name__)
@@ -89,6 +89,8 @@ app = FastAPI(
 )
 
 settings = get_settings()
+
+app.add_middleware(CookieOriginMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=parse_cors_origins(settings.cors_origins),

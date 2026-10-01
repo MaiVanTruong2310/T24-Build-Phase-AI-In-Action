@@ -1,10 +1,13 @@
 from types import SimpleNamespace
-from uuid import uuid4
 from unittest.mock import AsyncMock
+from uuid import uuid4
+
 import pytest
-from src.services.chat_history import graph_thread, health_record, STATE_FIELDS
-from src.medical_assistant.domain.schemas import ChatRequest
+
 from src.medical_assistant.api import routes
+from src.medical_assistant.domain.schemas import ChatRequest
+from src.services.chat_history import STATE_FIELDS, graph_thread, health_record
+
 
 def profile():
     return SimpleNamespace(id=uuid4(),full_name='Account name',phone='0912345678',date_of_birth=None,gender=None,

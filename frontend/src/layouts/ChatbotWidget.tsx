@@ -401,7 +401,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   }, [ownerKey]);
 
   useEffect(() => {
-    if (!authUser || !isChatOpen) { setHistoryError(''); setHistoryMore(false); setHistoryLoading(false); return; }
+    if (!authUser?.id || !isChatOpen) { setHistoryError(''); setHistoryMore(false); setHistoryLoading(false); return; }
     const controller = new AbortController();
     historyRequest.current?.abort(); historyRequest.current = controller;
     setHistoryLoading(true); setHistoryError('');

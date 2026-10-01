@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import ValidationError
 
-from src.medical_assistant.domain.schemas import ChatRequest, ChatPatientProfile
-from src.medical_assistant.api.routes import chat_agent_input
 from src.medical_assistant.agent.graph import agent
+from src.medical_assistant.api.routes import chat_agent_input
+from src.medical_assistant.domain.schemas import ChatPatientProfile, ChatRequest
 
 
 def test_profile_validation_and_structured_transport():

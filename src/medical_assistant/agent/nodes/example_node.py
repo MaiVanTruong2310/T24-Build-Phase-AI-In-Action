@@ -109,6 +109,7 @@ async def analyze_node(state: AgentState) -> dict:
 
     cache_service = get_cache_service()
     import re
+
     from src.medical_assistant.domain.guardrail_service import remove_accents
 
     identity_query = remove_accents(query.lower())

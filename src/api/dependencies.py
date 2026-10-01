@@ -2,8 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import AuthenticationError, AuthorizationError
@@ -12,7 +11,13 @@ from src.db.dependencies import get_auth_db_session
 from src.models.user import User
 from src.repositories.user import UserRepository
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+async def oauth2_scheme(request: Request) -> str:
+    from src.services.cookie_session import request_token
+    token = request_token(request)
+    if not token:
+        raise AuthenticationError("NOT_AUTHENTICATED", "Vui lòng đăng nhập.")
+    return token
 
 
 async def get_current_user(
@@ -20,7 +25,7 @@ async def get_current_user(
     session: AsyncSession = Depends(get_auth_db_session),
 ) -> User:
     """Resolve the active user from a valid access token."""
-    from src.services.supabase_auth import native_auth_enabled, authenticated_profile
+    from src.services.supabase_auth import authenticated_profile, native_auth_enabled
     if native_auth_enabled():
         return await authenticated_profile(token, session)
     payload = decode_access_token(token)

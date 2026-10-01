@@ -1,9 +1,8 @@
 import type { ChatProfile } from './profile';
 import { fetchPublicApi, fetchWithAuth } from '../../app/apiClient';
-import { readAccessToken, readRefreshToken } from '../auth/session';
 
 function fetchChatApi(url: string, options: RequestInit = {}) {
-  return readAccessToken() || readRefreshToken() ? fetchWithAuth(url, options) : fetchPublicApi(url, options);
+  return fetchWithAuth(url, options);
 }
 export interface SavedConversation { session_id: string; title: string; created_at: string; updated_at: string }
 export interface SavedChatTurn { id: string; request_id: string; user_text: string; assistant_text: string | null; result: ChatMetadata | null; status: 'completed' | 'processing' | 'failed'; created_at: string }

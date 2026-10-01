@@ -3,11 +3,13 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_current_user, require_staff, oauth2_scheme
+from src.api.dependencies import get_current_user, oauth2_scheme, require_staff
 from src.api.response import success_response
+from src.config import get_settings
 from src.db.dependencies import get_auth_db_session
 from src.models.user import User
 from src.schemas.auth import (
@@ -25,10 +27,15 @@ from src.schemas.auth import (
     UserResponse,
 )
 from src.schemas.common import ApiResponse
-from src.config import get_settings
-from pydantic import BaseModel, Field
 from src.services.auth import AuthService
-from src.services.supabase_auth import native_auth_enabled, register_email, login_email, auth_call, authenticated_profile
+from src.services.cookie_session import ACCESS_COOKIE, REFRESH_COOKIE, clear_session_cookies, token_result
+from src.services.supabase_auth import (
+    auth_call,
+    authenticated_profile,
+    login_email,
+    native_auth_enabled,
+    register_email,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 user_router = APIRouter(prefix="/users", tags=["users"])
@@ -116,59 +123,56 @@ class PasswordChangeRequest(BaseModel):
 
 
 @router.put("/password", response_model=ApiResponse[None])
-async def change_password(request: PasswordChangeRequest, token: str = Depends(oauth2_scheme)):
+async def change_password(request: PasswordChangeRequest, response: Response, token: str = Depends(oauth2_scheme)):
     if not native_auth_enabled():
         raise HTTPException(status_code=400, detail="Sử dụng chức năng khôi phục bằng OTP.")
     await auth_call("/user", {"password": request.new_password}, token=token, method="PUT")
     await auth_call("/logout", token=token)
+    clear_session_cookies(response)
     return success_response(None, "Đã cập nhật mật khẩu. Vui lòng đăng nhập lại.")
 
 
-@router.post("/login", response_model=ApiResponse[TokenResponse])
-async def login(
-    request: LoginRequest,
-    service: AuthService = Depends(get_auth_service),
-) -> ApiResponse[TokenResponse]:
-    """Authenticate a user and return access and refresh tokens."""
+@router.post("/login", response_model=ApiResponse[dict])
+async def login(request: LoginRequest, http_request: Request, response: Response, service: AuthService = Depends(get_auth_service)):
     if native_auth_enabled():
-        return success_response(TokenResponse(**await login_email(request, service.session)), "Login successful")
-    _, access_token, refresh_token, access_expires_at, _ = await service.login(request)
-    expires_in = max(0, int((access_expires_at - datetime.now(UTC)).total_seconds()))
-    data = TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=expires_in,
-    )
-    return success_response(data, "Login successful")
+        data = TokenResponse(**await login_email(request, service.session))
+    else:
+        _, access_token, refresh_token, expires_at, _ = await service.login(request)
+        data = TokenResponse(access_token=access_token, refresh_token=refresh_token,
+            expires_in=max(0,int((expires_at-datetime.now(UTC)).total_seconds())))
+    return token_result(http_request,response,data)
 
 
-@router.post("/refresh-token", response_model=ApiResponse[TokenResponse])
-async def refresh_token(
-    request: RefreshTokenRequest,
-    service: AuthService = Depends(get_auth_service),
-) -> ApiResponse[TokenResponse]:
-    """Rotate a refresh token and return the new token pair."""
+@router.post("/refresh-token", response_model=ApiResponse[dict])
+async def refresh_token(http_request: Request, response: Response, request: RefreshTokenRequest | None = None, service: AuthService = Depends(get_auth_service)):
+    value = http_request.cookies.get(REFRESH_COOKIE) or (request.refresh_token if request else None)
+    if not value:
+        raise HTTPException(401,"Không có phiên đăng nhập để gia hạn.")
     if native_auth_enabled():
-        tokens = await auth_call("/token", {"refresh_token": request.refresh_token}, params={"grant_type": "refresh_token"})
-        return success_response(TokenResponse(**{k: tokens[k] for k in ("access_token", "refresh_token", "expires_in")}), "Token refreshed")
-    _, access_token, new_refresh_token, access_expires_at = await service.refresh(request.refresh_token)
-    expires_in = max(0, int((access_expires_at - datetime.now(UTC)).total_seconds()))
-    data = TokenResponse(access_token=access_token, refresh_token=new_refresh_token, expires_in=expires_in)
-    return success_response(data, "Token refreshed")
+        tokens = await auth_call("/token", {"refresh_token":value}, params={"grant_type":"refresh_token"})
+        data = TokenResponse(**{key:tokens[key] for key in ("access_token","refresh_token","expires_in")})
+    else:
+        _, access_token, refresh_value, expires_at = await service.refresh(value)
+        data = TokenResponse(access_token=access_token,refresh_token=refresh_value,
+            expires_in=max(0,int((expires_at-datetime.now(UTC)).total_seconds())))
+    return token_result(http_request,response,data)
 
 
 @router.post("/logout", response_model=ApiResponse[None])
-async def logout(
-    request: RefreshTokenRequest,
-    service: AuthService = Depends(get_auth_service),
-) -> ApiResponse[None]:
-    """Revoke the refresh session supplied by the client."""
-    if native_auth_enabled():
-        tokens = await auth_call("/token", {"refresh_token": request.refresh_token}, params={"grant_type": "refresh_token"})
-        await auth_call("/logout", token=tokens["access_token"])
-        return success_response(None, "Logout successful")
-    await service.logout(request.refresh_token)
-    return success_response(None, "Logout successful")
+async def logout(http_request: Request, response: Response, request: RefreshTokenRequest | None = None, service: AuthService = Depends(get_auth_service)):
+    value = http_request.cookies.get(REFRESH_COOKIE) or (request.refresh_token if request else None)
+    try:
+        if value and native_auth_enabled():
+            access_token = http_request.cookies.get(ACCESS_COOKIE)
+            if not access_token:
+                tokens=await auth_call("/token", {"refresh_token":value}, params={"grant_type":"refresh_token"})
+                access_token=tokens["access_token"]
+            await auth_call("/logout",token=access_token)
+        elif value:
+            await service.logout(value)
+    finally:
+        clear_session_cookies(response)
+    return success_response(None,"Logout successful")
 
 
 @router.get("/sessions", response_model=ApiResponse[list[SessionResponse]])

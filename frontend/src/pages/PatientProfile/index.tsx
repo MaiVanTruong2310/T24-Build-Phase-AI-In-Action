@@ -4,7 +4,7 @@ import { useDispatch } from 'react-redux';
 import { Loader2, Pencil, X, UserRound } from 'lucide-react';
 import type { AppDispatch } from '../../app/store';
 import { initializeAuth } from '../../features/auth/authSlice';
-import { readAccessToken, readRefreshToken } from '../../features/auth/session';
+import { readPublishedSession } from '../../features/auth/session';
 import type { PatientProfile, PatientDetails, PatientProfileUpdate } from '../../features/patient/api';
 import { fetchPatientProfile, updateCurrentUser } from './api';
 import { Header } from './Header';
@@ -69,7 +69,7 @@ export default function PatientProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const dispatch = useDispatch<AppDispatch>();
-  const authenticated = Boolean(readAccessToken() || readRefreshToken());
+  const authenticated = Boolean(readPublishedSession());
   useEffect(() => {
     let active = true;
     if (!authenticated) { setLoading(false); return; }

@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 from sqlalchemy.exc import OperationalError
-from src.main import app
+
 from src.api.endpoints.auth import get_auth_service
+from src.main import app
 
 
 @pytest.mark.asyncio

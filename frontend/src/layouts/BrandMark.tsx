@@ -1,4 +1,3 @@
-import { BrainCircuit, Cross } from 'lucide-react'
 
 export function BrandMark() {
   return (

@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     database_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
 
     # Authentication
+    auth_cookie_secure: bool | None = None
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)

@@ -4,7 +4,8 @@ from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import Date, DateTime, String, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
