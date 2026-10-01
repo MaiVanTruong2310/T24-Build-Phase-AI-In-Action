@@ -18,11 +18,15 @@ services:
       - ${APP_ENV_FILE:-.env}
     environment:
       APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai20k_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ai20k}
-      KAFKA_ENABLED: ${KAFKA_ENABLED:-false}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai20k_app}:${POSTGRES_PASSWORD:-123456}@postgres:5432/${POSTGRES_DB:-ai20k}
+      # The API runs the Kafka producer and consumer when enabled.
+      KAFKA_ENABLED: ${API_KAFKA_ENABLED:-false}
       KAFKA_BOOTSTRAP_SERVERS: kafka-1:9094
     volumes:
       - ${APP_DATA_PATH:-./data}:/app/data
+    networks:
+      - default
+      - kafka-net
     restart: unless-stopped
     healthcheck:
       test:
@@ -30,31 +34,12 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
         ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  db-migrate:
-    image: ${IMAGE_REPO:-ai20k-agent}:${IMAGE_TAG:-local}
-    pull_policy: ${PULL_POLICY:-missing}
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ["alembic", "upgrade", "head"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    env_file:
-      - ${APP_ENV_FILE:-.env}
-    environment:
-      APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai20k_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ai20k}
-    networks:
-      - default
-    restart: "no"
 
   postgres:
     image: pgvector/pgvector:pg17
@@ -76,7 +61,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
   kafka-1:
     image: apache/kafka:3.9.0
     hostname: kafka-1
@@ -97,23 +81,46 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_NUM_PARTITIONS: 1
       KAFKA_LOG_RETENTION_HOURS: 24
+    networks:
+      - kafka-net
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-1:9094 > /dev/null 2>&1"]
       interval: 10s
       timeout: 10s
       retries: 10
       start_period: 30s
-    networks:
-      - default
     volumes:
       - kafka-data-1:/var/lib/kafka/data
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: "kraft-cluster"
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9094
+    depends_on:
+      - kafka-1
+    networks:
+      - kafka-net
+  db-migrate:
+    image: ${IMAGE_REPO}:${IMAGE_TAG}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    restart: "no"
 
 volumes:
   postgres_data:
     name: ${POSTGRES_VOLUME_NAME:-ai20k-postgres}
   kafka-data-1:
-    name: ${KAFKA_VOLUME_NAME:-ai20k-kafka}
 
 networks:
   default:
+    driver: bridge
+  kafka-net:
     driver: bridge
