@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +28,12 @@ from src.schemas.auth import (
 )
 from src.schemas.common import ApiResponse
 from src.services.auth import AuthService
-from src.services.cookie_session import ACCESS_COOKIE, REFRESH_COOKIE, clear_session_cookies, token_result
+from src.services.cookie_session import (
+    ACCESS_COOKIE,
+    REFRESH_COOKIE,
+    clear_session_cookies,
+    token_result,
+)
 from src.services.supabase_auth import (
     auth_call,
     authenticated_profile,
