@@ -25,7 +25,9 @@ from src.services.booking import BookingService
 class ScheduleServiceMixin:
     """Schedule operations composed into the catalog service."""
 
-    async def create_schedule(self, request: DoctorScheduleCreate, actor_id: UUID) -> tuple[DoctorSchedule, Booking | None]:
+    async def create_schedule(
+        self, request: DoctorScheduleCreate, actor_id: UUID
+    ) -> tuple[DoctorSchedule, Booking | None]:
         """Create a schedule and optionally a direct-confirmed doctor booking."""
         try:
             async with self.session.begin():
@@ -68,12 +70,16 @@ class ScheduleServiceMixin:
                     if request.facility_id is None:
                         raise ConflictError("FACILITY_REQUIRED", "Consultation schedules require a facility")
                     blocking_finder = getattr(self.catalog, "find_blocking_schedule", None)
-                    blocking = await blocking_finder(
-                        doctor_id=request.doctor_id,
-                        facility_id=request.facility_id,
-                        starts_at=request.starts_at,
-                        ends_at=request.ends_at,
-                    ) if blocking_finder else None
+                    blocking = (
+                        await blocking_finder(
+                            doctor_id=request.doctor_id,
+                            facility_id=request.facility_id,
+                            starts_at=request.starts_at,
+                            ends_at=request.ends_at,
+                        )
+                        if blocking_finder
+                        else None
+                    )
                     if blocking:
                         raise ConflictError("DOCTOR_BUSY", "Doctor is busy during this time range")
                     conflict = await self.catalog.find_schedule_conflict(
@@ -104,8 +110,10 @@ class ScheduleServiceMixin:
                 await self.session.flush()
                 await self._audit(actor_id, "doctor_schedule", value.id, "created", {"version": value.version})
                 booking = None
-                if service is not None and service.booking_mode == "doctor_visit" and (
-                    request.patient_id or request.guest_patient
+                if (
+                    service is not None
+                    and service.booking_mode == "doctor_visit"
+                    and (request.patient_id or request.guest_patient)
                 ):
                     booking = await BookingService(self.session).create_staff_confirmed_in_transaction(
                         value,
@@ -153,12 +161,16 @@ class ScheduleServiceMixin:
                     if value.facility_id is None:
                         raise ConflictError("FACILITY_REQUIRED", "Consultation schedules require a facility")
                     blocking_finder = getattr(self.catalog, "find_blocking_schedule", None)
-                    blocking = await blocking_finder(
-                        doctor_id=value.doctor_id,
-                        facility_id=value.facility_id,
-                        starts_at=updates["starts_at"],
-                        ends_at=updates["ends_at"],
-                    ) if blocking_finder else None
+                    blocking = (
+                        await blocking_finder(
+                            doctor_id=value.doctor_id,
+                            facility_id=value.facility_id,
+                            starts_at=updates["starts_at"],
+                            ends_at=updates["ends_at"],
+                        )
+                        if blocking_finder
+                        else None
+                    )
                     if blocking and blocking.id != value.id:
                         raise ConflictError("DOCTOR_BUSY", "Doctor is busy during this time range")
                     conflict = await self.catalog.find_schedule_conflict(
@@ -219,7 +231,9 @@ class ScheduleServiceMixin:
         counts = await self.catalog.count_active_bookings_for_schedules([value.id for value in values])
         for value in values:
             value_type = getattr(value, "type", "consultation") or "consultation"
-            value.remaining_capacity = None if value_type != "consultation" else max(value.capacity - counts.get(value.id, 0), 0)
+            value.remaining_capacity = (
+                None if value_type != "consultation" else max(value.capacity - counts.get(value.id, 0), 0)
+            )
         return values
 
     async def get_schedule(self, schedule_id: UUID, *, public_only: bool) -> DoctorSchedule:
@@ -228,7 +242,9 @@ class ScheduleServiceMixin:
         if value is not None:
             counts = await self.catalog.count_active_bookings_for_schedules([value.id])
             value.remaining_capacity = (
-                None if (getattr(value, "type", "consultation") or "consultation") != "consultation" else max(value.capacity - counts.get(value.id, 0), 0)
+                None
+                if (getattr(value, "type", "consultation") or "consultation") != "consultation"
+                else max(value.capacity - counts.get(value.id, 0), 0)
             )
         if value is None or (public_only and not self._schedule_is_public(value)):
             raise NotFoundError("Schedule not found")
@@ -319,12 +335,16 @@ class ScheduleServiceMixin:
             if record.facility_id is None:
                 raise ConflictError("FACILITY_REQUIRED", "Consultation schedules require a facility")
             blocking_finder = getattr(self.catalog, "find_blocking_schedule", None)
-            blocking = await blocking_finder(
-                doctor_id=record.doctor_id,
-                facility_id=record.facility_id,
-                starts_at=record.starts_at,
-                ends_at=record.ends_at,
-            ) if blocking_finder else None
+            blocking = (
+                await blocking_finder(
+                    doctor_id=record.doctor_id,
+                    facility_id=record.facility_id,
+                    starts_at=record.starts_at,
+                    ends_at=record.ends_at,
+                )
+                if blocking_finder
+                else None
+            )
             if blocking:
                 raise ConflictError("DOCTOR_BUSY", "Doctor is busy during this time range")
             conflict = await self.catalog.find_schedule_conflict(

@@ -260,7 +260,9 @@ class AuthService:
                     setattr(user, field, value)
                 await self.session.flush()
         except IntegrityError as exc:
-            raise ConflictError("PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác.") from exc
+            raise ConflictError(
+                "PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác."
+            ) from exc
         logger.info("AuthService.update_profile profile updated")
         return user
 

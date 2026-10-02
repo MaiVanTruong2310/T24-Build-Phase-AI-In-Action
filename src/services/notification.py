@@ -124,9 +124,7 @@ class NotificationService:
 
         now = datetime.now(UTC)
         async with self.session.begin():
-            await self.notifications.requeue_stale_email(
-                now, self.settings.notification_processing_timeout_seconds
-            )
+            await self.notifications.requeue_stale_email(now, self.settings.notification_processing_timeout_seconds)
             notifications = await self.notifications.claim_email_pending(now, limit)
 
         delivered = 0

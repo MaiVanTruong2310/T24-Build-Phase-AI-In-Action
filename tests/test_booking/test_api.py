@@ -58,9 +58,7 @@ async def test_staff_booking_routes_reject_non_staff_users(client):
     """The staff namespace remains protected even when common bookings are not role-gated."""
     from types import SimpleNamespace
 
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        id=uuid4(), role="patient", status="active"
-    )
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4(), role="patient", status="active")
     app.dependency_overrides[get_db_session] = override_db_session
     try:
         response = await client.get("/api/v1/staff/bookings")

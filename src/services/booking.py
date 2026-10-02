@@ -142,9 +142,7 @@ class BookingService:
         await self.notifications.create_for_booking_review(booking, "confirmed")
         return booking
 
-    async def _resolve_staff_patient(
-        self, patient_id: UUID | None, guest_patient: GuestPatientCreate | None
-    ) -> User:
+    async def _resolve_staff_patient(self, patient_id: UUID | None, guest_patient: GuestPatientCreate | None) -> User:
         """Resolve an existing patient or create a temporary guest patient."""
         if patient_id:
             patient = await self.users.get_by_id(patient_id)
@@ -215,31 +213,45 @@ class BookingService:
                 or local_start.time() < DEFAULT_WORKING_START
                 or local_end.time() > DEFAULT_WORKING_END
             ):
-                raise ConflictError("OUTSIDE_WORKING_HOURS", "Requested booking time is outside the default working hours")
+                raise ConflictError(
+                    "OUTSIDE_WORKING_HOURS", "Requested booking time is outside the default working hours"
+                )
             published_finder = getattr(self.bookings, "find_schedule_conflict", None)
-            published_schedule = await published_finder(
-                doctor_id=doctor_id,
-                starts_at=starts_at,
-                ends_at=ends_at,
-            ) if published_finder else None
+            published_schedule = (
+                await published_finder(
+                    doctor_id=doctor_id,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                )
+                if published_finder
+                else None
+            )
             if published_schedule is not None:
                 raise ConflictError("SCHEDULE_REQUIRED", "Select the published consultation schedule for this time")
             blocking_finder = getattr(self.bookings, "find_blocking_schedule", None)
-            blocking = await blocking_finder(
-                doctor_id=doctor_id,
-                facility_id=facility_id,
-                starts_at=starts_at,
-                ends_at=ends_at,
-            ) if blocking_finder else None
+            blocking = (
+                await blocking_finder(
+                    doctor_id=doctor_id,
+                    facility_id=facility_id,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                )
+                if blocking_finder
+                else None
+            )
             if blocking is not None:
                 raise ConflictError("DOCTOR_BUSY", "Doctor is busy during the requested time")
             if service.booking_mode == "doctor_visit":
                 conflict_finder = getattr(self.bookings, "find_active_booking_conflict", None)
-                conflict = await conflict_finder(
-                    doctor_id=doctor_id,
-                    starts_at=starts_at,
-                    ends_at=ends_at,
-                ) if conflict_finder else None
+                conflict = (
+                    await conflict_finder(
+                        doctor_id=doctor_id,
+                        starts_at=starts_at,
+                        ends_at=ends_at,
+                    )
+                    if conflict_finder
+                    else None
+                )
                 if conflict is not None:
                     raise ConflictError("SCHEDULE_CONFLICT", "This doctor is already booked during the requested time")
 
@@ -426,12 +438,16 @@ class BookingService:
             created_schedule = False
             if not expired and request.status == "confirmed" and booking.schedule_id is None:
                 blocking_finder = getattr(self.bookings, "find_blocking_schedule", None)
-                blocking = await blocking_finder(
-                    doctor_id=booking.doctor_id,
-                    facility_id=booking.facility_id,
-                    starts_at=booking.starts_at,
-                    ends_at=booking.ends_at,
-                ) if blocking_finder else None
+                blocking = (
+                    await blocking_finder(
+                        doctor_id=booking.doctor_id,
+                        facility_id=booking.facility_id,
+                        starts_at=booking.starts_at,
+                        ends_at=booking.ends_at,
+                    )
+                    if blocking_finder
+                    else None
+                )
                 if blocking is not None:
                     raise ConflictError("DOCTOR_BUSY", "Doctor is busy during the requested time")
                 conflict = await self.bookings.find_schedule_conflict(

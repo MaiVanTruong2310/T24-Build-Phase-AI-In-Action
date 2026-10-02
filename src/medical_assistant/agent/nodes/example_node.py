@@ -113,15 +113,27 @@ async def analyze_node(state: AgentState) -> dict:
     from src.medical_assistant.domain.guardrail_service import remove_accents
 
     identity_query = remove_accents(query.lower())
-    is_identity_query = re.search(r"(?:ten|so dien thoai|sdt|thong tin) (?:cua )?(?:toi|minh)|my (?:name|phone|contact)", identity_query)
+    is_identity_query = re.search(
+        r"(?:ten|so dien thoai|sdt|thong tin) (?:cua )?(?:toi|minh)|my (?:name|phone|contact)", identity_query
+    )
     profile = state.get("patient_profile") or {}
     if is_identity_query and profile:
         name = profile.get("name") or state.get("patient_name") or ""
         phone = profile.get("phone") or state.get("patient_phone") or ""
         identity_response = (
             f"Dạ, tên Anh/Chị đã cung cấp là **{name}**. "
-            + (f"Số điện thoại trong phiên này là **{phone}**." if phone else "Anh/Chị chưa cung cấp số điện thoại trong phiên này.")
-            if lang == "vi" else f"Your provided name is **{name}**. " + (f"Your phone number in this session is **{phone}**." if phone else "No phone number was provided in this session.")
+            + (
+                f"Số điện thoại trong phiên này là **{phone}**."
+                if phone
+                else "Anh/Chị chưa cung cấp số điện thoại trong phiên này."
+            )
+            if lang == "vi"
+            else f"Your provided name is **{name}**. "
+            + (
+                f"Your phone number in this session is **{phone}**."
+                if phone
+                else "No phone number was provided in this session."
+            )
         )
         cached = (identity_response, [], "SESSION_PROFILE")
     else:
@@ -303,7 +315,11 @@ async def analyze_node(state: AgentState) -> dict:
         clinical_facts = fact_service.merge(clinical_facts, rule_facts)
         clinical_facts = fact_service.merge(clinical_facts, extracted_facts)
 
-    patient_name = (state.get("patient_profile") or {}).get("name") or v2_response.facts_delta.patient_name or state.get("patient_name")
+    patient_name = (
+        (state.get("patient_profile") or {}).get("name")
+        or v2_response.facts_delta.patient_name
+        or state.get("patient_name")
+    )
 
     is_describe_more = bool(intent_check and intent_check.get("intent") == "DESCRIBE_MORE_SYMPTOMS")
     is_generic_visit = bool(intent_check and intent_check.get("intent") == "VISIT_PURPOSE_CLARIFICATION")

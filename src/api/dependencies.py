@@ -14,6 +14,7 @@ from src.repositories.user import UserRepository
 
 async def oauth2_scheme(request: Request) -> str:
     from src.services.cookie_session import request_token
+
     token = request_token(request)
     if not token:
         raise AuthenticationError("NOT_AUTHENTICATED", "Vui lòng đăng nhập.")
@@ -26,6 +27,7 @@ async def get_current_user(
 ) -> User:
     """Resolve the active user from a valid access token."""
     from src.services.supabase_auth import authenticated_profile, native_auth_enabled
+
     if native_auth_enabled():
         return await authenticated_profile(token, session)
     payload = decode_access_token(token)
