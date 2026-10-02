@@ -6,7 +6,7 @@ from alembic import op
 
 
 revision: str = "0013_booking_notification_kafka"
-down_revision: Union[str, None] = "0012_notification_delivery_metadata"
+down_revision: Union[str, None] = "0012_delivery_metadata"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
