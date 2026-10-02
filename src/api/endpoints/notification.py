@@ -2,8 +2,9 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from src.api.dependencies import get_current_user
 from src.api.response import success_response
@@ -15,15 +16,19 @@ from src.realtime.notifications import notification_manager
 from src.repositories.user import UserRepository
 from src.schemas.common import ApiResponse
 from src.schemas.notification import NotificationResponse
+from src.services.cookie_session import ACCESS_COOKIE
 from src.services.notification import NotificationService, notification_response
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.websocket("/ws")
-async def notification_websocket(websocket: WebSocket, token: str = Query(...)) -> None:
-    """Authenticate a notification socket with the access token query parameter."""
+async def notification_websocket(websocket: WebSocket, token: str | None = Query(default=None)) -> None:
+    """Authenticate a notification socket with a bearer token or access cookie."""
     try:
+        token = token or websocket.cookies.get(ACCESS_COOKIE)
+        if not token:
+            raise ValueError("missing access token")
         payload = decode_access_token(token)
         user_id = UUID(str(payload["sub"]))
         async with get_session_factory()() as session:

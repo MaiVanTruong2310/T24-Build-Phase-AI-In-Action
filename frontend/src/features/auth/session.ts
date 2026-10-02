@@ -16,6 +16,17 @@ export const REFRESH_TOKEN_KEY = 'refresh_token';
 export const AUTH_SESSION_KEY = 'medicare_auth_session';
 export const AUTH_TOKENS_UPDATED_EVENT = 'auth:tokens-updated';
 
+/**
+ * Read a legacy bearer token when one exists.
+ *
+ * The current browser session uses HttpOnly cookies, so this normally
+ * returns null. Keeping the accessor allows legacy token sessions and
+ * cookie sessions to share the same frontend code path.
+ */
+export function readAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
 export function markCookieSession(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);

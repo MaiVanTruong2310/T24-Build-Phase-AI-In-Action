@@ -49,9 +49,8 @@ export function NotificationBell({ enabled }: { enabled: boolean }) {
     const connect = () => {
       if (stopped) return;
       const token = readAccessToken();
-      if (!token) return;
-      const query = new URLSearchParams({ token });
-      socket = new WebSocket(`${resolveWebSocketUrl('/notifications/ws')}?${query.toString()}`);
+      const query = token ? `?${new URLSearchParams({ token }).toString()}` : '';
+      socket = new WebSocket(`${resolveWebSocketUrl('/notifications/ws')}${query}`);
       socket.onopen = () => {
         // Reconcile notifications created while the socket was reconnecting.
         void loadNotifications();
