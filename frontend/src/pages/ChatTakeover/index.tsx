@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MOCK_PATIENTS, INITIAL_METRICS } from './mockData';
-import { PatientQueueItem, ChatMessage } from './types';
+import { resolveTakeoverWebSocketUrl, claimTakeoverCase, fetchTakeoverCase, fetchTakeoverCases, releaseTakeoverCase, resolveTakeoverCase, sendTakeoverMessage, type TakeoverCase, type TakeoverCaseDetail } from './api';
+import { PatientQueueItem, ChatMessage, HITLMetrics } from './types';
 import { TopAlertBanner } from './components/TopAlertBanner';
 import { QueueSidebar } from './components/QueueSidebar';
 import { PatientHeader } from './components/PatientHeader';
@@ -12,176 +12,223 @@ import { AITriageCard } from './components/AITriageCard';
 import { ProtocolCard } from './components/ProtocolCard';
 import { FooterBar } from './components/FooterBar';
 
+function formatTime(value: string): string {
+  return new Date(value).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatAge(value: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+  if (minutes < 1) return 'vừa xong';
+  if (minutes < 60) return `${minutes} phút trước`;
+  return `${Math.round(minutes / 60)} giờ trước`;
+}
+
+function toMessages(detail: TakeoverCaseDetail): ChatMessage[] {
+  return detail.messages.map((message) => ({
+    id: message.id,
+    sender: message.author_type === 'patient' ? 'patient' : message.author_type === 'staff' ? 'doctor' : 'ai',
+    senderName: message.author_type === 'patient' ? detail.case.summary.patient_name || 'Bệnh nhân' : message.author_type === 'staff' ? 'Nhân viên y tế' : 'VCare+ AI',
+    time: formatTime(message.created_at),
+    content: message.content,
+  }));
+}
+
+function toQueueItem(item: TakeoverCase, messages: ChatMessage[] = []): PatientQueueItem {
+  const summary = item.summary || {};
+  const priority = item.priority === 'critical' ? 'critical' : item.priority === 'high' ? 'high' : 'normal';
+  const status = item.status === 'taken_over' ? 'in_intervention' : item.status === 'resolved' ? 'ai_handling' : 'need_takeover';
+  return {
+    id: item.id,
+    code: `HITL-${item.id.slice(0, 8).toUpperCase()}`,
+    name: summary.patient_name || 'Bệnh nhân',
+    age: summary.patient_age || 0,
+    gender: summary.patient_gender || 'Chưa rõ',
+    avatar: '',
+    riskLevel: item.priority === 'critical' ? 'CAO' : item.priority === 'high' ? 'TRUNG BÌNH' : 'THẤP',
+    status,
+    timeAgo: formatAge(item.created_at),
+    priority,
+    medicalHistory: [],
+    allergies: [],
+    categoryTag: summary.suggested_department || undefined,
+    lastSnippet: summary.patient_message || 'Ca chat đang chờ nhân viên tiếp nhận.',
+    subStatus: item.status === 'taken_over' ? 'Đang được tiếp quản' : item.status === 'resolved' ? 'Đã xử lý' : 'Chờ tiếp nhận',
+    confidence: summary.ats_level ? Math.max(0, 100 - summary.ats_level * 10) : undefined,
+    vitals: {
+      bloodPressure: 'Chưa có',
+      bloodPressureStatus: 'Chưa ghi nhận',
+      heartRate: 0,
+      spO2: 0,
+      spO2Status: 'Chưa ghi nhận',
+      ecgLead: 'Chưa có dữ liệu',
+      ecgStatus: 'Chưa ghi nhận',
+    },
+    triage: {
+      confidence: summary.ats_level ? Math.max(0, 100 - summary.ats_level * 10) : 0,
+      differentialDiagnosis: 'Không chẩn đoán tự động; cần staff tiếp nhận.',
+      riskFactors: [summary.workflow_status || 'HUMAN_HELP_REQUESTED'],
+    },
+    protocols: [],
+    messages,
+  };
+}
+
+function metrics(cases: TakeoverCase[]): HITLMetrics {
+  return {
+    totalQueue: cases.length,
+    needTakeoverCount: cases.filter((item) => item.status === 'queued' || item.status === 'released').length,
+    inInterventionCount: cases.filter((item) => item.status === 'taken_over').length,
+    aiHandlingCount: 0,
+    slaTargetSeconds: 90,
+    slaCurrentSeconds: 0,
+    shiftAccuracyPercent: 0,
+    completedCasesCount: cases.filter((item) => item.status === 'resolved').length,
+    zeroDefectCount: 0,
+  };
+}
+
 export default function ChatTakeover() {
   const navigate = useNavigate();
-  const [patients, setPatients] = useState<PatientQueueItem[]>(MOCK_PATIENTS);
-  const [selectedPatientId, setSelectedPatientId] = useState<string>('p-8831');
-  const [isTakenOver, setIsTakenOver] = useState<boolean>(false);
-  const [isSigned, setIsSigned] = useState<boolean>(false);
-  const [metrics] = useState(INITIAL_METRICS);
-  const [notice, setNotice] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
+  const [cases, setCases] = useState<TakeoverCase[]>([]);
+  const [activeDetail, setActiveDetail] = useState<TakeoverCaseDetail | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
 
-  const activePatient = patients.find((p) => p.id === selectedPatientId) || patients[0];
+  const showToast = useCallback((message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(''), 4000);
+  }, []);
 
-  const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
-    setNotice({ message, type });
-    setTimeout(() => {
-      setNotice(null);
-    }, 4000);
-  };
-
-  const handleSelectPatient = (id: string) => {
-    setSelectedPatientId(id);
-    setIsTakenOver(false);
-    setIsSigned(false);
-  };
-
-  const handleToggleTakeover = () => {
-    const nextState = !isTakenOver;
-    setIsTakenOver(nextState);
-    if (nextState) {
-      showToast(`Đã tiếp quản ca bệnh ${activePatient.name}. AI đã tạm dừng sinh phản hồi tự động.`, 'warning');
-    } else {
-      showToast(`Đã trả quyền sinh câu trả lời tự động cho Trợ lý MedPaLM AI.`, 'info');
+  const loadQueue = useCallback(async (signal?: AbortSignal) => {
+    setError('');
+    try {
+      setCases(await fetchTakeoverCases(undefined, signal));
+    } catch (cause) {
+      if (!signal?.aborted) setError(cause instanceof Error ? cause.message : 'Không thể tải hàng đợi takeover.');
+    } finally {
+      if (!signal?.aborted) setLoading(false);
     }
-  };
+  }, []);
 
-  const handleSendMessage = (text: string) => {
-    const newMsg: ChatMessage = {
-      id: `doc-${Date.now()}`,
-      sender: 'doctor',
-      senderName: 'BS. Nguyễn Phương Linh',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      content: text,
+  const loadDetail = useCallback(async (id: string, signal?: AbortSignal) => {
+    try {
+      const detail = await fetchTakeoverCase(id, signal);
+      if (!signal?.aborted) setActiveDetail(detail);
+    } catch (cause) {
+      if (!signal?.aborted) setError(cause instanceof Error ? cause.message : 'Không thể tải ca takeover.');
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadQueue(controller.signal);
+    return () => controller.abort();
+  }, [loadQueue]);
+
+  useEffect(() => {
+    const socket = new WebSocket(resolveTakeoverWebSocketUrl());
+    const keepalive = window.setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN) socket.send('keepalive');
+    }, 20_000);
+    socket.onmessage = () => void loadQueue();
+    socket.onerror = () => socket.close();
+    return () => {
+      window.clearInterval(keepalive);
+      socket.close();
     };
+  }, [loadQueue]);
 
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === activePatient.id
-          ? {
-              ...p,
-              messages: [...p.messages, newMsg],
-              lastSnippet: text,
-              status: 'in_intervention',
-            }
-          : p
-      )
-    );
+  useEffect(() => {
+    if (!selectedCaseId) return;
+    const controller = new AbortController();
+    void loadDetail(selectedCaseId, controller.signal);
+    return () => controller.abort();
+  }, [loadDetail, selectedCaseId]);
 
-    if (!isTakenOver) {
-      setIsTakenOver(true);
+  const patients = useMemo(
+    () => cases.map((item) => toQueueItem(item, item.id === activeDetail?.case.id ? toMessages(activeDetail) : [])),
+    [activeDetail, cases],
+  );
+  const activePatient = activeDetail ? toQueueItem(activeDetail.case, toMessages(activeDetail)) : null;
+  const isTakenOver = activeDetail?.case.status === 'taken_over';
+  const activeCaseId = activeDetail?.case.id;
+  const activeSessionId = activeDetail?.case.session_id;
+
+  useEffect(() => {
+    if (!activeCaseId || !activeSessionId) return;
+    const socket = new WebSocket(resolveTakeoverWebSocketUrl(activeSessionId));
+    socket.onmessage = () => void loadDetail(activeCaseId);
+    socket.onerror = () => socket.close();
+    return () => socket.close();
+  }, [activeCaseId, activeSessionId, loadDetail]);
+
+  const handleToggleTakeover = async () => {
+    if (!activeDetail) return;
+    try {
+      const updated = isTakenOver
+        ? await releaseTakeoverCase(activeDetail.case.id)
+        : await claimTakeoverCase(activeDetail.case.id);
+      setActiveDetail((current) => current ? { ...current, case: updated } : current);
+      setCases((current) => current.map((item) => item.id === updated.id ? updated : item));
+      showToast(isTakenOver ? 'Đã trả ca về hàng đợi.' : 'Đã tiếp quản ca chat.');
+    } catch (cause) {
+      showToast(cause instanceof Error ? cause.message : 'Không thể cập nhật trạng thái takeover.');
     }
-
-    showToast('Đã gửi chỉ định lâm sàng trực tiếp tới bệnh nhân.', 'success');
   };
 
-  const handleToggleProtocol = (protoId: string) => {
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === activePatient.id
-          ? {
-              ...p,
-              protocols: p.protocols.map((proto) =>
-                proto.id === protoId ? { ...proto, checked: !proto.checked } : proto
-              ),
-            }
-          : p
-      )
-    );
+  const handleSendMessage = async (text: string) => {
+    if (!activeDetail || !isTakenOver) return;
+    try {
+      await sendTakeoverMessage(activeDetail.case.id, text, crypto.randomUUID());
+      await loadDetail(activeDetail.case.id);
+      showToast('Đã gửi tin nhắn trực tiếp tới bệnh nhân.');
+    } catch (cause) {
+      showToast(cause instanceof Error ? cause.message : 'Không thể gửi tin nhắn.');
+    }
   };
 
-  const handleSignProtocol = () => {
-    setIsSigned(true);
-    showToast(`Đã ký số xác nhận phác đồ can thiệp lâm sàng cho ca ${activePatient.code} (BS. Nguyễn Phương Linh).`, 'success');
+  const handleResolve = async () => {
+    if (!activeDetail || !isTakenOver) return;
+    try {
+      const updated = await resolveTakeoverCase(activeDetail.case.id);
+      setActiveDetail((current) => current ? { ...current, case: updated } : current);
+      setCases((current) => current.map((item) => item.id === updated.id ? updated : item));
+      showToast('Đã đánh dấu ca takeover đã xử lý.');
+    } catch (cause) {
+      showToast(cause instanceof Error ? cause.message : 'Không thể đóng ca takeover.');
+    }
   };
 
-  const handleEscalate = () => {
-    navigate('/staff/queue');
-  };
-
-  const handleVideoCall = () => {
-    showToast(`Đang khởi tạo phòng gọi khám video sơ bộ trực tiếp với bệnh nhân ${activePatient.name}...`, 'info');
-  };
-
-  const handleQuickAppointment = () => {
-    navigate('/staff/doctor-schedule');
-  };
+  if (loading) return <div className="flex min-h-full items-center justify-center bg-slate-50 text-slate-600">Đang tải hàng đợi takeover…</div>;
 
   return (
     <div className="min-h-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans p-4 xl:p-5">
-      {/* SLA & Critical Status Banner */}
-      <TopAlertBanner
-        urgentCount={metrics.needTakeoverCount}
-        slaTargetSeconds={metrics.slaTargetSeconds}
-        slaCurrentSeconds={metrics.slaCurrentSeconds}
-      />
-
-      {/* Floating Toast Notification */}
-      {notice && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg border text-xs font-bold flex items-center gap-2 animate-bounce ${
-            notice.type === 'warning'
-              ? 'bg-amber-600 text-white border-amber-700'
-              : notice.type === 'info'
-              ? 'bg-sky-700 text-white border-sky-800'
-              : 'bg-emerald-700 text-white border-emerald-800'
-          }`}
-        >
-          <span>{notice.message}</span>
-        </div>
-      )}
-
-      {/* Main Layout Area */}
+      <TopAlertBanner urgentCount={metrics(cases).needTakeoverCount} slaTargetSeconds={90} slaCurrentSeconds={0} />
+      {notice && <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-slate-800 px-4 py-3 text-xs font-bold text-white shadow-lg">{notice}</div>}
+      {error && <div role="alert" className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
       <div className="flex-1 flex flex-col lg:flex-row gap-4 items-start w-full">
-        {/* Left Column: Hàng đợi Giám sát */}
-        <QueueSidebar
-          patients={patients}
-          selectedPatientId={selectedPatientId}
-          onSelectPatient={handleSelectPatient}
-          metrics={metrics}
-        />
-
-        {/* Right Area: Spanning to the right edge */}
-        <div className="flex-1 min-w-0 flex flex-col gap-3.5 w-full">
-          {/* Top: PatientHeader stretches full width across to right border */}
-          <PatientHeader
-            patient={activePatient}
-            isTakenOver={isTakenOver}
-            onToggleTakeover={handleToggleTakeover}
-            onEscalate={handleEscalate}
-            onVideoCall={handleVideoCall}
-            onQuickAppointment={handleQuickAppointment}
-          />
-
-          {/* Bottom Area: Khung Chat bên trái, Các khung sinh tồn/AI bên phải ngang hàng với khung chat */}
-          <div className="flex flex-col xl:flex-row gap-3.5 items-start w-full">
-            {/* Live Chat & Takeover Studio */}
-            <main className="flex-1 min-w-0 w-full flex flex-col bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden h-[calc(100vh-250px)] min-h-[520px]">
-              <MessageList messages={activePatient.messages} />
-
-              <ChatInputArea
-                patientName={activePatient.name}
-                isTakenOver={isTakenOver}
-                onSendMessage={handleSendMessage}
-              />
-            </main>
-
-            {/* Real-time Telemetry & AI Clinical Support Column */}
-            <aside className="w-full xl:w-80 2xl:w-88 shrink-0 flex flex-col gap-3 h-[calc(100vh-250px)] min-h-[520px] overflow-y-auto pr-0.5">
-              <VitalsCard vitals={activePatient.vitals} />
-              <AITriageCard triage={activePatient.triage} />
-              <ProtocolCard
-                protocols={activePatient.protocols}
-                onToggleProtocol={handleToggleProtocol}
-                onSignProtocol={handleSignProtocol}
-                isSigned={isSigned}
-              />
-            </aside>
+        <QueueSidebar patients={patients} selectedPatientId={activeDetail?.case.id || ''} onSelectPatient={setSelectedCaseId} metrics={metrics(cases)} />
+        {activePatient && activeDetail ? (
+          <div className="flex-1 min-w-0 flex flex-col gap-3.5 w-full">
+            <PatientHeader patient={activePatient} isTakenOver={Boolean(isTakenOver)} onToggleTakeover={() => void handleToggleTakeover()} onResolve={() => void handleResolve()} onEscalate={() => navigate('/staff/queue')} onVideoCall={() => showToast('Video call chưa thuộc MVP takeover.')} onQuickAppointment={() => navigate('/staff/doctor-schedule')} />
+            <div className="flex flex-col xl:flex-row gap-3.5 items-start w-full">
+              <main className="flex-1 min-w-0 w-full flex flex-col bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden h-[calc(100vh-250px)] min-h-[520px]">
+                <MessageList messages={activePatient.messages} />
+                <ChatInputArea patientName={activePatient.name} isTakenOver={Boolean(isTakenOver)} onSendMessage={(text) => void handleSendMessage(text)} />
+              </main>
+              <aside className="w-full xl:w-80 2xl:w-88 shrink-0 flex flex-col gap-3 h-[calc(100vh-250px)] min-h-[520px] overflow-y-auto pr-0.5">
+                <VitalsCard vitals={activePatient.vitals} />
+                <AITriageCard triage={activePatient.triage} />
+                <ProtocolCard protocols={activePatient.protocols} onToggleProtocol={() => undefined} onSignProtocol={() => undefined} isSigned={false} />
+              </aside>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex min-h-[520px] flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-sm text-slate-500">Chọn một ca trong hàng đợi để bắt đầu takeover.</div>
+        )}
       </div>
-
-      {/* Bottom Footer Metadata */}
       <FooterBar />
     </div>
   );

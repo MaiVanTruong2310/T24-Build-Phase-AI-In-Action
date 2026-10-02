@@ -13,12 +13,16 @@ from src.models.catalog import (
     Service,
     Specialty,
 )
+from src.models.chat_takeover import ChatTakeoverAuditEvent, ChatTakeoverCase, ChatTakeoverMessage
 from src.models.notification import Notification
 from src.models.user import User
 
 __all__ = [
     "CatalogAuditEvent",
     "Booking",
+    "ChatTakeoverAuditEvent",
+    "ChatTakeoverCase",
+    "ChatTakeoverMessage",
     "Notification",
     "Doctor",
     "DoctorFacility",

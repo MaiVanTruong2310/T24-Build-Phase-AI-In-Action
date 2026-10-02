@@ -23,6 +23,7 @@ from src.medical_assistant.domain.schemas import (
 )
 from src.models.user import User
 from src.services.chat_history import STATE_FIELDS, ChatHistoryService, graph_thread, health_record
+from src.services.chat_takeover import ChatTakeoverService, case_payload, message_payload
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -117,6 +118,25 @@ async def run_turn(request, user, payload, turn, service):
     if turn and turn.get("cached"):
         return turn["cached"]
     try:
+        if user:
+            takeover = ChatTakeoverService(service.session)
+            active_case = await takeover.active_case_for_patient(user.id, request.session_id)
+            if active_case is not None:
+                await takeover.record_patient_message(
+                    user.id,
+                    request.session_id,
+                    request.message,
+                    str(request.request_id),
+                )
+                response = public_result(
+                    {
+                        "response": "Tin nhắn của bạn đã được chuyển tới nhân viên y tế đang tiếp nhận ca. Vui lòng chờ phản hồi trực tiếp.",
+                        "workflow_status": "HUMAN_HELP_REQUESTED",
+                    },
+                    request.session_id,
+                )
+                await service.complete(turn, response, turn.get("checkpoint", {}))
+                return response
         started = time.perf_counter()
         result = await agent.ainvoke(
             payload, config={"configurable": {"thread_id": graph_thread(request.session_id, user)}}
@@ -127,6 +147,12 @@ async def run_turn(request, user, payload, turn, service):
             raise RuntimeError("Empty agent response")
         if user:
             await service.complete(turn, response, result)
+            await ChatTakeoverService(service.session).ensure_case_from_result(
+                user,
+                request.session_id,
+                request.message,
+                response,
+            )
         logger.info(
             "chat.completed agent_ms=%.0f archive_ms=%.0f",
             (agent_finished - started) * 1000,
@@ -222,6 +248,21 @@ async def conversation_messages(
     offset: int = Query(0, ge=0),
 ):
     return await ChatHistoryService(session).history(user.id, session_id, limit, offset)
+
+
+@router.get("/chat/conversations/{session_id}/takeover")
+async def takeover_conversation(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_auth_db_session),
+):
+    """Return the authenticated patient's takeover state and staff messages."""
+    service = ChatTakeoverService(session)
+    case = await service.get_case_for_patient(user.id, session_id)
+    if case is None:
+        return {"case": None, "messages": []}
+    messages = await service.repository.list_messages(case.id, 200)
+    return {"case": case_payload(case), "messages": [message_payload(message) for message in messages]}
 
 
 @router.post("/booking-requests", response_model=BookingIntakeResponse, status_code=201)

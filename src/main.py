@@ -14,6 +14,7 @@ from src.api.endpoints.booking import router as booking_router
 from src.api.endpoints.booking import staff_router as staff_booking_router
 from src.api.endpoints.catalog import router as catalog_router
 from src.api.endpoints.catalog import staff_router as catalog_staff_router
+from src.api.endpoints.chat_takeover import router as chat_takeover_router
 from src.api.endpoints.notification import router as notification_router
 from src.api.handlers import (
     app_error_handler,
@@ -112,6 +113,7 @@ app.include_router(user_router, prefix="/api/v1")
 app.include_router(booking_router, prefix="/api/v1")
 app.include_router(staff_booking_router, prefix="/api/v1")
 app.include_router(notification_router, prefix="/api/v1")
+app.include_router(chat_takeover_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(catalog_staff_router, prefix="/api/v1")
 app.add_exception_handler(OperationalError, database_unavailable_handler)
