@@ -1,4 +1,4 @@
-"""In-app booking notifications and reminder outbox records."""
+"""In-app booking notifications and patient email outbox records."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class Notification(Base):
-    """A durable in-app notification or scheduled reminder."""
+    """A durable in-app notification or patient email delivery command."""
 
     __tablename__ = "notifications"
     __table_args__ = (

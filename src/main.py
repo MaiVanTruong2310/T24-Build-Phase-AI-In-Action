@@ -43,9 +43,16 @@ async def _booking_maintenance_loop(interval_seconds: int) -> None:
                 expired_count = await BookingService(session).expire_pending_bookings()
                 if expired_count:
                     logger.info("main.booking_expiration expired bookings", extra={"count": expired_count})
-                reminder_count = await NotificationService(session).create_due_reminders()
+                notification_service = NotificationService(session)
+                reminder_count = await notification_service.create_due_reminders()
                 if reminder_count:
                     logger.info("main.notification_cleanup queued reminders", extra={"count": reminder_count})
+                delivered_email_count = await notification_service.deliver_pending_emails()
+                if delivered_email_count:
+                    logger.info(
+                        "main.notification_email delivered emails",
+                        extra={"count": delivered_email_count},
+                    )
         except asyncio.CancelledError:
             raise
         except Exception:

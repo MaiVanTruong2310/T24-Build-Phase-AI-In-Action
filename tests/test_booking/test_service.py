@@ -375,6 +375,25 @@ def test_confirmed_review_creates_an_immediate_patient_notification():
     assert [item.status for item in session.added] == ["delivered"]
 
 
+def test_confirmed_review_queues_email_when_patient_has_email_address():
+    """A patient email address adds a pending Gmail outbox row beside in-app delivery."""
+    session = FakeSession()
+    notification_service = NotificationService(session)
+    booking = SimpleNamespace(
+        id=uuid4(),
+        user_id=uuid4(),
+        starts_at=datetime.now(UTC) + timedelta(days=2),
+        staff_note=None,
+        user=SimpleNamespace(email="patient@example.com"),
+    )
+
+    asyncio.run(notification_service.create_for_booking_review(booking, "confirmed"))
+
+    assert [item.channel for item in session.added] == ["in_app", "email"]
+    assert [item.status for item in session.added] == ["delivered", "pending"]
+    assert session.added[1].provider == "gmail_smtp"
+
+
 def test_expired_pending_booking_releases_capacity_and_notifies_patient():
     """The periodic expiry transition is idempotent and creates an in-app notification."""
     session = FakeSession()
@@ -397,7 +416,7 @@ def test_expired_pending_booking_releases_capacity_and_notifies_patient():
 
 
 def test_staff_review_of_expired_booking_commits_expired_status_and_notifies_patient():
-    """A late staff action soft-expires the booking instead of rolling back."""
+    """A late staff action soft-expires the booking and notifies in-app."""
     session = FakeSession()
     repository = FakeBookingRepository(make_schedule(), SimpleNamespace(id=uuid4()), active_count=0)
     booking = SimpleNamespace(
@@ -421,7 +440,8 @@ def test_staff_review_of_expired_booking_commits_expired_status_and_notifies_pat
         )
 
     assert booking.status == "expired"
-    assert [item.channel for item in session.added] == ["in_app", "email"]
+    assert [item.channel for item in session.added] == ["in_app"]
+    assert [item.status for item in session.added] == ["delivered"]
 
 
 def test_confirmed_booking_in_reminder_window_gets_one_deduplicated_notification():

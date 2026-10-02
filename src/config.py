@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     database_pool_recycle_seconds: int = Field(default=900, ge=30, le=86400)
     database_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
 
+    # Direct notification delivery
+    notification_processing_timeout_seconds: int = Field(default=300, ge=30, le=86400)
+    notification_max_attempts: int = Field(default=5, ge=1, le=20)
+    notification_retry_backoff_seconds: int = Field(default=5, ge=1, le=3600)
+    notification_retry_backoff_max_seconds: int = Field(default=3600, ge=1, le=86400)
+
     # Authentication
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"

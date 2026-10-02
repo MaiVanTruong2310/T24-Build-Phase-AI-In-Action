@@ -11,8 +11,8 @@ from src.core.security import decode_access_token
 from src.db.dependencies import get_db_session
 from src.db.session import get_session_factory
 from src.models.user import User
-from src.repositories.user import UserRepository
 from src.realtime.notifications import notification_manager
+from src.repositories.user import UserRepository
 from src.schemas.common import ApiResponse
 from src.schemas.notification import NotificationResponse
 from src.services.notification import NotificationService, notification_response
