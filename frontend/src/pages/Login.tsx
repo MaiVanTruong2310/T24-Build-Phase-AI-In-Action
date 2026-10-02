@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '../app/store'
 import { loginUser } from '../features/auth/authSlice'
@@ -20,27 +20,39 @@ export function Login() {
 
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const { loading, error, user } = useSelector((state: RootState) => state.auth)
 
   const [validationError, setValidationError] = useState('')
+  const [confirmationNotice, setConfirmationNotice] = useState('')
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1))
+    if (params.get('type') === 'signup' && params.get('access_token')) {
+      setConfirmationNotice('Đã mở liên kết xác nhận email. Vui lòng đăng nhập bằng email và mật khẩu.')
+    } else if (params.get('error')) {
+      setValidationError('Liên kết xác nhận không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu gửi lại email.')
+    }
+    if (params.has('access_token') || params.has('error')) window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }, [])
 
   useEffect(() => {
     if (user) {
       if (user.role === 'staff') {
         navigate('/staff')
       } else {
-        navigate('/patient')
+        const returnTo = new URLSearchParams(location.search).get('returnTo');
+        navigate(returnTo?.startsWith('/') && !returnTo.startsWith('//') && !returnTo.startsWith('/login') ? returnTo : '/patient')
       }
     }
-  }, [user, navigate])
+  }, [user, navigate, location.search])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setValidationError('')
 
-    if (username.length < 7) {
-      setValidationError('Tên đăng nhập (Email/SĐT/CCCD) chưa đúng định dạng.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username.trim())) {
+      setValidationError('Vui lòng nhập email đăng ký tài khoản.')
       return
     }
 
@@ -56,14 +68,24 @@ export function Login() {
     <div className="w-full max-w-md">
       <div className="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-xl dark:shadow-2xl p-6 sm:p-8 text-slate-900 dark:text-slate-100 transition-colors duration-300">
         {/* Form Header */}
-
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2 tracking-tight">
-          Đăng Nhập VCare+
-        </h2>
+        <div className="flex items-center gap-3.5 mb-3">
+          <img
+            src="/vcare-logo.png"
+            alt="VCare+ Logo"
+            className="w-12 h-12 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm shrink-0 p-0.5"
+          />
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+              Đăng Nhập VCare+
+            </h2>
+            <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Hệ Thống Y Tế Số Đa Tầng</p>
+          </div>
+        </div>
         <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
           Chào mừng quay trở lại. Đăng nhập để tiếp tục lộ trình khám bệnh đa tầng và theo dõi bệnh án.
         </p>
 
+        {confirmationNotice && <p role="status" className="mb-4 text-sm text-green-700">{confirmationNotice}</p>}
         {(error || validationError) && (
           <div className="mb-6 p-3 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-500/40 rounded-xl text-xs sm:text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
             <div className="mt-0.5">⚠️</div>
@@ -74,14 +96,14 @@ export function Login() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
             <label className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 block" htmlFor="username">
-              Số điện thoại, Email hoặc Số CCCD
+              Email đã xác thực
             </label>
             <input
               id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="0912 345 678 hoặc 00120100xxxx"
+              placeholder="ban@example.com"
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-950/60 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-cyan-500/60 transition-all"
               disabled={loading}
             />

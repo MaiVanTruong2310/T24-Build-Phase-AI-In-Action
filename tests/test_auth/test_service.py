@@ -30,6 +30,10 @@ class FakeTransaction:
 class FakeSession:
     """Minimal async session surface required by AuthService."""
 
+    async def execute(self, statement):
+        """Accept the row lock used when applying profile updates."""
+        return None
+
     def begin(self) -> FakeTransaction:
         """Return a fake transaction context manager."""
         return FakeTransaction()

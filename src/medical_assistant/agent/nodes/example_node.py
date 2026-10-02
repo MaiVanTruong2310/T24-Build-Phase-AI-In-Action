@@ -108,14 +108,31 @@ async def analyze_node(state: AgentState) -> dict:
         }
 
     cache_service = get_cache_service()
-    cached = cache_service.check_cache(query, language=lang)
+    import re
+
+    from src.medical_assistant.domain.guardrail_service import remove_accents
+
+    identity_query = remove_accents(query.lower())
+    is_identity_query = re.search(r"(?:ten|so dien thoai|sdt|thong tin) (?:cua )?(?:toi|minh)|my (?:name|phone|contact)", identity_query)
+    profile = state.get("patient_profile") or {}
+    if is_identity_query and profile:
+        name = profile.get("name") or state.get("patient_name") or ""
+        phone = profile.get("phone") or state.get("patient_phone") or ""
+        identity_response = (
+            f"Dạ, tên Anh/Chị đã cung cấp là **{name}**. "
+            + (f"Số điện thoại trong phiên này là **{phone}**." if phone else "Anh/Chị chưa cung cấp số điện thoại trong phiên này.")
+            if lang == "vi" else f"Your provided name is **{name}**. " + (f"Your phone number in this session is **{phone}**." if phone else "No phone number was provided in this session.")
+        )
+        cached = (identity_response, [], "SESSION_PROFILE")
+    else:
+        cached = cache_service.check_cache(query, language=lang)
     if cached is not None:
         cached_response, cached_replies, faq_key = cached
         return {
             "analysis": f"⚡ Zero-Token Cache Hit: {faq_key} [Lang: {lang.upper()}]",
             "is_emergency": False,
             "emergency_warning": None,
-            "ats_level": current_ats if current_ats is not None else 5,
+            "ats_level": state.get("ats_level"),
             "urgency_tier": current_urgency or "FLEXIBLE",
             "max_booking_days": current_max_days or 30,
             "suggested_department_name": current_dept,
@@ -286,7 +303,7 @@ async def analyze_node(state: AgentState) -> dict:
         clinical_facts = fact_service.merge(clinical_facts, rule_facts)
         clinical_facts = fact_service.merge(clinical_facts, extracted_facts)
 
-    patient_name = v2_response.facts_delta.patient_name or state.get("patient_name")
+    patient_name = (state.get("patient_profile") or {}).get("name") or v2_response.facts_delta.patient_name or state.get("patient_name")
 
     is_describe_more = bool(intent_check and intent_check.get("intent") == "DESCRIBE_MORE_SYMPTOMS")
     is_generic_visit = bool(intent_check and intent_check.get("intent") == "VISIT_PURPOSE_CLARIFICATION")
@@ -813,6 +830,7 @@ async def respond_node(state: AgentState) -> dict:
                 "required": True,
                 "endpoint": "/api/v1/booking-requests",
                 "patient_name": state.get("patient_name") or "",
+                "patient_phone": state.get("patient_phone") or "",
                 "specialty_code": state.get("suggested_department_code"),
                 "specialty_name": spec_display,
                 "selected_slot_id": selected_slot.get("schedule_id") if selected_slot else None,
@@ -1003,6 +1021,11 @@ async def respond_node(state: AgentState) -> dict:
         )
     else:
         response = v2_draft if v2_draft else "Xin lỗi, tôi không thể xử lý yêu cầu của bạn."
+
+    patient_profile = state.get("patient_profile") or {}
+    display_name = patient_profile.get("name")
+    if display_name and workflow_status != "SECURITY_BLOCKED" and display_name not in response:
+        response = (f"Dạ {display_name},\n\n" if lang == "vi" else f"Hello {display_name},\n\n") + response
 
     full_response = response if workflow_status in {"SECURITY_BLOCKED", "SOCIAL_REDIRECT"} else response + disclaimer
 

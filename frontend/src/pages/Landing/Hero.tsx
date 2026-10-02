@@ -1,5 +1,5 @@
 import React from 'react'
-import { Stethoscope, ShieldCheck, ChevronRight, Activity, Lock, HeartPulse, CheckCircle2 } from 'lucide-react'
+import { Stethoscope, ChevronRight, Activity, Lock, HeartPulse } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import type { RootState } from '../../app/store'
@@ -24,13 +24,22 @@ export function Hero() {
       <div className="medical-glow-orb orb-clinical-cyan top-[35%] right-[5%] w-[420px] h-[420px]" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-12 gap-8 lg:gap-14 items-center relative z-10">
-        
+
         {/* Left Column: Clinical Value Proposition */}
         <div className="lg:col-span-7 reveal-item">
-          {/* Clinical Badge */}
-          <div className="inline-flex items-center gap-2 text-[11px] sm:text-xs font-medium text-blue-700 dark:text-cyan-300 border border-blue-500/30 dark:border-cyan-500/30 bg-blue-50 dark:bg-cyan-950/40 px-3 sm:px-3.5 py-1.5 mb-5 sm:mb-6 rounded-full shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-            <span className="truncate">HỆ THỐNG Y TẾ ĐA TẦNG ĐƯỢC CHỨNG NHẬN LÂM SÀNG</span>
+
+          {/* Clinical Authority Badge */}
+          <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white/85 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 shadow-xs mb-5 sm:mb-6 backdrop-blur-md">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 motion-reduce:hidden" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Hệ Thống Y Tế Số Đa Tầng Bác Sĩ Giám Sát 24/7
+            </span>
+            <span className="font-mono text-[9px] text-blue-700 dark:text-cyan-400 bg-blue-50 dark:bg-cyan-950/60 border border-blue-500/20 dark:border-cyan-500/30 px-1.5 py-0.5 rounded font-medium">
+              CLINICAL AI
+            </span>
           </div>
 
           {/* Heading */}
@@ -47,7 +56,7 @@ export function Hero() {
           </p>
 
           {/* 2 Rounded-xl Action Buttons (10-12px) */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-7 sm:mb-9">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-7 sm:mb-8">
             <Link
               to="/patient"
               className="btn-clinical-primary px-6 sm:px-7 py-3 sm:py-3.5 rounded-xl flex items-center justify-center gap-2.5 text-sm sm:text-base"
@@ -65,15 +74,26 @@ export function Hero() {
             </a>
           </div>
 
-          {/* Trust Guarantees */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-slate-800/80 pt-5 sm:pt-6">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>100% Y lệnh có Bác sĩ chuyên khoa duyệt</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-cyan-400 shrink-0" />
-              <span>Bảo mật chuẩn Y tế HIPAA & ISO 27001</span>
+          {/* Brand Guarantee Bar with VCare+ Logo */}
+          <div className="pt-6 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-slate-50/70 dark:bg-slate-900/50 p-4 sm:p-4.5 rounded-2xl border border-slate-200/70 dark:border-slate-800/70 shadow-xs backdrop-blur-xs">
+            <img
+              src="/vcare-logo.png"
+              alt="VCare+ Logo"
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-contain bg-white shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 shrink-0 p-1"
+            />
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                  VCare+ Health System
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  Chuẩn Bộ Y Tế & HIPAA
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">EST. 2026</span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">
+                Sản phẩm công nghệ y tế phục vụ người Việt, kết hợp AI phân luồng lâm sàng chuẩn quốc tế ATS và hội đồng bác sĩ chuyên khoa bảo chứng y lệnh 24/7.
+              </p>
             </div>
           </div>
         </div>
@@ -81,7 +101,7 @@ export function Hero() {
         {/* Right Column: Clinical Live Triage Card */}
         <div className="lg:col-span-5 reveal-item">
           <div className="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl rounded-2xl border border-slate-200 dark:border-slate-700/70 p-4 sm:p-7 shadow-xl dark:shadow-2xl dark:shadow-blue-950/40 relative transition-colors duration-300">
-            
+
             {/* Header of Live Triage Card */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-5">
               <div className="flex items-center gap-3">

@@ -91,4 +91,9 @@ context-agent/*
 # Local runner scripts (kept local only, do not commit)
 run.bat
 run.ps1
-run.sh
+run.sh
+
+# Local agent instructions and context
+.agent/
+.agents/
+context_agent/

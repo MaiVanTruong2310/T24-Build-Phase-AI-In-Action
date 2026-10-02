@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     database_auto_create: bool = False
     booking_maintenance_interval_seconds: int = Field(default=60, ge=5, le=3600)
     appointment_reminder_lead_days: int = Field(default=2, ge=1, le=30)
+    auth_database_url: str = ""
+    supabase_auth_redirect_url: str = "http://localhost:5173"
+    auth_provider: Literal["custom", "supabase"] = "custom"
+
+    booking_hold_cleanup_interval_seconds: int = Field(default=60, ge=5, le=3600)
     database_pool_size: int = Field(default=10, ge=1, le=100)
     database_max_overflow: int = Field(default=20, ge=0, le=200)
     database_pool_timeout_seconds: float = Field(default=10.0, gt=0.0, le=120.0)
@@ -45,6 +50,8 @@ class Settings(BaseSettings):
     notification_retry_backoff_max_seconds: int = Field(default=3600, ge=1, le=86400)
 
     # Authentication
+    auth_cookie_secure: bool | None = None
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)

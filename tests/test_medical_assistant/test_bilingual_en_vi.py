@@ -116,7 +116,8 @@ class TestBilingualGuardrails:
         assert "cannot determine a specific disease" in resp
         assert "Tension-type Headache" not in resp
         assert "Migraine" not in resp
-        assert "Neurology" in resp
+        assert "Where do you feel the discomfort" in resp
+        assert "scale from 0 to 10" in resp
 
     def test_english_department_info(self):
         intent = self.guardrail.check_intent("Please give me information about neurology department")

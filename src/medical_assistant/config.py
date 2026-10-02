@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     google_ai_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     google_ai_model_name: str = "gemini-3.1-flash-lite"
     llm_request_timeout_seconds: float = Field(default=12.0, gt=0.0, le=120.0)
+    llm_hedge_delay_seconds: float = Field(default=3.0, gt=0.0, le=30.0)
+    llm_total_timeout_seconds: float = Field(default=15.0, gt=0.0, le=120.0)
     llm_failure_cooldown_seconds: float = Field(default=30.0, ge=1.0, le=600.0)
 
     # Database

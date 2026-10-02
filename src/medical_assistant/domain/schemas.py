@@ -1,13 +1,36 @@
 from datetime import date
 from typing import Any, Literal
+from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+class ChatPatientProfile(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(default="", max_length=20)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def normalize_name(cls, value):
+        return " ".join(value.split()) if isinstance(value, str) else value
+
+    @field_validator("phone")
+    @classmethod
+    def normalize_phone(cls, value: str) -> str:
+        import re
+        phone = re.sub(r"[\s().-]", "", value)
+        if phone and not re.fullmatch(r"\+?\d{9,15}", phone):
+            raise ValueError("Số điện thoại không hợp lệ")
+        return phone
 
 
 class ChatRequest(BaseModel):
+    request_id: UUID = Field(default_factory=uuid4)
+    patient_profile: ChatPatientProfile | None = None
     message: str = Field(..., min_length=1, max_length=5000, description="Tin nhắn từ user")
     session_id: str = Field(
-        default="default_patient_session", description="Thread ID / Session ID định danh phiên chat của bệnh nhân"
+        default_factory=lambda: str(uuid4()), min_length=1, max_length=200,
+        pattern=r"^[A-Za-z0-9_-]+$", description="Thread ID / Session ID định danh phiên chat của bệnh nhân"
     )
     user_id: str | None = Field(default=None, description="Mã bệnh nhân nếu đã đăng nhập")
     enable_citation: bool = Field(

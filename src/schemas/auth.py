@@ -107,6 +107,32 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+class MedicalCondition(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    id: str = Field(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+    name: str = Field(min_length=1, max_length=200)
+    status: Literal["recovered", "in_treatment"]
+
+
+class PatientDetails(BaseModel):
+    """Patient-reported details; these do not certify a clinical diagnosis."""
+    model_config = ConfigDict(extra="forbid")
+    medical_history: list[MedicalCondition] = Field(default_factory=list, max_length=100)
+    blood_type: Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] | None = None
+    allergies: str | None = Field(default=None, max_length=2000)
+    current_medications: str | None = Field(default=None, max_length=2000)
+    address: str | None = Field(default=None, max_length=500)
+    emergency_name: str | None = Field(default=None, max_length=200)
+    emergency_relationship: str | None = Field(default=None, max_length=100)
+    emergency_phone: str | None = Field(default=None, pattern=r"^(?:0|\+84)[35789]\d{8}$")
+    systolic: int | None = Field(default=None, ge=40, le=300)
+    diastolic: int | None = Field(default=None, ge=20, le=200)
+    heart_rate: int | None = Field(default=None, ge=20, le=300)
+    height_cm: float | None = Field(default=None, gt=0, le=300)
+    weight_kg: float | None = Field(default=None, gt=0, le=500)
+    blood_glucose: float | None = Field(default=None, gt=0, le=100)
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -120,6 +146,7 @@ class UserResponse(BaseModel):
     gender: str | None
     citizen_id: str | None
     health_insurance_code: str | None
+    patient_details: PatientDetails | None = None
     verified_at: datetime | None
 
 
@@ -132,7 +159,10 @@ class SessionResponse(BaseModel):
 class UpdateProfileRequest(BaseModel):
     """Patient-editable profile fields."""
 
+    model_config = ConfigDict(extra="forbid")
     full_name: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, pattern=r"^(?:0|\+84)[35789]\d{8}$")
+    patient_details: PatientDetails | None = None
     date_of_birth: date | None = None
     gender: Literal["male", "female", "other", "unspecified"] | None = None
     citizen_id: str | None = Field(default=None, pattern=r"^\d{12}$")

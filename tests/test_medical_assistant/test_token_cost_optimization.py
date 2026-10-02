@@ -37,6 +37,8 @@ async def test_zero_token_cache_greeting():
     meta = result.get("metadata", {})
     assert meta.get("tokens_saved") is True
     assert result.get("workflow_status") == "FAQ_ANSWERED"
+    assert result.get("ats_level") is None
+    assert meta.get("booking_intake") is None
 
 
 @pytest.mark.asyncio

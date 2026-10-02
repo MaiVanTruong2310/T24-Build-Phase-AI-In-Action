@@ -11,12 +11,36 @@ export interface PatientProfile {
   gender: 'male' | 'female' | 'other' | 'unspecified' | null;
   citizen_id: string | null;
   health_insurance_code: string | null;
+  patient_details?: PatientDetails | null;
 }
 
-export type PatientProfileUpdate = Pick<
+export interface MedicalCondition {
+  id: string;
+  name: string;
+  status: 'recovered' | 'in_treatment';
+}
+
+export interface PatientDetails {
+  medical_history?: MedicalCondition[];
+  blood_type?: string | null;
+  allergies?: string | null;
+  current_medications?: string | null;
+  address?: string | null;
+  emergency_name?: string | null;
+  emergency_relationship?: string | null;
+  emergency_phone?: string | null;
+  systolic?: number | null;
+  diastolic?: number | null;
+  heart_rate?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  blood_glucose?: number | null;
+}
+
+export type PatientProfileUpdate = Partial<Pick<
   PatientProfile,
-  'full_name' | 'date_of_birth' | 'gender' | 'citizen_id' | 'health_insurance_code'
->;
+  'full_name' | 'phone' | 'date_of_birth' | 'gender' | 'citizen_id' | 'health_insurance_code' | 'patient_details'
+>>;
 
 export async function fetchCurrentUser(): Promise<PatientProfile> {
   const response = await fetchWithAuth('/users/me');

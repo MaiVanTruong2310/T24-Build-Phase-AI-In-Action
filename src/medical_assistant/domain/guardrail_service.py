@@ -754,33 +754,47 @@ class ClinicalGuardrailService:
         self, symptoms_summary: str = "", suggested_dept: str = "Chuyên khoa phù hợp", language: str = "vi"
     ) -> tuple[str, list[str]]:
         """Từ chối kết luận bệnh, định tuyến khám và không tự liệt kê chẩn đoán phân biệt."""
+        abdominal = "dau bung" in remove_accents(symptoms_summary.lower()) or "abdominal" in symptoms_summary.lower()
         if language == "en":
-            spec_en = get_specialty_display_name(suggested_dept, "en")
+            location_question = (
+                "Where in your abdomen does it hurt (upper/lower, left/right, or around the navel)?"
+                if abdominal else "Where do you feel the discomfort, and what does it feel like?"
+            )
+            accompanying_question = (
+                "Do you also have fever, nausea/vomiting, diarrhea, constipation, or other symptoms?"
+                if abdominal else "Do you have any other symptoms along with it?"
+            )
             response = (
                 "🩺 **Safe clinical guidance (SAF-02):**\n\n"
                 "I cannot determine a specific disease from a chat message alone, and I will not list possible diseases without sufficient clinical information.\n\n"
-                f"Based on the symptom category described, the appropriate next step is an assessment at **{spec_en}**. "
-                "Please share how long the symptom has lasted, its severity, and any accompanying warning signs so I can assess urgency more safely."
+                "Could you tell me a little more?\n"
+                f"1. {location_question}\n"
+                "2. When did it start? Is it constant or does it come and go?\n"
+                "3. How severe is it on a scale from 0 to 10 (0 = no pain, 10 = worst pain)?\n"
+                f"4. {accompanying_question}\n\n"
+                "Your answers will help me assess urgency and suggest the next step."
             )
-            quick_replies = [
-                "Describe symptoms in more detail",
-                f"View {spec_en} schedule",
-                "I have severe warning signs",
-            ]
-            return response, quick_replies
+            return response, ["Describe symptoms in more detail", "I have severe warning signs"]
 
+        location_question = (
+            "Anh/Chị đau ở vùng nào của bụng: trên hay dưới, bên trái hay bên phải, hoặc quanh rốn ạ?"
+            if abdominal else "Anh/Chị khó chịu ở vị trí nào và cảm giác như thế nào ạ?"
+        )
+        accompanying_question = (
+            "Anh/Chị có kèm sốt, buồn nôn/nôn, tiêu chảy, táo bón hoặc triệu chứng nào khác không ạ?"
+            if abdominal else "Anh/Chị có gặp triệu chứng nào khác đi kèm không ạ?"
+        )
         response = (
             "🩺 **Định hướng an toàn (SAF-02):**\n\n"
             "Dạ, chỉ từ một tin nhắn em chưa thể xác định bác mắc bệnh gì và cũng không nên tự liệt kê các bệnh khi chưa đủ thông tin lâm sàng.\n\n"
-            f"Dựa trên nhóm triệu chứng bác mô tả, hướng phù hợp là thăm khám tại **Khoa {suggested_dept}**. "
-            "Bác có thể cho em biết triệu chứng kéo dài bao lâu, mức độ ảnh hưởng và các dấu hiệu đi kèm để em đánh giá mức độ khẩn cấp an toàn hơn không ạ?"
+            "Anh/Chị có thể cho em biết thêm một vài thông tin nhé:\n"
+            f"1. {location_question}\n"
+            "2. Triệu chứng bắt đầu từ khi nào, diễn ra liên tục hay từng cơn ạ?\n"
+            "3. Mức độ đau khoảng bao nhiêu trên thang **0–10** (0 là không đau, 10 là đau dữ dội nhất) ạ?\n"
+            f"4. {accompanying_question}\n\n"
+            "Anh/Chị trả lời các ý trên giúp em để em đánh giá mức độ khẩn cấp và hỗ trợ hướng xử trí phù hợp hơn nhé."
         )
-        quick_replies = [
-            "Mô tả thêm triệu chứng",
-            f"Xem lịch khám Khoa {suggested_dept}",
-            "Tôi có dấu hiệu nặng",
-        ]
-        return response, quick_replies
+        return response, ["Mô tả thêm triệu chứng", "Tôi có dấu hiệu nặng"]
 
     def get_department_info_response(
         self,

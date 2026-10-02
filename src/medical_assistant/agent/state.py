@@ -14,6 +14,9 @@ class AgentState(TypedDict, total=False):
     analysis: str
     user_id: str
     patient_name: str | None
+    patient_phone: str | None
+    patient_health_record: dict[str, Any] | None
+    patient_profile: dict[str, str] | None
     messages: list[dict[str, str]]
     user_input: str
     language: str | None  # 'vi' hoặc 'en'

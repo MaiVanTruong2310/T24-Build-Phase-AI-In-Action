@@ -5,6 +5,8 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import Settings, get_settings
@@ -244,13 +246,21 @@ class AuthService:
 
     async def update_profile(self, user: User, request: UpdateProfileRequest) -> User:
         """Apply allowed profile changes and flush them in a transaction."""
-        async with self.session.begin():
-            updates = request.model_dump(exclude_unset=True)
-            if "full_name" in updates:
-                updates["full_name"] = updates["full_name"].strip() or None if updates["full_name"] else None
-            for field, value in updates.items():
-                setattr(user, field, value)
-            await self.session.flush()
+        try:
+            async with self.session.begin():
+                # Serialize per-field edits to retain other saved details.
+                await self.session.execute(select(User.id).where(User.id == user.id).with_for_update())
+                updates = request.model_dump(exclude_unset=True)
+                if "patient_details" in updates:
+                    await self.session.refresh(user, attribute_names=["patient_details"])
+                    updates["patient_details"] = {**(user.patient_details or {}), **(updates["patient_details"] or {})}
+                if "full_name" in updates:
+                    updates["full_name"] = updates["full_name"].strip() or None if updates["full_name"] else None
+                for field, value in updates.items():
+                    setattr(user, field, value)
+                await self.session.flush()
+        except IntegrityError as exc:
+            raise ConflictError("PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác.") from exc
         logger.info("AuthService.update_profile profile updated")
         return user
 

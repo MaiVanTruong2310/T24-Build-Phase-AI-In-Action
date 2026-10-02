@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.endpoints.auth import router as auth_router
@@ -16,6 +17,7 @@ from src.api.endpoints.catalog import staff_router as catalog_staff_router
 from src.api.endpoints.notification import router as notification_router
 from src.api.handlers import (
     app_error_handler,
+    database_unavailable_handler,
     http_error_handler,
     unexpected_error_handler,
     validation_error_handler,
@@ -27,6 +29,7 @@ from src.db.session import check_database_connection, close_database, get_sessio
 from src.medical_assistant.api.routes import router as medical_assistant_router
 from src.medical_assistant.db.supabase_client import close_supabase_clients
 from src.services.booking import BookingService
+from src.services.cookie_session import CookieOriginMiddleware
 from src.services.notification import NotificationService
 
 logger = get_logger(__name__)
@@ -93,6 +96,8 @@ app = FastAPI(
 )
 
 settings = get_settings()
+
+app.add_middleware(CookieOriginMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=parse_cors_origins(settings.cors_origins),
@@ -109,6 +114,7 @@ app.include_router(staff_booking_router, prefix="/api/v1")
 app.include_router(notification_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(catalog_staff_router, prefix="/api/v1")
+app.add_exception_handler(OperationalError, database_unavailable_handler)
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(StarletteHTTPException, http_error_handler)

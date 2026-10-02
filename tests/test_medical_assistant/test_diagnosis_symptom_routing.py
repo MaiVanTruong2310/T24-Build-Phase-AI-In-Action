@@ -13,7 +13,8 @@ async def test_constipation_diagnosis_question_routes_to_gastro_without_disease_
     assert result["workflow_status"] == "GUARDRAIL_DIAGNOSIS"
     assert result["suggested_department_name"] == "Tiêu hóa - Gan mật"
     assert result["ats_level"] == 4
-    assert "Khoa Tiêu hóa - Gan mật" in result["response"]
+    assert "Triệu chứng bắt đầu từ khi nào" in result["response"]
+    assert "0–10" in result["response"]
     assert "Khoa Thần kinh" not in result["response"]
     assert "Migraine" not in result["response"]
     assert "Đau đầu căng thẳng" not in result["response"]

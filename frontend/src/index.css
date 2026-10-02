@@ -82,6 +82,23 @@ a {
   animation-play-state: paused;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-gentle-float,
+  .orb-clinical-blue,
+  .orb-clinical-cyan,
+  .orb-clinical-teal {
+    animation: none !important;
+  }
+}
+
 .fade-hover {
   transition: opacity 0.3s ease-out, background-color 0.3s ease-out, border-color 0.3s ease-out, transform 0.3s ease-out;
 }
