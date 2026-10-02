@@ -1,6 +1,11 @@
 import { fetchWithAuth } from '../../app/apiClient';
 
-export type NotificationKind = 'booking_confirmed' | 'booking_rejected' | 'appointment_reminder';
+export type NotificationKind =
+  | 'booking_pending_approval'
+  | 'booking_confirmed'
+  | 'booking_rejected'
+  | 'booking_expired'
+  | 'appointment_reminder';
 
 export interface AppNotification {
   id: string;

@@ -240,6 +240,10 @@ class AuthService:
             raise NotFoundError("User not found")
         return user
 
+    async def list_patients(self, search: str | None, offset: int, limit: int) -> list[User]:
+        """Return patient identities for staff booking selection."""
+        return await self.users.list_patients(search, offset=offset, limit=limit)
+
     async def update_profile(self, user: User, request: UpdateProfileRequest) -> User:
         """Apply allowed profile changes and flush them in a transaction."""
         try:
@@ -256,7 +260,9 @@ class AuthService:
                     setattr(user, field, value)
                 await self.session.flush()
         except IntegrityError as exc:
-            raise ConflictError("PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác.") from exc
+            raise ConflictError(
+                "PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác."
+            ) from exc
         logger.info("AuthService.update_profile profile updated")
         return user
 

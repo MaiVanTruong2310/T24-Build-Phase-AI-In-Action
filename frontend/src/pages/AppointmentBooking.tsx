@@ -10,9 +10,7 @@ import { fetchCurrentUser, PatientProfile } from '../features/patient/api';
 import {
   BookingApiError,
   Booking,
-  BookingHold,
   createBooking,
-  createBookingHold,
   Doctor,
   Facility,
   fetchAvailability,
@@ -22,7 +20,6 @@ import {
   fetchSpecialties,
   fetchBooking,
   MedicalService,
-  releaseBookingHold,
   rescheduleBooking,
   Schedule,
   Specialty,
@@ -33,6 +30,91 @@ function formatLocalDate(value: Date): string {
   const month = String(value.getMonth() + 1).padStart(2, '0');
   const day = String(value.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+const DEFAULT_WORKING_START_MINUTES = 8 * 60;
+const DEFAULT_WORKING_END_MINUTES = 18 * 60;
+const BUSINESS_TIMEZONE_OFFSET = '+07:00';
+
+function buildRequestedTimeSlot(
+  date: string,
+  doctorId: string,
+  facilityId: string,
+  startMinutes: number,
+  durationMinutes: number,
+): Schedule[] {
+  const hours = String(Math.floor(startMinutes / 60)).padStart(2, '0');
+  const minutes = String(startMinutes % 60).padStart(2, '0');
+  const startsAt = new Date(`${date}T${hours}:${minutes}:00${BUSINESS_TIMEZONE_OFFSET}`);
+  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
+  return [{
+    id: `requested-${date}-${hours}${minutes}`,
+    doctor_id: doctorId,
+    facility_id: facilityId,
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+    capacity: 0,
+    status: 'available',
+    type: 'consultation',
+    version: 0,
+    source_system: 'ui-requested-time',
+  }];
+}
+
+function rangesOverlap(leftStart: string, leftEnd: string, rightStart: string, rightEnd: string): boolean {
+  return new Date(leftStart).getTime() < new Date(rightEnd).getTime()
+    && new Date(leftEnd).getTime() > new Date(rightStart).getTime();
+}
+
+function buildPatientSchedules(
+  date: string,
+  doctorId: string,
+  facilityId: string,
+  durationMinutes: number,
+  schedules: Schedule[],
+): Schedule[] {
+  const blockedSchedules = schedules.filter((schedule) => (
+    (schedule.type ?? 'consultation') !== 'consultation'
+    && schedule.status !== 'cancelled'
+  ));
+  const consultationSchedules = schedules.filter((schedule) => (
+    (schedule.type ?? 'consultation') === 'consultation'
+  ));
+  const generatedSlots: Schedule[] = [];
+
+  for (
+    let startMinutes = DEFAULT_WORKING_START_MINUTES;
+    startMinutes + durationMinutes <= DEFAULT_WORKING_END_MINUTES;
+    startMinutes += durationMinutes
+  ) {
+    const hours = String(Math.floor(startMinutes / 60)).padStart(2, '0');
+    const minutes = String(startMinutes % 60).padStart(2, '0');
+    const startsAt = new Date(`${date}T${hours}:${minutes}:00${BUSINESS_TIMEZONE_OFFSET}`);
+    const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
+    const startsAtIso = startsAt.toISOString();
+    const endsAtIso = endsAt.toISOString();
+
+    const isBlocked = blockedSchedules.some((schedule) => rangesOverlap(
+      startsAtIso,
+      endsAtIso,
+      schedule.starts_at,
+      schedule.ends_at,
+    ));
+    const isCoveredByExplicitSchedule = consultationSchedules.some((schedule) => rangesOverlap(
+      startsAtIso,
+      endsAtIso,
+      schedule.starts_at,
+      schedule.ends_at,
+    ));
+
+    if (!isBlocked && !isCoveredByExplicitSchedule) {
+      generatedSlots.push(...buildRequestedTimeSlot(date, doctorId, facilityId, startMinutes, durationMinutes));
+    }
+  }
+
+  return [...schedules, ...generatedSlots].sort(
+    (left, right) => new Date(left.starts_at).getTime() - new Date(right.starts_at).getTime(),
+  );
 }
 
 export default function AppointmentBooking() {
@@ -59,8 +141,6 @@ export default function AppointmentBooking() {
   const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   const [isBooking, setIsBooking] = useState(false);
-  const [hold, setHold] = useState<BookingHold | null>(null);
-  const [holdSecondsRemaining, setHoldSecondsRemaining] = useState(0);
   const [bookingError, setBookingError] = useState('');
   const [catalogError, setCatalogError] = useState('');
   const [availabilityError, setAvailabilityError] = useState('');
@@ -68,27 +148,9 @@ export default function AppointmentBooking() {
   const [patientNote, setPatientNote] = useState('');
   const [rescheduleSource, setRescheduleSource] = useState<Booking | null>(null);
   const [rescheduleLoading, setRescheduleLoading] = useState(false);
-  const holdRef = useRef<BookingHold | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    holdRef.current = hold;
-  }, [hold]);
-
-  useEffect(() => {
-    return () => {
-      const activeHold = holdRef.current;
-      if (activeHold) void releaseBookingHold(activeHold.id).catch(() => undefined);
-    };
-  }, []);
-
-  useEffect(() => {
-    const previousHold = holdRef.current;
-    if (previousHold) {
-      holdRef.current = null;
-      setHold(null);
-      void releaseBookingHold(previousHold.id).catch(() => undefined);
-    }
     let cancelled = false;
 
     Promise.all([fetchSpecialties(), fetchFacilities()])
@@ -222,36 +284,6 @@ export default function AppointmentBooking() {
   }, [selectedSpecialty, selectedFacility, selectedService, rescheduleSource?.doctor_id]);
 
   useEffect(() => {
-    const previousHold = holdRef.current;
-    if (!previousHold) return;
-    holdRef.current = null;
-    setHold(null);
-    void releaseBookingHold(previousHold.id).catch(() => undefined);
-  }, [selectedDoctorId, selectedDate]);
-
-  useEffect(() => {
-    if (!hold) {
-      setHoldSecondsRemaining(0);
-      return undefined;
-    }
-
-    const updateRemaining = () => {
-      const seconds = Math.max(0, Math.ceil((new Date(hold.expires_at).getTime() - Date.now()) / 1000));
-      setHoldSecondsRemaining(seconds);
-      if (seconds === 0) {
-        holdRef.current = null;
-        setHold(null);
-        setSelectedSlot('');
-        setBookingError('Thời gian giữ chỗ đã hết. Vui lòng chọn lại khung giờ.');
-      }
-    };
-
-    updateRemaining();
-    const timer = window.setInterval(updateRemaining, 1000);
-    return () => window.clearInterval(timer);
-  }, [hold]);
-
-  useEffect(() => {
     let cancelled = false;
     setSchedules([]);
     setSelectedSlot('');
@@ -290,40 +322,29 @@ export default function AppointmentBooking() {
   const selectedServiceData = services.find((service) => service.id === selectedService);
   const selectedFacilityData = facilities.find((facility) => facility.id === selectedFacility);
   const serviceDuration = selectedServiceData?.duration_minutes ?? null;
-  const displaySchedules = schedules;
+  const displaySchedules = !rescheduleId
+    && !loadingAvailability
+    && !availabilityError
+    && selectedDoctorId
+    && selectedFacility
+    && serviceDuration
+    && serviceDuration > 0
+    ? buildPatientSchedules(selectedDate, selectedDoctorId, selectedFacility, serviceDuration, schedules)
+    : schedules;
   const selectedSchedule = displaySchedules.find((schedule) => schedule.id === selectedSlot);
+  const isRequestedTimeSlot = selectedSchedule?.source_system === 'ui-requested-time' || selectedSchedule?.source_system === 'ui-demo';
   const scheduleFacility = facilities.find((facility) => facility.id === selectedSchedule?.facility_id) || selectedFacilityData;
-  const selectedDisplayEndsAt = selectedSchedule && serviceDuration
+  const selectedDisplayEndsAt = selectedSchedule?.source_system === 'ui-requested-time' && serviceDuration
     ? new Date(new Date(selectedSchedule.starts_at).getTime() + serviceDuration * 60 * 1000).toISOString()
     : selectedSchedule?.ends_at || '';
 
   const handleSlotSelection = async (slotId: string) => {
     setBookingError('');
-    const previousHold = holdRef.current;
-    if (previousHold) {
-      holdRef.current = null;
-      setHold(null);
-      await releaseBookingHold(previousHold.id).catch(() => undefined);
-    }
     setSelectedSlot(slotId);
-    if (!slotId || !selectedService || !selectedSpecialty) return;
-
-    try {
-      const nextHold = await createBookingHold(slotId, selectedService, selectedSpecialty);
-      holdRef.current = nextHold;
-      setHold(nextHold);
-    } catch (error) {
-      setSelectedSlot('');
-      if (error instanceof BookingApiError && error.status === 409) {
-        setBookingError('Khung giờ vừa được giữ bởi người khác. Vui lòng chọn khung giờ khác.');
-      } else {
-        setBookingError('Không thể giữ khung giờ. Vui lòng thử lại.');
-      }
-    }
   };
 
   const handleBooking = async () => {
-    if (!selectedDoctorId || !selectedSpecialty || !selectedService || !selectedSlot || !hold) {
+    if (!selectedDoctorId || !selectedSpecialty || !selectedService || !selectedSlot) {
       setBookingError('Vui lòng chọn chuyên khoa, dịch vụ, bác sĩ và khung giờ.');
       return;
     }
@@ -340,10 +361,9 @@ export default function AppointmentBooking() {
     setBookingError('');
     try {
       const booking = rescheduleId
-        ? await rescheduleBooking(rescheduleId, { schedule_id: selectedSlot, hold_id: hold.id })
+        ? await rescheduleBooking(rescheduleId, { schedule_id: selectedSlot })
         : await createBooking({
-            hold_id: hold.id,
-            schedule_id: selectedSlot,
+            schedule_id: isRequestedTimeSlot ? undefined : selectedSlot,
             doctor_id: selectedDoctorId,
             facility_id: scheduleFacility.id,
             starts_at: selectedSchedule.starts_at,
@@ -442,11 +462,6 @@ export default function AppointmentBooking() {
           </main>
 
           <div className="lg:col-span-4">
-            {hold && (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Khung giờ đang được giữ trong <strong>{Math.floor(holdSecondsRemaining / 60)}:{String(holdSecondsRemaining % 60).padStart(2, '0')}</strong>.
-              </div>
-            )}
             <BookingSummary
               patientName={patient?.full_name || 'Chưa cập nhật họ tên'}
               patientPhone={patient?.phone || null}

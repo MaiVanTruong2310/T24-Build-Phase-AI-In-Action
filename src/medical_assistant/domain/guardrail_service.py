@@ -758,11 +758,13 @@ class ClinicalGuardrailService:
         if language == "en":
             location_question = (
                 "Where in your abdomen does it hurt (upper/lower, left/right, or around the navel)?"
-                if abdominal else "Where do you feel the discomfort, and what does it feel like?"
+                if abdominal
+                else "Where do you feel the discomfort, and what does it feel like?"
             )
             accompanying_question = (
                 "Do you also have fever, nausea/vomiting, diarrhea, constipation, or other symptoms?"
-                if abdominal else "Do you have any other symptoms along with it?"
+                if abdominal
+                else "Do you have any other symptoms along with it?"
             )
             response = (
                 "🩺 **Safe clinical guidance (SAF-02):**\n\n"
@@ -778,11 +780,13 @@ class ClinicalGuardrailService:
 
         location_question = (
             "Anh/Chị đau ở vùng nào của bụng: trên hay dưới, bên trái hay bên phải, hoặc quanh rốn ạ?"
-            if abdominal else "Anh/Chị khó chịu ở vị trí nào và cảm giác như thế nào ạ?"
+            if abdominal
+            else "Anh/Chị khó chịu ở vị trí nào và cảm giác như thế nào ạ?"
         )
         accompanying_question = (
             "Anh/Chị có kèm sốt, buồn nôn/nôn, tiêu chảy, táo bón hoặc triệu chứng nào khác không ạ?"
-            if abdominal else "Anh/Chị có gặp triệu chứng nào khác đi kèm không ạ?"
+            if abdominal
+            else "Anh/Chị có gặp triệu chứng nào khác đi kèm không ạ?"
         )
         response = (
             "🩺 **Định hướng an toàn (SAF-02):**\n\n"

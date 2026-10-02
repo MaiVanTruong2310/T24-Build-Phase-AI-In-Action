@@ -13,7 +13,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.db.base import Base
 
 if TYPE_CHECKING:
-    from src.models.booking_hold import BookingHold
     from src.models.doctor import Doctor
     from src.models.facility import Facility
     from src.models.schedule import DoctorSchedule
@@ -35,9 +34,6 @@ class Booking(Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     schedule_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("doctor_schedules.id", ondelete="RESTRICT"), nullable=True, index=True
-    )
-    hold_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("booking_holds.id", ondelete="SET NULL"), nullable=True, unique=True, index=True
     )
     doctor_id: Mapped[UUID] = mapped_column(ForeignKey("doctors.id", ondelete="RESTRICT"), nullable=False, index=True)
     facility_id: Mapped[UUID] = mapped_column(
@@ -66,7 +62,7 @@ class Booking(Base):
 
     user: Mapped[User] = relationship(foreign_keys=[user_id])
     schedule: Mapped[DoctorSchedule | None] = relationship()
-    hold: Mapped[BookingHold | None] = relationship(back_populates="booking")
+    expired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     doctor: Mapped[Doctor] = relationship(foreign_keys=[doctor_id])
     facility: Mapped[Facility] = relationship(foreign_keys=[facility_id])
     service: Mapped[Service] = relationship()

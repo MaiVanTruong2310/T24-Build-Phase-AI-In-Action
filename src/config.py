@@ -27,16 +27,27 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = ""
+    # Schema changes are managed by Alembic. Keep ORM bootstrap opt-in so
+    # multiple API processes cannot race while creating tables.
+    database_auto_create: bool = False
+    booking_maintenance_interval_seconds: int = Field(default=60, ge=5, le=3600)
+    appointment_reminder_lead_days: int = Field(default=2, ge=1, le=30)
     auth_database_url: str = ""
     supabase_auth_redirect_url: str = "http://localhost:5173"
     auth_provider: Literal["custom", "supabase"] = "custom"
-    database_auto_create: bool = True
+
     booking_hold_cleanup_interval_seconds: int = Field(default=60, ge=5, le=3600)
     database_pool_size: int = Field(default=10, ge=1, le=100)
     database_max_overflow: int = Field(default=20, ge=0, le=200)
     database_pool_timeout_seconds: float = Field(default=10.0, gt=0.0, le=120.0)
     database_pool_recycle_seconds: int = Field(default=900, ge=30, le=86400)
     database_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
+
+    # Direct notification delivery
+    notification_processing_timeout_seconds: int = Field(default=300, ge=30, le=86400)
+    notification_max_attempts: int = Field(default=5, ge=1, le=20)
+    notification_retry_backoff_seconds: int = Field(default=5, ge=1, le=3600)
+    notification_retry_backoff_max_seconds: int = Field(default=3600, ge=1, le=86400)
 
     # Authentication
     auth_cookie_secure: bool | None = None
@@ -55,6 +66,13 @@ class Settings(BaseSettings):
     # Supabase
     supabase_url: str = ""
     supabase_key: str = ""
+
+    # Gmail SMTP App Password
+    gmail_smtp_host: str = "smtp.gmail.com"
+    gmail_smtp_port: int = Field(default=587, ge=1, le=65535)
+    gmail_smtp_username: str = ""
+    gmail_smtp_app_password: str = ""
+    gmail_from_email: str = ""
 
 
 def parse_cors_origins(value: str) -> list[str]:

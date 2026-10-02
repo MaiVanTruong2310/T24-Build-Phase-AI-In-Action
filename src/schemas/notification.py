@@ -6,7 +6,13 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-NotificationKind = Literal["booking_confirmed", "booking_rejected", "appointment_reminder"]
+NotificationKind = Literal[
+    "booking_pending_approval",
+    "booking_confirmed",
+    "booking_rejected",
+    "booking_expired",
+    "appointment_reminder",
+]
 
 
 class NotificationResponse(BaseModel):

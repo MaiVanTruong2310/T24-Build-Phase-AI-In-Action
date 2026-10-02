@@ -1,6 +1,8 @@
 import { Bell, CheckCheck, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { resolveWebSocketUrl } from '../../app/apiClient';
+import { readAccessToken } from '../auth/session';
 import {
   fetchNotifications,
   markAllNotificationsRead,
@@ -21,14 +23,16 @@ export function NotificationBell({ enabled }: { enabled: boolean }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const loadNotifications = useCallback(async () => {
     if (!enabled) return;
     try {
       setLoading(true);
+      setError('');
       setNotifications(await fetchNotifications());
     } catch {
-      // The header should remain usable when the notification service is unavailable.
+      setError('Không thể tải thông báo.');
     } finally {
       setLoading(false);
     }
@@ -37,8 +41,49 @@ export function NotificationBell({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     void loadNotifications();
     if (!enabled) return undefined;
-    const timer = window.setInterval(() => void loadNotifications(), 30_000);
-    return () => window.clearInterval(timer);
+
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+    let stopped = false;
+
+    const connect = () => {
+      if (stopped) return;
+      const token = readAccessToken();
+      const query = token ? `?${new URLSearchParams({ token }).toString()}` : '';
+      socket = new WebSocket(`${resolveWebSocketUrl('/notifications/ws')}${query}`);
+      socket.onopen = () => {
+        // Reconcile notifications created while the socket was reconnecting.
+        void loadNotifications();
+      };
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { type?: string; data?: AppNotification };
+          const incoming = payload.data;
+          if (payload.type !== 'notification.created' || !incoming) return;
+          setNotifications((current) => {
+            const next = [incoming, ...current.filter((item) => item.id !== incoming.id)];
+            return next.sort((left, right) => right.created_at.localeCompare(left.created_at));
+          });
+        } catch {
+          // Ignore malformed realtime messages and keep the current list.
+        }
+      };
+      socket.onclose = () => {
+        if (!stopped) {
+          void loadNotifications().finally(() => {
+            reconnectTimer = window.setTimeout(connect, 5_000);
+          });
+        }
+      };
+      socket.onerror = () => socket?.close();
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
   }, [enabled, loadNotifications]);
 
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
@@ -90,6 +135,14 @@ export function NotificationBell({ enabled }: { enabled: boolean }) {
             </button>
           </div>
           <div className="max-h-96 overflow-y-auto">
+            {error && (
+              <div role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+                <p>{error}</p>
+                <button type="button" className="mt-2 font-semibold underline" onClick={() => void loadNotifications()}>
+                  Thử lại
+                </button>
+              </div>
+            )}
             {loading && notifications.length === 0 && <div className="flex justify-center px-4 py-8"><Loader2 className="h-5 w-5 animate-spin text-sky-600" /></div>}
             {!loading && notifications.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-500">Chưa có thông báo.</p>}
             {notifications.map((notification) => (

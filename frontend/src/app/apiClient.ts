@@ -1,4 +1,10 @@
-import { clearSession, markCookieSession, readPublishedSession } from '../features/auth/session';
+import {
+  clearSession,
+  markCookieSession, readPublishedSession 
+} from '../features/auth/session';
+
+// Local Vite development uses the shared development backend exposed through ngrok.
+// Set VITE_API_BASE_URL in frontend/.env.local to override this when needed.
 const LOCAL_API_ORIGIN = 'http://localhost:8000';
 function normalizeApiOrigin(value: string): string {
   const trimmed = value.trim().replace(/\/$/, '');
@@ -73,6 +79,12 @@ export function resolveApiUrl(url: string): string {
   if (url.startsWith('/api/')) return `${API_ORIGIN}${url}`;
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }
+
+export function resolveWebSocketUrl(url: string): string {
+  const httpUrl = resolveApiUrl(url);
+  return httpUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+}
+
 export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<Response> {
   const resolved = resolveApiUrl(url);
   const headers = new Headers(options.headers);

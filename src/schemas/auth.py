@@ -116,6 +116,7 @@ class MedicalCondition(BaseModel):
 
 class PatientDetails(BaseModel):
     """Patient-reported details; these do not certify a clinical diagnosis."""
+
     model_config = ConfigDict(extra="forbid")
     medical_history: list[MedicalCondition] = Field(default_factory=list, max_length=100)
     blood_type: Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] | None = None

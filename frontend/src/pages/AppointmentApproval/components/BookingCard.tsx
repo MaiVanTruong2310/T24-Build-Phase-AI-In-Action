@@ -1,7 +1,7 @@
 import {
   ChevronRight, Clock, ShieldCheck, Brain,
   CheckCircle2, XCircle, Calendar, Stethoscope, Loader2,
-  Building2, Video, ChevronDown,
+  Building2, Video, ChevronDown, UserRound,
 } from 'lucide-react';
 import type { PendingBooking } from '../api';
 import { STATUS_CONFIG, RISK_CONFIG, formatTime, formatDate, formatRelative } from './constants';
@@ -34,11 +34,17 @@ export function BookingCard({ booking, isExpanded, onToggle, onOpenDetail, onApp
       <div className="px-5 py-4 flex items-center gap-4">
         {/* Status dot + avatar */}
         <div className="relative flex-shrink-0">
-          <img
-            src={booking.doctor_avatar || `https://i.pravatar.cc/150?u=${booking.id}`}
-            alt={booking.doctor_name}
-            className="w-12 h-12 rounded-xl object-cover border border-slate-200"
-          />
+          {booking.doctor_avatar ? (
+            <img
+              src={booking.doctor_avatar}
+              alt={booking.doctor_name}
+              className="h-12 w-12 rounded-xl border border-slate-200 object-cover"
+            />
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-sky-50 text-sky-600">
+              <UserRound className="h-5 w-5" />
+            </div>
+          )}
           <div
             className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${status.dot}`}
             title={status.label}

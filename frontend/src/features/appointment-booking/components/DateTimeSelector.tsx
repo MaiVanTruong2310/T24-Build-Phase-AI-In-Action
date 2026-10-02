@@ -15,7 +15,8 @@ function formatTime(value: string): string {
 
 function formatSlotRange(schedule: Schedule, serviceDuration: number | null): string {
   const startsAt = new Date(schedule.starts_at);
-  const endsAt = serviceDuration && serviceDuration > 0
+  const isGeneratedSlot = schedule.source_system === 'ui-requested-time' || schedule.source_system === 'ui-demo';
+  const endsAt = isGeneratedSlot && serviceDuration && serviceDuration > 0
     ? new Date(startsAt.getTime() + serviceDuration * 60 * 1000)
     : new Date(schedule.ends_at);
   return `${formatTime(startsAt.toISOString())} – ${formatTime(endsAt.toISOString())}`;
@@ -133,9 +134,13 @@ export function DateTimeSelector({
             <h3 className="mb-3 text-sm font-bold text-slate-700">{group.label}</h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
               {group.slots.map((schedule) => {
-                const isDemo = schedule.source_system === 'ui-demo';
-                const hasCapacity = typeof schedule.capacity === 'number';
-                const isAvailable = isDemo || (schedule.status === 'available' && (!hasCapacity || schedule.capacity > 0));
+                const isRequestedTime = schedule.source_system === 'ui-requested-time' || schedule.source_system === 'ui-demo';
+                const scheduleType = schedule.type ?? 'consultation';
+                const isBlockedSchedule = scheduleType !== 'consultation';
+                const remainingCapacity = schedule.remaining_capacity ?? schedule.capacity;
+                const hasCapacity = typeof remainingCapacity === 'number';
+                const isPast = new Date(schedule.starts_at).getTime() <= Date.now();
+                const isAvailable = !isPast && !isBlockedSchedule && (isRequestedTime || (schedule.status === 'available' && (!hasCapacity || remainingCapacity > 0)));
                 const isSelected = selectedSlot === schedule.id;
                 return (
                   <button
@@ -154,7 +159,7 @@ export function DateTimeSelector({
                     {isSelected && <Check className="absolute right-2 top-2 h-4 w-4 text-emerald-300" />}
                     <span className="block font-bold">{formatSlotRange(schedule, serviceDuration)}</span>
                     <span className={clsx('mt-1 block text-xs', isSelected ? 'text-sky-100' : isAvailable ? 'text-sky-600' : 'text-slate-400')}>
-                      {isAvailable ? (isDemo || !hasCapacity ? 'Còn trống' : `${schedule.capacity} chỗ trống`) : 'Không còn chỗ'}
+                      {isBlockedSchedule ? 'Đã bận' : isPast ? 'Đã qua' : isAvailable ? (isRequestedTime || !hasCapacity ? 'Còn trống' : `${remainingCapacity} chỗ trống`) : 'Không còn chỗ'}
                     </span>
                   </button>
                 );

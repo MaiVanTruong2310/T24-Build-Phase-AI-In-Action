@@ -18,6 +18,7 @@ function statusLabel(status: Booking['status']): string {
   if (status === 'pending_approval') return 'Chờ duyệt';
   if (status === 'confirmed') return 'Đã xác nhận';
   if (status === 'rejected') return 'Đã từ chối';
+  if (status === 'expired') return 'Đã hết hạn';
   return 'Đã huỷ';
 }
 
@@ -100,6 +101,8 @@ export default function AppointmentHistory() {
                     ? 'rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700'
                     : booking.status === 'rejected'
                       ? 'rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700'
+                    : booking.status === 'expired'
+                      ? 'rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700'
                       : 'rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600'}>
                   {statusLabel(booking.status)}
                 </span>
