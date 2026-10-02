@@ -1,6 +1,8 @@
 import { Bell, CheckCheck, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { resolveWebSocketUrl } from '../../app/apiClient';
+import { readAccessToken } from '../auth/session';
 import {
   fetchNotifications,
   markAllNotificationsRead,
@@ -39,8 +41,50 @@ export function NotificationBell({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     void loadNotifications();
     if (!enabled) return undefined;
-    const timer = window.setInterval(() => void loadNotifications(), 30_000);
-    return () => window.clearInterval(timer);
+
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+    let stopped = false;
+
+    const connect = () => {
+      if (stopped) return;
+      const token = readAccessToken();
+      if (!token) return;
+      const query = new URLSearchParams({ token });
+      socket = new WebSocket(`${resolveWebSocketUrl('/notifications/ws')}?${query.toString()}`);
+      socket.onopen = () => {
+        // Reconcile notifications created while the socket was reconnecting.
+        void loadNotifications();
+      };
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { type?: string; data?: AppNotification };
+          const incoming = payload.data;
+          if (payload.type !== 'notification.created' || !incoming) return;
+          setNotifications((current) => {
+            const next = [incoming, ...current.filter((item) => item.id !== incoming.id)];
+            return next.sort((left, right) => right.created_at.localeCompare(left.created_at));
+          });
+        } catch {
+          // Ignore malformed realtime messages and keep the current list.
+        }
+      };
+      socket.onclose = () => {
+        if (!stopped) {
+          void loadNotifications().finally(() => {
+            reconnectTimer = window.setTimeout(connect, 5_000);
+          });
+        }
+      };
+      socket.onerror = () => socket?.close();
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
   }, [enabled, loadNotifications]);
 
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;

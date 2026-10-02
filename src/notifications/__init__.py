@@ -1,1 +1,1 @@
-"""Kafka notification producer and consumer primitives."""
+"""Legacy notification package kept for import compatibility."""

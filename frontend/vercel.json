@@ -7,7 +7,7 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "https://reclining-unlit-unused.ngrok-free.dev/api/:path*"
+      "destination": "https://ai20k-medguide.duckdns.org/api/:path*"
     }
   ]
 }

@@ -17,7 +17,7 @@ flowchart LR
     subgraph BE["2️⃣ BACKEND LAYER (FastAPI)"]
         direction TB
         SVC["Core Services<br/>(Auth·Patient·Clinic·Appointment·<br/>Conversation·HITL·Notification)"]
-        DATA["Data Layer<br/>(PostgreSQL·pgvector·Redis·Kafka·Storage)"]
+        DATA["Data Layer<br/>(PostgreSQL·pgvector·Redis·Storage)"]
 
         subgraph BK["Booking Workflow"]
             direction LR
@@ -48,7 +48,7 @@ flowchart LR
     SD <-->|"WebSocket"| SVC
     SVC --> DATA
     SVC -->|"Redis"| DATA
-    SVC -->|"Kafka"| Notify(["Notification"])
+    SVC -->|"Database + WebSocket"| Notify(["Notification"])
     Notify -.-> PA
     SVC --> BK
     BK <-->|"REST API"| FLOW
@@ -123,13 +123,13 @@ flowchart LR
     ToolCall --> Reply
     HITL1 -->|"WebSocket"| Reply
 
-    ToolCall -->|"Kafka (thông báo)"| Notify(["Gửi nhắc lịch/thông báo"])
+    ToolCall -->|"Database + WebSocket"| Notify(["Gửi nhắc lịch/thông báo"])
 ```
 
 ### Data & Infrastructure
 
 - PostgreSQL là nguồn dữ liệu nghiệp vụ; pgvector lưu embedding và phục vụ RAG.
-- Redis dùng cho cache và trạng thái ngắn hạn; Kafka xử lý thông báo bất đồng bộ; Object Storage lưu tài liệu.
+- Redis dùng cho cache và trạng thái ngắn hạn; notification được ghi trực tiếp vào PostgreSQL và đẩy realtime qua WebSocket; Object Storage lưu tài liệu.
 - Alembic quản lý migration; Prometheus/Grafana, Loki/Tempo và Langfuse phục vụ quan sát hệ thống.
 
 ## Core Data Flow
@@ -163,7 +163,7 @@ flowchart LR
     FE -->|"REST API"| API
 ```
 
-Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển khai image đã kiểm thử lên EC2, có health check và rollback. Redis, Kafka, Object Storage và frontend được tích hợp theo môi trường triển khai tương ứng.
+Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển khai image đã kiểm thử lên EC2, có health check và rollback. Redis, Object Storage và frontend được tích hợp theo môi trường triển khai tương ứng.
 
 ## Security
 
@@ -179,5 +179,5 @@ Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển k
 | API                 | FastAPI                               | Async, type-safe, tự sinh OpenAPI                   |
 | Agent orchestration | LangGraph                             | State rõ ràng, branching và HITL                    |
 | Primary database    | PostgreSQL + pgvector                 | Dữ liệu quan hệ và vector search trong một nền tảng |
-| Cache / events      | Redis + Kafka                         | Giảm độ trễ và xử lý notification bất đồng bộ       |
+| Cache / events      | Redis + WebSocket                     | Giảm độ trễ và cập nhật notification realtime       |
 | Deployment          | Docker Compose + EC2 + GitHub Actions | Đơn giản cho MVP, có CI/CD và rollback              |

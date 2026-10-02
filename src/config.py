@@ -54,17 +54,6 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""
 
-    # Notification / Kafka
-    kafka_enabled: bool = False
-    kafka_bootstrap_servers: str = "localhost:9092"
-    notification_topic: str = "notifications.v1"
-    notification_dead_letter_topic: str = "notifications.dead-letter.v1"
-    notification_consumer_group: str = "notification-consumer"
-    notification_processing_timeout_seconds: int = Field(default=300, ge=30, le=86400)
-    notification_max_attempts: int = Field(default=5, ge=1, le=20)
-    notification_retry_backoff_seconds: int = Field(default=5, ge=1, le=3600)
-    notification_retry_backoff_max_seconds: int = Field(default=3600, ge=1, le=86400)
-
     # Gmail SMTP App Password
     gmail_smtp_host: str = "smtp.gmail.com"
     gmail_smtp_port: int = Field(default=587, ge=1, le=65535)

@@ -356,8 +356,8 @@ def test_staff_approval_rechecks_capacity_before_confirmation():
     assert repository.staff_booking.status == "pending_approval"
 
 
-def test_confirmed_review_creates_patient_in_app_and_email_notifications():
-    """A confirmed booking produces one notification per patient channel."""
+def test_confirmed_review_creates_an_immediate_patient_notification():
+    """A confirmed booking produces one directly delivered in-app notification."""
     session = FakeSession()
     notification_service = NotificationService(session)
     booking = SimpleNamespace(
@@ -369,14 +369,14 @@ def test_confirmed_review_creates_patient_in_app_and_email_notifications():
 
     asyncio.run(notification_service.create_for_booking_review(booking, "confirmed"))
 
-    assert [item.kind for item in session.added] == ["booking_confirmed", "booking_confirmed"]
+    assert [item.kind for item in session.added] == ["booking_confirmed"]
     assert all(item.user_id == booking.user_id for item in session.added)
-    assert [item.channel for item in session.added] == ["in_app", "email"]
-    assert all(item.status == "pending" for item in session.added)
+    assert [item.channel for item in session.added] == ["in_app"]
+    assert [item.status for item in session.added] == ["delivered"]
 
 
 def test_expired_pending_booking_releases_capacity_and_notifies_patient():
-    """The periodic expiry transition is idempotent and creates both channels."""
+    """The periodic expiry transition is idempotent and creates an in-app notification."""
     session = FakeSession()
     repository = FakeBookingRepository(make_schedule(), SimpleNamespace(id=uuid4()), active_count=0)
     booking = SimpleNamespace(
@@ -392,7 +392,8 @@ def test_expired_pending_booking_releases_capacity_and_notifies_patient():
 
     assert asyncio.run(service.expire_pending_bookings()) == 1
     assert booking.status == "expired"
-    assert [item.channel for item in session.added] == ["in_app", "email"]
+    assert [item.channel for item in session.added] == ["in_app"]
+    assert [item.status for item in session.added] == ["delivered"]
 
 
 def test_staff_review_of_expired_booking_commits_expired_status_and_notifies_patient():
@@ -423,8 +424,8 @@ def test_staff_review_of_expired_booking_commits_expired_status_and_notifies_pat
     assert [item.channel for item in session.added] == ["in_app", "email"]
 
 
-def test_confirmed_booking_in_reminder_window_gets_two_deduplicated_channels():
-    """The cron scan creates the two-day reminder exactly once per channel."""
+def test_confirmed_booking_in_reminder_window_gets_one_deduplicated_notification():
+    """The maintenance scan creates the two-day reminder once in-app."""
     session = FakeSession()
     booking = SimpleNamespace(id=uuid4(), user_id=uuid4(), starts_at=datetime.now(UTC) + timedelta(days=1))
     notification_service = NotificationService(session)
@@ -435,9 +436,10 @@ def test_confirmed_booking_in_reminder_window_gets_two_deduplicated_channels():
     notification_service.bookings = SimpleNamespace(list_confirmed_reminder_candidates=candidates)
 
     assert asyncio.run(notification_service.create_due_reminders()) == 1
-    assert [item.kind for item in session.added] == ["appointment_reminder", "appointment_reminder"]
-    assert [item.channel for item in session.added] == ["in_app", "email"]
-    assert len({item.dedupe_key for item in session.added}) == 2
+    assert [item.kind for item in session.added] == ["appointment_reminder"]
+    assert [item.channel for item in session.added] == ["in_app"]
+    assert [item.status for item in session.added] == ["delivered"]
+    assert len({item.dedupe_key for item in session.added}) == 1
 
 
 def test_reschedule_releases_old_slot_and_records_audit_event():

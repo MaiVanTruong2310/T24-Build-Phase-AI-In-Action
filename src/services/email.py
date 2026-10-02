@@ -14,7 +14,7 @@ class GmailEmailSender:
         self.settings = settings
 
     async def send(self, recipient: str, subject: str, message: str) -> None:
-        """Send one email without blocking the async notification consumer."""
+        """Send one email without blocking the async API event loop."""
         await asyncio.to_thread(self._send_sync, recipient, subject, message)
 
     def _send_sync(self, recipient: str, subject: str, message: str) -> None:

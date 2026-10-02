@@ -100,6 +100,11 @@ export function resolveApiUrl(url: string): string {
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }
 
+export function resolveWebSocketUrl(url: string): string {
+  const httpUrl = resolveApiUrl(url);
+  return httpUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+}
+
 export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<Response> {
   return fetch(resolveApiUrl(url), options);
 }
