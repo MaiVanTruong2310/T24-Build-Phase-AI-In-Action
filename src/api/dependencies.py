@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import AuthenticationError, AuthorizationError
 from src.core.security import decode_access_token
-from src.db.dependencies import get_auth_db_session
+from src.db.dependencies import get_auth_db_session, get_db_session
 from src.models.user import User
 from src.repositories.user import UserRepository
 
@@ -88,3 +88,13 @@ async def get_optional_user(
     except Exception:
         return None
 
+
+
+async def require_coordination_admin(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db_session)):
+    from src.services.workbench import member_for
+    member = await member_for(db, user)
+    allowed = member.is_admin and not member.facility_ids
+    await db.commit()
+    if not allowed:
+        raise AuthorizationError()
+    return user

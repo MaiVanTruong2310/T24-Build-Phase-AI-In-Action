@@ -69,6 +69,7 @@ class ChatResponse(BaseModel):
     conflict_reason: str | None = Field(default=None, description="Lý do cần làm rõ giữa các hướng chuyên khoa")
     acuity_status: str | None = Field(default=None, description="Độ chắc chắn của mức khẩn cấp")
     disposition: str | None = Field(default=None, description="Hướng xử lý an toàn hiện tại")
+    elapsed_ms: float | None = Field(default=None, description="Thời gian phản hồi (ms)")
 
 
 class BookingIntakeRequest(BaseModel):

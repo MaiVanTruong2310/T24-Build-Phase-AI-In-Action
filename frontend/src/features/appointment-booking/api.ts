@@ -257,11 +257,16 @@ export async function fetchDoctorDetail(doctorId: string): Promise<Doctor> {
     const json = await response.json()
     const doctor = json.data as Record<string, unknown>
     const rawSpecialties = (doctor.specialties as Array<{ specialty_id: string; specialty?: { name: string } | null; name?: string }> | undefined) || []
+    const rawServices = (doctor.services as Array<{ service_id: string; service?: { name: string } | null; name?: string }> | undefined) || []
     return {
       ...doctor,
       specialties: rawSpecialties.map(item => ({
         specialty_id: item.specialty_id,
         name: item.specialty?.name || item.name || 'Chưa cập nhật',
+      })),
+      services: rawServices.map(item => ({
+        service_id: item.service_id,
+        name: item.service?.name || item.name || 'Thông tin dịch vụ đang cập nhật',
       })),
     } as Doctor
   })
@@ -310,6 +315,9 @@ export interface PackageRequest {
 }
 
 export interface CreatePackageRequestPayload {
+  consent_to_contact?: boolean;
+  guardian_name?: string;
+  guardian_phone?: string;
   service_id: string;
   facility_id: string;
   preferred_date: string;

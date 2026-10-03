@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import Depends, Query, status
 
-from src.api.dependencies import require_staff
+from src.api.dependencies import require_coordination_admin as require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
 from src.models.user import User
@@ -36,17 +36,29 @@ async def list_public_services(
     return success_response([ServiceResponse.model_validate(value) for value in values], "Services retrieved")
 
 
+import time
+
+_CATEGORIES_CACHE: tuple[float, list[str]] | None = None
+_CACHE_TTL = 300.0  # 5 minutes
+
+
 @router.get("/services/categories", response_model=ApiResponse[list[str]])
 async def list_service_categories(
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[str]]:
     """List distinct categories of active medical services and health packages."""
-    from sqlalchemy import distinct, select
+    global _CATEGORIES_CACHE
+    now = time.monotonic()
+    if _CATEGORIES_CACHE is not None and (now - _CATEGORIES_CACHE[0]) < _CACHE_TTL:
+        return success_response(_CATEGORIES_CACHE[1], "Categories retrieved")
+
+    from sqlalchemy import select
     from src.models.catalog import Service
 
-    stmt = select(distinct(Service.category)).where(Service.status == "active", Service.category.is_not(None)).order_by(Service.category)
+    stmt = select(Service.category).where(Service.status == "active", Service.category.is_not(None)).distinct().order_by(Service.category)
     res = await service.session.execute(stmt)
     categories = [c for c in res.scalars().all() if c and c != "Khám Chuyên Khoa"]
+    _CATEGORIES_CACHE = (now, categories)
     return success_response(categories, "Categories retrieved")
 
 

@@ -146,7 +146,11 @@ class ClinicalGuardrailService:
         )
 
     def check_intent(
-        self, user_query: str, current_department: str | None = None, language: str = "vi"
+        self,
+        user_query: str,
+        current_department: str | None = None,
+        language: str = "vi",
+        state: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """
         Kiểm tra intent an ninh mạng, de-obfuscation và an toàn y tế lâm sàng.
@@ -199,7 +203,8 @@ class ClinicalGuardrailService:
             return {"intent": "THIRD_PARTY_HEALTH_QUERY", "topic": topic}
 
         social_statement = re.search(
-            r"\b(?:toi|minh|tui|em)\s+(?:rat\s+)?(?:ghet|thich|yeu|buc|gian)\b",
+            r"\b(?:toi|minh|tui|em)\s+(?:rat\s+)?(?:ghet|thich|yeu|buc|gian)\b|"
+            r"\b(?:co\s+nguoi\s+yeu\s+chua|lam\s+quen\s+duoc\s+khong|ban\s+co\s+nguoi\s+yeu|troi\s+mua\s+to|thoi\s+tiet|ban\s+la\s+ai|may\s+tuoi|chuc\s+ngu\s+ngon)\b",
             query_normalized,
         )
         if social_statement:
@@ -357,148 +362,183 @@ class ClinicalGuardrailService:
         }
 
         # A. ĐIỀU HƯỚNG: Xem danh sách bác sĩ tại cơ sở cụ thể
+        doctor_inquiry_keywords = [
+            "bac si", "bác sĩ", "doctor", "chuyen gia", "doi ngu", "ai kham", "nguoi kham",
+            "cac si", "các sĩ", "thong tin bac si", "danh sach bac si", "goi y bac si",
+            "bác si", "bac sĩ", "tim bac si", "kiem tra bac si"
+        ]
+        is_asking_doctors = any(k in query_normalized for k in doctor_inquiry_keywords)
+
+        # A1: Có tên cơ sở trực tiếp trong query
         for fkey, fval in direct_facility_names.items():
-            if fkey in query_normalized and any(
-                k in query_normalized for k in ["bac si", "doctor", "chuyen gia", "doi ngu", "ai kham", "nguoi kham"]
-            ):
+            if fkey in query_normalized and is_asking_doctors:
                 return {
                     "intent": "FACILITY_DOCTORS",
                     "matched_pattern": fkey,
                     "facility_name_query": fval,
                 }
 
-        # B. ĐIỀU HƯỚNG: Đặt lịch khám tại cơ sở cụ thể
-        for fkey, fval in direct_facility_names.items():
-            if fkey in query_normalized and any(
-                k in query_normalized for k in ["dat lich", "kham tai", "dang ky", "book"]
+        # A2: Có từ chỉ cơ sở ngữ cảnh ("bệnh viện trên", "tại đây", "ở đây"...) hoặc có cơ sở trong state
+        context_facility_keywords = [
+            "benh vien tren", "benh vien nay", "benh vien do", "co so tren", "co so nay",
+            "co so do", "tai day", "o day", "tai do", "o do", "noi nay", "vien tren", "vien nay"
+        ]
+        has_context_facility = any(ref in query_normalized for ref in context_facility_keywords)
+        prev_fac = (state or {}).get("metadata", {}).get("facility_preference") or (state or {}).get("facility_preference")
+        if is_asking_doctors and (has_context_facility or prev_fac):
+            target_fac = None
+            if prev_fac:
+                for fkey, fval in direct_facility_names.items():
+                    if fkey in prev_fac.lower():
+                        target_fac = fval
+                        break
+                if not target_fac:
+                    target_fac = prev_fac
+            return {
+                "intent": "FACILITY_DOCTORS",
+                "matched_pattern": "context_facility",
+                "facility_name_query": target_fac or "times city",
+            }
+
+        # B. ĐIỀU HƯỚNG: Đặt lịch khám chung tại cơ sở (khi chưa có ngày hoặc slot cụ thể)
+        # Nếu câu hỏi đã có ngày/tháng cụ thể, hãy để booking engine tìm slot & bác sĩ thay vì chặn lại
+        has_concrete_schedule = any(
+            k in query_normalized for k in ["ngay ", "vào ngày", "thang", "buoi sang", "buoi chieu", "tu chon", "tự chọn", "slot"]
+        )
+        if not is_asking_doctors and not has_concrete_schedule:
+            for fkey, fval in direct_facility_names.items():
+                if fkey in query_normalized and any(
+                    k in query_normalized for k in ["dat lich", "kham tai", "dang ky", "book"]
+                ):
+                    return {
+                        "intent": "FACILITY_BOOKING_START",
+                        "matched_pattern": fkey,
+                        "facility_name_query": fval,
+                    }
+            if any(
+                k in query_normalized
+                for k in ["dat lich kham tai day", "dat lich tai day", "kham tai day", "dang ky tai day"]
             ):
                 return {
                     "intent": "FACILITY_BOOKING_START",
-                    "matched_pattern": fkey,
-                    "facility_name_query": fval,
+                    "matched_pattern": "tai day",
+                    "facility_name_query": None,
                 }
-        if any(
-            k in query_normalized
-            for k in ["dat lich kham tai day", "dat lich tai day", "kham tai day", "dang ky tai day"]
-        ):
-            return {
-                "intent": "FACILITY_BOOKING_START",
-                "matched_pattern": "tai day",
-                "facility_name_query": None,
-            }
 
-        # C. Tra cứu thông tin cơ sở khi có tên cơ sở cụ thể
-        for fkey, fval in direct_facility_names.items():
-            if fkey in query_normalized and any(
-                k in query_normalized
-                for k in [
-                    "benh vien",
-                    "phong kham",
-                    "vinmec",
-                    "thong tin",
-                    "o dau",
-                    "dia chi",
-                    "hotline",
-                    "co so",
-                    "gio lam viec",
-                    "gio mo cua",
-                    "gio kham",
-                ]
-            ):
-                return {
-                    "intent": "FACILITY_INFO",
-                    "matched_pattern": fkey,
-                    "region_filter": None,
-                    "facility_name_query": fval,
-                }
+        # C. Tra cứu thông tin cơ sở khi có tên cơ sở cụ thể (chỉ khi không hỏi bác sĩ)
+        if not is_asking_doctors and not has_concrete_schedule:
+            for fkey, fval in direct_facility_names.items():
+                if fkey in query_normalized and any(
+                    k in query_normalized
+                    for k in [
+                        "benh vien",
+                        "phong kham",
+                        "vinmec",
+                        "thong tin",
+                        "o dau",
+                        "dia chi",
+                        "hotline",
+                        "co so",
+                        "gio lam viec",
+                        "gio mo cua",
+                        "gio kham",
+                    ]
+                ):
+                    return {
+                        "intent": "FACILITY_INFO",
+                        "matched_pattern": fkey,
+                        "region_filter": None,
+                        "facility_name_query": fval,
+                    }
 
         # D. Tra cứu thông tin cơ sở / chi nhánh hoặc danh sách theo khu vực & quận/huyện
-        for pattern in self.facility_patterns:
-            if re.search(pattern, query_clean, re.IGNORECASE) or re.search(pattern, query_normalized, re.IGNORECASE):
-                # Phát hiện khu vực tỉnh/thành
-                regions = {
-                    "hà nội": "Hà Nội",
-                    "ha noi": "Hà Nội",
-                    "hồ chí minh": "Hồ Chí Minh",
-                    "ho chi minh": "Hồ Chí Minh",
-                    "tphcm": "Hồ Chí Minh",
-                    "sài gòn": "Hồ Chí Minh",
-                    "sai gon": "Hồ Chí Minh",
-                    "đà nẵng": "Đà Nẵng",
-                    "da nang": "Đà Nẵng",
-                    "hải phòng": "Hải Phòng",
-                    "hai phong": "Hải Phòng",
-                    "hạ long": "Hạ Long",
-                    "ha long": "Hạ Long",
-                    "quảng ninh": "Quảng Ninh",
-                    "quang ninh": "Quảng Ninh",
-                    "nha trang": "Nha Trang",
-                    "khánh hòa": "Khánh Hòa",
-                    "khanh hoa": "Khánh Hòa",
-                    "phú quốc": "Phú Quốc",
-                    "phu quoc": "Phú Quốc",
-                    "cần thơ": "Cần Thơ",
-                    "can tho": "Cần Thơ",
-                    "hưng yên": "Hưng Yên",
-                    "hung yen": "Hưng Yên",
-                }
-                detected_region = next((val for key, val in regions.items() if key in query_normalized), None)
-                detected_fac = next(
-                    (val for key, val in direct_facility_names.items() if key in query_normalized), None
-                )
+        if not is_asking_doctors and not has_concrete_schedule:
+            for pattern in self.facility_patterns:
+                if re.search(pattern, query_clean, re.IGNORECASE) or re.search(pattern, query_normalized, re.IGNORECASE):
+                    # Phát hiện khu vực tỉnh/thành
+                    regions = {
+                        "hà nội": "Hà Nội",
+                        "ha noi": "Hà Nội",
+                        "hồ chí minh": "Hồ Chí Minh",
+                        "ho chi minh": "Hồ Chí Minh",
+                        "tphcm": "Hồ Chí Minh",
+                        "sài gòn": "Hồ Chí Minh",
+                        "sai gon": "Hồ Chí Minh",
+                        "đà nẵng": "Đà Nẵng",
+                        "da nang": "Đà Nẵng",
+                        "hải phòng": "Hải Phòng",
+                        "hai phong": "Hải Phòng",
+                        "hạ long": "Hạ Long",
+                        "ha long": "Hạ Long",
+                        "quảng ninh": "Quảng Ninh",
+                        "quang ninh": "Quảng Ninh",
+                        "nha trang": "Nha Trang",
+                        "khánh hòa": "Khánh Hòa",
+                        "khanh hoa": "Khánh Hòa",
+                        "phú quốc": "Phú Quốc",
+                        "phu quoc": "Phú Quốc",
+                        "cần thơ": "Cần Thơ",
+                        "can tho": "Cần Thơ",
+                        "hưng yên": "Hưng Yên",
+                        "hung yen": "Hưng Yên",
+                    }
+                    detected_region = next((val for key, val in regions.items() if key in query_normalized), None)
+                    detected_fac = next(
+                        (val for key, val in direct_facility_names.items() if key in query_normalized), None
+                    )
 
-                # Phát hiện quận / huyện và gán cơ sở Vinmec gần nhất
-                districts = {
-                    "hoan kiem": ("Hà Nội", "Quận Hoàn Kiếm", "times city"),
-                    "hoàn kiếm": ("Hà Nội", "Quận Hoàn Kiếm", "times city"),
-                    "hai ba trung": ("Hà Nội", "Quận Hai Bà Trưng", "times city"),
-                    "hai bà trưng": ("Hà Nội", "Quận Hai Bà Trưng", "times city"),
-                    "hoang mai": ("Hà Nội", "Quận Hoàng Mai", "times city"),
-                    "hoàng mai": ("Hà Nội", "Quận Hoàng Mai", "times city"),
-                    "ba dinh": ("Hà Nội", "Quận Ba Đình", "times city"),
-                    "ba đình": ("Hà Nội", "Quận Ba Đình", "times city"),
-                    "dong da": ("Hà Nội", "Quận Đống Đa", "royal city"),
-                    "đống đa": ("Hà Nội", "Quận Đống Đa", "royal city"),
-                    "thanh xuan": ("Hà Nội", "Quận Thanh Xuân", "royal city"),
-                    "thanh xuân": ("Hà Nội", "Quận Thanh Xuân", "royal city"),
-                    "cau giay": ("Hà Nội", "Quận Cầu Giấy", "smart city"),
-                    "cầu giấy": ("Hà Nội", "Quận Cầu Giấy", "smart city"),
-                    "nam tu liem": ("Hà Nội", "Quận Nam Từ Liêm", "smart city"),
-                    "nam từ liêm": ("Hà Nội", "Quận Nam Từ Liêm", "smart city"),
-                    "bac tu liem": ("Hà Nội", "Quận Bắc Từ Liêm", "smart city"),
-                    "bắc từ liêm": ("Hà Nội", "Quận Bắc Từ Liêm", "smart city"),
-                    "ha dong": ("Hà Nội", "Quận Hà Đông", "smart city"),
-                    "hà đông": ("Hà Nội", "Quận Hà Đông", "smart city"),
-                    "long bien": ("Hà Nội", "Quận Long Biên", "riverside"),
-                    "long biên": ("Hà Nội", "Quận Long Biên", "riverside"),
-                    "gia lam": ("Hà Nội", "Huyện Gia Lâm", "ocean park"),
-                    "gia lâm": ("Hà Nội", "Huyện Gia Lâm", "ocean park"),
-                    # TP. Hồ Chí Minh
-                    "quan 1": ("Hồ Chí Minh", "Quận 1", "central park"),
-                    "quận 1": ("Hồ Chí Minh", "Quận 1", "central park"),
-                    "binh thanh": ("Hồ Chí Minh", "Quận Bình Thạnh", "central park"),
-                    "bình thạnh": ("Hồ Chí Minh", "Quận Bình Thạnh", "central park"),
-                    "quan 2": ("Hồ Chí Minh", "TP. Thủ Đức", "central park"),
-                    "quan 3": ("Hồ Chí Minh", "Quận 3", "central park"),
-                    "thu duc": ("Hồ Chí Minh", "TP. Thủ Đức", "central park"),
-                }
-                detected_district_info = next(
-                    (val for key, val in districts.items() if key in query_normalized or key in query_clean), None
-                )
-                detected_district = None
-                if detected_district_info:
-                    detected_region = detected_district_info[0]
-                    detected_district = detected_district_info[1]
-                    if not detected_fac:
-                        detected_fac = detected_district_info[2]
+                    # Phát hiện quận / huyện và gán cơ sở Vinmec gần nhất
+                    districts = {
+                        "hoan kiem": ("Hà Nội", "Quận Hoàn Kiếm", "times city"),
+                        "hoàn kiếm": ("Hà Nội", "Quận Hoàn Kiếm", "times city"),
+                        "hai ba trung": ("Hà Nội", "Quận Hai Bà Trưng", "times city"),
+                        "hai bà trưng": ("Hà Nội", "Quận Hai Bà Trưng", "times city"),
+                        "hoang mai": ("Hà Nội", "Quận Hoàng Mai", "times city"),
+                        "hoàng mai": ("Hà Nội", "Quận Hoàng Mai", "times city"),
+                        "ba dinh": ("Hà Nội", "Quận Ba Đình", "times city"),
+                        "ba đình": ("Hà Nội", "Quận Ba Đình", "times city"),
+                        "dong da": ("Hà Nội", "Quận Đống Đa", "royal city"),
+                        "đống đa": ("Hà Nội", "Quận Đống Đa", "royal city"),
+                        "thanh xuan": ("Hà Nội", "Quận Thanh Xuân", "royal city"),
+                        "thanh xuân": ("Hà Nội", "Quận Thanh Xuân", "royal city"),
+                        "cau giay": ("Hà Nội", "Quận Cầu Giấy", "smart city"),
+                        "cầu giấy": ("Hà Nội", "Quận Cầu Giấy", "smart city"),
+                        "nam tu liem": ("Hà Nội", "Quận Nam Từ Liêm", "smart city"),
+                        "nam từ liêm": ("Hà Nội", "Quận Nam Từ Liêm", "smart city"),
+                        "bac tu liem": ("Hà Nội", "Quận Bắc Từ Liêm", "smart city"),
+                        "bắc từ liêm": ("Hà Nội", "Quận Bắc Từ Liêm", "smart city"),
+                        "ha dong": ("Hà Nội", "Quận Hà Đông", "smart city"),
+                        "hà đông": ("Hà Nội", "Quận Hà Đông", "smart city"),
+                        "long bien": ("Hà Nội", "Quận Long Biên", "riverside"),
+                        "long biên": ("Hà Nội", "Quận Long Biên", "riverside"),
+                        "gia lam": ("Hà Nội", "Huyện Gia Lâm", "ocean park"),
+                        "gia lâm": ("Hà Nội", "Huyện Gia Lâm", "ocean park"),
+                        # TP. Hồ Chí Minh
+                        "quan 1": ("Hồ Chí Minh", "Quận 1", "central park"),
+                        "quận 1": ("Hồ Chí Minh", "Quận 1", "central park"),
+                        "binh thanh": ("Hồ Chí Minh", "Quận Bình Thạnh", "central park"),
+                        "bình thạnh": ("Hồ Chí Minh", "Quận Bình Thạnh", "central park"),
+                        "quan 2": ("Hồ Chí Minh", "TP. Thủ Đức", "central park"),
+                        "quan 3": ("Hồ Chí Minh", "Quận 3", "central park"),
+                        "thu duc": ("Hồ Chí Minh", "TP. Thủ Đức", "central park"),
+                    }
+                    detected_district_info = next(
+                        (val for key, val in districts.items() if key in query_normalized or key in query_clean), None
+                    )
+                    detected_district = None
+                    if detected_district_info:
+                        detected_region = detected_district_info[0]
+                        detected_district = detected_district_info[1]
+                        if not detected_fac:
+                            detected_fac = detected_district_info[2]
 
-                return {
-                    "intent": "FACILITY_INFO",
-                    "matched_pattern": pattern,
-                    "region_filter": detected_region,
-                    "district_filter": detected_district,
-                    "facility_name_query": detected_fac,
-                }
+                    return {
+                        "intent": "FACILITY_INFO",
+                        "matched_pattern": pattern,
+                        "region_filter": detected_region,
+                        "district_filter": detected_district,
+                        "facility_name_query": detected_fac,
+                    }
 
         schedule_shortcuts = {
             "xem lich hom nay": 1,

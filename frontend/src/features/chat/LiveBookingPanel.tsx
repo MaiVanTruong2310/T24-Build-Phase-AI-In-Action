@@ -21,13 +21,18 @@ interface LiveBookingPanelProps {
 
 const VINMEC_FACILITIES = [
   'Bệnh viện ĐKQT Vinmec Times City (Hà Nội)',
-  'Bệnh viện ĐKQT Vinmec Central Park (TP.HCM)',
+  'Phòng khám ĐKQT Vinmec Ocean Park (Hà Nội)',
+  'Bệnh viện ĐKQT Vinmec Ocean Park 2 (Hưng Yên)',
   'Phòng khám ĐKQT Vinmec Smart City (Hà Nội)',
+  'Phòng khám ĐKQT Vinmec Royal City (Hà Nội)',
+  'Bệnh viện ĐKQT Vinmec Riverside (Hà Nội)',
+  'Bệnh viện ĐKQT Vinmec Central Park (TP.HCM)',
   'Bệnh viện ĐKQT Vinmec Hải Phòng',
   'Bệnh viện ĐKQT Vinmec Đà Nẵng',
   'Bệnh viện ĐKQT Vinmec Nha Trang',
   'Bệnh viện ĐKQT Vinmec Phú Quốc',
   'Bệnh viện ĐKQT Vinmec Hạ Long',
+  'Bệnh viện ĐKQT Vinmec Cần Thơ',
 ];
 
 const formatCurrency = (val?: number | null) => {
@@ -63,6 +68,13 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
   const [facility, setFacility] = useState(
     intake?.facility_preference || VINMEC_FACILITIES[0]
   );
+
+  const facilityOptions = useMemo(() => {
+    if (facility && !VINMEC_FACILITIES.includes(facility)) {
+      return [facility, ...VINMEC_FACILITIES];
+    }
+    return VINMEC_FACILITIES;
+  }, [facility]);
   const [preferredDate, setPreferredDate] = useState(intake?.preferred_date || '');
   const [preferredPeriod, setPreferredPeriod] = useState(
     intake?.preferred_period || 'any'
@@ -150,14 +162,18 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
       setPreferredDoctorId(intake.selected_doctor_id);
     }
 
-    // Task 2: Sync clinical summary notes
+    // Sync clinical summary notes
     const newSummary = intake.clinical_summary || intake.patient_notes;
     if (newSummary && newSummary !== patientNotes) {
       setPatientNotes(newSummary);
       setPackageNote(newSummary);
       setLastAutoFilledField('notes');
     }
-  }, [intake, authUser]);
+
+    if ((intake as any)?.confirmed && (intake as any)?.request_code && !savedCode) {
+      setSavedCode((intake as any).request_code);
+    }
+  }, [intake, authUser, savedCode]);
 
   // Load packages catalog when switching to package tab
   useEffect(() => {
@@ -573,6 +589,22 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 2. Cơ sở & Thời gian mong muốn
               </span>
 
+              {/* Specialty */}
+              <div>
+                <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
+                  Chuyên khoa thăm khám
+                </label>
+                <div className="flex items-center justify-between rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 font-medium">
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Stethoscope className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="truncate">{intake?.specialty_name || 'Khám Đa khoa & Chuyên khoa'}</span>
+                  </span>
+                  <span className="text-[9.5px] text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded font-normal shrink-0">
+                    AI Định hướng
+                  </span>
+                </div>
+              </div>
+
               {/* Facility */}
               <div>
                 <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
@@ -583,7 +615,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                   onChange={(e) => setFacility(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2.5 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
                 >
-                  {VINMEC_FACILITIES.map((fac) => (
+                  {facilityOptions.map((fac) => (
                     <option key={fac} value={fac}>
                       {fac}
                     </option>
@@ -622,26 +654,24 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 </div>
               </div>
 
-              {/* Preferred Doctor Dropdown (nếu có) */}
-              {intake?.doctors && intake.doctors.length > 0 && (
-                <div>
-                  <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
-                    Bác sĩ chuyên khoa đề xuất
-                  </label>
-                  <select
-                    value={preferredDoctorId}
-                    onChange={(e) => setPreferredDoctorId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2.5 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs truncate"
-                  >
-                    <option value="">Để Điều phối viên chỉ định Bác sĩ phù hợp nhất</option>
-                    {intake.doctors.map((doc) => (
-                      <option key={doc.id || doc.name} value={doc.id || ''}>
-                        {doc.name} {doc.title ? `— ${doc.title}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Preferred Doctor Dropdown (luôn hiển thị để bệnh nhân chọn bác sĩ hoặc để điều phối viên sắp xếp) */}
+              <div>
+                <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
+                  Bác sĩ chuyên khoa tiếp nhận
+                </label>
+                <select
+                  value={preferredDoctorId}
+                  onChange={(e) => setPreferredDoctorId(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2.5 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs truncate"
+                >
+                  <option value="">Để Điều phối viên chỉ định Bác sĩ phù hợp nhất</option>
+                  {intake?.doctors && intake.doctors.length > 0 && intake.doctors.map((doc) => (
+                    <option key={doc.id || doc.name} value={doc.id || doc.name}>
+                      {doc.name} {doc.title ? `— ${doc.title}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* BƯỚC 3: LÝ DO KHÁM & TÓM TẮT LÂM SÀNG TỪ AGENT (Task 2) */}

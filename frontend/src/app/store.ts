@@ -48,7 +48,7 @@ const layoutSlice = createSlice({
     toggleTheme: (state) => {
       state.theme = state.theme === 'dark' ? 'light' : 'dark'
       if (typeof window !== 'undefined') {
-        localStorage.setItem('medicare_theme', state.theme)
+        localStorage.setItem('vcare_theme', state.theme)
       }
       if (typeof document !== 'undefined') {
         if (state.theme === 'dark') {
@@ -63,7 +63,7 @@ const layoutSlice = createSlice({
     setTheme: (state, action: PayloadAction<'dark' | 'light'>) => {
       state.theme = action.payload
       if (typeof window !== 'undefined') {
-        localStorage.setItem('medicare_theme', state.theme)
+        localStorage.setItem('vcare_theme', state.theme)
       }
       if (typeof document !== 'undefined') {
         if (state.theme === 'dark') {

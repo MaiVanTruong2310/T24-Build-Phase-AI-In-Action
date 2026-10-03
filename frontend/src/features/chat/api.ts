@@ -17,6 +17,15 @@ export const getConversations = (offset = 0, signal?: AbortSignal) => historyJso
 export const getConversation = (id: string, offset = 0, signal?: AbortSignal) => historyJson<ConversationHistory>(`/chat/conversations/${encodeURIComponent(id)}?offset=${offset}`, signal);
 
 
+export async function deleteConversation(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/chat/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (response.status === 404) return;
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || data.detail || 'Không thể xóa cuộc trò chuyện.');
+  }
+}
+
 export interface TokenUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
@@ -84,6 +93,7 @@ export interface ChatMetadata {
   conflict_reason?: string | null;
   acuity_status?: string | null;
   disposition?: string | null;
+  elapsed_ms?: number | null;
 }
 
 interface ChatResponse extends ChatMetadata {

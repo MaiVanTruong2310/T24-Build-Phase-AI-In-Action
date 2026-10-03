@@ -5,12 +5,12 @@ from datetime import date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_optional_user, require_patient, require_staff
+from src.api.dependencies import get_optional_user, require_patient, require_coordination_admin as require_staff
 from src.api.response import success_response
 from src.core.exceptions import ConflictError, NotFoundError
 from src.db.dependencies import get_db_session
@@ -37,6 +37,9 @@ class PackageRequestInput(BaseModel):
     patient_email: str | None = Field(default=None, max_length=320)
     gender: str | None = Field(default=None, pattern="^(male|female|other|prefer_not_to_say)$")
     date_of_birth: date | None = None
+    consent_to_contact: bool = False
+    guardian_name: str | None = Field(default=None, max_length=120)
+    guardian_phone: str | None = Field(default=None, max_length=20)
 
 
 class StaffPackageStatusUpdate(BaseModel):
@@ -70,6 +73,7 @@ def _package_request_dict(item: PackageRequest, service: Service | None = None, 
 @router.post("/requests", status_code=status.HTTP_201_CREATED)
 async def create_package_request(
     payload: PackageRequestInput,
+    http_request: Request,
     user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -90,26 +94,20 @@ async def create_package_request(
             if payload.date_of_birth > datetime.now(VN_TZ).date():
                 raise ConflictError("INVALID_DOB", "Ngày sinh không thể nằm trong tương lai")
 
-            existing_user = (await db.execute(select(User).where(User.phone == clean_phone))).scalar_one_or_none()
-            if not existing_user and payload.patient_email:
-                existing_user = (await db.execute(select(User).where(User.email == payload.patient_email.lower().strip()))).scalar_one_or_none()
-
-            if existing_user:
-                patient = existing_user
-            else:
-                patient = User(
-                    full_name=payload.patient_name.strip(),
-                    phone=clean_phone,
-                    email=payload.patient_email.lower().strip() if payload.patient_email else None,
-                    gender=payload.gender,
-                    date_of_birth=payload.date_of_birth,
-                    role="patient",
-                    status="guest",
-                )
-                db.add(patient)
-                await db.flush()
+            patient = User(full_name=payload.patient_name.strip(), phone=None, email=None,
+                           gender=payload.gender, date_of_birth=payload.date_of_birth,
+                           role="patient", status="guest")
+            db.add(patient)
+            await db.flush()
         else:
             patient = user
+
+        if not payload.consent_to_contact:
+            raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
+        from src.medical_assistant.domain.booking_request_service import _is_minor, PHONE_PATTERN
+        dob = payload.date_of_birth or patient.date_of_birth
+        if dob and _is_minor(dob) and (not payload.guardian_name or not PHONE_PATTERN.fullmatch(re.sub(r"[\s.()-]", "", payload.guardian_phone or ""))):
+            raise ConflictError("GUARDIAN_REQUIRED", "Người dưới 18 tuổi cần họ tên và điện thoại người giám hộ.")
 
         if payload.preferred_date < datetime.now(VN_TZ).date():
             raise ConflictError("DATE_INVALID", "Ngày khám mong muốn không thể nằm trong quá khứ")
@@ -137,6 +135,9 @@ async def create_package_request(
         )
         db.add(item)
         await db.flush()
+
+        from src.services.workbench import create_source_case
+        receipt = await create_source_case(db, "package", item, patient, user, http_request.state.coordination_guest, payload, facility.id)
 
     return success_response(
         _package_request_dict(item, service, facility, patient),
@@ -201,17 +202,4 @@ async def staff_update_package_request(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Staff update package request status and notes."""
-    async with db.begin():
-        item = await db.get(PackageRequest, request_id)
-        if not item:
-            raise NotFoundError("Không tìm thấy yêu cầu gói khám")
-        item.status = payload.status
-        if payload.staff_note is not None:
-            item.staff_note = payload.staff_note
-        await db.flush()
-
-        service = await db.get(Service, item.service_id)
-        facility = await db.get(Facility, item.facility_id)
-        patient = await db.get(User, item.patient_id) if item.patient_id else None
-
-    return success_response(_package_request_dict(item, service, facility, patient), "Cập nhật yêu cầu thành công")
+    raise ConflictError("USE_WORKBENCH_PACKAGE", "Cập nhật phiếu qua bàn điều phối.")

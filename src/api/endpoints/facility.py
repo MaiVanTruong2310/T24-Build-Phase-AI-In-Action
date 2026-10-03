@@ -4,13 +4,19 @@ from uuid import UUID
 
 from fastapi import Depends, Query, status
 
-from src.api.dependencies import require_staff
+from src.api.dependencies import require_coordination_admin as require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
 from src.models.user import User
 from src.schemas.catalog import FacilityCreate, FacilityResponse, FacilityUpdate
 from src.schemas.common import ApiResponse
 from src.services.catalog import CatalogService
+
+
+import time
+
+_FACILITIES_CACHE: dict[str, tuple[float, list[FacilityResponse]]] = {}
+_CACHE_TTL = 300.0  # 5 minutes
 
 
 @router.get("/facilities", response_model=ApiResponse[list[FacilityResponse]])
@@ -21,8 +27,15 @@ async def list_facilities(
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[FacilityResponse]]:
     """List active facilities."""
+    cache_key = f"{offset}:{limit}:{specialty_id}"
+    now = time.monotonic()
+    if cache_key in _FACILITIES_CACHE and (now - _FACILITIES_CACHE[cache_key][0]) < _CACHE_TTL:
+        return success_response(_FACILITIES_CACHE[cache_key][1], "Facilities retrieved")
+
     values = await service.list_facilities(public_only=True, offset=offset, limit=limit, specialty_id=specialty_id)
-    return success_response([FacilityResponse.model_validate(value) for value in values], "Facilities retrieved")
+    items = [FacilityResponse.model_validate(value) for value in values]
+    _FACILITIES_CACHE[cache_key] = (now, items)
+    return success_response(items, "Facilities retrieved")
 
 
 @router.get("/facilities/{facility_id}", response_model=ApiResponse[FacilityResponse])

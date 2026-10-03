@@ -28,6 +28,9 @@ class AgentState(TypedDict, total=False):
     user_input: str
     language: str | None  # 'vi' hoặc 'en'
     enable_citation: bool | None
+    durable_soap_note: str | None
+    active_open_loops: list[dict[str, Any]] | None
+    patient_memory_profile: list[dict[str, Any]] | None
 
     # Thông tin triệu chứng & Y tế
     symptoms: list[str]
@@ -52,6 +55,8 @@ class AgentState(TypedDict, total=False):
     routing_candidates: list[dict[str, Any]]
     conflict_reason: str | None
     recommended_doctor_id: str | None
+    doctor_preference: str | None
+    doctor_name: str | None
 
     # Slot khám & Giữ chỗ
     available_slots: list[dict[str, Any]]
@@ -69,3 +74,13 @@ class AgentState(TypedDict, total=False):
     error: str | None
     token_usage: dict[str, Any]
     metadata: dict[str, Any]
+
+    # Reflexion & Self-Correction Engine (Shinn et al., 2023)
+    reflection_count: int | None
+    critic_critique: str | None
+    critic_status: str | None  # 'APPROVED' | 'REVISE' | 'REVISED_BY_REFLEXION'
+    reflection_memory: list[dict[str, Any]] | None  # Cấu trúc bộ nhớ bài học cô đọng theo slide VinUni
+    pruned_departments: list[str] | None  # Danh sách chuyên khoa bị Action Space Pruning cấm chọn lại
+    pruned_actions: list[str] | None  # Danh sách hành động bị Action Space Pruning cấm chọn lại
+
+

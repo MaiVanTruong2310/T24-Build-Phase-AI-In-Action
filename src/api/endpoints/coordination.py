@@ -5,13 +5,13 @@ from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_optional_user, require_patient, require_staff
+from src.api.dependencies import get_optional_user, require_patient, require_coordination_admin as require_staff
 from src.api.response import success_response
 from src.core.exceptions import ConflictError, NotFoundError
 from src.db.dependencies import get_db_session
@@ -68,6 +68,9 @@ class RequestInput(BaseModel):
     patient_email: str | None = Field(default=None, max_length=320)
     gender: str | None = Field(default=None, pattern="^(male|female|other|prefer_not_to_say)$")
     date_of_birth: date | None = None
+    consent_to_contact: bool = False
+    guardian_name: str | None = Field(default=None, max_length=120)
+    guardian_phone: str | None = Field(default=None, max_length=20)
 
     @field_validator("reason")
     @classmethod
@@ -138,7 +141,7 @@ async def list_sessions(
 
 
 @router.post("/requests", status_code=201)
-async def create_request(payload: RequestInput, user: User | None = Depends(get_optional_user),
+async def create_request(payload: RequestInput, http_request: Request, user: User | None = Depends(get_optional_user),
                          db: AsyncSession = Depends(get_db_session)):
     async with db.begin():
         if user is None:
@@ -156,32 +159,20 @@ async def create_request(payload: RequestInput, user: User | None = Depends(get_
             if payload.date_of_birth > datetime.now(VN_TZ).date():
                 raise ConflictError("INVALID_DOB", "Ngày sinh không thể nằm trong tương lai")
 
-            existing_user = (await db.execute(select(User).where(User.phone == clean_phone))).scalar_one_or_none()
-            if not existing_user and payload.patient_email:
-                existing_user = (await db.execute(select(User).where(User.email == payload.patient_email.lower().strip()))).scalar_one_or_none()
-
-            if existing_user:
-                patient = existing_user
-                if not patient.full_name:
-                    patient.full_name = payload.patient_name.strip()
-                if not patient.date_of_birth:
-                    patient.date_of_birth = payload.date_of_birth
-                if not patient.gender:
-                    patient.gender = payload.gender
-            else:
-                patient = User(
-                    full_name=payload.patient_name.strip(),
-                    phone=clean_phone,
-                    email=payload.patient_email.lower().strip() if payload.patient_email else None,
-                    gender=payload.gender,
-                    date_of_birth=payload.date_of_birth,
-                    role="patient",
-                    status="guest",
-                )
-                db.add(patient)
-                await db.flush()
+            patient = User(full_name=payload.patient_name.strip(), phone=None, email=None,
+                           gender=payload.gender, date_of_birth=payload.date_of_birth,
+                           role="patient", status="guest")
+            db.add(patient)
+            await db.flush()
         else:
             patient = user
+
+        if not payload.consent_to_contact:
+            raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
+        from src.medical_assistant.domain.booking_request_service import _is_minor, PHONE_PATTERN
+        dob = payload.date_of_birth or patient.date_of_birth
+        if dob and _is_minor(dob) and (not payload.guardian_name or not PHONE_PATTERN.fullmatch(re.sub(r"[\s.()-]", "", payload.guardian_phone or ""))):
+            raise ConflictError("GUARDIAN_REQUIRED", "Người dưới 18 tuổi cần họ tên và điện thoại người giám hộ.")
 
         session = (await db.execute(select(ConsultationSession).where(
             ConsultationSession.id == payload.session_id).with_for_update()
@@ -222,7 +213,12 @@ async def create_request(payload: RequestInput, user: User | None = Depends(get_
         db.add(item)
         await db.flush()
         db.add(ConsultationRequestEvent(request_id=item.id, actor_id=patient.id, action="requested"))
-    return success_response(_request_dict(item, session, patient), "Yêu cầu đã gửi; nhân viên sẽ gọi lại để chốt giờ", 201)
+        from src.services.workbench import create_source_case
+        receipt = await create_source_case(db, "consultation", item, patient, user, http_request.state.coordination_guest, payload, session.facility_id)
+
+    result = _request_dict(item, session, patient)
+    result.update(patient_name=receipt.patient.get("name"), patient_phone=receipt.patient.get("phone"), patient_email=receipt.patient.get("email"), coordination_session_id=receipt.session_id)
+    return success_response(result, "Yêu cầu đã gửi; nhân viên sẽ gọi lại để chốt giờ", 201)
 
 
 @router.get("/requests/mine")
@@ -435,69 +431,10 @@ async def staff_requests(_: User = Depends(require_staff), db: AsyncSession = De
 
 
 @staff_router.post("/requests/{request_id}/assign")
-async def assign_request(request_id: UUID, payload: DecisionInput, staff: User = Depends(require_staff),
-                         db: AsyncSession = Depends(get_db_session)):
-    if not payload.slot_id:
-        raise ConflictError("SLOT_REQUIRED", "Chọn một giờ khám cụ thể")
-    async with db.begin():
-        item = (await db.execute(select(ConsultationRequest).where(ConsultationRequest.id == request_id).with_for_update())).scalar_one_or_none()
-        if item is None:
-            raise NotFoundError("Request not found")
-        session = (await db.execute(select(ConsultationSession).where(ConsultationSession.id == item.session_id).with_for_update())).scalar_one()
-        if item.status != "pending" or session.status != "open":
-            raise ConflictError("REQUEST_NOT_PENDING", "Yêu cầu không còn chờ điều phối")
-        slot = (await db.execute(select(ConsultationSlot).where(ConsultationSlot.id == payload.slot_id))).scalar_one_or_none()
-        if slot is None or slot.session_id != session.id:
-            raise ConflictError("SLOT_MISMATCH", "Giờ khám không thuộc buổi đã chọn")
-        schedule = (await db.execute(select(DoctorSchedule).where(DoctorSchedule.id == slot.schedule_id).with_for_update())).scalar_one()
-        if schedule.status != "blocked" or schedule.starts_at <= datetime.now(UTC):
-            raise ConflictError("SLOT_UNAVAILABLE", "Giờ khám không còn trống")
-        assigned = (await db.execute(select(ConsultationRequest.id).where(
-            ConsultationRequest.assigned_slot_id == slot.id,
-            ConsultationRequest.status == "confirmed",
-        ))).first()
-        booked = (await db.execute(select(Booking.id).where(
-            Booking.schedule_id == schedule.id, Booking.status.notin_(("cancelled", "rejected")),
-        ))).first()
-        if assigned or booked:
-            raise ConflictError("SLOT_OCCUPIED", "Giờ khám đã được sử dụng")
-        booking = Booking(user_id=item.patient_id, schedule_id=schedule.id,
-                          doctor_id=session.doctor_id, facility_id=session.facility_id,
-                          starts_at=schedule.starts_at, ends_at=schedule.ends_at,
-                          service_id=item.service_id, specialty_id=item.specialty_id,
-                          encounter_type=item.encounter_type, reason=item.reason,
-                          patient_note=item.patient_note, status="confirmed",
-                          staff_note=payload.note, reviewed_by=staff.id,
-                          reviewed_at=datetime.now(UTC))
-        db.add(booking)
-        await db.flush()
-        item.assigned_slot_id = slot.id
-        item.booking_id = booking.id
-        item.status = "confirmed"
-        item.staff_note = payload.note
-        item.reviewed_by = staff.id
-        item.reviewed_at = datetime.now(UTC)
-        db.add(ConsultationRequestEvent(request_id=item.id, actor_id=staff.id,
-                                        action="confirmed", note=payload.note))
-    return success_response({"id": str(item.id), "booking_id": str(item.booking_id)}, "Appointment confirmed")
+async def assign_request(request_id: UUID, payload: DecisionInput, staff: User = Depends(require_staff)):
+    raise ConflictError("USE_WORKBENCH", "Chốt lịch qua bàn điều phối sau khi xác minh cọc.")
 
 
 @staff_router.post("/requests/{request_id}/reject")
-async def reject_request(request_id: UUID, payload: DecisionInput, staff: User = Depends(require_staff),
-                         db: AsyncSession = Depends(get_db_session)):
-    if not payload.note or not payload.note.strip():
-        raise ConflictError("REASON_REQUIRED", "Nhập lý do từ chối")
-    async with db.begin():
-        item = (await db.execute(select(ConsultationRequest).where(ConsultationRequest.id == request_id).with_for_update())).scalar_one_or_none()
-        if item is None:
-            raise NotFoundError("Request not found")
-        await db.execute(select(ConsultationSession.id).where(ConsultationSession.id == item.session_id).with_for_update())
-        if item.status != "pending":
-            raise ConflictError("REQUEST_NOT_PENDING", "Yêu cầu không còn chờ điều phối")
-        item.status = "rejected"
-        item.staff_note = payload.note.strip()
-        item.reviewed_by = staff.id
-        item.reviewed_at = datetime.now(UTC)
-        db.add(ConsultationRequestEvent(request_id=item.id, actor_id=staff.id,
-                                        action="rejected", note=payload.note.strip()))
-    return success_response({"id": str(item.id)}, "Request rejected")
+async def reject_request(request_id: UUID, payload: DecisionInput, staff: User = Depends(require_staff)):
+    raise ConflictError("USE_WORKBENCH_REJECT", "Đóng phiếu qua bàn điều phối để xử lý cọc và lịch sử.")

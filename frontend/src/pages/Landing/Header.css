@@ -32,12 +32,12 @@
 }
 
 .patient-nav-tab:focus-visible {
-  outline: 2px solid #168455;
+  outline: 2px solid var(--app-primary);
   outline-offset: 6px;
 }
 
 .dark .patient-nav-tab {
-  --tab-background: #ffffff;
+  --tab-background: #151f33;
   --tab-border: #5c9e7c;
   --tab-text: #c8ebd8;
   --tab-shadow: rgba(0, 0, 0, 0.35);
@@ -45,7 +45,7 @@
 
 .dark .patient-nav-tab:hover,
 .dark .patient-nav-tab[aria-current="page"] {
-  --tab-background: #ffffff;
+  --tab-background: #173b32;
   --tab-border: #8ed3ae;
   --tab-text: #f6fcf9;
 }

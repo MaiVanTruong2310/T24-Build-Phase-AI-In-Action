@@ -16,41 +16,45 @@ function formatDateTime(value: string): string {
 
 export function AppointmentDetailPanel({ booking, display, isCancelling, onCancel, onReschedule }: Props) {
   if (!booking || !display) {
-    return <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-dashed border-slate-300 light:border-app-border bg-white light:bg-app-surface p-8 text-center text-sm text-slate-500 light:text-app-secondary">Chọn một lịch hẹn để xem chi tiết.</div>;
+    return <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-dashed border-slate-300 dark:border-app-border light:border-app-border bg-white dark:bg-app-surface light:bg-app-surface p-8 text-center text-sm text-slate-500 dark:text-app-secondary light:text-app-secondary">Chọn một lịch hẹn để xem chi tiết.</div>;
   }
 
   const canModify = booking.status === 'pending_approval' || booking.status === 'confirmed';
   return (
     <aside className="space-y-5 xl:sticky xl:top-6">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 light:border-app-border bg-white light:bg-app-surface shadow-sm">
-        <div className="border-b border-slate-100 light:border-app-border p-5">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 dark:border-app-border light:border-app-border bg-white dark:bg-app-surface light:bg-app-surface shadow-sm">
+        <div className="border-b border-slate-100 dark:border-app-border light:border-app-border p-5">
           <div className="flex items-center justify-between gap-3">
-            <div><p className="text-xs font-bold uppercase tracking-wide text-teal-600">Chi tiết lịch hẹn đang chọn</p><h2 className="mt-1 text-xl font-bold text-slate-900 light:text-app-text">{display.doctorName}</h2><p className="mt-1 text-sm font-semibold text-sky-700 light:text-app-primary">{display.specialtyName} · {display.facilityName}</p></div>
-            <div className="rounded-xl bg-sky-50 light:bg-app-muted p-3 text-sky-700 light:text-app-primary"><FileText className="h-5 w-5" /></div>
+            <div><p className="text-xs font-bold uppercase tracking-wide text-teal-600 dark:text-teal-300">Chi tiết lịch hẹn đang chọn</p><h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-app-text light:text-app-text">{display.doctorName}</h2><p className="mt-1 text-sm font-semibold text-sky-700 dark:text-sky-300 light:text-app-primary">{display.specialtyName} · {display.facilityName}</p></div>
+            <div className="rounded-xl bg-sky-50 dark:bg-sky-950/50 light:bg-app-muted p-3 text-sky-700 dark:text-sky-300 light:text-app-primary"><FileText className="h-5 w-5" /></div>
           </div>
         </div>
 
         <div className="space-y-5 p-5">
           {booking.status === 'confirmed' ? (
-            <div className="rounded-2xl bg-sky-50 light:bg-app-muted p-4">
-              <div className="flex items-center gap-3"><QrCode className="h-6 w-6 text-sky-700 light:text-app-primary" /><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500 light:text-app-secondary">Mã check-in</p><p className="mt-1 font-bold text-slate-900 light:text-app-text">Chưa được cấp</p></div></div>
-              <p className="mt-3 text-xs leading-5 text-slate-600 light:text-app-secondary">Mã QR/check-in sẽ hiển thị khi cơ sở cung cấp token tiếp đón.</p>
+            <div className="rounded-2xl bg-sky-50 dark:bg-sky-950/50 light:bg-app-muted p-4">
+              <div className="flex items-center gap-3"><QrCode className="h-6 w-6 text-sky-700 dark:text-sky-300 light:text-app-primary" /><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-app-secondary light:text-app-secondary">Mã check-in</p><p className="mt-1 font-bold text-slate-900 dark:text-app-text light:text-app-text">Chưa được cấp</p></div></div>
+              <p className="mt-3 text-xs leading-5 text-slate-600 dark:text-app-secondary light:text-app-secondary">Mã QR/check-in sẽ hiển thị khi cơ sở cung cấp token tiếp đón.</p>
+            </div>
+          ) : booking.status === 'cancelled' ? (
+            <div className="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/50 p-4 text-sm leading-6 text-rose-800 dark:text-rose-300">
+              <X className="mr-2 inline h-4 w-4" /> Lịch hẹn này đã được hủy và lưu trong danh mục Đã hủy.
             </div>
           ) : (
-            <div className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-800"><ShieldCheck className="mr-2 inline h-4 w-4" />Lịch hẹn đang chờ hệ thống và nhân viên điều phối xác nhận.</div>
+            <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/50 p-4 text-sm leading-6 text-amber-800 dark:text-amber-300"><ShieldCheck className="mr-2 inline h-4 w-4" />Lịch hẹn đang chờ hệ thống và nhân viên điều phối xác nhận.</div>
           )}
 
-          <div className="grid gap-3 rounded-2xl border border-slate-100 light:border-app-border bg-slate-50 light:bg-app-page p-4">
-            <div className="flex gap-3"><CalendarClock className="mt-0.5 h-5 w-5 text-sky-700 light:text-app-primary" /><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500 light:text-app-secondary">Thời gian</p><p className="mt-1 text-sm font-bold text-slate-900 light:text-app-text">{formatDateTime(booking.starts_at)}</p><p className="mt-1 text-xs text-slate-500 light:text-app-secondary">Kết thúc dự kiến: {new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(booking.ends_at))}</p></div></div>
-            <div className="flex gap-3"><MapPin className="mt-0.5 h-5 w-5 text-sky-700 light:text-app-primary" /><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500 light:text-app-secondary">Địa điểm khám</p><p className="mt-1 text-sm font-bold text-slate-900 light:text-app-text">{display.facilityName}</p></div></div>
-            <div className="flex gap-3"><Stethoscope className="mt-0.5 h-5 w-5 text-sky-700 light:text-app-primary" /><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500 light:text-app-secondary">Dịch vụ</p><p className="mt-1 text-sm font-bold text-slate-900 light:text-app-text">{display.serviceName}</p></div></div>
+          <div className="grid gap-3 rounded-2xl border border-slate-100 dark:border-app-border light:border-app-border bg-slate-50 dark:bg-app-surface light:bg-app-page p-4">
+            <div className="flex gap-3"><CalendarClock className="mt-0.5 h-5 w-5 text-sky-700 dark:text-sky-300 light:text-app-primary" /><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-app-secondary light:text-app-secondary">Thời gian</p><p className="mt-1 text-sm font-bold text-slate-900 dark:text-app-text light:text-app-text">{formatDateTime(booking.starts_at)}</p><p className="mt-1 text-xs text-slate-500 dark:text-app-secondary light:text-app-secondary">Kết thúc dự kiến: {new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(booking.ends_at))}</p></div></div>
+            <div className="flex gap-3"><MapPin className="mt-0.5 h-5 w-5 text-sky-700 dark:text-sky-300 light:text-app-primary" /><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-app-secondary light:text-app-secondary">Địa điểm khám</p><p className="mt-1 text-sm font-bold text-slate-900 dark:text-app-text light:text-app-text">{display.facilityName}</p></div></div>
+            <div className="flex gap-3"><Stethoscope className="mt-0.5 h-5 w-5 text-sky-700 dark:text-sky-300 light:text-app-primary" /><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-app-secondary light:text-app-secondary">Dịch vụ</p><p className="mt-1 text-sm font-bold text-slate-900 dark:text-app-text light:text-app-text">{display.serviceName}</p></div></div>
           </div>
 
-          <div><h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 light:text-app-text"><FileText className="h-4 w-4 text-sky-700 light:text-app-primary" /> Dặn dò trước khám</h3><div className="mt-3 rounded-2xl border border-dashed border-slate-300 light:border-app-border p-4 text-sm leading-6 text-slate-500 light:text-app-secondary">Chưa có hướng dẫn trước khám được cung cấp cho lịch hẹn này.</div></div>
+          <div><h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-app-text light:text-app-text"><FileText className="h-4 w-4 text-sky-700 dark:text-sky-300 light:text-app-primary" /> Dặn dò trước khám</h3><div className="mt-3 rounded-2xl border border-dashed border-slate-300 dark:border-app-border light:border-app-border p-4 text-sm leading-6 text-slate-500 dark:text-app-secondary light:text-app-secondary">Chưa có hướng dẫn trước khám được cung cấp cho lịch hẹn này.</div></div>
 
-          <div className="rounded-2xl bg-slate-50 light:bg-app-page p-4"><div className="flex items-center gap-3"><PhoneCall className="h-5 w-5 text-sky-700 light:text-app-primary" /><div><p className="text-sm font-bold text-slate-900 light:text-app-text">Cần hỗ trợ lịch hẹn?</p><p className="text-xs text-slate-500 light:text-app-secondary">Liên hệ điều phối viên khi API hỗ trợ được kết nối.</p></div></div></div>
+          <div className="rounded-2xl bg-slate-50 dark:bg-app-surface light:bg-app-page p-4"><div className="flex items-center gap-3"><PhoneCall className="h-5 w-5 text-sky-700 dark:text-sky-300 light:text-app-primary" /><div><p className="text-sm font-bold text-slate-900 dark:text-app-text light:text-app-text">Cần hỗ trợ lịch hẹn?</p><p className="text-xs text-slate-500 dark:text-app-secondary light:text-app-secondary">Liên hệ điều phối viên khi API hỗ trợ được kết nối.</p></div></div></div>
 
-          {canModify && <div className="flex gap-3 border-t border-slate-100 light:border-app-border pt-5"><button type="button" onClick={onReschedule} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-100 light:bg-app-tint px-3 py-3 text-sm font-bold text-sky-700 light:text-app-primary hover:bg-sky-200 light:hover:bg-app-tint"><RefreshCw className="h-4 w-4" /> Đổi lịch hẹn</button><button type="button" onClick={onCancel} disabled={isCancelling} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 px-3 py-3 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-60"><X className="h-4 w-4" /> {isCancelling ? 'Đang hủy' : 'Hủy lịch'}</button></div>}
+          {canModify && <div className="flex gap-3 border-t border-slate-100 dark:border-app-border light:border-app-border pt-5"><button type="button" onClick={onReschedule} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-100 dark:bg-sky-950/50 light:bg-app-tint px-3 py-3 text-sm font-bold text-sky-700 dark:text-sky-300 light:text-app-primary hover:bg-sky-200 dark:hover:bg-sky-950/50 light:hover:bg-app-tint"><RefreshCw className="h-4 w-4" /> Đổi lịch hẹn</button><button type="button" onClick={onCancel} disabled={isCancelling} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 dark:border-rose-800 px-3 py-3 text-sm font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/50 disabled:cursor-wait disabled:opacity-60"><X className="h-4 w-4" /> {isCancelling ? 'Đang hủy' : 'Hủy lịch'}</button></div>}
         </div>
       </section>
     </aside>

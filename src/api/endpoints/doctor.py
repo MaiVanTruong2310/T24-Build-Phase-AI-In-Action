@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import Depends, Query, status
 from sqlalchemy import select, text
 
-from src.api.dependencies import require_staff
+from src.api.dependencies import require_coordination_admin as require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
 from src.models.catalog import Doctor

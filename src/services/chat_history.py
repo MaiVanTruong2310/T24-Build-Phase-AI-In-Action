@@ -45,11 +45,18 @@ STATE_FIELDS = {
     "preferred_date",
     "preferred_period",
     "is_authenticated",
+    "durable_soap_note",
+    "active_open_loops",
+    "patient_memory_profile",
 }
 
 
-def graph_thread(session_id, user=None):
-    return f"user:{user.id}:{session_id}" if user else f"guest:{session_id}"
+def graph_thread(session_id, user=None, guest_token=""):
+    if user:
+        return f"user:{user.id}:{session_id}"
+    import hashlib
+    capability = hashlib.sha256(guest_token.encode()).hexdigest() if guest_token else "legacy"
+    return f"guest:{capability}:{session_id}"
 
 
 def health_record(user):
@@ -172,6 +179,25 @@ class ChatHistoryService:
                     text("UPDATE public.chat_turns SET status='failed' WHERE conversation_id=:cid AND request_id=:rid"),
                     {"cid": turn["conversation_id"], "rid": turn["request_id"]},
                 )
+
+    async def delete_conversation(self, user, session_id):
+        # The same row lock as begin_turn prevents deletion during an active turn.
+        async with self.session.begin():
+            row = (await self.session.execute(
+                text("""SELECT id, busy_until > now() AS processing FROM public.chat_conversations
+                WHERE user_id=:uid AND session_id=:sid FOR UPDATE"""),
+                {"uid": user.id, "sid": session_id},
+            )).mappings().first()
+            if not row:
+                raise HTTPException(404, "Không tìm thấy cuộc trò chuyện.")
+            if row["processing"]:
+                raise HTTPException(409, "Cuộc trò chuyện đang xử lý. Vui lòng chờ trước khi xóa.")
+            from src.medical_assistant.agent.graph import checkpointer
+            await checkpointer.adelete_thread(graph_thread(session_id, user))
+            await self.session.execute(
+                text("DELETE FROM public.chat_conversations WHERE id=:cid AND user_id=:uid"),
+                {"cid": row["id"], "uid": user.id},
+            )
 
     async def list_conversations(self, user_id, limit=30, offset=0):
         rows = (

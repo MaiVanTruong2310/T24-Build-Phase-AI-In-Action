@@ -255,6 +255,24 @@ class FacilityService:
             schedule_service = DoctorScheduleService(client=client)
             facility = schedule_service.find_facility(facility_query)
             if facility:
+                dept_specialty_ids: list[str] = []
+                if department_context:
+                    candidate_specs = schedule_service.find_candidate_specialties(department_context)
+                    dept_specialty_ids = [str(sp["id"]) for sp in candidate_specs[:3]]
+
+                dept_doc_ids: set[str] = set()
+                if dept_specialty_ids:
+                    spec_relations = client.select(
+                        "doctor_specialties",
+                        params={
+                            "select": "doctor_id",
+                            "specialty_id": f"in.({','.join(dept_specialty_ids)})",
+                            "review_status": "eq.approved",
+                            "limit": 1000,
+                        },
+                    )
+                    dept_doc_ids = {str(r["doctor_id"]) for r in spec_relations if r.get("doctor_id")}
+
                 relations = client.select(
                     "doctor_facilities",
                     params={
@@ -265,12 +283,20 @@ class FacilityService:
                     },
                 )
                 relation_by_doctor = {str(row["doctor_id"]): row for row in relations if row.get("doctor_id")}
-                if relation_by_doctor:
+                target_doc_ids = list(relation_by_doctor)
+                is_dept_filtered = False
+                if dept_doc_ids:
+                    filtered_ids = [d_id for d_id in target_doc_ids if d_id in dept_doc_ids]
+                    if filtered_ids:
+                        target_doc_ids = filtered_ids
+                        is_dept_filtered = True
+
+                if target_doc_ids:
                     doctors = client.select(
                         "doctors",
                         params={
                             "select": "id,full_name,title,source_url",
-                            "id": "in.(" + ",".join(relation_by_doctor) + ")",
+                            "id": "in.(" + ",".join(target_doc_ids[:50]) + ")",
                             "status": "eq.active",
                             "review_status": "eq.approved",
                             "order": "full_name.asc",
@@ -280,7 +306,7 @@ class FacilityService:
                     matched_docs = [
                         {
                             "name": doctor.get("full_name"),
-                            "specialties": [],
+                            "specialties": [department_context] if (is_dept_filtered and department_context) else ([relation_by_doctor[str(doctor["id"])].get("department")] if relation_by_doctor[str(doctor["id"])].get("department") else []),
                             "source_url": doctor.get("source_url"),
                             "sections": {
                                 "Chức vụ": [doctor.get("title")] if doctor.get("title") else [],
@@ -308,12 +334,29 @@ class FacilityService:
                 if is_match:
                     matched_docs.append(d)
 
+            if department_context and matched_docs:
+                dept_norm = _normalize_text(department_context)
+                filtered_crawled = []
+                for d in matched_docs:
+                    secs = d.get("sections", {})
+                    specs = d.get("specialties") or secs.get("Chuyên khoa") or []
+                    all_text = " ".join([str(s) for s in specs] + [str(w) for w in (d.get("workplace") or [])])
+                    if dept_norm in _normalize_text(all_text):
+                        filtered_crawled.append(d)
+                if filtered_crawled:
+                    matched_docs = filtered_crawled
+
         fac_display = (facility.get("name") if facility else facility_query).strip().title()
 
         if matched_docs:
+            header_title = (
+                f"👨‍⚕️ **Đội ngũ Bác sĩ chuyên khoa {department_context} tại {fac_display}:**\n"
+                if department_context
+                else f"👨‍⚕️ **Đội ngũ Bác sĩ tiêu biểu làm việc tại {fac_display}:**\n"
+            )
             lines = [
-                f"👨‍⚕️ **Đội ngũ Bác sĩ tiêu biểu làm việc tại {fac_display}:**\n",
-                f"Hệ thống ghi nhận **{len(matched_docs)}** bác sĩ, chuyên gia y tế thuộc cơ sở này:\n",
+                header_title,
+                f"Hệ thống ghi nhận **{len(matched_docs)}** bác sĩ, chuyên gia y tế phù hợp:\n",
             ]
             for idx, doc in enumerate(matched_docs[:5], 1):
                 secs = doc.get("sections", {})
@@ -556,6 +599,39 @@ class FacilityService:
             if matching:
                 filtered = matching
 
+        # Tra cứu các cơ sở có chuyên khoa/bác sĩ phù hợp nếu có department_context
+        specialty_facility_ids: set[str] = set()
+        if department_context:
+            try:
+                client = self._get_client()
+                sched_service = DoctorScheduleService(client=client)
+                specs = sched_service.find_candidate_specialties(department_context)
+                if specs:
+                    spec_ids = [sp["id"] for sp in specs[:3]]
+                    rels = client.select(
+                        "doctor_specialties",
+                        params={
+                            "select": "doctor_id",
+                            "specialty_id": f"in.({','.join(spec_ids)})",
+                            "review_status": "eq.approved",
+                            "limit": 200,
+                        },
+                    )
+                    doc_ids = list({r["doctor_id"] for r in rels if r.get("doctor_id")})
+                    if doc_ids:
+                        df = client.select(
+                            "doctor_facilities",
+                            params={
+                                "select": "facility_id",
+                                "doctor_id": f"in.({','.join(doc_ids[:50])})",
+                                "status": "eq.active",
+                                "limit": 200,
+                            },
+                        )
+                        specialty_facility_ids = {f["facility_id"] for f in df if f.get("facility_id")}
+            except Exception as exc:
+                logger.warning("Failed to lookup specialty facilities: %s", exc)
+
         hospitals: list[dict[str, Any]] = []
         clinics: list[dict[str, Any]] = []
 
@@ -568,42 +644,103 @@ class FacilityService:
 
         lines: list[str] = []
         if language == "en":
-            lines.append("🏥 **Vinmec International Healthcare System**\n")
-            lines.append("Vinmec operates modern international hospitals and specialized clinics across Vietnam:\n")
+            if department_context:
+                region_str = f" in {region_filter}" if region_filter else ""
+                lines.append(f"🏥 **Vinmec Healthcare Facilities for {department_context}{region_str}:**\n")
+                spec_hospitals = [h for h in hospitals if h.get("id") in specialty_facility_ids]
+                other_hospitals = [h for h in hospitals if h.get("id") not in specialty_facility_ids]
 
-            if hospitals:
-                lines.append("### 🏨 International General Hospitals:")
-                for h in hospitals:
-                    phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
-                    lines.append(f"• **{h['name']}**\n  📍 Address: {h.get('address', 'Updating')}{phone_str}\n")
+                if spec_hospitals:
+                    lines.append(f"### 🏨 Specialized Hospitals for {department_context} (Inpatient & Surgery):")
+                    for h in spec_hospitals:
+                        phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
+                        lines.append(f"• **{h['name']}**\n  📍 Address: {h.get('address', 'Updating')}{phone_str}\n  ✨ *Comprehensive inpatient care, specialized diagnostics, and 24/7 emergency services.*\n")
+                elif hospitals:
+                    lines.append("### 🏨 International General Hospitals:")
+                    for h in hospitals:
+                        phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
+                        lines.append(f"• **{h['name']}**\n  📍 Address: {h.get('address', 'Updating')}{phone_str}\n")
 
-            if clinics:
-                lines.append("### 🩺 International General Clinics:")
-                for c in clinics:
-                    phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
-                    lines.append(f"• **{c['name']}**\n  📍 Address: {c.get('address', 'Updating')}{phone_str}\n")
+                secondary_facilities = clinics + (other_hospitals if spec_hospitals else [])
+                if secondary_facilities:
+                    lines.append("### 🩺 General Clinics (Initial Screening & Consultation):")
+                    seen_names = set()
+                    for c in secondary_facilities:
+                        if c["name"] in seen_names:
+                            continue
+                        seen_names.add(c["name"])
+                        phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
+                        lines.append(f"• **{c['name']}**\n  📍 Address: {c.get('address', 'Updating')}{phone_str}\n")
+                    lines.append("💡 *Satellite clinics provide initial examination, ultrasound, and outpatient treatment, referring complex cases to the specialized hospital.*")
 
-            lines.append("💡 *Emergency services operate 24/7 at all hospitals.*")
-            quick_replies = ["Book appointment now", "Search doctor schedule", "General Health Checkup"]
+                quick_replies = [f"Book appointment", f"Doctors for {department_context}", "General Health Checkup"]
+            else:
+                lines.append("🏥 **Vinmec International Healthcare System**\n")
+                lines.append("Vinmec operates modern international hospitals and specialized clinics across Vietnam:\n")
+
+                if hospitals:
+                    lines.append("### 🏨 International General Hospitals:")
+                    for h in hospitals:
+                        phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
+                        lines.append(f"• **{h['name']}**\n  📍 Address: {h.get('address', 'Updating')}{phone_str}\n")
+
+                if clinics:
+                    lines.append("### 🩺 International General Clinics:")
+                    for c in clinics:
+                        phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
+                        lines.append(f"• **{c['name']}**\n  📍 Address: {c.get('address', 'Updating')}{phone_str}\n")
+
+                lines.append("💡 *Emergency services operate 24/7 at all hospitals.*")
+                quick_replies = ["Book appointment now", "Search doctor schedule", "General Health Checkup"]
         else:
             region_suffix = f" tại {region_filter}" if region_filter else ""
-            lines.append(f"🏥 **Hệ thống Bệnh viện & Phòng khám Đa khoa Quốc tế Vinmec{region_suffix}**\n")
-            lines.append("Hệ sinh thái Vinmec hiện diện tại các thành phố trọng điểm trên toàn quốc:\n")
+            if department_context:
+                lines.append(f"🏥 **Cơ sở Y tế Vinmec tiếp nhận khám Khoa {department_context}{region_suffix}:**\n")
+                spec_hospitals = [h for h in hospitals if h.get("id") in specialty_facility_ids]
+                other_hospitals = [h for h in hospitals if h.get("id") not in specialty_facility_ids]
 
-            if hospitals:
-                lines.append("### 🏨 Bệnh viện Đa khoa Quốc tế:")
-                for h in hospitals:
-                    phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
-                    lines.append(f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n")
+                if spec_hospitals:
+                    lines.append(f"### 🏨 Bệnh viện ĐKQT tiếp nhận điều trị chuyên sâu Khoa {department_context}:")
+                    for h in spec_hospitals:
+                        phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
+                        lines.append(f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n  ✨ *Trung tâm chuyên sâu trang bị đầy đủ máy móc hiện đại, phòng mổ vô khuẩn và điều trị nội trú 24/7.*\n")
+                elif hospitals:
+                    lines.append("### 🏨 Bệnh viện Đa khoa Quốc tế:")
+                    for h in hospitals:
+                        phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
+                        lines.append(f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n")
 
-            if clinics:
-                lines.append("### 🩺 Phòng khám Đa khoa Quốc tế:")
-                for c in clinics:
-                    phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
-                    lines.append(f"• **{c['name']}**\n  📍 Địa chỉ: {c.get('address', 'Đang cập nhật')}{phone_str}\n")
+                secondary_facilities = clinics + (other_hospitals if spec_hospitals else [])
+                if secondary_facilities:
+                    lines.append("### 🩺 Phòng khám Đa khoa vệ tinh (Tiếp nhận khám ban đầu & Chuyển tiếp):")
+                    seen_names = set()
+                    for c in secondary_facilities:
+                        if c["name"] in seen_names:
+                            continue
+                        seen_names.add(c["name"])
+                        phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
+                        lines.append(f"• **{c['name']}**\n  📍 Địa chỉ: {c.get('address', 'Đang cập nhật')}{phone_str}\n")
+                    lines.append("💡 *Các phòng khám vệ tinh tiếp nhận khám sàng lọc ban đầu, siêu âm, xét nghiệm và điều trị ngoại trú; trường hợp cần can thiệp ngoại khoa hay nội trú chuyên sâu sẽ được hội chẩn chuyển viện nhanh chóng sang bệnh viện trung tâm.*\n")
 
-            lines.append("💡 *Khoa Cấp cứu & Phòng Lưu bệnh làm việc **24/7** tại tất cả các bệnh viện.*")
-            quick_replies = ["Đặt lịch khám ngay", "Xem danh sách bác sĩ", "Giờ làm việc & Khám Thứ 7"]
+                quick_replies = ["Đặt lịch khám ngay", f"Bác sĩ Khoa {department_context}", "Xem các cơ sở khác"]
+            else:
+                lines.append(f"🏥 **Hệ thống Bệnh viện & Phòng khám Đa khoa Quốc tế Vinmec{region_suffix}**\n")
+                lines.append("Hệ sinh thái Vinmec hiện diện tại các thành phố trọng điểm trên toàn quốc:\n")
+
+                if hospitals:
+                    lines.append("### 🏨 Bệnh viện Đa khoa Quốc tế:")
+                    for h in hospitals:
+                        phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
+                        lines.append(f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n")
+
+                if clinics:
+                    lines.append("### 🩺 Phòng khám Đa khoa Quốc tế:")
+                    for c in clinics:
+                        phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
+                        lines.append(f"• **{c['name']}**\n  📍 Địa chỉ: {c.get('address', 'Đang cập nhật')}{phone_str}\n")
+
+                lines.append("💡 *Khoa Cấp cứu & Phòng Lưu bệnh làm việc **24/7** tại tất cả các bệnh viện.*")
+                quick_replies = ["Đặt lịch khám ngay", "Xem danh sách bác sĩ", "Giờ làm việc & Khám Thứ 7"]
 
         return "\n".join(lines).strip(), quick_replies
 

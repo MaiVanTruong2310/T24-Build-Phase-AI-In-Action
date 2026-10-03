@@ -1,3 +1,4 @@
+import { PatientUpdates, type PatientUpdatesHandle, type SupportRequestState } from '../features/coordinator/PatientUpdates';
 import '../components/ChatMessageInput.css';
 import '../components/ChatSendButton.css';
 import { AIIdentity } from '../components/AIIdentity';
@@ -6,13 +7,14 @@ import { ChatHistoryPanel } from '../features/chat/ChatHistoryPanel';
 import { ChatAccessGate } from '../features/chat/ChatAccessGate';
 import { GUEST_PROFILE_EVENT, readGuestProfile, saveGuestProfile, type ChatProfile } from '../features/chat/profile';
 import { AssistantMessage } from '../features/chat/AssistantMessage';
-import { useEffect, useRef, useState, useCallback, type FormEvent } from 'react';
+import { AssistantTurnMetrics } from '../features/chat/AssistantTurnMetrics';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   History,
+  Headset,
   Activity,
   AlertTriangle,
   Bot,
-  Calendar,
   CheckCircle2,
   ClipboardList,
   LoaderCircle,
@@ -21,7 +23,6 @@ import {
   Minimize2,
   Minus,
   RotateCcw,
-  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -29,7 +30,6 @@ import { closeChat, toggleChat, type RootState } from '../app/store';
 import {
   getConversation,
   type SavedChatTurn,
-  checkAgentStatus,
   sendChat,
   streamChat,
   type BookingIntake,
@@ -48,6 +48,7 @@ interface Message {
   pending?: boolean;
   error?: boolean;
   metadata?: ChatMetadata;
+  elapsedMs?: number | null;
 }
 
 const DEFAULT_QUICK_REPLIES = [
@@ -78,7 +79,15 @@ function savedMessages(turns: SavedChatTurn[]): Message[] {
     const time = new Date(turn.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     return [
       { id: `${turn.id}-user`, sender: 'user' as const, text: turn.user_text, time },
-      { id: `${turn.id}-bot`, sender: 'bot' as const, text: turn.assistant_text || 'Lượt chat chưa hoàn tất. Bạn có thể gửi lại tin nhắn.', time, error: turn.status !== 'completed', metadata: turn.result || undefined },
+      {
+        id: `${turn.id}-bot`,
+        sender: 'bot' as const,
+        text: turn.assistant_text || 'Lượt chat chưa hoàn tất. Bạn có thể gửi lại tin nhắn.',
+        time,
+        error: turn.status !== 'completed',
+        metadata: turn.result || undefined,
+        elapsedMs: turn.result?.elapsed_ms ?? undefined,
+      },
     ];
   });
 }
@@ -153,10 +162,12 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [isSending, setIsSending] = useState(false);
-  const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [sessionId, setSessionId] = useState(createSessionId);
+  const supportRef = useRef<PatientUpdatesHandle>(null);
+  const [supportState, setSupportState] = useState<SupportRequestState>({ busy: false, requested: false, control: 'ai' });
   const [isBookingDrawerOpen, setIsBookingDrawerOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyDeleting, setHistoryDeleting] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [historyMore, setHistoryMore] = useState(false);
@@ -228,12 +239,6 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   useEffect(() => () => activeRequest.current?.abort(), []);
 
   useEffect(() => {
-    const request = new AbortController();
-    void checkAgentStatus(request.signal).then(setAgentOnline);
-    return () => request.abort();
-  }, []);
-
-  useEffect(() => {
     const refreshGuest = () => setGuestProfile(readGuestProfile());
     window.addEventListener(GUEST_PROFILE_EVENT, refreshGuest);
     return () => window.removeEventListener(GUEST_PROFILE_EVENT, refreshGuest);
@@ -297,7 +302,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   };
 
   const openConversation = (id: string) => {
-    if (isSending || historyLoading) return;
+    if (isSending || historyDeleting || historyLoading) return;
     sessionStorage.setItem('p124_chat_session_id', id); setSessionId(id);
     setHistoryOpen(false); setMessages([WELCOME_MESSAGE]); setHistoryError(''); setInputText('');
     if (id === sessionId) setHistoryReload(value => value + 1);
@@ -325,7 +330,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
   const sendMessage = async (rawText: string) => {
     const text = rawText.trim();
-    if (!text || isSending || chatLocked || historyLoading || historyError) return;
+    if (!text || isSending || historyDeleting || chatLocked || historyLoading || historyError) return;
 
     const request = new AbortController();
     activeRequest.current = request;
@@ -349,8 +354,10 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     let completed = false;
     let streamedText = '';
     let receivedMetadata = false;
+    const sendStartTime = Date.now();
+    let recordedElapsedMs: number | undefined;
+
     const showConnectionError = () => {
-      setAgentOnline(false);
       updateBot(botId, {
         text: 'Không thể nhận phản hồi từ trợ lý. Vui lòng kiểm tra kết nối hoặc thử lại sau.',
         pending: false,
@@ -377,15 +384,29 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         },
         onMetadata: (metadata) => {
           receivedMetadata = true;
-          updateBot(botId, { metadata });
+          const currentElapsed = metadata.elapsed_ms ?? (Date.now() - sendStartTime);
+          recordedElapsedMs = currentElapsed;
+          updateBot(botId, {
+            metadata: {
+              ...metadata,
+              elapsed_ms: currentElapsed,
+            },
+            elapsedMs: currentElapsed,
+          });
           if (metadata.booking_intake?.required) {
             setIsBookingDrawerOpen(true);
           }
         },
       });
       completed = true;
-      setAgentOnline(true);
-      updateBot(botId, { pending: false });
+      const finalElapsed = recordedElapsedMs ?? (Date.now() - sendStartTime);
+      updateBot(botId, (current) => ({
+        pending: false,
+        elapsedMs: current.elapsedMs ?? finalElapsed,
+        metadata: current.metadata
+          ? { ...current.metadata, elapsed_ms: current.metadata.elapsed_ms ?? finalElapsed }
+          : undefined,
+      }));
       setTimeout(() => {
         if (isNearBottomRef.current) {
           scrollToBottom(true);
@@ -401,8 +422,13 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
       try {
         const result = await sendChat(text, sessionId, request.signal, profile || undefined, requestId);
         completed = true;
-        setAgentOnline(true);
-        updateBot(botId, { text: result.response, pending: false, metadata: result });
+        const finalElapsed = result.elapsed_ms ?? (Date.now() - sendStartTime);
+        updateBot(botId, {
+          text: result.response,
+          pending: false,
+          metadata: { ...result, elapsed_ms: finalElapsed },
+          elapsedMs: finalElapsed,
+        });
         if (result.booking_intake?.required) {
           setIsBookingDrawerOpen(true);
         }
@@ -461,6 +487,9 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
       .reverse()
       .find((message) => message.sender === 'bot' && message.metadata?.quick_replies?.length)
       ?.metadata?.quick_replies || DEFAULT_QUICK_REPLIES;
+  const supportLabel = supportState.control === 'human'
+    ? 'Đang kết nối bác sĩ'
+    : supportState.requested ? 'Đã gửi yêu cầu' : 'Yêu cầu hỗ trợ';
 
   return (
     <div
@@ -478,7 +507,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               ? 'h-full min-h-[660px] w-full shadow-lg dark:shadow-2xl'
               : isExpanded
               ? 'h-[88vh] w-[min(48rem,calc(100vw-2rem))] shadow-2xl shadow-blue-950/25 dark:shadow-cyan-950/40 ring-1 ring-blue-500/10 dark:ring-cyan-500/20'
-              : 'h-[620px] max-h-[85vh] w-[min(27rem,calc(100vw-1.5rem))] shadow-2xl shadow-blue-950/20 dark:shadow-black/60 ring-1 ring-blue-500/10 dark:ring-cyan-500/20'
+              : 'h-[min(744px,calc(100dvh-2rem))] w-[min(32.5rem,calc(100vw-1.5rem))] shadow-2xl shadow-blue-950/20 dark:shadow-black/60 ring-1 ring-blue-500/10 dark:ring-cyan-500/20'
           }`}
           aria-label="P-124 Medical Assistant"
         >
@@ -487,32 +516,23 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
             <div className="flex items-center gap-3">
               <div className="flex min-w-0 flex-col gap-2">
                 <AIIdentity />
-                <div className="flex items-center gap-2 text-[10.5px] text-[#527565] dark:text-slate-300">
-                  <span className="flex items-center gap-1 font-medium">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        agentOnline === false
-                          ? 'bg-amber-400'
-                          : agentOnline === true
-                          ? 'animate-pulse bg-emerald-400'
-                          : 'animate-pulse bg-cyan-400'
-                      }`}
-                    />
-                    {agentOnline === false
-                      ? 'Chưa kết nối trợ lý'
-                      : agentOnline === true
-                      ? 'Trợ lý trực tuyến'
-                      : 'Đang kết nối trợ lý'}
-                  </span>
-                  <span className="text-slate-500">•</span>
-                  <span className="hidden sm:inline text-cyan-300 font-medium">Hỗ trợ tư vấn</span>
-                </div>
               </div>
             </div>
 
             {/* Action buttons */}
             <div className="flex items-center gap-1 text-[#527565] dark:text-slate-300">
-              {authUser && <button type="button" disabled={isSending || historyLoading} aria-label="Lịch sử trò chuyện" title="Lịch sử trò chuyện" onClick={() => setHistoryOpen(value => !value)} className="rounded-lg p-2 hover:bg-emerald-100 dark:hover:bg-white/10 disabled:opacity-50"><History className="h-4 w-4" /></button>}
+              <button
+                type="button"
+                disabled={chatLocked || supportState.busy || supportState.requested || supportState.control === 'human'}
+                aria-label={supportLabel}
+                title={supportLabel}
+                onClick={() => supportRef.current?.requestHuman()}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium hover:bg-emerald-100 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Headset className="h-4 w-4 shrink-0" />
+                <span className={embedded ? 'hidden sm:inline' : 'sr-only'}>{supportLabel}</span>
+              </button>
+              {authUser && <button type="button" disabled={isSending || historyDeleting || historyLoading} aria-label="Lịch sử trò chuyện" title="Lịch sử trò chuyện" onClick={() => setHistoryOpen(value => !value)} className="rounded-lg p-2 hover:bg-emerald-100 dark:hover:bg-white/10 disabled:opacity-50"><History className="h-4 w-4" /></button>}
               <button
                 type="button"
                 onClick={() => setIsBookingDrawerOpen((prev) => !prev)}
@@ -555,19 +575,8 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
           <div className="relative flex min-h-0 flex-1 flex-col">
           <div inert={chatLocked} aria-hidden={chatLocked || undefined} className={`flex min-h-0 flex-1 flex-col ${chatLocked ? 'pointer-events-none select-none blur-sm' : ''}`}>
-          {/* Clinical Security & Supervision Strip */}
-          <div className="flex items-center justify-between border-b border-[#d5e8de] dark:border-slate-800/80 bg-[#e7f3ec] dark:bg-[#070D1E] px-4 py-1.5 text-[10.5px] text-[#527565] dark:text-cyan-300">
-            <div className="flex items-center gap-1.5 font-medium">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-              <span>Trợ lý AI · Hỗ trợ sàng lọc sơ bộ</span>
-            </div>
-            <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
-              Mã: {sessionId.slice(0, 11)}…
-            </span>
-          </div>
-
           {/* Message List */}
-          {authUser && historyOpen && <ChatHistoryPanel key={authUser.id} activeSessionId={sessionId} onSelect={openConversation} />}
+          {authUser && historyOpen && <ChatHistoryPanel key={authUser.id} activeSessionId={sessionId} onSelect={openConversation} busy={isSending || historyLoading} onDeletingChange={setHistoryDeleting} onDeleted={id => { if (id === sessionId) { historyRequest.current?.abort(); setHistoryError(''); setHistoryMore(false); setHistoryOffset(0); resetConversation(); } }} />}
           {authUser && <p className="border-b border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800">Sử dụng hồ sơ sức khỏe của bạn · Lịch sử được lưu theo tài khoản.</p>}
           {historyError && <p role="alert" className="px-4 py-2 text-xs text-red-600">{historyError} <button type="button" onClick={() => setHistoryReload(value => value + 1)} className="underline">Thử tải lại</button></p>}
           {historyLoading && <p className="px-4 py-2 text-xs text-slate-500">Đang tải cuộc trò chuyện…</p>}
@@ -627,6 +636,15 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                       </div>
                     )}
 
+                    {/* Small telemetry info under medical disclaimer */}
+                    {!isUser && !message.pending && message.id !== 'welcome' && message.text && (
+                      <AssistantTurnMetrics
+                        tokenUsage={message.metadata?.token_usage}
+                        elapsedMs={message.elapsedMs ?? message.metadata?.elapsed_ms}
+                        text={message.text}
+                      />
+                    )}
+
                     {/* Candidate Specialties Card */}
                     {candidates.length > 0 && (
                       <div className="mt-3 rounded-xl border border-[#cde5d7] dark:border-blue-900/60 bg-[#edf7f1] dark:bg-[#0c1830] p-3 text-[11px] text-[#295c49] dark:text-cyan-200">
@@ -667,6 +685,14 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                 </div>
               );
             })}
+            <PatientUpdates
+              key={ownerKey + sessionId}
+              ref={supportRef}
+              sessionId={sessionId}
+              owner={ownerKey}
+              showRequestButton={false}
+              onSupportStateChange={setSupportState}
+            />
             <div ref={messagesEndRef} />
           </div>
 
@@ -677,7 +703,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                 <button
                   key={reply}
                   type="button"
-                  disabled={isSending || historyLoading || Boolean(historyError)}
+                  disabled={isSending || historyDeleting || historyLoading || Boolean(historyError)}
                   onClick={() => {
                     void sendMessage(reply);
                     ensureChatVisibleInPage();
@@ -705,7 +731,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                   ref={inputRef}
                   type="text"
                   value={inputText}
-                  disabled={isSending || historyLoading || Boolean(historyError)}
+                  disabled={isSending || historyDeleting || historyLoading || Boolean(historyError)}
                   onFocus={ensureChatVisibleInPage}
                   onChange={(event) => setInputText(event.target.value)}
                   placeholder="Mô tả triệu chứng, vị trí và thời gian bắt đầu…"
@@ -725,7 +751,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
               <button
                 type="submit"
-                disabled={isSending || historyLoading || Boolean(historyError) || !inputText.trim()}
+                disabled={isSending || historyDeleting || historyLoading || Boolean(historyError) || !inputText.trim()}
                 className="chat-send-button"
                 aria-label="Gửi tin nhắn"
               >

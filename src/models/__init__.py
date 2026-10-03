@@ -18,6 +18,7 @@ from src.models.catalog import (
 from src.models.package_request import PackageRequest
 from src.models.notification import Notification
 from src.models.user import User
+from src.models.workbench import CoordinatorMember, CoordinationCase, CoordinationDeposit, CoordinationEvent, CoordinationMessage, CoordinationPolicy
 
 __all__ = [
     "PackageRequest",

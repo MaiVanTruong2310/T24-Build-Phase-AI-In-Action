@@ -111,25 +111,25 @@ class BookingResponse(BaseModel):
 
     id: UUID
     user_id: UUID
-    schedule_id: UUID | None
+    schedule_id: UUID | None = None
     hold_id: UUID | None = None
-    service_id: UUID
-    specialty_id: UUID
-    doctor_id: UUID
-    facility_id: UUID
-    starts_at: datetime
-    ends_at: datetime
-    booking_mode: Literal["group", "doctor_visit"]
-    encounter_type: EncounterType
-    reason: str
-    patient_note: str | None
+    service_id: UUID | None = None
+    specialty_id: UUID | None = None
+    doctor_id: UUID | None = None
+    facility_id: UUID | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    booking_mode: Literal["group", "doctor_visit"] = "doctor_visit"
+    encounter_type: EncounterType = "in_person"
+    reason: str | None = None
+    patient_note: str | None = None
     status: BookingStatus
-    cancellation_reason: str | None
+    cancellation_reason: str | None = None
     staff_note: str | None = None
     reviewed_by: UUID | None = None
     reviewed_at: datetime | None = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class StaffBookingResponse(BookingResponse):

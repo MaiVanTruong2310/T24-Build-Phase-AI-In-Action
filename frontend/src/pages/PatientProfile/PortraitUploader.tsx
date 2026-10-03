@@ -96,22 +96,22 @@ export function PortraitUploader({ userId, name }: { userId: string; name: strin
   }
 
   return <div className="w-28 shrink-0 text-center">
-    <div className="mx-auto flex aspect-[2/3] w-24 items-center justify-center overflow-hidden rounded-lg border border-slate-200 light:border-app-border bg-cyan-50 light:bg-app-muted text-cyan-700 light:text-app-primary">
+    <div className="mx-auto flex aspect-[2/3] w-24 items-center justify-center overflow-hidden rounded-lg border border-slate-200 dark:border-app-border light:border-app-border bg-cyan-50 dark:bg-cyan-950/50 light:bg-app-muted text-cyan-700 dark:text-cyan-300 light:text-app-primary">
       {portrait ? <img src={portrait} alt={`Ảnh hồ sơ của ${name}`} className="h-full w-full object-cover" /> : <UserRound className="h-10 w-10" />}
     </div>
     <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Chọn ảnh hồ sơ 4×6" className="hidden" onChange={choose} />
-    <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-blue-200 light:border-app-border px-2 py-1.5 text-xs font-medium text-blue-700 light:text-app-primary hover:bg-blue-50 light:hover:bg-app-muted disabled:opacity-50"><Camera className="h-3.5 w-3.5" />{portrait ? 'Đổi ảnh' : 'Tải ảnh 4×6'}</button>
-    {portrait && <button type="button" disabled={busy} onClick={remove} className="mt-1 block w-full text-xs text-slate-500 light:text-app-secondary hover:text-red-600 disabled:opacity-50">Gỡ ảnh</button>}
-    {!source && error && <p role="alert" className="mt-2 break-words text-xs text-red-600">{error}</p>}
-    {notice && <p role="status" className="mt-2 text-xs text-emerald-700">{notice}</p>}
+    <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-blue-200 dark:border-blue-800 light:border-app-border px-2 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 light:text-app-primary hover:bg-blue-50 dark:hover:bg-blue-950/50 light:hover:bg-app-muted disabled:opacity-50"><Camera className="h-3.5 w-3.5" />{portrait ? 'Đổi ảnh' : 'Tải ảnh 4×6'}</button>
+    {portrait && <button type="button" disabled={busy} onClick={remove} className="mt-1 block w-full text-xs text-slate-500 dark:text-app-secondary light:text-app-secondary hover:text-red-600 dark:hover:text-red-300 disabled:opacity-50">Gỡ ảnh</button>}
+    {!source && error && <p role="alert" className="mt-2 break-words text-xs text-red-600 dark:text-red-300">{error}</p>}
+    {notice && <p role="status" className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">{notice}</p>}
     {source && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 text-left" onClick={event => { if (event.target === event.currentTarget && !busy) setSource(null); }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="portrait-editor-title" className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white light:bg-app-surface p-5 shadow-xl">
-        <div className="flex items-center justify-between"><h2 id="portrait-editor-title" className="font-semibold text-slate-900 light:text-app-text">Ảnh hồ sơ 4×6</h2><button autoFocus type="button" disabled={busy} aria-label="Đóng chỉnh sửa ảnh" onClick={() => setSource(null)} className="rounded p-2 text-slate-500 light:text-app-secondary"><X className="h-5 w-5" /></button></div>
-        <p className="mt-1 text-xs text-slate-500 light:text-app-secondary">Chọn ảnh chân dung rõ mặt, nhìn thẳng, nền sáng. Ảnh sẽ được cắt theo tỷ lệ 4:6.</p>
-        <div className="mx-auto mt-4 aspect-[2/3] w-40 overflow-hidden rounded border bg-white light:bg-app-surface"><img src={source} alt="Xem trước ảnh hồ sơ 4×6" className="h-full w-full object-cover" style={{objectPosition: `50% ${position}%`}} /></div>
-        <label className="mt-4 block text-xs text-slate-600 light:text-app-secondary">Căn vị trí ảnh theo chiều dọc<input type="range" min="0" max="100" value={position} disabled={busy} onChange={event => setPosition(Number(event.target.value))} className="mt-2 w-full" /></label>
-        {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setSource(null)} className="rounded-lg border px-4 py-2 text-sm">Hủy</button><button type="button" disabled={busy} onClick={() => { void upload(); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 light:bg-app-primary px-4 py-2 text-sm text-white disabled:opacity-50">{busy && <TypewriterLoader />}{busy ? 'Đang lưu…' : 'Lưu ảnh'}</button></div>
+      <div role="dialog" aria-modal="true" aria-labelledby="portrait-editor-title" className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white dark:bg-app-surface light:bg-app-surface p-5 shadow-xl">
+        <div className="flex items-center justify-between"><h2 id="portrait-editor-title" className="font-semibold text-slate-900 dark:text-app-text light:text-app-text">Ảnh hồ sơ 4×6</h2><button autoFocus type="button" disabled={busy} aria-label="Đóng chỉnh sửa ảnh" onClick={() => setSource(null)} className="rounded p-2 text-slate-500 dark:text-app-secondary light:text-app-secondary"><X className="h-5 w-5" /></button></div>
+        <p className="mt-1 text-xs text-slate-500 dark:text-app-secondary light:text-app-secondary">Chọn ảnh chân dung rõ mặt, nhìn thẳng, nền sáng. Ảnh sẽ được cắt theo tỷ lệ 4:6.</p>
+        <div className="mx-auto mt-4 aspect-[2/3] w-40 overflow-hidden rounded border bg-white dark:bg-app-surface light:bg-app-surface"><img src={source} alt="Xem trước ảnh hồ sơ 4×6" className="h-full w-full object-cover" style={{objectPosition: `50% ${position}%`}} /></div>
+        <label className="mt-4 block text-xs text-slate-600 dark:text-app-secondary light:text-app-secondary">Căn vị trí ảnh theo chiều dọc<input type="range" min="0" max="100" value={position} disabled={busy} onChange={event => setPosition(Number(event.target.value))} className="mt-2 w-full" /></label>
+        {error && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-300">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setSource(null)} className="rounded-lg border px-4 py-2 text-sm">Hủy</button><button type="button" disabled={busy} onClick={() => { void upload(); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 dark:bg-blue-700 light:bg-app-primary px-4 py-2 text-sm text-white disabled:opacity-50">{busy && <TypewriterLoader />}{busy ? 'Đang lưu…' : 'Lưu ảnh'}</button></div>
       </div>
     </div>}
   </div>;

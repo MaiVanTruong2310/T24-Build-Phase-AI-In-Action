@@ -96,13 +96,17 @@ def get_auth_session_factory() -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(get_auth_engine(), expire_on_commit=False)
 
 
-async def get_auth_db_session() -> AsyncIterator[AsyncSession]:
-    if not get_settings().auth_database_url:
-        async for session in get_db_session():
+async def get_auth_db_session(session: AsyncSession | None = None) -> AsyncIterator[AsyncSession]:
+    settings = get_settings()
+    if not settings.auth_database_url or _shared_database_url(settings.database_url, settings.auth_database_url):
+        if session is not None:
             yield session
+            return
+        async for s in get_db_session():
+            yield s
         return
-    async with get_auth_session_factory()() as session:
-        yield session
+    async with get_auth_session_factory()() as auth_session:
+        yield auth_session
 
 
 async def initialize_database() -> None:

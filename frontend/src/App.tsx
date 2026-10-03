@@ -20,7 +20,8 @@ const Landing = lazy(() => import('./pages/Landing').then((module) => ({ default
 const Login = lazy(() => import('./pages/Login').then((module) => ({ default: module.Login })))
 const Register = lazy(() => import('./pages/Register').then((module) => ({ default: module.Register })))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then((module) => ({ default: module.ForgotPassword })))
-const EmergencyCoordinator = lazy(() => import('./pages/EmergencyCoordinator'))
+const CoordinatorWorkbench = lazy(() => import('./pages/CoordinatorWorkbench'))
+const PatientCoordinationRequests = lazy(() => import('./pages/PatientCoordinationRequests'))
 const ConsultationBooking = lazy(() => import('./pages/ConsultationBooking'))
 const DoctorDirectory = lazy(() => import('./pages/DoctorDirectory'))
 const DoctorProfile = lazy(() => import('./pages/DoctorProfile'))
@@ -32,14 +33,14 @@ const DoctorManagement = lazy(() => import('./pages/DoctorManagement'))
 const CreateDoctor = lazy(() => import('./pages/DoctorManagement/Create'))
 const ServiceManagement = lazy(() => import('./pages/ServiceManagement'))
 const CreateService = lazy(() => import('./pages/ServiceManagement/Create'))
-const ScheduleApprove = lazy(() => import('./pages/ScheduleApprove'))
-const AppointmentApproval = lazy(() => import('./pages/AppointmentApproval'))
+
+
 const DoctorSchedule = lazy(() => import('./pages/DoctorSchedule'))
 const PatientProfile = lazy(() => import('./pages/PatientProfile'))
 const PatientDepartments = lazy(() => import('./pages/PatientDepartments'))
 const PatientConsultation = lazy(() => import('./pages/PatientConsultation'))
-const ChatTakeover = lazy(() => import('./pages/ChatTakeover'))
-const StaffDashboard = lazy(() => import('./pages/StaffDashboard'))
+
+
 
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
@@ -76,6 +77,7 @@ const router = createBrowserRouter([
           { path: 'records', element: <Navigate to="/patient/profile" replace /> },
           { path: 'departments', element: <PatientDepartments /> },
           { path: 'appointments', element: <ConsultationBooking /> },
+          { path: 'requests', element: <PatientCoordinationRequests /> },
           { path: 'doctors', element: <DoctorDirectory /> },
           { path: 'doctors/:id', element: <DoctorProfile /> },
           { path: 'appointments/history', element: <AppointmentHistory /> },
@@ -89,22 +91,24 @@ const router = createBrowserRouter([
     path: 'staff',
     element: <StaffGate />,
     children: [
-      { index: true, element: <StaffDashboard /> },
-      { path: 'overview', element: <StaffDashboard /> },
-      { path: 'dieu-phoi', element: <CoordinatorSchedule /> },
-      { path: 'queue', element: <AppointmentApproval /> },
-      { path: 'emergency', element: <EmergencyCoordinator /> },
-      { path: 'chat', element: <ChatTakeover /> },
+      { index: true, element: <CoordinatorWorkbench mode="dashboard" /> },
+      { path: 'overview', element: <CoordinatorWorkbench mode="dashboard" /> },
+      { path: 'dieu-phoi', element: <CoordinatorWorkbench /> },
+      { path: 'shifts', element: <CoordinatorSchedule /> },
+      { path: 'settings', element: <CoordinatorWorkbench mode="settings" /> },
+      { path: 'queue', element: <CoordinatorWorkbench /> },
+      { path: 'emergency', element: <CoordinatorWorkbench mode="emergency" /> },
+      { path: 'chat', element: <CoordinatorWorkbench mode="chat" /> },
       { path: 'doctors', element: <DoctorManagement /> },
       { path: 'doctors/create', element: <CreateDoctor /> },
       { path: 'doctors/:id/edit', element: <CreateDoctor /> },
       { path: 'services', element: <ServiceManagement /> },
       { path: 'services/create', element: <CreateService /> },
-      { path: 'appointments', element: <AppointmentApproval /> },
-      { path: 'appointments/approve/:id', element: <ScheduleApprove /> },
+      { path: 'appointments', element: <CoordinatorWorkbench /> },
+      { path: 'appointments/approve/:id', element: <Navigate to="/staff/queue" replace /> },
       { path: 'doctor-schedule', element: <DoctorSchedule /> },
       { path: 'patients', element: <Placeholder title="Quản lý bệnh nhân" description="Page quản lý bệnh nhân sẽ được bổ sung sau." /> },
-      { path: 'monitoring', element: <Placeholder title="Giám sát hệ thống" description="Page giám sát hệ thống sẽ được bổ sung sau." /> }
+      { path: 'monitoring', element: <CoordinatorWorkbench mode="emergency" /> }
     ]
   }
 ])

@@ -45,7 +45,7 @@
   --app-on-primary: #e4f3ea;
   --app-accent: #edb2b1;
   font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  color-scheme: light dark;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -410,3 +410,37 @@ html:not(.dark):not([data-theme="dark"]) .orb-clinical-cyan,
 html:not(.dark):not([data-theme="dark"]) .orb-clinical-teal {
   background: radial-gradient(circle, #a4c8b5 0%, transparent 70%);
 }
+
+/* Shared dark palette for patient navigation, forms and care records. */
+html.dark, html[data-theme="dark"] {
+  color-scheme: dark;
+  --app-page: #0b1329;
+  --app-surface: #151f33;
+  --app-muted: #202d43;
+  --app-tint: #173b32;
+  --app-text: #edf3f8;
+  --app-secondary: #b2bfd0;
+  --app-border: #3d4c63;
+  --app-primary: #8bd5af;
+  --app-primary-hover: #b0e7c8;
+  --app-primary-strong: #173b32;
+  --app-on-primary: #edf8f1;
+  --app-accent: #edb2b1;
+}
+.patient-theme { color: var(--app-text); }
+.patient-theme :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  color: var(--app-text);
+  background-color: var(--app-surface);
+  border-color: var(--app-border);
+  accent-color: var(--app-primary);
+}
+.patient-theme :where(input, textarea)::placeholder { color: var(--app-secondary); opacity: .8; }
+.patient-theme :where(select) option { background: var(--app-surface); color: var(--app-text); }
+.patient-theme :where(input, select, textarea):disabled { background: var(--app-muted); opacity: .65; }
+.patient-theme :where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 3px;
+}
+.patient-theme :where(button):disabled { cursor: not-allowed; }
+.patient-theme :where(input[type="checkbox"], input[type="radio"]) { accent-color: #168455; }
+@media (prefers-reduced-motion: reduce) { .patient-theme :where(button, a) { transition-duration: 0ms; } }

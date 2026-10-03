@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.api.endpoints.workbench import router as workbench_router, patient_router as live_coordination_router
 from src.api.endpoints.auth import router as auth_router
 from src.api.endpoints.auth import user_router
 from src.api.endpoints.booking import router as booking_router
@@ -49,6 +50,9 @@ async def _booking_hold_cleanup_loop(interval_seconds: int) -> None:
                 released_count = await BookingService(session).release_expired_holds()
                 if released_count:
                     logger.info("main.booking_hold_cleanup released holds", extra={"count": released_count})
+                from src.services.workbench import expire_deposits
+                async with session.begin():
+                    await expire_deposits(session)
                 reminder_count = await NotificationService(session).process_due_reminders()
                 if reminder_count:
                     logger.info("main.notification_cleanup delivered reminders", extra={"count": reminder_count})
@@ -93,6 +97,19 @@ app = FastAPI(
 
 settings = get_settings()
 
+@app.middleware("http")
+async def coordination_capability(request, call_next):
+    import secrets
+    token = request.cookies.get("coordination_guest")
+    valid = token and len(token) == 64 and all(c in "0123456789abcdef" for c in token)
+    token = token if valid else secrets.token_hex(32)
+    request.state.coordination_guest = token
+    response = await call_next(request)
+    if not valid and request.url.path.startswith(("/api/v1/chat", "/api/v1/booking-requests", "/api/v1/coordination/", "/api/v1/packages/")):
+        secure = settings.auth_cookie_secure if settings.auth_cookie_secure is not None else settings.app_env == "production"
+        response.set_cookie("coordination_guest", token, httponly=True, secure=secure, samesite=settings.auth_cookie_samesite, max_age=2592000, path="/")
+    return response
+
 app.add_middleware(CookieOriginMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -104,6 +121,8 @@ app.add_middleware(
 
 app.include_router(medical_assistant_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(workbench_router, prefix="/api/v1")
+app.include_router(live_coordination_router, prefix="/api/v1")
 app.include_router(user_router, prefix="/api/v1")
 app.include_router(booking_router, prefix="/api/v1")
 app.include_router(staff_booking_router, prefix="/api/v1")

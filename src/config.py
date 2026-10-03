@@ -33,9 +33,9 @@ class Settings(BaseSettings):
     auth_provider: Literal["custom", "supabase"] = "custom"
     database_auto_create: bool = True
     booking_hold_cleanup_interval_seconds: int = Field(default=60, ge=5, le=3600)
-    database_pool_size: int = Field(default=3, ge=1, le=100)
-    database_max_overflow: int = Field(default=1, ge=0, le=200)
-    database_pool_timeout_seconds: float = Field(default=10.0, gt=0.0, le=120.0)
+    database_pool_size: int = Field(default=15, ge=1, le=100)
+    database_max_overflow: int = Field(default=10, ge=0, le=200)
+    database_pool_timeout_seconds: float = Field(default=30.0, gt=0.0, le=120.0)
     database_pool_recycle_seconds: int = Field(default=900, ge=30, le=86400)
     database_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
 

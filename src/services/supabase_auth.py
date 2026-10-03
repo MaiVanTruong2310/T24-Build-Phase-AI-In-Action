@@ -33,16 +33,42 @@ async def verified_identity(token: str) -> dict:
     return await asyncio.shield(task)
 
 
+import ssl
+
+_ssl_context: ssl.SSLContext | None = None
+
+
+def _get_auth_ssl_context() -> ssl.SSLContext:
+    global _ssl_context
+    if _ssl_context is None:
+        _ssl_context = ssl.create_default_context()
+        _ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return _ssl_context
+
+
 async def auth_call(path: str, body: dict | None = None, token: str | None = None, method: str = "POST", params: dict | None = None) -> dict:
     settings = get_settings()
     headers = {"apikey": settings.supabase_key}
     if token:
         headers["Authorization"] = "Bearer " + token
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.request(method, settings.supabase_url.rstrip("/") + "/auth/v1" + path, json=body, headers=headers, params=params)
-    except httpx.HTTPError as exc:
-        raise AppError("AUTH_UNAVAILABLE", "Không thể kết nối dịch vụ xác thực. Vui lòng thử lại sau.", 503) from exc
+    ssl_ctx = _get_auth_ssl_context()
+    response = None
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=20, verify=ssl_ctx) as client:
+                response = await client.request(
+                    method,
+                    settings.supabase_url.rstrip("/") + "/auth/v1" + path,
+                    json=body,
+                    headers=headers,
+                    params=params,
+                )
+            break
+        except (httpx.HTTPError, ssl.SSLError, OSError) as exc:
+            if attempt == 0:
+                await asyncio.sleep(0.2)
+                continue
+            raise AppError("AUTH_UNAVAILABLE", "Không thể kết nối dịch vụ xác thực. Vui lòng thử lại sau.", 503) from exc
     payload = response.json() if response.content else {}
     if response.is_error:
         code = payload.get("error_code") or payload.get("code")

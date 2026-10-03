@@ -88,10 +88,23 @@ CHỌN BƯỚC TIẾP THEO
     - proposed_action: "search_available_slot"
     - trích xuất specialty_key tương ứng trong specialty_catalog, requested_days (ví dụ: tuần này = 7, 2 ngày tới = 2), preferred_period.
     - Không chuyển sang hỏi mục đích khám hay giới thiệu chung chung khi người dùng đã chỉ đích danh chuyên khoa cần xem lịch.
-20. Slot ID chỉ có thể được chọn từ các slot backend đã cấp trong phiên hiện tại.
+20. TRÍCH XUẤT THÔNG TIN ĐẶT KHÁM & CƠ SỞ (SLOT FILLING):
+    - Khi người dùng thể hiện nguyện vọng hoặc nhắc đến cơ sở khám (ví dụ: "Phòng khám ĐKQT Vinmec Ocean Park", "Bệnh viện Times City", "khám bên Gia Lâm"):
+      Điền tên cơ sở vào action_args.facility_name.
+    - Khi người dùng nhắc đến thời gian khám (ví dụ: "ngày mai", "sáng mai", "thứ 2", "ca sáng"):
+      Điền chuỗi thời gian vào action_args.preferred_date_text (ví dụ: "ngày mai") và điền preferred_period ("morning" nếu sáng/ca sáng, "afternoon" nếu chiều/ca chiều, "evening" nếu tối/ca tối).
+    - Khi người dùng cung cấp số điện thoại: Điền vào facts_delta.patient_phone.
+21. XỬ LÝ CÂU HỎI MƠ HỒ, VU VƠ HOẶC THIẾU THÔNG TIN (AMBIGUITY & PROBING):
+    - Nếu người dùng hỏi chung chung, vu vơ (ví dụ: "Ở Hà Nội khám ở đâu tốt em?", "Tôi muốn đi khám", "Bệnh viện có khám không?") mà KHÔNG có triệu chứng, KHÔNG có chuyên khoa cụ thể:
+      - Đặt needs_clarification = true, clarification_reason = "Thiếu triệu chứng hoặc chuyên khoa khám cụ thể".
+      - proposed_action = "clarify_visit_purpose".
+      - draft_response: Hỏi làm rõ mục đích khám ân cần, giải thích rằng để gợi ý đúng cơ sở/bác sĩ giỏi nhất, bác có thể chia sẻ triệu chứng khó chịu hoặc chuyên khoa cần khám (Tiêu hóa, Tim mạch, Cơ xương khớp hay Khám sức khỏe tổng quát).
+      - quick_replies: Đưa ra 3-4 lựa chọn gợi ý (ví dụ: ["Khám Tiêu hóa", "Khám Tim mạch", "Khám Cơ xương khớp", "Khám sức khỏe tổng quát"]).
+      - Tuyệt đối không tự suy diễn bừa một chuyên khoa hay gán bừa cơ sở khi chưa biết người dùng cần khám gì.
+22. Slot ID chỉ có thể được chọn từ các slot backend đã cấp trong phiên hiện tại.
     Chọn bằng giờ/tên bác sĩ phải khớp duy nhất; nếu nhiều lựa chọn thì hỏi lại.
     Không tuyên bố giữ chỗ thành công trước kết quả service. Không tự tạo mã BK hoặc TTL.
-21. Chỉ trả lời giá, giờ làm việc, chính sách hủy, địa chỉ, năng lực khoa từ verified_data
+23. Chỉ trả lời giá, giờ làm việc, chính sách hủy, địa chỉ, năng lực khoa từ verified_data
     hoặc FAQ do backend xác minh. Nếu thiếu thông tin, nói rõ cần tra cứu; không tự bịa chính sách.
     Không hứa có slot trong khoảng yêu cầu trước khi service trả kết quả lọc đúng điều kiện.
 
@@ -176,6 +189,7 @@ class HybridDialogueService:
                 text,
                 current_department=state.get("suggested_department_name"),
                 language=language,
+                state=state,
             )
             or {}
         )
@@ -322,7 +336,24 @@ class HybridDialogueService:
             history_lines.append(f"- {role_tag}: {content_snippet}")
         context_obj["conversation_history"] = history_lines
 
+        # Tích hợp Reflection Memory (Bài học phản tỉnh cô đọng từ Short-term & Long-term)
+        reflection_lessons = ""
+        reflection_mem = state.get("reflection_memory") or []
+        if reflection_mem:
+            from src.medical_assistant.domain.reflection_memory_service import get_reflection_memory_service
+            reflection_lessons = get_reflection_memory_service().format_reflections_for_prompt(reflection_mem)
+        else:
+            try:
+                from src.medical_assistant.domain.reflection_memory_service import get_reflection_memory_service
+                past_reflections = get_reflection_memory_service().retrieve_relevant_reflections(text, limit=1)
+                if past_reflections:
+                    reflection_lessons = get_reflection_memory_service().format_reflections_for_prompt(past_reflections)
+            except Exception:
+                pass
+
         context_msg = json.dumps(context_obj, ensure_ascii=False, separators=(",", ":"))
+        if reflection_lessons:
+            context_msg += f"\n\n{reflection_lessons}"
 
         lang = state.get("language", "vi")
         prompt_messages = [
