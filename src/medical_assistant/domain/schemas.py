@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 class ChatPatientProfile(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     phone: str = Field(default="", max_length=20)
+    date_of_birth: str | None = Field(default=None, max_length=20)
+    gender: str | None = Field(default=None, max_length=20)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -78,6 +80,8 @@ class BookingIntakeRequest(BaseModel):
     gender: Literal["female", "male", "other", "prefer_not_to_say"] | None = None
     guardian_name: str | None = Field(default=None, max_length=120)
     guardian_phone: str | None = Field(default=None, max_length=20)
+    specialty_name: str | None = Field(default=None, max_length=120)
+    specialty_code: str | None = Field(default=None, max_length=60)
     preferred_doctor_id: str | None = Field(default=None, max_length=200)
     selected_slot_id: str | None = Field(default=None, max_length=100)
     preferred_date: date | None = None

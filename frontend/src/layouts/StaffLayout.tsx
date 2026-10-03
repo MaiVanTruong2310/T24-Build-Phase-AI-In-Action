@@ -1,9 +1,10 @@
+import { LogoutButton } from '../components/LogoutButton';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { 
   Search, Bell, Settings, Flame, ArrowRightLeft, 
   LayoutDashboard, Activity, ListOrdered, MessageSquare, 
   CalendarCheck, Stethoscope, Briefcase, Users, 
-  Building2, Package, ShieldAlert, LogOut, CalendarRange
+  Building2, Package, ShieldAlert, CalendarRange
 } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../app/store';
@@ -103,19 +104,13 @@ export function StaffLayout() {
             </button>
             
             {user ? (
-              <div 
-                className="flex items-center gap-3 pl-4 border-l border-slate-200 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors group"
-                onClick={handleLogout}
-                title="Đăng xuất"
-              >
-                <img src={getUserAvatarUrl(user)} alt={user.full_name || 'Người dùng'} className="w-9 h-9 rounded-full object-cover border border-slate-200 group-hover:hidden" />
-                <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
-                  <LogOut className="w-4 h-4" />
-                </div>
+              <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
+                <img src={getUserAvatarUrl(user)} alt={user.full_name || 'Người dùng'} className="h-9 w-9 rounded-full border border-slate-200 object-cover" />
                 <div className="hidden sm:block">
                   <p className="text-sm font-bold text-slate-800">{user.full_name || 'Người dùng'}</p>
-                  <p className="text-[10px] text-slate-500 font-semibold uppercase">Quản trị viên</p>
+                  <p className="text-[10px] font-semibold uppercase text-slate-500">Quản trị viên</p>
                 </div>
+                <LogoutButton onClick={handleLogout} accountName={user.full_name || 'Tài khoản'} />
               </div>
             ) : (
               <div className="flex items-center gap-3 pl-4 border-l border-slate-200">

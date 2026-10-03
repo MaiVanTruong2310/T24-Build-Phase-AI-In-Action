@@ -1032,10 +1032,50 @@ class ClinicalTriageService:
                     "lưng dưới",
                     "thắt lưng",
                     "cột sống",
+                    "ngón tay",
+                    "ngón tay cái",
+                    "khớp ngón",
+                    "bàn tay",
+                    "cổ tay",
+                    "ngón chân",
+                    "bàn chân",
+                    "cổ chân",
+                    "khớp gối",
+                    "đầu gối",
+                    "khớp háng",
+                    "khuỷu tay",
+                    "khớp",
+                    "xương khớp",
                     "neck pain",
                     "shoulder pain",
                     "back pain",
                     "lower back",
+                    "joint pain",
+                    "finger",
+                    "knee",
+                    "wrist",
+                    "ankle",
+                )
+            )
+            has_explicit_joint = any(
+                term in clean_user_text
+                for term in (
+                    "ngón tay",
+                    "ngón tay cái",
+                    "khớp ngón",
+                    "đau khớp",
+                    "xương khớp",
+                    "khớp gối",
+                    "đầu gối",
+                    "cổ tay",
+                    "bàn tay",
+                    "cổ chân",
+                    "khuỷu tay",
+                    "khớp háng",
+                    "viêm khớp",
+                    "thoái hóa khớp",
+                    "joint pain",
+                    "knee pain",
                 )
             )
             has_msk_context = any(
@@ -1079,7 +1119,7 @@ class ClinicalTriageService:
                     "paralysis",
                 )
             )
-            if has_msk_site and has_msk_context and not has_msk_alarm:
+            if (has_explicit_joint or (has_msk_site and has_msk_context)) and not has_msk_alarm:
                 guidance = get_triage_guidance(
                     specialty="Chấn thương chỉnh hình - Y học thể thao",
                     ats_level=4,

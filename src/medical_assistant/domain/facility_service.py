@@ -242,8 +242,11 @@ class FacilityService:
         facility_query: str,
         language: str = "vi",
         enable_citation: bool = True,
+        department_context: str | None = None,
+        booking_intake: dict[str, Any] | None = None,
+        is_authenticated: bool = False,
     ) -> tuple[str, list[str]]:
-        """Điều hướng: Tìm và hiển thị danh sách bác sĩ thuộc cơ sở y tế cụ thể."""
+        """Điều hướng: Tìm và hiển thị danh sách bác sĩ thuộc cơ sở y tế cụ thể, kèm ngữ cảnh chuyên khoa nếu có."""
         norm_q = _normalize_text(facility_query)
         matched_docs: list[dict[str, Any]] = []
         facility = None
@@ -305,7 +308,7 @@ class FacilityService:
                 if is_match:
                     matched_docs.append(d)
 
-        fac_display = facility_query.strip().title()
+        fac_display = (facility.get("name") if facility else facility_query).strip().title()
 
         if matched_docs:
             lines = [
@@ -321,9 +324,14 @@ class FacilityService:
                 url_str = f" — [Hồ sơ bác sĩ]({source_url})" if (source_url and enable_citation) else ""
                 lines.append(f"**{idx}. {doc.get('name')}**{pos_str}\n   • Chuyên môn: {specs}{url_str}\n")
 
-            lines.append(
-                "💡 *Bác có muốn đặt lịch khám với bác sĩ hoặc tìm hiểu chuyên khoa cụ thể nào tại cơ sở này không ạ?*"
-            )
+            if department_context:
+                lines.append(
+                    f"💡 *Để khám đúng **Khoa {department_context}**, bác có thể đặt lịch hẹn để hệ thống ưu tiên xếp bác sĩ chuyên khoa phù hợp nhất.*"
+                )
+            else:
+                lines.append(
+                    "💡 *Bác có muốn đặt lịch khám với bác sĩ hoặc tìm hiểu chuyên khoa cụ thể nào tại cơ sở này không ạ?*"
+                )
             quick_replies = [
                 f"Đặt lịch tại {fac_display}",
                 "Khám Sức khỏe tổng quát",
@@ -331,7 +339,36 @@ class FacilityService:
             ]
             return "\n".join(lines).strip(), quick_replies
 
-        # Trường hợp cơ sở mới hoặc chưa liên kết bác sĩ riêng
+        # Trường hợp cơ sở phòng khám đa khoa vệ tinh hoặc chưa liên kết bác sĩ cơ hữu riêng
+        if department_context:
+            if language == "vi":
+                lines = [
+                    f"🏥 **Khám Khoa {department_context} & Đội ngũ Bác sĩ tại {fac_display}:**\n",
+                    f"Dạ có ạ! **{fac_display}** tiếp nhận khám và chẩn đoán ban đầu cho các bệnh lý thuộc **Khoa {department_context}** (thực hiện chụp X-quang kỹ thuật số, siêu âm khớp, kê đơn và điều trị ngoại trú).\n",
+                    f"• 👨‍⚕️ **Đội ngũ Bác sĩ:** Các bác sĩ chuyên khoa {department_context} từ hệ thống Bệnh viện ĐKQT Vinmec (trực tiếp từ cơ sở Vinmec Times City) phụ trách chuyên môn và có lịch khám luân chuyển định kỳ tại {fac_display}.",
+                    f"• 🏨 **Trường hợp chuyên sâu:** Nếu cần can thiệp ngoại khoa phức tạp hoặc điều trị nội trú, cơ sở sẽ hội chẩn và chuyển tiếp thuận tiện sang Bệnh viện ĐKQT Vinmec Times City (chỉ cách ~15 phút di chuyển).\n",
+                ]
+                if booking_intake:
+                    p_info = f" (**Bệnh nhân:** {booking_intake.get('patient_name')}, **Chuyên khoa:** {department_context})" if is_authenticated and booking_intake.get("patient_name") else f" (**Chuyên khoa:** {department_context})"
+                    lines.append(
+                        f"📋 **Phiếu Đăng Ký Khám:**\n"
+                        f"Em đã tự động cập nhật cơ sở mong muốn là **{fac_display}** vào Phiếu Hẹn Khám ở khung bên cạnh{p_info}. "
+                        f"Bác vui lòng kiểm tra ngày khám phù hợp trên phiếu rồi bấm **'Xác nhận gửi thông tin đặt khám'** để Lễ tân điều phối giữ chỗ cho bác nhé ạ!"
+                    )
+            else:
+                lines = [
+                    f"🏥 **Department of {department_context} & Doctors at {fac_display}:**\n",
+                    f"Yes! **{fac_display}** provides outpatient consultations and diagnostic services for **{department_context}**.",
+                    f"• 👨‍⚕️ **Specialists:** Specialists from Vinmec International Hospital (Times City) directly consult on scheduled rotating days at {fac_display}.",
+                    f"• 🏨 **Advanced Inpatient Care:** Cases requiring surgery or inpatient care are seamlessly connected to Vinmec Times City Hospital.\n",
+                ]
+            quick_replies = [
+                f"Đặt lịch tại {fac_display}",
+                "Xem lịch tại Times City",
+                "Tư vấn triệu chứng",
+            ]
+            return "\n".join(lines).strip(), quick_replies
+
         lines = [
             f"👨‍⚕️ **Đội ngũ Bác sĩ tại {fac_display}:**\n",
             f"Cơ sở **{fac_display}** tiếp đón bệnh nhân với đội ngũ bác sĩ, chuyên gia luân chuyển từ hệ thống Bệnh viện Đa khoa Quốc tế Vinmec.\n",

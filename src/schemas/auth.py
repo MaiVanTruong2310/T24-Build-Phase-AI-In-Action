@@ -1,10 +1,13 @@
 """Authentication request and response schemas."""
 
+import base64
+import binascii
+
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class RegisterRequest(BaseModel):
@@ -81,6 +84,7 @@ class ResetPasswordRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=32)
     email: str | None = Field(default=None, min_length=3, max_length=320)
     phone: str | None = Field(default=None, min_length=7, max_length=32)
     password: str | None = Field(default=None, min_length=8, max_length=128)
@@ -89,8 +93,8 @@ class LoginRequest(BaseModel):
     @model_validator(mode="after")
     def validate_login(self) -> "LoginRequest":
         """Require an identity and one supported authentication factor."""
-        if not self.email and not self.phone:
-            raise ValueError("email or phone is required")
+        if not self.email and not self.phone and not self.username:
+            raise ValueError("email, phone or username is required")
         if not self.password and not self.otp_code:
             raise ValueError("password or otp_code is required")
         return self
@@ -117,6 +121,7 @@ class MedicalCondition(BaseModel):
 class PatientDetails(BaseModel):
     """Patient-reported details; these do not certify a clinical diagnosis."""
     model_config = ConfigDict(extra="forbid")
+    portrait_image: str | None = Field(default=None, max_length=180000)
     medical_history: list[MedicalCondition] = Field(default_factory=list, max_length=100)
     blood_type: Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] | None = None
     allergies: str | None = Field(default=None, max_length=2000)
@@ -133,6 +138,32 @@ class PatientDetails(BaseModel):
     blood_glucose: float | None = Field(default=None, gt=0, le=100)
 
 
+class PortraitUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    image: str | None = Field(max_length=180000)
+
+    @field_validator("image")
+    @classmethod
+    def validate_image(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        prefix = "data:image/jpeg;base64,"
+        if not value.startswith(prefix):
+            raise ValueError("Ảnh hồ sơ cần ở định dạng JPEG.")
+        try:
+            image = base64.b64decode(value[len(prefix):], validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("Dữ liệu ảnh không hợp lệ.") from exc
+        if not image.startswith(b"\xff\xd8\xff") or not image.endswith(b"\xff\xd9"):
+            raise ValueError("Dữ liệu ảnh JPEG không hợp lệ.")
+        return value
+
+
+class PatientDetailsResponse(PatientDetails):
+    # Portraits are loaded separately, never embedded into normal auth/profile responses.
+    portrait_image: str | None = Field(default=None, exclude=True)
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -146,7 +177,7 @@ class UserResponse(BaseModel):
     gender: str | None
     citizen_id: str | None
     health_insurance_code: str | None
-    patient_details: PatientDetails | None = None
+    patient_details: PatientDetailsResponse | None = None
     verified_at: datetime | None
 
 
@@ -173,4 +204,6 @@ class UpdateProfileRequest(BaseModel):
         """Prevent a profile from containing a future birth date."""
         if self.date_of_birth and self.date_of_birth >= date.today():
             raise ValueError("date_of_birth must be in the past")
+        if self.patient_details and "portrait_image" in self.patient_details.model_fields_set:
+            raise ValueError("Vui lòng dùng API ảnh hồ sơ để cập nhật ảnh.")
         return self

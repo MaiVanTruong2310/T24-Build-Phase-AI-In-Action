@@ -23,13 +23,13 @@ interface MedicalTimelineProps {
 /* ─── Badge color mapping ───────────────────────────────────────── */
 const BADGE_STYLES: Record<string, string> = {
   teal: 'bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-200/60',
-  blue: 'bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200/60',
+  blue: 'bg-sky-50 light:bg-app-muted text-sky-700 light:text-app-primary ring-1 ring-inset ring-sky-200/60',
   amber: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200/60',
 };
 
 const DOT_STYLES: Record<string, string> = {
   teal: 'bg-teal-500 ring-teal-200',
-  blue: 'bg-sky-500 ring-sky-200',
+  blue: 'bg-sky-500 light:bg-app-primary ring-sky-200',
   amber: 'bg-amber-500 ring-amber-200',
 };
 
@@ -37,30 +37,30 @@ export const MedicalTimeline = memo(function MedicalTimeline({
   entries,
 }: MedicalTimelineProps) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+    <section className="rounded-xl border border-slate-200 light:border-app-border bg-white light:bg-app-surface shadow-sm">
       {/* Section header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 light:border-app-border px-5 py-3.5">
         <div>
-          <h3 className="text-[15px] font-bold text-slate-800">
+          <h3 className="text-[15px] font-bold text-slate-800 light:text-app-text">
             Dòng thời gian y khoa tương tác
           </h3>
-          <p className="mt-0.5 text-[11px] text-slate-400">
+          <p className="mt-0.5 text-[11px] text-slate-400 light:text-app-secondary">
             Lịch sử toàn bộ chứng thực điện tử và phê duyệt của các bác sĩ đã
             phê HITL
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400 light:text-app-secondary" />
             <input
               type="text"
               placeholder="Bộ lọc chuyên khoa"
-              className="w-36 rounded-md border border-slate-200 bg-slate-50 py-1.5 pl-7 pr-2 text-[11px] text-slate-600 placeholder:text-slate-400 focus:border-[#0e7490] focus:outline-none focus:ring-1 focus:ring-[#0e7490]/30"
+              className="w-36 rounded-md border border-slate-200 light:border-app-border bg-slate-50 light:bg-app-page py-1.5 pl-7 pr-2 text-[11px] text-slate-600 light:text-app-secondary placeholder:text-slate-400 light:placeholder:text-app-secondary focus:border-[#0e7490] focus:outline-none focus:ring-1 focus:ring-[#0e7490]/30"
             />
           </div>
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-200 light:border-app-border bg-white light:bg-app-surface px-2.5 py-1.5 text-[11px] font-medium text-slate-500 light:text-app-secondary transition hover:bg-slate-50 light:hover:bg-app-page"
           >
             <Filter className="h-3 w-3" />
             Tất cả chuyên khoa Show
@@ -71,7 +71,7 @@ export const MedicalTimeline = memo(function MedicalTimeline({
       {/* Timeline entries */}
       <div className="relative px-5 py-5">
         {/* Vertical connector line */}
-        <div className="absolute bottom-0 left-[31px] top-0 w-px bg-slate-200" />
+        <div className="absolute bottom-0 left-[31px] top-0 w-px bg-slate-200 light:bg-app-tint" />
 
         <div className="space-y-6">
           {entries.map((entry) => (
@@ -93,9 +93,9 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
       />
 
       {/* Content card */}
-      <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
+      <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-slate-200 light:border-app-border bg-white light:bg-app-surface shadow-sm transition hover:shadow-md">
         {/* Card header */}
-        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 light:border-app-border px-4 py-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <span
@@ -103,10 +103,10 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
               >
                 {entry.badgeLabel}
               </span>
-              <h4 className="text-[13px] font-bold text-slate-800">
+              <h4 className="text-[13px] font-bold text-slate-800 light:text-app-text">
                 {entry.title}
               </h4>
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-slate-400 light:text-app-secondary">
                 • {entry.date} {entry.time && `lúc ${entry.time}`}
               </span>
             </div>
@@ -121,15 +121,15 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
         </div>
 
         {/* Doctor info */}
-        <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-400">
+        <div className="flex items-center gap-2.5 border-b border-slate-100 light:border-app-border px-4 py-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 light:bg-app-muted text-slate-400 light:text-app-secondary">
             <User className="h-3.5 w-3.5" />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-slate-700">
+            <p className="text-[13px] font-semibold text-slate-700 light:text-app-text">
               {entry.doctorName}
             </p>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-400 light:text-app-secondary">
               {entry.doctorDepartment}
             </p>
           </div>
@@ -142,10 +142,10 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
               <div key={idx} className="flex items-start gap-2">
                 <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#0e7490]" />
                 <div>
-                  <p className="text-[11px] font-bold text-slate-600">
+                  <p className="text-[11px] font-bold text-slate-600 light:text-app-secondary">
                     {finding.title}
                   </p>
-                  <p className="mt-0.5 text-[11px] leading-[1.6] text-slate-500">
+                  <p className="mt-0.5 text-[11px] leading-[1.6] text-slate-500 light:text-app-secondary">
                     {finding.description}
                   </p>
                 </div>
@@ -178,15 +178,15 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
 
         {/* Prescription note */}
         {entry.prescriptionNote && (
-          <div className="flex items-center gap-2 border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-500">
-            <Clock className="h-3 w-3 text-slate-400" />
+          <div className="flex items-center gap-2 border-t border-slate-100 light:border-app-border px-4 py-2.5 text-[11px] text-slate-500 light:text-app-secondary">
+            <Clock className="h-3 w-3 text-slate-400 light:text-app-secondary" />
             {entry.prescriptionNote}
           </div>
         )}
 
         {/* Summary actions */}
         {entry.summary && (
-          <div className="flex flex-wrap items-center gap-2.5 border-t border-slate-100 px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2.5 border-t border-slate-100 light:border-app-border px-4 py-2.5">
             <button
               type="button"
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#0e7490] transition hover:text-[#0c6478]"
@@ -212,10 +212,10 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
               {entry.testResults.map((test) => (
                 <div
                   key={test.id}
-                  className="rounded-md border border-slate-200 bg-slate-50/60 p-3"
+                  className="rounded-md border border-slate-200 light:border-app-border bg-slate-50/60 light:bg-app-page/60 p-3"
                 >
                   <div className="flex items-start gap-2.5">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sky-50 text-sky-500">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sky-50 light:bg-app-muted text-sky-500 light:text-app-primary">
                       {test.title.includes('X-quang') ? (
                         <Image className="h-4 w-4" />
                       ) : (
@@ -223,16 +223,16 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold text-slate-700">
+                      <p className="text-[11px] font-bold text-slate-700 light:text-app-text">
                         {test.title}
                       </p>
-                      <p className="mt-0.5 whitespace-pre-line text-[10px] leading-[1.6] text-slate-500">
+                      <p className="mt-0.5 whitespace-pre-line text-[10px] leading-[1.6] text-slate-500 light:text-app-secondary">
                         {test.description}
                       </p>
                       {test.hasImageLink && (
                         <button
                           type="button"
-                          className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-sky-600 transition hover:text-sky-700"
+                          className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-sky-600 light:text-app-primary transition hover:text-sky-700 light:hover:text-app-primary"
                         >
                           <ExternalLink className="h-2.5 w-2.5" />
                           {test.imageLinkLabel}
@@ -257,8 +257,8 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
 
         {/* Recommendation */}
         {entry.recommendation && (
-          <div className="border-t border-slate-100 px-4 py-2.5">
-            <p className="text-[11px] italic leading-[1.6] text-slate-500">
+          <div className="border-t border-slate-100 light:border-app-border px-4 py-2.5">
+            <p className="text-[11px] italic leading-[1.6] text-slate-500 light:text-app-secondary">
               {entry.recommendation}
             </p>
           </div>
@@ -266,12 +266,12 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
 
         {/* Additional links */}
         {entry.additionalLinks && entry.additionalLinks.length > 0 && (
-          <div className="flex justify-center border-t border-slate-100 py-2.5">
+          <div className="flex justify-center border-t border-slate-100 light:border-app-border py-2.5">
             {entry.additionalLinks.map((link, idx) => (
               <button
                 key={idx}
                 type="button"
-                className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 light:border-app-border px-3 py-1.5 text-[11px] font-medium text-slate-500 light:text-app-secondary transition hover:bg-slate-50 light:hover:bg-app-page"
               >
                 <Download className="h-3 w-3" />
                 {link.label}

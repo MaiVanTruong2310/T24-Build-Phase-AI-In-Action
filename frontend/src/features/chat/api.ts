@@ -43,9 +43,30 @@ export interface BookingDoctor {
 export interface BookingIntake {
   required?: boolean;
   endpoint?: string;
+  booking_mode?: 'doctor' | 'package';
   patient_name?: string;
   patient_phone?: string;
+  patient_email?: string;
+  date_of_birth?: string;
+  gender?: string;
   specialty_name?: string;
+  specialty_code?: string;
+  facility_preference?: string;
+  preferred_date?: string;
+  preferred_period?: string;
+  patient_notes?: string;
+  clinical_summary?: string;
+  clinical_details?: {
+    primary_complaint?: string;
+    location?: string;
+    severity?: string;
+    pain_score?: number | null;
+    duration?: string;
+    associated?: string[];
+    negatives?: string[];
+  };
+  missing_fields?: string[];
+  is_authenticated?: boolean;
   selected_slot_id?: string | null;
   selected_doctor_id?: string | null;
   doctors?: BookingDoctor[];

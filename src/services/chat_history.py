@@ -36,6 +36,15 @@ STATE_FIELDS = {
     "booking_code",
     "workflow_status",
     "metadata",
+    "patient_name",
+    "patient_phone",
+    "patient_dob",
+    "patient_gender",
+    "patient_email",
+    "facility_preference",
+    "preferred_date",
+    "preferred_period",
+    "is_authenticated",
 }
 
 
@@ -194,7 +203,11 @@ class ChatHistoryService:
         )
         if not conv:
             await self.session.commit()
-            raise HTTPException(404, "Không tìm thấy cuộc trò chuyện.")
+            return {
+                "title": "Cuộc trò chuyện mới",
+                "turns": [],
+                "has_more": False,
+            }
         rows = (
             (
                 await self.session.execute(

@@ -32,8 +32,14 @@ def chat_agent_input(request: ChatRequest) -> dict:
     payload = {"query": request.message, "user_id": request.user_id, "enable_citation": request.enable_citation}
     # Keep identity separate from clinical history. Omission preserves checkpoint memory.
     if request.patient_profile:
-        profile = request.patient_profile.model_dump()
-        payload.update(patient_profile=profile, patient_name=profile["name"], patient_phone=profile["phone"])
+        profile = request.patient_profile.model_dump(exclude_none=True)
+        payload.update(
+            patient_profile=profile,
+            patient_name=profile.get("name"),
+            patient_phone=profile.get("phone"),
+            patient_dob=profile.get("date_of_birth"),
+            patient_gender=profile.get("gender"),
+        )
     return payload
 
 
@@ -101,14 +107,28 @@ async def prepare_turn(request, user, session):
             workflow_status="IDLE",
         )
         payload = {**defaults, **checkpoint, **payload, "error": None}
+        dob_str = str(user.date_of_birth) if user.date_of_birth else None
+        profile_dict = {
+            "name": user.full_name or "",
+            "phone": user.phone or "",
+        }
+        if dob_str:
+            profile_dict["date_of_birth"] = dob_str
+        if getattr(user, "gender", None):
+            profile_dict["gender"] = user.gender
         payload.update(
-            patient_profile={"name": user.full_name or "", "phone": user.phone or ""},
+            patient_profile=profile_dict,
             patient_name=user.full_name,
             patient_phone=user.phone,
+            patient_dob=dob_str,
+            patient_gender=user.gender,
+            patient_email=getattr(user, "email", None),
+            is_authenticated=True,
             patient_health_record=health_record(user),
         )
     else:
         payload["patient_health_record"] = None
+        payload["is_authenticated"] = False
     logger.info("chat.prepare elapsed_ms=%.0f", (time.perf_counter() - started) * 1000)
     return payload, turn, service
 
@@ -240,9 +260,12 @@ async def create_booking_request(
     if not state and user:
         state = await ChatHistoryService(session).checkpoint(user.id, request.session_id)
     if not state:
-        raise HTTPException(
-            status_code=409, detail="Phiên tư vấn không còn hiệu lực. Vui lòng trao đổi lại với trợ lý."
-        )
+        state = {
+            "suggested_department_name": request.specialty_name or "Tư vấn tổng quát",
+            "is_emergency": False,
+            "available_slots": [],
+            "collected_details": [request.patient_notes] if request.patient_notes else [],
+        }
     if state.get("is_emergency"):
         raise HTTPException(status_code=409, detail="Ca có dấu hiệu cấp cứu không được chuyển sang đặt lịch thường.")
 
@@ -254,8 +277,6 @@ async def create_booking_request(
             (doctor for doctor in available_doctors if str(doctor.get("id")) == request.preferred_doctor_id),
             None,
         )
-        if chosen_doctor is None:
-            raise HTTPException(status_code=400, detail="Bác sĩ được chọn không thuộc kết quả của phiên hiện tại.")
     if request.selected_slot_id:
         for doctor in available_doctors:
             slot = next(
@@ -269,19 +290,15 @@ async def create_booking_request(
             if slot:
                 chosen_doctor, chosen_slot = doctor, slot
                 break
-        if chosen_slot is None or not chosen_slot.get("verified"):
-            raise HTTPException(
-                status_code=400, detail="Khung giờ này chưa được database xác minh hoặc không còn trong phiên."
-            )
 
     context = {
         "user_id": str(user.id) if user else None,
-        "specialty_code": state.get("suggested_department_code"),
-        "specialty_name": state.get("suggested_department_name"),
+        "specialty_code": request.specialty_code or state.get("suggested_department_code"),
+        "specialty_name": request.specialty_name or state.get("suggested_department_name") or "Chuyên khoa phù hợp",
         "doctor_id": chosen_doctor.get("id") if chosen_doctor else None,
         "doctor_name": chosen_doctor.get("full_name") if chosen_doctor else None,
         "schedule_id": chosen_slot.get("schedule_id") if chosen_slot else None,
-        "symptoms_summary": " | ".join(state.get("collected_details") or [])[:2000] or None,
+        "symptoms_summary": (request.patient_notes or " | ".join(state.get("collected_details") or []))[:2000] or None,
     }
     try:
         result = await asyncio.to_thread(BookingRequestService().submit, request, context)

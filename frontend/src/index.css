@@ -1,6 +1,23 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(html:not(.dark):not([data-theme="dark"]) *));
+
+@theme inline {
+  --color-app-page: var(--app-page);
+  --color-app-surface: var(--app-surface);
+  --color-app-muted: var(--app-muted);
+  --color-app-tint: var(--app-tint);
+  --color-app-text: var(--app-text);
+  --color-app-secondary: var(--app-secondary);
+  --color-app-border: var(--app-border);
+  --color-app-primary: var(--app-primary);
+  --color-app-primary-hover: var(--app-primary-hover);
+  --color-app-primary-strong: var(--app-primary-strong);
+  --color-app-on-primary: var(--app-on-primary);
+  --color-app-accent: var(--app-accent);
+}
+
 
 @theme {
   --font-sans: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -15,6 +32,18 @@
 }
 
 :root {
+  --app-page: #f6fcf9;
+  --app-surface: #ffffff;
+  --app-muted: #eaf4ee;
+  --app-tint: #d9efe2;
+  --app-text: #243b30;
+  --app-secondary: #6b8075;
+  --app-border: #dcece3;
+  --app-primary: #285c45;
+  --app-primary-hover: #204b38;
+  --app-primary-strong: #193c2d;
+  --app-on-primary: #e4f3ea;
+  --app-accent: #edb2b1;
   font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   color-scheme: light dark;
   font-synthesis: none;
@@ -25,8 +54,8 @@
 html {
   overflow-y: scroll;
   scroll-behavior: smooth;
-  background-color: #F8FAFC;
-  color: #0F172A;
+  background-color: var(--app-page);
+  color: var(--app-text);
   transition: background-color 0.35s ease-out, color 0.35s ease-out;
 }
 
@@ -34,8 +63,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #F8FAFC;
-  color: #0F172A;
+  background-color: var(--app-page);
+  color: var(--app-text);
   transition: background-color 0.35s ease-out, color 0.35s ease-out;
 }
 
@@ -341,4 +370,43 @@ html.dark .btn-clinical-ghost:hover {
   .btn-clinical-ghost:hover {
     transform: none !important;
   }
+}
+
+
+/* Shared light-mode treatments; dark selectors retain their existing palette. */
+html:not(.dark):not([data-theme="dark"]) { color-scheme: light; }
+html.dark, html[data-theme="dark"] { color-scheme: dark; }
+
+html:not(.dark):not([data-theme="dark"]) .btn-clinical-primary {
+  background-color: var(--app-primary);
+  box-shadow: 0 4px 16px rgb(40 92 69 / 18%);
+}
+html:not(.dark):not([data-theme="dark"]) .btn-clinical-primary:hover {
+  background-color: var(--app-primary-hover);
+  box-shadow: 0 8px 24px rgb(40 92 69 / 24%);
+}
+html:not(.dark):not([data-theme="dark"]) .btn-clinical-ghost {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+html:not(.dark):not([data-theme="dark"]) .btn-clinical-ghost:hover {
+  background: var(--app-muted);
+  border-color: var(--app-primary);
+}
+html:not(.dark):not([data-theme="dark"]) .clinical-heading-gradient {
+  background-image: linear-gradient(135deg, var(--app-text), var(--app-primary), #568d70);
+}
+html:not(.dark):not([data-theme="dark"]) .clinical-bento-card {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+}
+html:not(.dark):not([data-theme="dark"]) .clinical-bento-card:hover {
+  border-color: #a4c8b5;
+  box-shadow: 0 12px 32px -8px rgb(40 92 69 / 14%);
+}
+html:not(.dark):not([data-theme="dark"]) .orb-clinical-blue,
+html:not(.dark):not([data-theme="dark"]) .orb-clinical-cyan,
+html:not(.dark):not([data-theme="dark"]) .orb-clinical-teal {
+  background: radial-gradient(circle, #a4c8b5 0%, transparent 70%);
 }

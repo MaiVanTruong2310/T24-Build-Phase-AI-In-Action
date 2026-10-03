@@ -45,6 +45,7 @@ def test_catalog_routes_are_mounted_under_api_v1():
         ("POST", "/api/v1/staff/services"),
         ("PATCH", "/api/v1/staff/services/{service_id}"),
         ("GET", "/api/v1/doctors"),
+            ("GET", "/api/v1/doctors/facets"),
         ("GET", "/api/v1/doctors/{doctor_id}"),
         ("GET", "/api/v1/doctors/{doctor_id}/availability"),
         ("GET", "/api/v1/staff/schedules"),
@@ -53,6 +54,8 @@ def test_catalog_routes_are_mounted_under_api_v1():
         ("POST", "/api/v1/staff/schedules/import"),
         ("DELETE", "/api/v1/staff/schedules/{schedule_id}/cancel"),
         ("POST", "/api/v1/staff/doctors"),
+            ("GET", "/api/v1/staff/doctors"),
+            ("GET", "/api/v1/staff/doctors/{doctor_id}"),
         ("PATCH", "/api/v1/staff/doctors/{doctor_id}"),
         ("PATCH", "/api/v1/staff/doctors/{doctor_id}/toggle-booking"),
     }

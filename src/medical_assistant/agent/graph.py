@@ -40,9 +40,18 @@ def should_continue(state: AgentState) -> str:
     return "find_doctors"
 
 
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
 # Checkpointer lưu trữ trạng thái phiên theo thread_id
 # Chuẩn bị sẵn để dễ dàng thay thế bằng PostgresSaver khi scale 10.000 users
-checkpointer = MemorySaver()
+checkpointer = MemorySaver(
+    serde=JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("src.medical_assistant.domain.disease_triage", "ATSLevel"),
+            ("src.medical_assistant.domain.disease_triage", "UrgencyTier"),
+        ]
+    )
+)
 
 
 def build_graph():

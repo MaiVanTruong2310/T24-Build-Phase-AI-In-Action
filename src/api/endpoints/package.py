@@ -1,0 +1,217 @@
+"""Package booking endpoints for health packages and pathways."""
+
+import re
+from datetime import date, datetime
+from uuid import UUID
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel, Field
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.api.dependencies import get_optional_user, require_patient, require_staff
+from src.api.response import success_response
+from src.core.exceptions import ConflictError, NotFoundError
+from src.db.dependencies import get_db_session
+from src.models.facility import Facility
+from src.models.package_request import PackageRequest
+from src.models.service import Service
+from src.models.user import User
+
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+router = APIRouter(prefix="/packages", tags=["packages"])
+staff_router = APIRouter(prefix="/staff/packages", tags=["staff-packages"])
+
+
+class PackageRequestInput(BaseModel):
+    service_id: UUID
+    facility_id: UUID
+    preferred_date: date
+    preferred_period: str = Field(default="morning", pattern="^(morning|afternoon)$")
+    note: str | None = Field(default=None, max_length=2000)
+
+    # Guest fields
+    patient_name: str | None = Field(default=None, max_length=120)
+    patient_phone: str | None = Field(default=None, max_length=20)
+    patient_email: str | None = Field(default=None, max_length=320)
+    gender: str | None = Field(default=None, pattern="^(male|female|other|prefer_not_to_say)$")
+    date_of_birth: date | None = None
+
+
+class StaffPackageStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(pending|contacted|confirmed|cancelled|completed)$")
+    staff_note: str | None = Field(default=None, max_length=2000)
+
+
+def _package_request_dict(item: PackageRequest, service: Service | None = None, facility: Facility | None = None, patient: User | None = None) -> dict:
+    return {
+        "id": str(item.id),
+        "service_id": str(item.service_id),
+        "service_name": service.name if service else None,
+        "service_price": float(service.price) if service and service.price is not None else None,
+        "facility_id": str(item.facility_id),
+        "facility_name": facility.name if facility else None,
+        "preferred_date": item.preferred_date.isoformat(),
+        "preferred_period": item.preferred_period,
+        "status": item.status,
+        "note": item.note,
+        "staff_note": item.staff_note,
+        "patient_id": str(item.patient_id) if item.patient_id else None,
+        "patient_name": item.patient_name or (patient.full_name if patient else None),
+        "patient_phone": item.patient_phone or (patient.phone if patient else None),
+        "patient_email": item.patient_email or (patient.email if patient else None),
+        "gender": item.gender or (patient.gender if patient else None),
+        "date_of_birth": (item.date_of_birth or (patient.date_of_birth if patient else None)).isoformat() if (item.date_of_birth or (patient and patient.date_of_birth)) else None,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+    }
+
+
+@router.post("/requests", status_code=status.HTTP_201_CREATED)
+async def create_package_request(
+    payload: PackageRequestInput,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Register for a health package / pathway."""
+    async with db.begin():
+        if user is None:
+            if not payload.patient_name or len(payload.patient_name.strip()) < 2:
+                raise ConflictError("NAME_REQUIRED", "Vui lòng nhập họ và tên người khám (tối thiểu 2 ký tự)")
+            if not payload.patient_phone:
+                raise ConflictError("PHONE_REQUIRED", "Vui lòng nhập số điện thoại liên hệ")
+            clean_phone = re.sub(r"[\s.()-]", "", payload.patient_phone)
+            if not re.fullmatch(r"^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$", clean_phone):
+                raise ConflictError("INVALID_PHONE", "Số điện thoại chưa đúng định dạng Việt Nam")
+            if not payload.gender:
+                raise ConflictError("GENDER_REQUIRED", "Vui lòng chọn giới tính")
+            if not payload.date_of_birth:
+                raise ConflictError("DOB_REQUIRED", "Vui lòng chọn ngày sinh")
+            if payload.date_of_birth > datetime.now(VN_TZ).date():
+                raise ConflictError("INVALID_DOB", "Ngày sinh không thể nằm trong tương lai")
+
+            existing_user = (await db.execute(select(User).where(User.phone == clean_phone))).scalar_one_or_none()
+            if not existing_user and payload.patient_email:
+                existing_user = (await db.execute(select(User).where(User.email == payload.patient_email.lower().strip()))).scalar_one_or_none()
+
+            if existing_user:
+                patient = existing_user
+            else:
+                patient = User(
+                    full_name=payload.patient_name.strip(),
+                    phone=clean_phone,
+                    email=payload.patient_email.lower().strip() if payload.patient_email else None,
+                    gender=payload.gender,
+                    date_of_birth=payload.date_of_birth,
+                    role="patient",
+                    status="guest",
+                )
+                db.add(patient)
+                await db.flush()
+        else:
+            patient = user
+
+        if payload.preferred_date < datetime.now(VN_TZ).date():
+            raise ConflictError("DATE_INVALID", "Ngày khám mong muốn không thể nằm trong quá khứ")
+
+        service = await db.get(Service, payload.service_id)
+        if not service or service.status != "active":
+            raise NotFoundError("Gói dịch vụ không tồn tại hoặc tạm ngưng tiếp nhận")
+
+        facility = await db.get(Facility, payload.facility_id)
+        if not facility or facility.status != "active":
+            raise NotFoundError("Cơ sở bệnh viện không tồn tại hoặc tạm ngưng tiếp nhận")
+
+        item = PackageRequest(
+            patient_id=patient.id,
+            service_id=service.id,
+            facility_id=facility.id,
+            preferred_date=payload.preferred_date,
+            preferred_period=payload.preferred_period,
+            patient_name=payload.patient_name.strip() if payload.patient_name else patient.full_name,
+            patient_phone=clean_phone if user is None else patient.phone,
+            patient_email=payload.patient_email.lower().strip() if payload.patient_email else patient.email,
+            gender=payload.gender or patient.gender,
+            date_of_birth=payload.date_of_birth or patient.date_of_birth,
+            note=payload.note.strip() if payload.note else None,
+        )
+        db.add(item)
+        await db.flush()
+
+    return success_response(
+        _package_request_dict(item, service, facility, patient),
+        "Đăng ký gói khám thành công; điều phối viên sẽ gọi lại để tư vấn lộ trình và xếp lịch",
+        201,
+    )
+
+
+@router.get("/requests/mine")
+async def list_my_package_requests(
+    patient: User = Depends(require_patient),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List current patient's package requests."""
+    stmt = (
+        select(PackageRequest, Service, Facility)
+        .join(Service, Service.id == PackageRequest.service_id)
+        .join(Facility, Facility.id == PackageRequest.facility_id)
+        .where(PackageRequest.patient_id == patient.id)
+        .order_by(desc(PackageRequest.created_at))
+    )
+    res = await db.execute(stmt)
+    items = []
+    for pr, s, f in res.all():
+        items.append(_package_request_dict(pr, s, f, patient))
+    return success_response(items, "Danh sách gói khám đã đăng ký")
+
+
+@staff_router.get("/requests")
+async def staff_list_package_requests(
+    status_filter: str | None = Query(default=None, alias="status"),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    _: User = Depends(require_staff),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Staff list of all package registration requests."""
+    stmt = (
+        select(PackageRequest, Service, Facility, User)
+        .join(Service, Service.id == PackageRequest.service_id)
+        .join(Facility, Facility.id == PackageRequest.facility_id)
+        .outerjoin(User, User.id == PackageRequest.patient_id)
+        .order_by(desc(PackageRequest.created_at))
+        .offset(offset)
+        .limit(limit)
+    )
+    if status_filter:
+        stmt = stmt.where(PackageRequest.status == status_filter)
+
+    res = await db.execute(stmt)
+    items = []
+    for pr, s, f, u in res.all():
+        items.append(_package_request_dict(pr, s, f, u))
+    return success_response(items, "Danh sách yêu cầu gói khám")
+
+
+@staff_router.patch("/requests/{request_id}")
+async def staff_update_package_request(
+    request_id: UUID,
+    payload: StaffPackageStatusUpdate,
+    _: User = Depends(require_staff),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Staff update package request status and notes."""
+    async with db.begin():
+        item = await db.get(PackageRequest, request_id)
+        if not item:
+            raise NotFoundError("Không tìm thấy yêu cầu gói khám")
+        item.status = payload.status
+        if payload.staff_note is not None:
+            item.staff_note = payload.staff_note
+        await db.flush()
+
+        service = await db.get(Service, item.service_id)
+        facility = await db.get(Facility, item.facility_id)
+        patient = await db.get(User, item.patient_id) if item.patient_id else None
+
+    return success_response(_package_request_dict(item, service, facility, patient), "Cập nhật yêu cầu thành công")

@@ -4,6 +4,8 @@ export interface SessionUser {
   phone?: string | null;
   full_name: string;
   role: 'patient' | 'staff';
+  date_of_birth?: string | null;
+  gender?: string | null;
 }
 
 interface StoredSession {

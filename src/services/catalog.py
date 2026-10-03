@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger
-from src.models.catalog import CatalogAuditEvent, Doctor, DoctorSchedule
+from src.models.catalog import CatalogAuditEvent, DoctorSchedule
 from src.repositories.catalog import CatalogRepository
 from src.schemas.catalog import DoctorFacilityAssignment
 from src.services.doctor import DoctorServiceMixin
@@ -60,14 +60,6 @@ class CatalogService(
         existing = (await self.session.execute(select(model).where(model.code == code))).scalar_one_or_none()
         if existing is not None:
             raise ConflictError("CODE_EXISTS", "Catalog code already exists")
-
-    async def _ensure_license_available(self, license_number: str, *, exclude_id: UUID | None = None) -> None:
-        """Reject duplicate doctor license numbers."""
-        statement = select(Doctor).where(Doctor.license_number == license_number)
-        if exclude_id:
-            statement = statement.where(Doctor.id != exclude_id)
-        if (await self.session.execute(statement)).scalar_one_or_none() is not None:
-            raise ConflictError("LICENSE_EXISTS", "Doctor license number already exists")
 
     async def _audit(self, actor_id: UUID, entity_type: str, entity_id: UUID, action: str, payload: dict) -> None:
         """Write a durable audit record and a safe application log."""

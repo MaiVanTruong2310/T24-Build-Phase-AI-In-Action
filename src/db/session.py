@@ -25,14 +25,28 @@ def _async_database_url(database_url: str) -> str:
     return database_url
 
 
+def _shared_database_url(database_url: str, auth_database_url: str) -> str | None:
+    """Reuse one pool when both URLs address the same DB and only SSL differs."""
+    if not database_url or not auth_database_url:
+        return None
+    if database_url == auth_database_url:
+        return database_url
+    catalog_base, _, catalog_query = database_url.partition("?")
+    auth_base, _, auth_query = auth_database_url.partition("?")
+    if catalog_base != auth_base or {catalog_query, auth_query} != {"", "sslmode=require"}:
+        return None
+    return auth_database_url if auth_query == "sslmode=require" else database_url
+
+
 @lru_cache
 def get_engine():
     """Create the shared async database engine lazily."""
     settings = get_settings()
     if not settings.database_url:
         raise RuntimeError("DATABASE_URL must be configured")
+    database_url = _shared_database_url(settings.database_url, settings.auth_database_url) or settings.database_url
     return create_async_engine(
-        _async_database_url(settings.database_url),
+        _async_database_url(database_url),
         pool_pre_ping=True,
         pool_size=settings.database_pool_size,
         max_overflow=settings.database_max_overflow,
@@ -64,11 +78,13 @@ def get_auth_engine():
     settings = get_settings()
     if not settings.auth_database_url:
         return get_engine()
+    if _shared_database_url(settings.database_url, settings.auth_database_url):
+        return get_engine()
     return create_async_engine(
         _async_database_url(settings.auth_database_url),
         pool_pre_ping=True,
-        pool_size=min(settings.database_pool_size, 5),
-        max_overflow=min(settings.database_max_overflow, 5),
+        pool_size=min(settings.database_pool_size, 2),
+        max_overflow=min(settings.database_max_overflow, 1),
         pool_timeout=settings.database_pool_timeout_seconds,
         pool_recycle=settings.database_pool_recycle_seconds,
         connect_args={"connect_timeout": settings.database_connect_timeout_seconds},
@@ -111,5 +127,5 @@ async def close_database() -> None:
     settings = get_settings()
     if settings.database_url:
         await get_engine().dispose()
-    if settings.auth_database_url:
+    if settings.auth_database_url and get_auth_engine() is not get_engine():
         await get_auth_engine().dispose()

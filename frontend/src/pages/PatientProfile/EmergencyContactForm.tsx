@@ -22,24 +22,24 @@ export const EmergencyContactForm = memo(function EmergencyContactForm({
   };
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+    <section className="rounded-xl border border-slate-200 light:border-app-border bg-white light:bg-app-surface shadow-sm">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 light:border-app-border px-5 py-4">
         <div className="flex items-start gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-500">
             <ShieldCheck className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-[15px] font-bold text-slate-800">
+            <h3 className="text-[15px] font-bold text-slate-800 light:text-app-text">
               Chỉnh sửa nhanh thông tin y tế quan trọng
             </h3>
-            <p className="mt-0.5 text-[11px] text-slate-400">
+            <p className="mt-0.5 text-[11px] text-slate-400 light:text-app-secondary">
               Cập nhật thông tin dùng trong các trường hợp cấp cứu, và đồng bộ
               dữ liệu VMedID / GHTT
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 text-[10px] text-slate-400">
+        <div className="flex items-center gap-1 text-[10px] text-slate-400 light:text-app-secondary">
           <ShieldCheck className="h-3 w-3 text-emerald-500" />
           Chuẩn HIPAA & ISO 27001
         </div>
@@ -94,7 +94,7 @@ export const EmergencyContactForm = memo(function EmergencyContactForm({
           </button>
           <button
             type="button"
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-[13px] font-semibold text-slate-500 shadow-sm transition hover:bg-slate-50"
+            className="rounded-lg border border-slate-200 light:border-app-border bg-white light:bg-app-surface px-4 py-2 text-[13px] font-semibold text-slate-500 light:text-app-secondary shadow-sm transition hover:bg-slate-50 light:hover:bg-app-page"
           >
             Huỷ
           </button>
@@ -119,7 +119,7 @@ function FormField({
   isHighlighted?: boolean;
 }) {
   return (
-    <label className="block text-[11px] font-medium text-slate-500">
+    <label className="block text-[11px] font-medium text-slate-500 light:text-app-secondary">
       {label}
       <div className="relative mt-1">
         <input
@@ -129,11 +129,11 @@ function FormField({
           className={`w-full rounded-md border px-2.5 py-2 text-[13px] font-normal transition focus:outline-none focus:ring-1 ${
             isHighlighted
               ? 'border-red-200 bg-red-50/40 text-red-700 focus:border-red-300 focus:ring-red-200'
-              : 'border-slate-200 bg-white text-slate-700 focus:border-[#0e7490] focus:ring-[#0e7490]/30'
+              : 'border-slate-200 light:border-app-border bg-white light:bg-app-surface text-slate-700 light:text-app-text focus:border-[#0e7490] focus:ring-[#0e7490]/30'
           }`}
         />
         {badge && (
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded bg-slate-100 px-1.5 py-px text-[9px] font-semibold text-slate-500">
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded bg-slate-100 light:bg-app-muted px-1.5 py-px text-[9px] font-semibold text-slate-500 light:text-app-secondary">
             {badge}
           </span>
         )}

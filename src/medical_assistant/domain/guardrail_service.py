@@ -181,12 +181,19 @@ class ClinicalGuardrailService:
 
         # Conversation-boundary intents protect the active patient's clinical
         # episode from social detours and health questions about another person.
+        cleaned_for_tp = re.sub(r"^(?:chao|xin chao|alo)\s+(?:ban|bac si|tro ly|bot|ai)\b", "", query_normalized).strip()
         third_party_health = re.search(
-            r"\b(?:ban|anh ay|chi ay|co ay|chu ay|ong ay|ba ay|em (?:toi|gai|trai)|vo|chong|me|ma|bo|ba|cha|con|nguoi yeu)"
+            r"\b(?:ban(?:\s+[a-z0-9]+)?|anh ay|chi ay|co ay|chu ay|ong ay|ba ay|em (?:toi|gai|trai)|vo|chong|me|ma|bo|ba|cha|con|nguoi yeu)"
             r"(?:\s+[a-z0-9]+){0,3}\s+(?:bi|dang bi|co|mac)\s+"
             r"(?:vo sinh|hiem muon|benh|dau|sot|ho|kho tho|ung thu|tieu duong)\b",
-            query_normalized,
+            cleaned_for_tp,
         )
+        is_first_person_complaint = bool(
+            re.search(r"(?:^|\b(?:thi|va|nhung|ma|la)\s+)(?:toi|em|minh|tui)\s+(?:bi|dang bi|co|mac|thay)\b", cleaned_for_tp)
+        )
+        if is_first_person_complaint and not re.search(r"\b(?:chi|anh|em|ban|me|bo|ba|cha|con|vo|chong)\s+toi\s+bi\b", cleaned_for_tp):
+            third_party_health = None
+
         if third_party_health:
             topic = "infertility" if re.search(r"\b(?:vo sinh|hiem muon)\b", query_normalized) else "general_health"
             return {"intent": "THIRD_PARTY_HEALTH_QUERY", "topic": topic}

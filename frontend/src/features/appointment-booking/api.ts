@@ -1,4 +1,7 @@
 import { fetchWithAuth } from '../../app/apiClient';
+import { cachedQuery } from '../../app/queryCache';
+
+const CATALOG_TTL_MS = 60_000;
 
 export interface Specialty {
   id: string;
@@ -37,9 +40,17 @@ export interface Doctor {
   bio?: string | null;
   avatar_url: string | null;
   title: string | null;
-  rating?: number; // assuming additional UI field
-  experience_years?: number; // assuming additional UI field
-  price?: number; // assuming additional UI field
+  booking_enabled?: boolean;
+  professional_role?: string;
+  honors?: string[];
+  academic_ranks?: string[];
+  degrees?: string[];
+  languages?: string[];
+  position?: string | null;
+  experience_years?: number | null;
+  education?: string[];
+  work_history?: string[];
+  awards?: string[];
   facilities?: DoctorFacility[];
   facility_ids?: string[];
   service_ids?: string[];
@@ -51,6 +62,10 @@ export interface DoctorFacility {
   facility_id: string;
   department?: string | null;
   room?: string | null;
+  position?: string | null;
+  is_primary?: boolean;
+  active_from?: string | null;
+  active_to?: string | null;
   facility?: {
     id: string;
     code: string;
@@ -182,15 +197,20 @@ export class BookingApiError extends Error {
   }
 }
 
-export async function fetchSpecialties(): Promise<Specialty[]> {
-  const res = await fetchWithAuth('/specialties');
-  if (!res.ok) throw new Error('Failed to fetch specialties');
-  const json = await res.json();
-  return json.data || [];
+export async function fetchSpecialties(filters: { facilityId?: string } = {}): Promise<Specialty[]> {
+  const query = new URLSearchParams({ limit: '150' });
+  if (filters.facilityId) query.set('facility_id', filters.facilityId);
+  const queryString = query.toString();
+  return cachedQuery(`catalog:specialties:${queryString}`, CATALOG_TTL_MS, async () => {
+    const res = await fetchWithAuth(`/specialties?${queryString}`);
+    if (!res.ok) throw new Error('Failed to fetch specialties');
+    const json = await res.json();
+    return json.data || [];
+  });
 }
 
 export async function fetchDoctors(
-  filters: { specialtyId?: string; facilityId?: string; serviceId?: string; name?: string; bookingEnabled?: boolean } | string = {},
+  filters: { specialtyId?: string; facilityId?: string; serviceId?: string; name?: string; bookingEnabled?: boolean; honor?: string; academicRank?: string; degree?: string; language?: string; professionalRole?: string; onDate?: string; offset?: number; limit?: number } | string = {},
 ): Promise<Doctor[]> {
   const normalizedFilters = typeof filters === 'string' ? { specialtyId: filters } : filters;
   const query = new URLSearchParams();
@@ -198,42 +218,158 @@ export async function fetchDoctors(
   if (normalizedFilters.facilityId) query.set('facility_id', normalizedFilters.facilityId);
   if (normalizedFilters.serviceId) query.set('service_id', normalizedFilters.serviceId);
   if (normalizedFilters.name) query.set('name', normalizedFilters.name);
+  if (normalizedFilters.honor) query.set('honor', normalizedFilters.honor);
+  if (normalizedFilters.academicRank) query.set('academic_rank', normalizedFilters.academicRank);
+  if (normalizedFilters.degree) query.set('degree', normalizedFilters.degree);
+  if (normalizedFilters.language) query.set('language', normalizedFilters.language);
+  if (normalizedFilters.professionalRole) query.set('professional_role', normalizedFilters.professionalRole);
+  if (normalizedFilters.onDate) query.set('on_date', normalizedFilters.onDate);
+  if (normalizedFilters.offset) query.set('offset', String(normalizedFilters.offset));
+  if (normalizedFilters.limit) query.set('limit', String(normalizedFilters.limit));
   if (normalizedFilters.bookingEnabled !== undefined) {
     query.set('booking_enabled', String(normalizedFilters.bookingEnabled));
   }
   const queryString = query.toString();
-  const res = await fetchWithAuth(`/doctors${queryString ? `?${queryString}` : ''}`);
-  if (!res.ok) throw new Error('Failed to fetch doctors');
-  const json = await res.json();
-  return (json.data || []).map((doctor: Record<string, unknown>) => ({
-    ...doctor,
-    service_ids: (doctor.service_ids as string[] | undefined)
-      || ((doctor.services as Array<{ service_id: string }> | undefined) || []).map((item) => item.service_id),
-    specialties: ((doctor.specialties as Array<{ specialty_id: string; specialty?: { name: string } | null }> | undefined) || []).map((item) => ({
-      specialty_id: item.specialty_id,
-      name: item.specialty?.name || 'Chưa cập nhật',
-    })),
-    services: ((doctor.services as Array<{ service_id: string; service?: { name: string } | null }> | undefined) || []).map((item) => ({
-      service_id: item.service_id,
-      name: item.service?.name || 'Chưa cập nhật',
-    })),
-  })) as Doctor[];
+  return cachedQuery(`catalog:doctors:${queryString}`, CATALOG_TTL_MS, async () => {
+    const res = await fetchWithAuth(`/doctors${queryString ? `?${queryString}` : ''}`);
+    if (!res.ok) throw new Error('Failed to fetch doctors');
+    const json = await res.json();
+    return (json.data || []).map((doctor: Record<string, unknown>) => ({
+      ...doctor,
+      service_ids: (doctor.service_ids as string[] | undefined)
+        || ((doctor.services as Array<{ service_id: string }> | undefined) || []).map((item) => item.service_id),
+      specialties: ((doctor.specialties as Array<{ specialty_id: string; specialty?: { name: string } | null }> | undefined) || []).map((item) => ({
+        specialty_id: item.specialty_id,
+        name: item.specialty?.name || 'Chưa cập nhật',
+      })),
+      services: ((doctor.services as Array<{ service_id: string; service?: { name: string } | null }> | undefined) || []).map((item) => ({
+        service_id: item.service_id,
+        name: item.service?.name || 'Chưa cập nhật',
+      })),
+    })) as Doctor[];
+  });
 }
 
-export async function fetchFacilities(): Promise<Facility[]> {
-  const res = await fetchWithAuth('/facilities');
-  if (!res.ok) throw new Error('Failed to fetch facilities');
-  const json = await res.json();
-  return json.data || [];
+export async function fetchDoctorDetail(doctorId: string): Promise<Doctor> {
+  return cachedQuery(`catalog:doctor:${doctorId}`, CATALOG_TTL_MS, async () => {
+    const response = await fetchWithAuth(`/doctors/${doctorId}`)
+    if (!response.ok) throw new Error('Không thể tải hồ sơ bác sĩ')
+    const json = await response.json()
+    const doctor = json.data as Record<string, unknown>
+    const rawSpecialties = (doctor.specialties as Array<{ specialty_id: string; specialty?: { name: string } | null; name?: string }> | undefined) || []
+    return {
+      ...doctor,
+      specialties: rawSpecialties.map(item => ({
+        specialty_id: item.specialty_id,
+        name: item.specialty?.name || item.name || 'Chưa cập nhật',
+      })),
+    } as Doctor
+  })
 }
 
-export async function fetchServices(filters: { specialtyId?: string; facilityId?: string } = {}): Promise<MedicalService[]> {
+export async function fetchDoctorFacets(): Promise<{ honors: string[]; academic_ranks: string[]; degrees: string[]; languages: string[]; professional_roles: string[] }> {
+  return cachedQuery('catalog:doctor-facets', CATALOG_TTL_MS, async () => {
+    const response = await fetchWithAuth('/doctors/facets')
+    if (!response.ok) throw new Error('Không thể tải bộ lọc bác sĩ')
+    const json = await response.json()
+    return json.data
+  })
+}
+
+export async function fetchFacilities(filters: { specialtyId?: string } = {}): Promise<Facility[]> {
+  const query = new URLSearchParams({ limit: '50' });
+  if (filters.specialtyId) query.set('specialty_id', filters.specialtyId);
+  const queryString = query.toString();
+  return cachedQuery(`catalog:facilities:${queryString}`, CATALOG_TTL_MS, async () => {
+    const res = await fetchWithAuth(`/facilities?${queryString}`);
+    if (!res.ok) throw new Error('Failed to fetch facilities');
+    const json = await res.json();
+    return json.data || [];
+  });
+}
+
+export interface PackageRequest {
+  id: string;
+  service_id: string;
+  service_name?: string | null;
+  service_price?: number | null;
+  facility_id: string;
+  facility_name?: string | null;
+  preferred_date: string;
+  preferred_period: 'morning' | 'afternoon';
+  status: 'pending' | 'contacted' | 'confirmed' | 'cancelled' | 'completed';
+  note?: string | null;
+  staff_note?: string | null;
+  patient_id?: string | null;
+  patient_name?: string | null;
+  patient_phone?: string | null;
+  patient_email?: string | null;
+  gender?: string | null;
+  date_of_birth?: string | null;
+  created_at?: string;
+}
+
+export interface CreatePackageRequestPayload {
+  service_id: string;
+  facility_id: string;
+  preferred_date: string;
+  preferred_period: 'morning' | 'afternoon';
+  note?: string;
+  patient_name?: string;
+  patient_phone?: string;
+  patient_email?: string;
+  gender?: string;
+  date_of_birth?: string;
+}
+
+export async function fetchServices(filters: { specialtyId?: string; facilityId?: string; category?: string; name?: string; limit?: number } = {}): Promise<MedicalService[]> {
   const query = new URLSearchParams();
   if (filters.specialtyId) query.set('specialty_id', filters.specialtyId);
   if (filters.facilityId) query.set('facility_id', filters.facilityId);
+  if (filters.category) query.set('category', filters.category);
+  if (filters.name) query.set('name', filters.name);
+  if (filters.limit) query.set('limit', String(filters.limit));
   const queryString = query.toString();
-  const res = await fetchWithAuth(`/services${queryString ? `?${queryString}` : ''}`);
-  if (!res.ok) throw new Error('Failed to fetch services');
+  return cachedQuery(`catalog:services:${queryString}`, CATALOG_TTL_MS, async () => {
+    const res = await fetchWithAuth(`/services${queryString ? `?${queryString}` : ''}`);
+    if (!res.ok) throw new Error('Failed to fetch services');
+    const json = await res.json();
+    return json.data || [];
+  });
+}
+
+export async function fetchServiceCategories(): Promise<string[]> {
+  return cachedQuery('catalog:service-categories', CATALOG_TTL_MS, async () => {
+    const res = await fetchWithAuth('/services/categories');
+    if (!res.ok) throw new Error('Failed to fetch service categories');
+    const json = await res.json();
+    return json.data || [];
+  });
+}
+
+export async function fetchDoctorConsultationService(): Promise<MedicalService | null> {
+  const services = await fetchServices({ limit: 100 });
+  const found = services.find((s) => s.code === 'DV-KHAN-CHUYEN-KHOA' || s.name.includes('Khám Chuyên khoa'));
+  return found || services[0] || null;
+}
+
+export async function createPackageRequest(payload: CreatePackageRequestPayload): Promise<PackageRequest> {
+  const res = await fetchWithAuth('/packages/requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.message || 'Không thể gửi yêu cầu đăng ký gói khám');
+  }
+  const json = await res.json();
+  return json.data;
+}
+
+export async function fetchMyPackageRequests(): Promise<PackageRequest[]> {
+  const res = await fetchWithAuth('/packages/requests/mine');
+  if (!res.ok) throw new Error('Failed to fetch my package requests');
   const json = await res.json();
   return json.data || [];
 }

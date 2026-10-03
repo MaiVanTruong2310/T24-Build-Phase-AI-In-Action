@@ -8,12 +8,14 @@ from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger
 from src.models.booking import Booking
 from src.models.booking_hold import BookingHold
+from src.models.coordination import ConsultationRequest, ConsultationRequestEvent, ConsultationSession
 from src.models.catalog import CatalogAuditEvent
 from src.repositories.booking import BookingRepository
 from src.schemas.booking import (
@@ -277,6 +279,18 @@ class BookingService:
                 raise ConflictError("BOOKING_NOT_CANCELLABLE", "Rejected booking cannot be cancelled")
             booking.status = "cancelled"
             booking.cancellation_reason = reason.strip() if reason else None
+            consultation = (await self.session.execute(select(ConsultationRequest).where(
+                ConsultationRequest.booking_id == booking.id,
+            ).with_for_update())).scalar_one_or_none()
+            if consultation is not None:
+                await self.session.execute(select(ConsultationSession.id).where(
+                    ConsultationSession.id == consultation.session_id,
+                ).with_for_update())
+                consultation.status = "cancelled"
+                self.session.add(ConsultationRequestEvent(
+                    request_id=consultation.id, actor_id=user_id,
+                    action="cancelled", note=booking.cancellation_reason,
+                ))
             await self.session.flush()
         logger.info("BookingService.cancel booking cancelled", extra={"booking_id": str(booking_id)})
         return await self.get(user_id, booking_id)
@@ -287,6 +301,11 @@ class BookingService:
             booking = await self.bookings.get_for_user(booking_id, user_id, for_update=True)
             if booking is None:
                 raise NotFoundError("Booking not found")
+            is_coordinated = (await self.session.execute(select(ConsultationRequest.id).where(
+                ConsultationRequest.booking_id == booking.id,
+            ))).first()
+            if is_coordinated:
+                raise ConflictError("COORDINATED_BOOKING", "Please contact the coordinator to reschedule this appointment")
             if booking.status in ("cancelled", "rejected"):
                 raise ConflictError("BOOKING_NOT_RESCHEDULABLE", "This booking cannot be rescheduled")
             if booking.schedule_id is None:

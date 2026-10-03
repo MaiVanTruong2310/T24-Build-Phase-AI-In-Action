@@ -15,6 +15,7 @@ from src.models.user import User
 from src.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
+    PortraitUpdateRequest,
     OtpSendRequest,
     OtpSendResponse,
     OtpVerifyRequest,
@@ -134,7 +135,15 @@ async def change_password(request: PasswordChangeRequest, response: Response, to
 
 @router.post("/login", response_model=ApiResponse[dict])
 async def login(request: LoginRequest, http_request: Request, response: Response, service: AuthService = Depends(get_auth_service)):
-    if native_auth_enabled():
+    if request.username:
+        if request.email or request.phone or request.username != "admin123" or not request.password:
+            raise HTTPException(status_code=401, detail="Tài khoản điều phối không hợp lệ.")
+        user, access_token, refresh_token, expires_at, _ = await service.login(request)
+        if user.role != "staff":
+            raise HTTPException(status_code=403, detail="Tài khoản không có quyền điều phối.")
+        data = TokenResponse(access_token=access_token, refresh_token=refresh_token,
+            expires_in=max(0, int((expires_at-datetime.now(UTC)).total_seconds())))
+    elif native_auth_enabled():
         data = TokenResponse(**await login_email(request, service.session))
     else:
         _, access_token, refresh_token, expires_at, _ = await service.login(request)
@@ -148,7 +157,13 @@ async def refresh_token(http_request: Request, response: Response, request: Refr
     value = http_request.cookies.get(REFRESH_COOKIE) or (request.refresh_token if request else None)
     if not value:
         raise HTTPException(401,"Không có phiên đăng nhập để gia hạn.")
-    if native_auth_enabled():
+    if value.startswith("staff_"):
+        user, access_token, refresh_value, expires_at = await service.refresh(value)
+        if user.role != "staff":
+            raise HTTPException(status_code=403, detail="Tài khoản không có quyền điều phối.")
+        data = TokenResponse(access_token=access_token,refresh_token=refresh_value,
+            expires_in=max(0,int((expires_at-datetime.now(UTC)).total_seconds())))
+    elif native_auth_enabled():
         tokens = await auth_call("/token", {"refresh_token":value}, params={"grant_type":"refresh_token"})
         data = TokenResponse(**{key:tokens[key] for key in ("access_token","refresh_token","expires_in")})
     else:
@@ -162,7 +177,9 @@ async def refresh_token(http_request: Request, response: Response, request: Refr
 async def logout(http_request: Request, response: Response, request: RefreshTokenRequest | None = None, service: AuthService = Depends(get_auth_service)):
     value = http_request.cookies.get(REFRESH_COOKIE) or (request.refresh_token if request else None)
     try:
-        if value and native_auth_enabled():
+        if value and value.startswith("staff_"):
+            await service.logout(value)
+        elif value and native_auth_enabled():
             access_token = http_request.cookies.get(ACCESS_COOKIE)
             if not access_token:
                 tokens=await auth_call("/token", {"refresh_token":value}, params={"grant_type":"refresh_token"})
@@ -212,6 +229,21 @@ async def update_me(
     """Update and return the authenticated user's profile."""
     user = await service.update_profile(current_user, request)
     return success_response(UserResponse.model_validate(user), "Profile updated")
+
+
+@user_router.get("/me/portrait", response_model=ApiResponse[str | None])
+async def get_portrait(current_user: User = Depends(get_current_user)):
+    return success_response((current_user.patient_details or {}).get("portrait_image"), "Portrait retrieved")
+
+
+@user_router.patch("/me/portrait", response_model=ApiResponse[str | None])
+async def update_portrait(
+    request: PortraitUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    service: AuthService = Depends(get_auth_service),
+):
+    await service.update_portrait(current_user, request.image)
+    return success_response(request.image, "Portrait updated")
 
 
 @user_router.get("/{user_id}", response_model=ApiResponse[UserResponse])

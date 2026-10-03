@@ -82,3 +82,38 @@ def test_database_search_intersects_specialty_with_facility_relationships():
     assert [doctor["full_name"] for doctor in doctors] == ["Nguyễn Xuân Mười"]
     assert doctors[0]["workplace"] == "Bệnh viện Vinmec Times City"
     assert doctors[0]["department"] == "Khoa Nội Tiêu hóa - Gan mật"
+
+
+def test_specialized_times_city_centers_map_to_times_city_hospital():
+    assert facility_key("Trung tâm Y Học Cổ Truyền Vinmec - Sao Phương Đông") == ("times_city", "hospital")
+    assert facility_key("Trung tâm Chăm sóc Sức khỏe Tinh Thần") == ("times_city", "hospital")
+    assert facility_key("Viện nghiên cứu Tế bào gốc và Công nghệ gen Vinmec") == ("times_city", "hospital")
+    assert facility_key("Khối Sản xuất Tế bào, Trung tâm Công nghệ Cao Vinmec") == ("times_city", "hospital")
+    assert facility_key("Ngân hàng mô Vinmec") == ("times_city", "hospital")
+    assert facility_key("Trung tâm Nha khoa Quốc tế Vinmec View Dental Premium") == ("times_city", "hospital")
+
+
+def test_extract_workplaces_from_record_fallback():
+    from src.medical_assistant.domain.facility_linking import extract_workplaces_from_record
+
+    # 1. Primary Nơi làm việc present
+    rec1 = {"sections": {"Nơi làm việc": ["Bệnh viện Đa khoa Quốc tế Vinmec Đà Nẵng"]}}
+    assert extract_workplaces_from_record(rec1) == ["Bệnh viện Đa khoa Quốc tế Vinmec Đà Nẵng"]
+
+    # 2. Missing Nơi làm việc, fallback to Chức vụ
+    rec2 = {"sections": {"Chức vụ": ["Điều dưỡng Trưởng - Phòng khám Vinmec Sài Gòn"]}}
+    wps = extract_workplaces_from_record(rec2)
+    assert any("Vinmec Sài Gòn" in wp for wp in wps)
+
+    # 3. Missing Nơi làm việc, fallback to Kinh nghiệm làm việc
+    rec3 = {
+        "sections": {
+            "Kinh nghiệm làm việc": [
+                "2010 - 2015: Bệnh viện Chợ Rẫy",
+                "2015 - đến nay: Bác sĩ khoa Khám bệnh - Bệnh viện Đa khoa Quốc tế Vinmec Central Park",
+            ]
+        }
+    }
+    wps = extract_workplaces_from_record(rec3)
+    assert any("Central Park" in wp for wp in wps)
+

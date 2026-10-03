@@ -38,7 +38,7 @@ export function ForgotPassword() {
     } catch (e) { setError(e instanceof TypeError ? 'Không thể kết nối máy chủ. Vui lòng thử lại sau.' : e instanceof Error ? e.message : 'Có lỗi xảy ra.') }
     finally { setBusy(false) }
   }
-  return <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:bg-slate-900">
+  return <div className="w-full max-w-md rounded-2xl border border-slate-200 light:border-app-border bg-white light:bg-app-surface p-8 shadow-xl dark:bg-slate-900">
     <h2 className="mb-4 text-xl font-bold">Khôi phục mật khẩu bằng email</h2>
     {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
     {notice && <p role="status" className="mb-4 text-sm text-green-700">{notice}</p>}
@@ -46,8 +46,8 @@ export function ForgotPassword() {
       <label className="block text-sm">{token ? 'Mật khẩu mới' : 'Email đã đăng ký'}
         <input required type={token ? 'password' : 'email'} value={token ? password : email} onChange={e => token ? setPassword(e.target.value) : setEmail(e.target.value)} autoComplete={token ? 'new-password' : 'email'} className="mt-2 w-full rounded-xl border p-3 dark:bg-slate-950" />
       </label>
-      <button disabled={busy} className="w-full rounded-xl bg-blue-600 p-3 text-white disabled:opacity-50">{busy ? 'Đang xử lý…' : token ? 'Đặt lại mật khẩu' : 'Gửi liên kết khôi phục'}</button>
+      <button disabled={busy} className="w-full rounded-xl bg-blue-600 light:bg-app-primary p-3 text-white disabled:opacity-50">{busy ? 'Đang xử lý…' : token ? 'Đặt lại mật khẩu' : 'Gửi liên kết khôi phục'}</button>
     </form>}
-    <Link to="/login" className="mt-5 block text-center text-sm text-blue-600">Quay lại đăng nhập</Link>
+    <Link to="/login" className="mt-5 block text-center text-sm text-blue-600 light:text-app-primary">Quay lại đăng nhập</Link>
   </div>
 }

@@ -1,6 +1,12 @@
 import asyncio
+import re
 
 from src.medical_assistant.agent.state import AgentState
+from src.medical_assistant.domain.booking_slot_service import (
+    build_booking_guidance_text,
+    evaluate_missing_fields,
+    extract_booking_entities,
+)
 from src.medical_assistant.domain.cache_service import get_cache_service
 from src.medical_assistant.domain.clinical_fact_service import get_clinical_fact_service
 from src.medical_assistant.domain.disease_triage import ATSLevel, UrgencyTier
@@ -16,6 +22,33 @@ from src.medical_assistant.domain.security.security_guardrail_service import get
 from src.medical_assistant.domain.triage_service import get_triage_service
 
 MAX_DETAILS_HISTORY = 4
+
+def extract_facility_inquiry(query: str) -> tuple[bool, str | None]:
+    """Phát hiện linh hoạt ý định hỏi nơi khám / bệnh viện / cơ sở kèm khu vực địa lý."""
+    q = query.lower()
+    region = None
+    if any(k in q for k in ["hà nội", "ha noi", "hn"]):
+        region = "Hà Nội"
+    elif any(k in q for k in ["hồ chí minh", "tp hcm", "tphcm", "sài gòn", "sai gon", "hcm"]):
+        region = "TP. Hồ Chí Minh"
+    elif any(k in q for k in ["đà nẵng", "da nang"]):
+        region = "Đà Nẵng"
+    elif any(k in q for k in ["hải phòng", "hai phong"]):
+        region = "Hải Phòng"
+    elif any(k in q for k in ["nha trang"]):
+        region = "Nha Trang"
+    elif any(k in q for k in ["phú quốc", "phu quoc"]):
+        region = "Phú Quốc"
+    elif any(k in q for k in ["quảng ninh", "hạ long", "ha long"]):
+        region = "Hạ Long"
+
+    facility_keywords = [
+        "bệnh viện", "cơ sở", "phòng khám", "ở đâu", "chỗ nào", "nơi nào",
+        "khám ở", "viện nào", "địa chỉ", "chi nhánh"
+    ]
+    is_asking_facility = any(k in q for k in facility_keywords)
+    return is_asking_facility, region
+
 
 
 async def analyze_node(state: AgentState) -> dict:
@@ -172,6 +205,16 @@ async def analyze_node(state: AgentState) -> dict:
     last_assistant_question = state.get("metadata", {}).get("clarification_question")
     guardrail = get_guardrail_service()
     intent_check = guardrail.check_intent(query, current_department=current_dept, language=lang)
+    if not intent_check:
+        fac_inquiry, fac_reg = extract_facility_inquiry(query)
+        if fac_inquiry and fac_reg:
+            intent_check = {
+                "intent": "FACILITY_INFO",
+                "matched_pattern": "smart_facility_extraction",
+                "region_filter": fac_reg,
+                "district_filter": None,
+                "facility_name_query": None,
+            }
     boundary_intent = (intent_check or {}).get("intent")
     if boundary_intent in {"SOCIAL_STATEMENT", "THIRD_PARTY_HEALTH_QUERY", "SELF_CARE_FOLLOWUP"}:
         workflow_by_intent = {
@@ -303,7 +346,42 @@ async def analyze_node(state: AgentState) -> dict:
         clinical_facts = fact_service.merge(clinical_facts, rule_facts)
         clinical_facts = fact_service.merge(clinical_facts, extracted_facts)
 
-    patient_name = (state.get("patient_profile") or {}).get("name") or v2_response.facts_delta.patient_name or state.get("patient_name")
+    booking_entities = extract_booking_entities(query, state)
+    patient_name = (
+        booking_entities.get("patient_name")
+        or (state.get("patient_profile") or {}).get("name")
+        or v2_response.facts_delta.patient_name
+        or state.get("patient_name")
+    )
+    patient_phone = (
+        booking_entities.get("patient_phone")
+        or (state.get("patient_profile") or {}).get("phone")
+        or state.get("patient_phone")
+    )
+    patient_dob = (
+        booking_entities.get("date_of_birth")
+        or (state.get("patient_profile") or {}).get("date_of_birth")
+        or state.get("patient_dob")
+    )
+    patient_gender = (
+        booking_entities.get("gender")
+        or (state.get("patient_profile") or {}).get("gender")
+        or state.get("patient_gender")
+    )
+    patient_email = state.get("patient_email")
+    facility_pref = (
+        booking_entities.get("facility_preference")
+        or state.get("facility_preference")
+        or facility_pref
+    )
+    preferred_date = booking_entities.get("preferred_date") or state.get("preferred_date")
+    preferred_period = booking_entities.get("preferred_period") or state.get("preferred_period")
+    is_package_inquiry = bool(booking_entities.get("is_package_inquiry"))
+    is_booking_intent = bool(
+        booking_entities.get("is_booking_intent")
+        or is_package_inquiry
+        or (intent_check and intent_check.get("intent") in {"HOLD_BOOKING", "BOOKING_CONTACT_REQUEST", "FACILITY_BOOKING_START"})
+    )
 
     is_describe_more = bool(intent_check and intent_check.get("intent") == "DESCRIBE_MORE_SYMPTOMS")
     is_generic_visit = bool(intent_check and intent_check.get("intent") == "VISIT_PURPOSE_CLARIFICATION")
@@ -373,18 +451,24 @@ async def analyze_node(state: AgentState) -> dict:
         }
 
     # Action Validation via ActionValidator
-    from src.medical_assistant.domain.action_validator import validate_action
+    from src.medical_assistant.domain.action_validator import validate_action, has_clinical_evidence
 
     action = v2_response.proposed_action
-    suggested_dept_code = department_query or current_dept
-    if triage_result.recommended_specialties and not department_query:
+    suggested_dept_code = department_query
+    if not suggested_dept_code and triage_result.recommended_specialties:
         suggested_dept_code = triage_result.recommended_specialties[0].code
-    elif rule_facts.get("chief_complaint") and not department_query:
+    if (
+        not suggested_dept_code
+        and triage_result.suggested_specialty
+        and triage_result.suggested_specialty not in {"Sức khỏe tổng quát", "General Health"}
+    ):
+        suggested_dept_code = triage_result.suggested_specialty
+    if not suggested_dept_code and rule_facts.get("chief_complaint"):
         suggested_dept_code = current_query_triage.suggested_specialty
-    elif not department_query and v2_response.candidate_specialties and not clinical_facts.get("complaints"):
+    if not suggested_dept_code and v2_response.candidate_specialties:
         suggested_dept_code = v2_response.candidate_specialties[0].specialty_key
     if not suggested_dept_code:
-        suggested_dept_code = triage_result.suggested_specialty
+        suggested_dept_code = current_dept or triage_result.suggested_specialty
 
     action = validate_action(action, clinical_facts, v2_response, allowed_actions)
     if "HEADACHE_WITH_VISUAL_CHANGE" in triage_result.triggered_rule_ids:
@@ -618,8 +702,8 @@ async def analyze_node(state: AgentState) -> dict:
         "analysis": analysis,
         "is_emergency": is_emergency,
         "emergency_warning": triage_result.patient_guidance if is_emergency else None,
-        "ats_level": None if is_non_clinical else triage_result.ats_level.value,
-        "urgency_tier": None if is_non_clinical else triage_result.urgency_tier.value,
+        "ats_level": (triage_result.ats_level.value if has_clinical_evidence(clinical_facts, v2_response) else None) if is_non_clinical else triage_result.ats_level.value,
+        "urgency_tier": (triage_result.urgency_tier.value if has_clinical_evidence(clinical_facts, v2_response) else None) if is_non_clinical else triage_result.urgency_tier.value,
         "max_booking_days": 0
         if workflow_status == "SAFETY_REVIEW"
         else (None if is_non_clinical else current_max_days),
@@ -628,6 +712,14 @@ async def analyze_node(state: AgentState) -> dict:
         "suggested_department_code": None if workflow_status == "VISIT_PURPOSE_CLARIFICATION" else canonical_dept,
         "suggested_department_name": None if workflow_status == "VISIT_PURPOSE_CLARIFICATION" else department_display,
         "patient_name": patient_name,
+        "patient_phone": patient_phone,
+        "patient_dob": patient_dob,
+        "patient_gender": patient_gender,
+        "patient_email": patient_email,
+        "facility_preference": facility_pref,
+        "preferred_date": preferred_date,
+        "preferred_period": preferred_period,
+        "is_authenticated": state.get("is_authenticated"),
         "workflow_status": workflow_status,
         "probing_turn": new_turn,
         "active_probing_category": new_category,
@@ -658,6 +750,8 @@ async def analyze_node(state: AgentState) -> dict:
             "district_filter": (intent_check or {}).get("district_filter"),
             "facility_name_query": (intent_check or {}).get("facility_name_query"),
             "schedule_lookup_requested": action == "search_available_slot",
+            "is_booking_intent": is_booking_intent,
+            "booking_entities_found": bool(booking_entities.get("patient_name") or booking_entities.get("patient_phone") or booking_entities.get("date_of_birth") or booking_entities.get("facility_preference") or booking_entities.get("preferred_date")),
             "tokens_saved": skip_llm,
             "llm_invoked": not skip_llm,
             "llm_succeeded": llm_succeeded,
@@ -672,6 +766,7 @@ async def analyze_node(state: AgentState) -> dict:
 async def respond_node(state: AgentState) -> dict:
     meta = state.get("metadata", {})
     workflow_status = state.get("workflow_status", "")
+    query = state.get("query") or state.get("user_input", "")
     enable_citation = state.get("enable_citation") if state.get("enable_citation") is not None else True
     patient_guidance = meta.get("patient_guidance") or state.get("emergency_warning", "")
     clarification = meta.get("clarification_question")
@@ -682,7 +777,67 @@ async def respond_node(state: AgentState) -> dict:
     spec_display = get_specialty_display_name(spec_name, lang)
     disclaimer = get_medical_disclaimer(lang)
     v2_draft = meta.get("v2_draft_response")
-    booking_intake = None
+    # Universal Booking Intake snapshot for live form-filling (computed upfront)
+    from src.medical_assistant.domain.booking_slot_service import generate_clinical_summary, detect_package_inquiry
+
+    is_package_inquiry = bool(meta.get("is_package_inquiry") or detect_package_inquiry(query))
+    is_auth = bool(state.get("is_authenticated") or state.get("user_id"))
+    p_name = state.get("patient_name") or (state.get("patient_profile") or {}).get("name") or ""
+    p_phone = state.get("patient_phone") or (state.get("patient_profile") or {}).get("phone") or ""
+    p_dob = (
+        state.get("patient_dob")
+        or (state.get("patient_profile") or {}).get("date_of_birth")
+        or ""
+    )
+    p_gender = (
+        state.get("patient_gender")
+        or (state.get("patient_profile") or {}).get("gender")
+        or ""
+    )
+    fac_pref = state.get("facility_preference") or ""
+    pref_date = state.get("preferred_date") or ""
+    pref_period = state.get("preferred_period") or "any"
+    available_docs = state.get("available_slots") or []
+
+    # Task 2: Sinh tóm tắt lâm sàng chuẩn từ triệu chứng, vị trí, mức độ, thời gian
+    clinical_summary_result = generate_clinical_summary(state, current_text=query)
+    clinical_notes = clinical_summary_result.get("summary") or " ".join(state.get("collected_details") or [])
+    clinical_details = clinical_summary_result.get("details") or {}
+
+    missing_fields = [] if is_auth else evaluate_missing_fields(p_name, p_phone, p_dob, fac_pref, pref_date)
+
+    # Task 3: Phát hiện nhu cầu gói khám
+    booking_mode = "package" if is_package_inquiry or meta.get("is_package_inquiry") else "doctor"
+
+    booking_intake = {
+        "required": True,
+        "endpoint": "/api/v1/booking-requests",
+        "booking_mode": booking_mode,
+        "patient_name": p_name,
+        "patient_phone": p_phone,
+        "date_of_birth": p_dob,
+        "gender": p_gender,
+        "specialty_code": state.get("suggested_department_code") or "",
+        "specialty_name": spec_display,
+        "facility_preference": fac_pref,
+        "preferred_date": pref_date,
+        "preferred_period": pref_period,
+        "patient_notes": clinical_notes,
+        "clinical_summary": clinical_notes,
+        "clinical_details": clinical_details,
+        "missing_fields": missing_fields,
+        "is_authenticated": is_auth,
+        "selected_slot_id": meta.get("slot_id"),
+        "doctors": [
+            {
+                "id": doctor.get("id"),
+                "name": doctor.get("full_name"),
+                "title": doctor.get("title"),
+                "source_url": doctor.get("source_url"),
+            }
+            for doctor in available_docs
+        ],
+    }
 
     if workflow_status == "SECURITY_BLOCKED":
         response = meta.get("security_response") or "Yêu cầu bị từ chối do vi phạm quy chuẩn an toàn thông tin."
@@ -767,7 +922,7 @@ async def respond_node(state: AgentState) -> dict:
         dept_context = state.get("suggested_department_name") or (
             spec_display if spec_display != "Sức khỏe tổng quát" else None
         )
-        response, quick_replies = await asyncio.to_thread(
+        facility_resp, quick_replies = await asyncio.to_thread(
             get_facility_service().get_facilities_response,
             language=lang,
             region_filter=region_filter,
@@ -776,15 +931,57 @@ async def respond_node(state: AgentState) -> dict:
             department_context=dept_context,
             enable_citation=enable_citation,
         )
+
+        clinical_prefix = ""
+        has_clinical = bool(
+            (state.get("clinical_facts") or {}).get("chief_complaint")
+            or (state.get("clinical_facts") or {}).get("positive_facts")
+            or state.get("collected_details")
+            or any(kw in query.lower() for kw in ["đau", "nhức", "mỏi", "khó chịu", "khớp", "ngón tay", "lưng", "gối", "đầu"])
+        )
+        if has_clinical and dept_context:
+            symptom_loc = ""
+            for kw in ["khớp ngón tay cái", "ngón tay cái", "ngón tay", "khớp ngón", "khớp gối", "đầu gối", "cổ vai gáy", "thắt lưng", "cổ tay", "khớp"]:
+                if kw in query.lower():
+                    symptom_loc = f" ở {kw}"
+                    break
+            clinical_prefix = (
+                f"Dạ, em đã ghi nhận triệu chứng của bác{symptom_loc}.\n"
+                f"Về chuyên khoa, bác nên thăm khám tại **Khoa {dept_context}** để bác sĩ kiểm tra và đưa ra chẩn đoán chính xác nhất.\n\n"
+            ) if lang == "vi" else (
+                f"I have noted your reported symptoms{symptom_loc}. Given your symptoms, an in-person evaluation at **{dept_context}** is recommended.\n\n"
+            )
+
+        booking_suffix = ""
+        if meta.get("is_booking_intent") or booking_intake.get("required"):
+            p_label = f" (**Bệnh nhân:** {booking_intake.get('patient_name')}, **Chuyên khoa:** {spec_display})" if is_auth and booking_intake.get('patient_name') else ""
+            region_str = f" tại {region_filter}" if region_filter else ""
+            booking_suffix = (
+                f"\n\n📋 **Phiếu Hẹn Khám Bác Sĩ Chuyên Khoa:**\n"
+                f"Em đã tự động trích xuất thông tin của bác vào phiếu ở khung bên cạnh{p_label}. "
+                f"Bác vui lòng chọn cơ sở mong muốn{region_str} và ngày khám phù hợp trên phiếu rồi bấm **'Xác nhận gửi thông tin đặt khám'** nhé ạ!"
+            ) if lang == "vi" else (
+                f"\n\n📋 **Appointment Request Form:**\n"
+                f"I have pre-filled your details on the right panel. Please select your preferred facility and date, then confirm to submit your request!"
+            )
+
+        response = clinical_prefix + facility_resp + booking_suffix
     elif workflow_status == "FACILITY_DOCTORS":
         from src.medical_assistant.domain.facility_service import get_facility_service
 
         fac_q = meta.get("facility_name_query") or state.get("metadata", {}).get("facility_preference") or "Vinmec"
+        dept_ctx = state.get("suggested_department_name") or spec_display
+        if dept_ctx in {"Sức khỏe tổng quát", "General Health"}:
+            dept_ctx = None
+        booking_intake["facility_preference"] = fac_q.title()
         response, quick_replies = await asyncio.to_thread(
             get_facility_service().get_facility_doctors_response,
             facility_query=fac_q,
             language=lang,
             enable_citation=enable_citation,
+            department_context=dept_ctx,
+            booking_intake=booking_intake,
+            is_authenticated=is_auth,
         )
     elif workflow_status == "FACILITY_BOOKING_START":
         from src.medical_assistant.domain.facility_service import get_facility_service
@@ -795,64 +992,91 @@ async def respond_node(state: AgentState) -> dict:
             facility_query=fac_q,
             language=lang,
         )
+    elif is_package_inquiry and not is_emergency:
+        response = (
+            "Dạ, Vinmec hiện có các **Gói khám sức khỏe tổng quát và lộ trình tầm soát chuyên sâu** "
+            "(như Khám sức khỏe định kỳ, Tầm soát tim mạch, Tầm soát ung thư sớm, Gói thai sản/sinh nở...).\n\n"
+            "Em đã tự động chuyển **Phiếu Đăng Ký Khám** ở khung bên cạnh sang chế độ **Gói Khám Bệnh**. "
+            "Bác có thể tra cứu chi tiết danh mục gói, chi phí niêm yết và chọn gửi yêu cầu trực tiếp trên bảng bên cạnh nhé ạ!"
+        ) if lang == "vi" else (
+            "Vinmec provides various comprehensive Health Checkup and Screening Packages. "
+            "I have switched the Live Booking Panel on the right to **Health Packages** mode so you can view details and register directly!"
+        )
+        quick_replies = [
+            "Gói khám tổng quát",
+            "Tầm soát tim mạch",
+            "Tầm soát ung thư",
+            "Khám bác sĩ chuyên khoa",
+        ] if lang == "vi" else ["Health checkup", "Cancer screening", "Specialist booking"]
     elif workflow_status == "BOOKING_CONTACT_REQUIRED":
-        slot_id = str(meta.get("slot_id") or "").lower()
-        available_docs = state.get("available_slots") or []
-        selected_doctor = None
-        selected_slot = None
-        if slot_id:
-            for doctor in available_docs:
-                candidate = next(
-                    (
-                        slot
-                        for slot in doctor.get("available_slots", [])
-                        if str(slot.get("schedule_id", "")).lower() == slot_id
-                    ),
-                    None,
-                )
-                if candidate:
-                    selected_doctor, selected_slot = doctor, candidate
-                    break
-        if slot_id and (selected_slot is None or not selected_slot.get("verified")):
-            response = (
-                "Dạ, mã lịch này chưa được database xác minh hoặc không còn trong kết quả hiện tại. "
-                "Em chưa thể báo đã giữ chỗ. Bác có thể xem lại lịch hoặc gửi yêu cầu để điều phối viên hỗ trợ."
-                if lang == "vi"
-                else "This slot is not verified by the database. I cannot claim it is reserved. You may review availability or request coordinator assistance."
+        response = build_booking_guidance_text(
+            is_authenticated=is_auth,
+            missing_fields=missing_fields,
+            current_intake=booking_intake,
+            specialty_name=spec_display,
+            lang=lang,
+        )
+        quick_replies = []
+    elif (
+        (meta.get("is_booking_intent") or meta.get("booking_entities_found"))
+        and not is_emergency
+        and workflow_status != "VISIT_PURPOSE_CLARIFICATION"
+    ):
+        is_fac_ask, fac_reg = extract_facility_inquiry(query)
+        if (is_fac_ask or meta.get("is_facility_inquiry")) and not is_emergency:
+            from src.medical_assistant.domain.facility_service import get_facility_service
+            region_filter = fac_reg or meta.get("region_filter") or "Hà Nội"
+            dept_context = state.get("suggested_department_name") or spec_display
+            facility_resp, f_replies = await asyncio.to_thread(
+                get_facility_service().get_facilities_response,
+                language=lang,
+                region_filter=region_filter,
+                department_context=dept_context,
+                enable_citation=enable_citation,
             )
-            quick_replies = (
-                ["Xem lịch trống", "Để lại thông tin liên hệ"]
-                if lang == "vi"
-                else ["View availability", "Leave contact details"]
+            booking_cta = (
+                f"\n\n📋 **Phiếu Hẹn Khám Bác Sĩ Chuyên Khoa:**\n"
+                f"Em đã tự động trích xuất thông tin của bác vào phiếu ở khung bên cạnh"
+                + (f" (**Bệnh nhân:** {booking_intake.get('patient_name')}, **Chuyên khoa:** {spec_display})." if is_auth and booking_intake.get('patient_name') else ".")
+                + f" Bác vui lòng chọn cơ sở mong muốn tại {region_filter} và xác nhận trên phiếu bên cạnh nhé ạ!"
+            ) if lang == "vi" else (
+                f"\n\n📋 **Appointment Request Form:**\n"
+                f"I have pre-filled your details on the right panel. Please choose your preferred facility and confirm!"
             )
+            lead_in = ""
+            if v2_draft and len(v2_draft.strip()) > 20:
+                cleaned_draft = re.sub(
+                    r"(Bác có muốn xem lịch khám không[^\n]*|Em có thể hỗ trợ tìm bác sĩ[^\n]*|Bác có muốn đặt lịch[^\n]*)",
+                    "",
+                    v2_draft,
+                    flags=re.IGNORECASE,
+                ).strip()
+                lead_in = (cleaned_draft + "\n\n") if cleaned_draft else ""
+            if not lead_in:
+                lead_in = f"Dạ, với triệu chứng khó chịu bác đang gặp, bác nên thăm khám tại **Khoa {dept_context}** để được kiểm tra trực tiếp.\n\n"
+            response = lead_in + facility_resp + booking_cta
+            quick_replies = [f"Khoa {spec_display}", "Cơ sở Times City", "Cơ sở Smart City"] if lang == "vi" else ["Times City", "Smart City"]
+        elif has_compound_question and v2_draft and len(v2_draft.strip()) > 30 and not v2_draft.strip().startswith("Dạ, em đã điền sẵn"):
+            booking_cta = (
+                f"\n\n📋 **Phiếu Hẹn Khám Bác Sĩ Chuyên Khoa:**\n"
+                f"Em đã tự động trích xuất thông tin của bác vào phiếu ở khung bên cạnh"
+                + (f" (**Bệnh nhân:** {booking_intake.get('patient_name')}, **Chuyên khoa:** {spec_display})." if is_auth and booking_intake.get('patient_name') else ".")
+                + " Bác vui lòng kiểm tra lại thông tin và xác nhận trên phiếu bên cạnh nhé ạ!"
+            ) if lang == "vi" else (
+                f"\n\n📋 **Appointment Request Form:**\n"
+                f"I have pre-filled the appointment details on the right panel. Please review and confirm your request!"
+            )
+            response = v2_draft + booking_cta
+            quick_replies = [f"Khoa {spec_display}", "Cơ sở Times City", "Cơ sở Central Park"] if lang == "vi" else ["Times City", "Central Park"]
         else:
-            booking_intake = {
-                "required": True,
-                "endpoint": "/api/v1/booking-requests",
-                "patient_name": state.get("patient_name") or "",
-                "patient_phone": state.get("patient_phone") or "",
-                "specialty_code": state.get("suggested_department_code"),
-                "specialty_name": spec_display,
-                "selected_slot_id": selected_slot.get("schedule_id") if selected_slot else None,
-                "selected_doctor_id": selected_doctor.get("id") if selected_doctor else None,
-                "doctors": [
-                    {
-                        "id": doctor.get("id"),
-                        "name": doctor.get("full_name"),
-                        "title": doctor.get("title"),
-                        "source_url": doctor.get("source_url"),
-                    }
-                    for doctor in available_docs
-                ],
-            }
-            response = (
-                "Dạ, vì bác chưa đăng nhập nên em chưa thể tự xác nhận hay khóa lịch. "
-                "Bác vui lòng điền phiếu liên hệ bên dưới. Chỉ khi phiếu được lưu thành công, hệ thống mới cấp mã yêu cầu; "
-                "điều phối viên sẽ gọi lại để xác minh thông tin và chốt lịch chính thức."
-                if lang == "vi"
-                else "Because you are not signed in, I cannot confirm or lock an appointment automatically. Please complete the contact form below. A coordinator will verify the details and finalize the appointment."
+            response = build_booking_guidance_text(
+                is_authenticated=is_auth,
+                missing_fields=missing_fields,
+                current_intake=booking_intake,
+                specialty_name=spec_display,
+                lang=lang,
             )
-            quick_replies = []
+            quick_replies = [f"Khoa {spec_display}", "Cơ sở Times City", "Cơ sở Central Park"] if lang == "vi" else ["Times City", "Central Park"]
     elif workflow_status == "TRIAGED_READY_FOR_BOOKING":
         max_days = state.get("max_booking_days", 7)
         available_docs = state.get("available_slots") or []
@@ -912,7 +1136,16 @@ async def respond_node(state: AgentState) -> dict:
                     if lang == "vi"
                     else ["Request coordinator contact", "Choose another facility"]
                 )
-            response = f"{prefix}{doctors_text}"
+            form_hint = (
+                "\n\n📋 *Em đã tự động điền sẵn thông tin từ tài khoản của bác vào Phiếu Đăng Ký Khám ở khung bên cạnh. Bác vui lòng kiểm tra lại và xác nhận nhé!*"
+                if is_auth
+                else "\n\n📋 *Bác có thể nhắn Họ tên, SĐT và Ngày sinh để em tự động điền giúp bác, hoặc tự điền vào Phiếu Khám ở khung bên cạnh nhé ạ!*"
+            ) if lang == "vi" else (
+                "\n\n📋 *I have pre-filled the Appointment Form on the right panel with your profile. Please review and confirm!*"
+                if is_auth
+                else "\n\n📋 *You can provide your name, phone, and DOB for auto-fill, or type directly into the form on the right panel!*"
+            )
+            response = f"{prefix}{doctors_text}{form_hint}"
         else:
             response = (
                 "Xin lỗi bác, hiện tại em chưa tìm thấy lịch khám phù hợp. Bác có muốn chọn ngày khác hoặc để em hỗ trợ thêm không ạ?"
@@ -1052,7 +1285,7 @@ async def respond_node(state: AgentState) -> dict:
         token_metrics["execution_mode"] = "llm_fallback_rule"
     meta["token_usage"] = token_metrics
     meta["quick_replies"] = quick_replies
-    meta["booking_intake"] = booking_intake
+    meta["booking_intake"] = None if workflow_status in {"FAQ_ANSWERED", "SECURITY_BLOCKED"} else booking_intake
     meta["dlp_leakage_detected"] = dlp_scan.has_leakage
 
     # Cập nhật và lưu giữ lịch sử hội thoại (Conversation Memory)

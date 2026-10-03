@@ -10,9 +10,18 @@ from src.schemas.catalog import SpecialtyCreate, SpecialtyUpdate
 class SpecialtyServiceMixin:
     """Specialty operations composed into the catalog service."""
 
-    async def list_specialties(self, *, public_only: bool, offset: int, limit: int) -> list[Specialty]:
+    async def list_specialties(
+        self,
+        *,
+        public_only: bool,
+        offset: int,
+        limit: int,
+        facility_id: UUID | None = None,
+    ) -> list[Specialty]:
         """List specialties."""
-        return await self.catalog.list_specialties(public_only=public_only, offset=offset, limit=limit)
+        return await self.catalog.list_specialties(
+            public_only=public_only, offset=offset, limit=limit, facility_id=facility_id
+        )
 
     async def get_specialty(self, resource_id: UUID, *, public_only: bool) -> Specialty:
         """Get a specialty or raise a safe not-found error."""

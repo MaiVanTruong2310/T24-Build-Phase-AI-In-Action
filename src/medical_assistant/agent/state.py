@@ -15,6 +15,13 @@ class AgentState(TypedDict, total=False):
     user_id: str
     patient_name: str | None
     patient_phone: str | None
+    patient_dob: str | None
+    patient_gender: str | None
+    patient_email: str | None
+    facility_preference: str | None
+    preferred_date: str | None
+    preferred_period: str | None
+    is_authenticated: bool | None
     patient_health_record: dict[str, Any] | None
     patient_profile: dict[str, str] | None
     messages: list[dict[str, str]]

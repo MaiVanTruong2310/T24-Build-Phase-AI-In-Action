@@ -13,7 +13,7 @@ export const MedicalTabs = memo(function MedicalTabs({
   onTabChange,
 }: MedicalTabsProps) {
   return (
-    <div className="flex flex-wrap items-center gap-0 rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="flex flex-wrap items-center gap-0 rounded-xl border border-slate-200 light:border-app-border bg-white light:bg-app-surface shadow-sm">
       {tabs.map((tab) => {
         const isActive = tab.key === activeTab;
         return (
@@ -23,15 +23,15 @@ export const MedicalTabs = memo(function MedicalTabs({
             onClick={() => onTabChange(tab.key)}
             className={`relative px-5 py-3 text-[13px] font-medium transition first:rounded-l-xl last:rounded-r-xl ${
               isActive
-                ? 'bg-[#0e7490] text-white font-semibold'
-                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                ? 'bg-[#0e7490] light:bg-app-primary text-white font-semibold'
+                : 'text-slate-500 light:text-app-secondary hover:bg-slate-50 light:hover:bg-app-page hover:text-slate-700 light:hover:text-app-text'
             }`}
           >
             {tab.label}
             {tab.count != null && (
               <span
                 className={`ml-1 text-[12px] ${
-                  isActive ? 'text-white/70' : 'text-slate-400'
+                  isActive ? 'text-white/70' : 'text-slate-400 light:text-app-secondary'
                 }`}
               >
                 ({tab.count})

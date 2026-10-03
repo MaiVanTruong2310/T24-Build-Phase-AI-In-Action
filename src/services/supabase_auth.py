@@ -1,5 +1,7 @@
 """Supabase-managed email/password identity, with private application profiles."""
+import asyncio
 from datetime import datetime
+from hashlib import sha256
 from uuid import UUID
 
 import httpx
@@ -13,6 +15,22 @@ from src.models.user import User
 
 def native_auth_enabled() -> bool:
     return get_settings().auth_provider == "supabase"
+
+
+# Share only concurrent checks. Completed results are discarded, so each later
+# request still asks Supabase whether the token is valid.
+_pending_user_checks: dict[bytes, asyncio.Task[dict]] = {}
+
+
+async def verified_identity(token: str) -> dict:
+    key = sha256(token.encode()).digest()
+    task = _pending_user_checks.get(key)
+    if task is None:
+        task = asyncio.create_task(auth_call("/user", token=token, method="GET"))
+        _pending_user_checks[key] = task
+        task.add_done_callback(lambda completed: _pending_user_checks.pop(key, None)
+                               if _pending_user_checks.get(key) is completed else None)
+    return await asyncio.shield(task)
 
 
 async def auth_call(path: str, body: dict | None = None, token: str | None = None, method: str = "POST", params: dict | None = None) -> dict:
@@ -72,7 +90,7 @@ async def register_email(request, session: AsyncSession) -> dict:
 
 
 async def authenticated_profile(token: str, session: AsyncSession) -> User:
-    identity = await auth_call("/user", token=token, method="GET")
+    identity = await verified_identity(token)
     if not identity.get("email_confirmed_at"):
         raise AuthenticationError("EMAIL_NOT_CONFIRMED", "Bạn cần xác nhận email trước khi đăng nhập.")
     auth_id = UUID(identity["id"])

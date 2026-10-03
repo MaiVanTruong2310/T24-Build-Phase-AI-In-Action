@@ -123,7 +123,13 @@ async function migrateLegacyUnlocked(): Promise<void> {
   if (payload?.data?.authenticated !== true) throw new Error('Chưa thể xác nhận phiên cookie.');
   markCookieSession();
 }
-export function migrateLegacySession(): Promise<void> { return withSessionLock(migrateLegacyUnlocked); }
+export function migrateLegacySession(): Promise<void> {
+  if (!localStorage.getItem('refresh_token')) {
+    localStorage.removeItem('access_token');
+    return Promise.resolve();
+  }
+  return withSessionLock(migrateLegacyUnlocked);
+}
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   let response = await fetchPublicApi(url,options);
   // Authentication actions have their own error semantics and must never be replayed.

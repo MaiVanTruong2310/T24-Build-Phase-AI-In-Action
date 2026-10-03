@@ -18,10 +18,10 @@ export const VitalSigns = memo(function VitalSigns({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-[#0e7490]" />
-          <h3 className="text-[15px] font-bold text-slate-800">
+          <h3 className="text-[15px] font-bold text-slate-800 light:text-app-text">
             Chỉ số sinh tồn gần nhất
           </h3>
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+          <span className="rounded bg-slate-100 light:bg-app-muted px-2 py-0.5 text-[11px] font-medium text-slate-500 light:text-app-secondary">
             Cập nhật: {lastUpdated}
           </span>
         </div>
