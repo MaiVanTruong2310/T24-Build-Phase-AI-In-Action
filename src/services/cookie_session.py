@@ -2,7 +2,7 @@ from fastapi import HTTPException, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from src.config import get_settings, parse_cors_origins
+from src.config import allowed_cors_origins, get_settings
 
 ACCESS_COOKIE = 'p124_access'
 REFRESH_COOKIE = 'p124_refresh'
@@ -48,7 +48,7 @@ def token_result(request, response, tokens):
 class CookieOriginMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         if request.method not in ('GET','HEAD','OPTIONS') and cookie_transport(request):
-            allowed = parse_cors_origins(get_settings().cors_origins)
+            allowed = allowed_cors_origins()
             origin = request.headers.get('origin')
             if not origin or origin.rstrip('/') not in allowed:
                 return JSONResponse({'code':403,'message':'Nguồn yêu cầu không hợp lệ.','data':None},status_code=403)

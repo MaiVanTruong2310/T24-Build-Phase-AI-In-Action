@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     cors_origins: str = "http://localhost:5173"
+    public_frontend_origin: str = "https://creative-enjoyment-production-e3d9.up.railway.app"
 
     # LLM
     openai_api_key: str = ""
@@ -65,6 +66,12 @@ def parse_cors_origins(value: str) -> list[str]:
         if origin and origin not in origins:
             origins.append(origin)
     return origins
+
+
+def allowed_cors_origins() -> list[str]:
+    """Include the deployed frontend even if CORS_ORIGINS is overridden."""
+    settings = get_settings()
+    return parse_cors_origins(f"{settings.cors_origins},{settings.public_frontend_origin}")
 
 
 @lru_cache

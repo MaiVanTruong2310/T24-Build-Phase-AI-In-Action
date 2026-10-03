@@ -25,7 +25,7 @@ from src.api.handlers import (
     unexpected_error_handler,
     validation_error_handler,
 )
-from src.config import get_settings, parse_cors_origins
+from src.config import allowed_cors_origins, get_settings
 from src.core.exceptions import AppError
 from src.core.logging import get_logger
 from src.db.session import check_database_connection, close_database, get_session_factory, initialize_database
@@ -96,7 +96,7 @@ settings = get_settings()
 app.add_middleware(CookieOriginMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=parse_cors_origins(settings.cors_origins),
+    allow_origins=allowed_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
