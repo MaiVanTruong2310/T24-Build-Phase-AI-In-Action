@@ -83,7 +83,8 @@ export const initializeAuth = createAsyncThunk(
       const response = await fetchWithAuth('/users/me');
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          if (readPublishedSession()?.id !== originalUserId) return rejectWithValue({ kind: 'unavailable' });
+          const currentUserId = readPublishedSession()?.id;
+          if (currentUserId && currentUserId !== originalUserId) return rejectWithValue({ kind: 'unavailable' });
           clearSession();
           return null;
         }
