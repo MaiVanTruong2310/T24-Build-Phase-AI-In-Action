@@ -2,7 +2,9 @@ import { clearSession, markCookieSession, readPublishedSession } from '../featur
 const LOCAL_API_ORIGIN = 'http://localhost:8000';
 function normalizeApiOrigin(value: string): string {
   const trimmed = value.trim().replace(/\/$/, '');
-  return (!trimmed ? LOCAL_API_ORIGIN : /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`).replace(/\/api\/v1$/, '');
+  const scheme = /^(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(trimmed) ? 'http://' : 'https://';
+  const origin = !trimmed ? LOCAL_API_ORIGIN : /^https?:\/\//.test(trimmed) ? trimmed : scheme + trimmed;
+  return origin.replace(/\/api\/v1$/, '');
 }
 const API_ORIGIN = normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
 const API_BASE = `${API_ORIGIN}/api/v1`;
