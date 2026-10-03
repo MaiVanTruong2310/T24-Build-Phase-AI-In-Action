@@ -1,0 +1,22 @@
+{
+	admin off
+	persist_config off
+	auto_https off
+}
+
+:{$PORT:8000} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:https://t24-build-phase-ai-in-action-production.up.railway.app} {
+			header_up Host {upstream_hostport}
+			flush_interval -1
+		}
+	}
+
+	handle {
+		root * /app/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

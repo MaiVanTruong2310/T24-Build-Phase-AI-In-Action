@@ -6,7 +6,10 @@ function normalizeApiOrigin(value: string): string {
   const origin = !trimmed ? LOCAL_API_ORIGIN : /^https?:\/\//.test(trimmed) ? trimmed : scheme + trimmed;
   return origin.replace(/\/api\/v1$/, '');
 }
-const API_ORIGIN = normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
+const RAILWAY_FRONTEND_HOST = 'creative-enjoyment-production-e3d9.up.railway.app';
+const API_ORIGIN = typeof window !== 'undefined' && window.location.hostname === RAILWAY_FRONTEND_HOST
+  ? window.location.origin
+  : normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
 const API_BASE = `${API_ORIGIN}/api/v1`;
 const REVISION_KEY = 'p124_cookie_revision';
 let refreshPromise: Promise<boolean> | null = null;
