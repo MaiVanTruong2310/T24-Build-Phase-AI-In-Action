@@ -1,6 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { 
-  Search, Bell, Settings, Flame, ArrowRightLeft, 
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import {
+  Search, Settings, ArrowRightLeft,
   LayoutDashboard, Activity, ListOrdered, MessageSquare, 
   CalendarCheck, Stethoscope, Briefcase, Users, 
   Building2, Package, ShieldAlert, LogOut, CalendarRange
@@ -8,6 +8,8 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../app/store';
 import { logoutUser } from '../features/auth/authSlice';
+import { getUserAvatarUrl } from '../features/auth/session';
+import { NotificationBell } from '../features/notification/NotificationBell';
 
 export function StaffLayout() {
   const dispatch = useDispatch<AppDispatch>();
@@ -19,12 +21,18 @@ export function StaffLayout() {
     navigate('/login');
   };
 
+  const handleOpenPatientPortal = () => {
+    // Keep the staff-to-patient portal switch explicit so it works from every
+    // staff page, including pages rendered by nested routes.
+    navigate('/patient');
+  };
+
   const navItems = [
     { to: '/staff', label: 'Tổng quan quản trị', icon: LayoutDashboard, end: true },
     { to: '/staff/dieu-phoi', label: 'Điều phối khám', icon: Activity },
-    { to: '/staff/queue', label: 'HITL Queue', icon: ListOrdered, badge: 28 },
-    { to: '/staff/chat', label: 'Chat Takeover', icon: MessageSquare, badge: 4 },
-    { to: '/staff/appointments', label: 'Duyệt lịch hẹn', icon: CalendarCheck, badge: 12 },
+    { to: '/staff/queue', label: 'HITL Queue', icon: ListOrdered },
+    { to: '/staff/chat', label: 'Chat Takeover', icon: MessageSquare },
+    { to: '/staff/appointments', label: 'Duyệt lịch hẹn', icon: CalendarCheck },
     { to: '/staff/doctor-schedule', label: 'Quản Lý Lịch Bác Sĩ', icon: CalendarRange },
     { to: '/staff/doctors', label: 'Quản Lý Bác Sĩ', icon: Stethoscope },
     { to: '/staff/specialties', label: 'Quản lý chuyên khoa', icon: Briefcase },
@@ -45,7 +53,7 @@ export function StaffLayout() {
               <span className="text-white font-bold text-xl leading-none">+</span>
             </div>
             <div>
-              <h1 className="text-xl font-extrabold text-sky-800 leading-none mb-1">MediCare AI</h1>
+              <h1 className="text-xl font-extrabold text-sky-800 leading-none mb-1">VCare+</h1>
               <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider leading-none">Hệ Thống Quản Trị Y Tế</p>
             </div>
           </div>
@@ -62,35 +70,9 @@ export function StaffLayout() {
         </div>
 
         <div className="flex items-center gap-6">
-          {/* Status Badges */}
-          <div className="hidden xl:flex items-center gap-3 border-r border-slate-200 pr-6">
-            <div className="text-right">
-              <p className="text-[10px] text-slate-500 font-semibold uppercase">Công suất phòng</p>
-              <p className="text-sm font-bold text-slate-800">86% <span className="text-xs text-slate-500 font-normal">(412/480)</span></p>
-            </div>
-            <div className="text-right pl-3 border-l border-slate-100">
-              <p className="text-[10px] text-slate-500 font-semibold uppercase">Bác sĩ trực</p>
-              <p className="text-sm font-bold text-sky-600">64 Đang online</p>
-            </div>
-            
-            <div className="flex items-center gap-2 ml-4">
-              <span className="px-3 py-1 bg-teal-50 text-teal-700 text-xs font-bold rounded-full flex items-center gap-1.5 border border-teal-100">
-                <div className="w-1.5 h-1.5 bg-teal-500 rounded-full"></div>
-                Đang trực ban
-              </span>
-              <span className="px-3 py-1 bg-rose-50 text-rose-700 text-xs font-bold rounded-full flex items-center gap-1.5 border border-rose-100 shadow-sm">
-                <Flame size={14} className="text-rose-600" />
-                2 Cấp cứu
-              </span>
-            </div>
-          </div>
-
           {/* Actions & Profile */}
           <div className="flex items-center gap-4">
-            <button className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white shadow-sm">3</span>
-            </button>
+            <NotificationBell enabled={Boolean(user)} />
             <button className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
               <Settings size={20} />
             </button>
@@ -101,7 +83,7 @@ export function StaffLayout() {
                 onClick={handleLogout}
                 title="Đăng xuất"
               >
-                <img src="https://i.pravatar.cc/150?u=admin" alt="Admin" className="w-9 h-9 rounded-full object-cover border border-slate-200 group-hover:hidden" />
+                <img src={getUserAvatarUrl(user)} alt={user.full_name || 'Người dùng'} className="w-9 h-9 rounded-full object-cover border border-slate-200 group-hover:hidden" />
                 <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 hidden group-hover:flex items-center justify-center">
                   <LogOut className="w-4 h-4" />
                 </div>
@@ -146,13 +128,6 @@ export function StaffLayout() {
                   <item.icon size={18} className={item.alert ? '' : 'opacity-70'} />
                   {item.label}
                 </div>
-                {item.badge && (
-                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                    item.alert ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    {item.badge}
-                  </span>
-                )}
               </NavLink>
             ))}
           </nav>
@@ -163,10 +138,14 @@ export function StaffLayout() {
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
               Hệ thống an toàn
             </div>
-            <button className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-sky-700 hover:text-sky-800 hover:bg-sky-50 px-3 py-2.5 rounded-xl transition-colors border border-transparent hover:border-sky-100">
+            <Link
+              to="/patient"
+              onClick={handleOpenPatientPortal}
+              className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-sky-700 hover:text-sky-800 hover:bg-sky-50 px-3 py-2.5 rounded-xl transition-colors border border-transparent hover:border-sky-100"
+            >
               <ArrowRightLeft size={16} />
               Cổng Bệnh Nhân
-            </button>
+            </Link>
           </div>
         </aside>
 

@@ -3,6 +3,8 @@ import json
 
 import pytest
 from fastapi.exceptions import RequestValidationError
+from starlette.requests import Request
+from starlette.responses import Response
 
 from src.api.endpoints.auth import forgot_password, logout, reset_password, send_otp
 from src.api.handlers import app_error_handler, validation_error_handler
@@ -60,7 +62,11 @@ def test_logout_endpoint_uses_refresh_token_without_access_token():
     """The logout endpoint forwards the refresh token directly to the service."""
     service = FakeAuthService()
 
-    response = asyncio.run(logout(RefreshTokenRequest(refresh_token="r" * 32), service))
+    response = asyncio.run(
+        logout(
+            Request({"type": "http", "headers": []}), Response(), RefreshTokenRequest(refresh_token="r" * 32), service
+        )
+    )
 
     assert response.message == "Logout successful"
     assert service.logout_token == "r" * 32

@@ -28,6 +28,7 @@ from src.services.catalog import CatalogService
 async def list_doctors(
     specialty_id: UUID | None = None,
     facility_id: UUID | None = None,
+    service_id: UUID | None = None,
     name: str | None = Query(default=None, max_length=200),
     booking_enabled: bool | None = None,
     offset: int = Query(default=0, ge=0),
@@ -40,6 +41,7 @@ async def list_doctors(
         public_only=True,
         specialty_id=specialty_id,
         facility_id=facility_id,
+        service_id=service_id,
         name=name,
         booking_enabled=booking_enabled,
         offset=offset,

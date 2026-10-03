@@ -29,8 +29,26 @@ env/
 .DS_Store
 Thumbs.db
 
-# Data (never commit large data)
-data/
+# Data (never commit large generated data). Keep the reviewed specialty
+# corpus required by the chat runtime.
+data/*
+!data/datalake/
+data/datalake/*
+!data/datalake/normalized/
+data/datalake/normalized/*
+!data/datalake/normalized/diseases_triaged.jsonl
+!data/datalake/rag/
+data/datalake/rag/*
+!data/datalake/rag/specialties.jsonl
+!data/crawled/
+data/crawled/*
+!data/crawled/doctors/
+data/crawled/doctors/*
+!data/crawled/doctors/processed/
+data/crawled/doctors/processed/*
+!data/crawled/doctors/processed/jsonl/
+data/crawled/doctors/processed/jsonl/*
+!data/crawled/doctors/processed/jsonl/vinmec_professionals_vi.jsonl
 *.db
 *.sqlite3
 
@@ -68,4 +86,14 @@ specs/*
 VMEC-01 — Đặc tả build hệ thống.html
 frontend/node_modules
 frontend/UI
-frontend/.vite/deps
+context-agent/*
+
+# Local runner scripts (kept local only, do not commit)
+run.bat
+run.ps1
+run.sh
+
+# Local agent instructions and context
+.agent/
+.agents/
+context_agent/

@@ -16,7 +16,7 @@ export function Header() {
         </div>
         <h1 className="text-3xl font-bold text-slate-900">Hồ Sơ & Điều Phối Bác Sĩ</h1>
         <p className="text-slate-500 mt-1 max-w-2xl text-sm">
-          Quản lý danh bộ 148 chuyên gia y tế, điều phối ca lâm sàng tự động bằng thuật toán MediCare AI và giám sát chỉ số an toàn khám chữa bệnh.
+          Quản lý danh bộ 148 chuyên gia y tế, điều phối ca lâm sàng tự động bằng thuật toán VCare+ và giám sát chỉ số an toàn khám chữa bệnh.
         </p>
       </div>
       <div className="flex items-center gap-3">

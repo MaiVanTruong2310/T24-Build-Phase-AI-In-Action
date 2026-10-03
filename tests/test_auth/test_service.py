@@ -11,7 +11,7 @@ from src.core.exceptions import AuthenticationError
 from src.core.security import hash_refresh_token, verify_password
 from src.models.auth import OtpChallenge, RefreshSession
 from src.models.user import User
-from src.schemas.auth import LoginRequest, RegisterRequest
+from src.schemas.auth import LoginRequest, RegisterRequest, UpdateProfileRequest
 from src.services.auth import AuthService
 from src.services.otp import MockOtpProvider
 
@@ -29,6 +29,10 @@ class FakeTransaction:
 
 class FakeSession:
     """Minimal async session surface required by AuthService."""
+
+    async def execute(self, statement):
+        """Accept the row lock used when applying profile updates."""
+        return None
 
     def begin(self) -> FakeTransaction:
         """Return a fake transaction context manager."""
@@ -203,6 +207,31 @@ def test_register_persists_patient_personal_information():
     assert user.gender == "female"
     assert user.citizen_id == "012345678901"
     assert user.health_insurance_code == "BH1234567890"
+
+
+def test_update_profile_changes_only_patient_editable_fields():
+    """Profile update persists the supplied demographic and insurance fields."""
+    service, _, _, _ = build_service()
+    user = User(id=uuid4(), email="user@example.com", role="patient", status="active")
+
+    updated = asyncio.run(
+        service.update_profile(
+            user,
+            UpdateProfileRequest(
+                full_name="  Nguyen Van A ",
+                date_of_birth=date(1990, 5, 20),
+                gender="male",
+                citizen_id="012345678901",
+                health_insurance_code="BH1234567890",
+            ),
+        )
+    )
+
+    assert updated.full_name == "Nguyen Van A"
+    assert updated.date_of_birth == date(1990, 5, 20)
+    assert updated.gender == "male"
+    assert updated.citizen_id == "012345678901"
+    assert updated.health_insurance_code == "BH1234567890"
 
 
 def test_send_otp_returns_mock_code_for_existing_user():

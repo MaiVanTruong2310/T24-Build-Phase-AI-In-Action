@@ -4,14 +4,6 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      }
-    }
-  },
   plugins: [
     react(),
     tailwindcss(),
@@ -19,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'MediCare AI',
-        short_name: 'MediCare AI',
+        name: 'VCare+',
+        short_name: 'VCare+',
         description: 'Hệ thống y tế số đa tầng bác sĩ giám sát',
         theme_color: '#0284c7',
         background_color: '#f8fafc',

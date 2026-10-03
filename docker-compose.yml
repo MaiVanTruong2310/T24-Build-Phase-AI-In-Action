@@ -10,12 +10,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:
       APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai20k_app}:${POSTGRES_PASSWORD:-123456}@postgres:5432/${POSTGRES_DB:-ai20k}
     volumes:
       - ${APP_DATA_PATH:-./data}:/app/data
+    networks:
+      - default
     restart: unless-stopped
     healthcheck:
       test:
@@ -50,7 +55,22 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+  db-migrate:
+    image: ${IMAGE_REPO}:${IMAGE_TAG}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    restart: "no"
 
 volumes:
   postgres_data:
     name: ${POSTGRES_VOLUME_NAME:-ai20k-postgres}
+
+networks:
+  default:
+    driver: bridge

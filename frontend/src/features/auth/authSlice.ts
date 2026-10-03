@@ -1,14 +1,20 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
+import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from '../../app/store'
+import { fetchWithAuth, fetchPublicApi, migrateLegacySession } from '../../app/apiClient'
+import {
+  clearSession,
+  publishSession,
+  readPublishedSession,
+  markCookieSession,
+  type SessionUser,
+} from './session'
 
 export interface User {
   id: string;
-  email?: string;
-  phone?: string;
+  email?: string | null;
+  phone?: string | null;
   full_name: string;
   role: 'patient' | 'staff';
-  token: string;
-  refresh_token: string;
 }
 
 interface AuthState {
@@ -16,20 +22,27 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   registerSuccess: boolean;
+  initialized: boolean;
+  restoreError: string | null;
+  restoreRequestId: string | null;
 }
 
 const initialState: AuthState = {
-  user: null,
+  user: readPublishedSession(),
+  initialized: false,
+  restoreError: null,
+  restoreRequestId: null,
   loading: false,
   error: null,
   registerSuccess: false,
 }
 
-const API_BASE = '/api/v1';
 type RegistrationPayload = Record<string, string | boolean | null | undefined>;
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error ? error.message : fallback;
+  error instanceof TypeError && /fetch|network/i.test(error.message)
+    ? 'Không thể kết nối tới máy chủ. Vui lòng thử lại sau.'
+    : error instanceof Error ? error.message : fallback;
 
 const translateError = (msg: string | undefined | null): string => {
   if (!msg) return 'Đã xảy ra lỗi.';
@@ -41,9 +54,53 @@ const translateError = (msg: string | undefined | null): string => {
   return msg;
 };
 
+function toUser(profile: SessionUser): User {
+  return { ...profile };
+}
+
+function toSessionUser(profile: User): SessionUser {
+  return {
+    id: profile.id,
+    email: profile.email,
+    phone: profile.phone,
+    full_name: profile.full_name,
+    role: profile.role,
+  };
+}
+
+export const initializeAuth = createAsyncThunk(
+  'auth/initializeAuth',
+  async (_, { rejectWithValue }) => {
+    const originalUserId = readPublishedSession()?.id;
+    try {
+      await migrateLegacySession();
+      const response = await fetchWithAuth('/users/me');
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          clearSession();
+          return null;
+        }
+        return rejectWithValue({ kind: 'unavailable' });
+      }
+      const payload = await response.json();
+      const profile = payload?.data as SessionUser | undefined;
+      if (!profile?.id || !profile.role) return rejectWithValue({ kind: 'unavailable' });
+      // A response received after logout must not resurrect the old session.
+      if (readPublishedSession()?.id !== originalUserId) return rejectWithValue({ kind: 'unavailable' });
+      const user = toUser(profile);
+      publishSession(toSessionUser(user));
+      return user;
+    } catch {
+      return rejectWithValue({ kind: 'unavailable' });
+    }
+  },
+  { condition: (_, { getState }) => !(getState() as RootState).auth.restoreRequestId },
+);
+
 export const loginUser = createAsyncThunk(
   'auth/loginUser',
   async (credentials: { username: string; password?: string; otp_code?: string }, { rejectWithValue }) => {
+    let tokensSaved = false;
     try {
       const isEmail = credentials.username.includes('@');
       
@@ -57,7 +114,7 @@ export const loginUser = createAsyncThunk(
         payload.otp_code = credentials.otp_code;
       }
 
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const response = await fetchWithAuth('/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,34 +128,30 @@ export const loginUser = createAsyncThunk(
         throw new Error(translateError(data.message) || 'Đăng nhập thất bại');
       }
 
-      const token = data.data.access_token;
-      const refresh_token = data.data.refresh_token;
-      
-      const userRes = await fetch(`${API_BASE}/users/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      if (data?.data?.authenticated !== true) throw new Error('Không thể tạo phiên đăng nhập.');
+      markCookieSession();
+      tokensSaved = true;
+
+      const userRes = await fetchWithAuth('/users/me');
       const userData = await userRes.json();
       
       if (!userRes.ok) {
         throw new Error(translateError(userData.message) || 'Không thể lấy thông tin người dùng');
       }
 
-      // Lưu token vào localStorage
-      localStorage.setItem('access_token', token);
-      localStorage.setItem('refresh_token', refresh_token);
-
-      return {
+      const user = {
         id: userData.data.id,
         email: userData.data.email,
         phone: userData.data.phone,
         full_name: userData.data.full_name || 'Người dùng',
         role: userData.data.role,
-        token: token,
-        refresh_token: refresh_token
       } as User;
+      publishSession(toSessionUser(user));
+      return user;
     } catch (err: unknown) {
+      if (tokensSaved) {
+        return rejectWithValue('Đã tạo phiên đăng nhập nhưng chưa tải được hồ sơ. Vui lòng tải lại trang.');
+      }
       return rejectWithValue(getErrorMessage(err, 'Đăng nhập thất bại'));
     }
   }
@@ -106,43 +159,23 @@ export const loginUser = createAsyncThunk(
 
 export const logoutUser = createAsyncThunk(
   'auth/logoutUser',
-  async (_, { getState }) => {
+  async (_, { rejectWithValue }) => {
     try {
-      const state = getState() as RootState;
-      // Refresh tokens rotate after every successful refresh. Redux may still
-      // contain the old value, so prefer the current persisted token.
-      const refresh_token = localStorage.getItem('refresh_token') || state.auth.user?.refresh_token;
-      
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-
-      if (!refresh_token) {
-        return true; // nothing to logout
-      }
-
-      const response = await fetch(`${API_BASE}/auth/logout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token })
-      });
-      
-      if (!response.ok) {
-        // Even if it fails, we should clear the local state
-        console.warn('Logout API failed');
-      }
+      // The browser supplies the HttpOnly refresh cookie; JS never reads it.
+      await fetchPublicApi('/auth/logout', { method: 'POST' });
+      clearSession();
       return true;
     } catch (err: unknown) {
-      console.warn(getErrorMessage(err, 'Logout request failed'));
-      return true;
+      return rejectWithValue(getErrorMessage(err, 'Chưa thể đăng xuất. Vui lòng thử lại.'));
     }
-  }
+  },
 )
 
 export const registerUser = createAsyncThunk(
   'auth/registerUser',
   async (userData: RegistrationPayload, { rejectWithValue }) => {
     try {
-      const response = await fetch(`${API_BASE}/auth/register`, {
+      const response = await fetchWithAuth('/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -163,6 +196,34 @@ export const registerUser = createAsyncThunk(
   }
 )
 
+export const sendOtp = createAsyncThunk(
+  'auth/sendOtp',
+  async (
+    data: { email?: string; phone?: string; purpose?: 'register' | 'login' | 'reset_password' },
+    { rejectWithValue },
+  ) => {
+    try {
+      const payload: Record<string, string> = { purpose: data.purpose || 'register' };
+      if (data.email) payload.email = data.email;
+      if (data.phone) payload.phone = data.phone;
+
+      const response = await fetchWithAuth('/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const responseData = await response.json();
+      if (!response.ok) {
+        throw new Error(translateError(responseData.message) || 'Không thể lấy mã OTP');
+      }
+
+      return responseData.data as { otp?: string | null };
+    } catch (err: unknown) {
+      return rejectWithValue(getErrorMessage(err, 'Không thể lấy mã OTP'));
+    }
+  },
+);
+
 export const verifyOtp = createAsyncThunk(
   'auth/verifyOtp',
   async (data: { email?: string; phone?: string; code: string }, { rejectWithValue }) => {
@@ -171,7 +232,7 @@ export const verifyOtp = createAsyncThunk(
       if (data.email) payload.email = data.email;
       if (data.phone) payload.phone = data.phone;
       
-      const response = await fetch(`${API_BASE}/auth/otp/verify`, {
+      const response = await fetchWithAuth('/auth/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -193,7 +254,7 @@ export const requestPasswordReset = createAsyncThunk(
     try {
       const isEmail = username.includes('@');
       const payload = isEmail ? { email: username } : { phone: username };
-      const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+      const response = await fetchWithAuth('/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -216,7 +277,7 @@ export const resetPassword = createAsyncThunk(
       if (isEmail) payload.email = data.username;
       else payload.phone = data.username;
 
-      const response = await fetch(`${API_BASE}/auth/reset-password`, {
+      const response = await fetchWithAuth('/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -238,6 +299,14 @@ export const authSlice = createSlice({
       state.user = null
       state.error = null
       state.registerSuccess = false
+      state.restoreRequestId = null
+      state.restoreError = null
+      state.initialized = true
+      state.loading = false
+    },
+    sessionChanged: (state, action: PayloadAction<SessionUser | null>) => {
+      state.user = action.payload ? toUser(action.payload) : null
+      state.error = null
     },
     resetRegisterSuccess: (state) => {
       state.registerSuccess = false
@@ -245,8 +314,31 @@ export const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(initializeAuth.pending, (state, action) => {
+        state.loading = true
+        state.restoreError = null
+        state.restoreRequestId = action.meta.requestId
+      })
+      .addCase(initializeAuth.fulfilled, (state, action) => {
+        if (state.restoreRequestId !== action.meta.requestId) return
+        state.loading = false
+        state.initialized = true
+        state.restoreRequestId = null
+        state.user = action.payload
+      })
+      .addCase(initializeAuth.rejected, (state, action) => {
+        if (state.restoreRequestId !== action.meta.requestId) return
+        state.loading = false
+        state.initialized = true
+        state.restoreRequestId = null
+        const failure = action.payload as { kind?: string } | undefined
+        if (failure?.kind === 'invalid') state.user = null
+        else state.restoreError = 'Kết nối tạm thời gián đoạn. Phiên đăng nhập đã lưu được giữ lại.'
+      })
       // Login
       .addCase(loginUser.pending, (state) => {
+        state.restoreRequestId = null
+        state.restoreError = null
         state.loading = true
         state.error = null
       })
@@ -259,7 +351,14 @@ export const authSlice = createSlice({
         state.error = action.payload as string
       })
       // Logout
+      .addCase(logoutUser.pending, (state) => {
+        state.restoreRequestId = null
+      })
+      .addCase(logoutUser.rejected, (state, action) => {
+        state.error = action.payload as string
+      })
       .addCase(logoutUser.fulfilled, (state) => {
+        state.restoreError = null
         state.user = null
         state.error = null
         state.registerSuccess = false
@@ -317,5 +416,5 @@ export const authSlice = createSlice({
   },
 })
 
-export const { logout, resetRegisterSuccess } = authSlice.actions
+export const { logout, sessionChanged, resetRegisterSuccess } = authSlice.actions
 export default authSlice.reducer

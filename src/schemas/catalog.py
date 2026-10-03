@@ -2,11 +2,13 @@
 
 from src.schemas.audit import CatalogAuditResponse
 from src.schemas.catalog_types import (
+    BookingMode,
     CatalogBase,
     CatalogStatus,
     MutableScheduleStatus,
     ReviewStatus,
     ScheduleStatus,
+    ScheduleType,
 )
 from src.schemas.doctor import (
     DoctorCreate,
@@ -29,8 +31,11 @@ from src.schemas.schedule import (
     DoctorScheduleCreate,
     DoctorScheduleResponse,
     DoctorScheduleUpdate,
+    GuestPatientCreate,
     ScheduleCancellationRequest,
     ScheduleImportRecord,
+    StaffScheduleCreate,
+    StaffScheduleCreateResponse,
 )
 from src.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
 from src.schemas.specialty import SpecialtyCreate, SpecialtyResponse, SpecialtyUpdate
@@ -39,6 +44,7 @@ __all__ = [
     "BulkImportItemResult",
     "BulkImportResponse",
     "BulkScheduleImportRequest",
+    "BookingMode",
     "CatalogAuditResponse",
     "CatalogBase",
     "CatalogStatus",
@@ -49,8 +55,11 @@ __all__ = [
     "DoctorResponse",
     "DoctorReviewRequest",
     "DoctorScheduleCreate",
+    "StaffScheduleCreate",
     "DoctorScheduleResponse",
     "DoctorScheduleUpdate",
+    "GuestPatientCreate",
+    "StaffScheduleCreateResponse",
     "DoctorServiceResponse",
     "DoctorServiceAssignment",
     "DoctorSpecialtyResponse",
@@ -64,6 +73,7 @@ __all__ = [
     "ScheduleCancellationRequest",
     "ScheduleImportRecord",
     "ScheduleStatus",
+    "ScheduleType",
     "ServiceCreate",
     "ServiceResponse",
     "ServiceUpdate",

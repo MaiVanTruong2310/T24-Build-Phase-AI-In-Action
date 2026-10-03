@@ -25,8 +25,10 @@ function toIsoString(value: string): string {
 }
 
 function locationLabel(doctor: Doctor, schedule: Schedule): string {
-  const assignment = doctor.facilities?.find((item) => item.facility_id === schedule.facility_id);
-  const facility = assignment?.facility?.name || `Cơ sở ${schedule.facility_id}`;
+  const assignment = schedule.facility_id
+    ? doctor.facilities?.find((item) => item.facility_id === schedule.facility_id)
+    : undefined;
+  const facility = assignment?.facility?.name || (schedule.facility_id ? `Cơ sở ${schedule.facility_id}` : 'Tất cả cơ sở');
   return assignment?.room ? `${facility} - Phòng ${assignment.room}` : facility;
 }
 
@@ -35,6 +37,8 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
   const [endsAt, setEndsAt] = useState(toDateTimeInput(schedule.ends_at));
   const [capacity, setCapacity] = useState(String(schedule.capacity));
   const [status, setStatus] = useState<'available' | 'blocked' | 'inactive'>(schedule.status === 'cancelled' ? 'inactive' : schedule.status);
+  const [scheduleType, setScheduleType] = useState<'consultation' | 'busy' | 'leave' | 'other'>(schedule.type || 'consultation');
+  const [note, setNote] = useState(schedule.note || '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -43,6 +47,8 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
     setEndsAt(toDateTimeInput(schedule.ends_at));
     setCapacity(String(schedule.capacity));
     setStatus(schedule.status === 'cancelled' ? 'inactive' : schedule.status);
+    setScheduleType(schedule.type || 'consultation');
+    setNote(schedule.note || '');
   }, [schedule]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -65,6 +71,8 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
         ends_at: toIsoString(endsAt),
         capacity: numericCapacity,
         status,
+        type: scheduleType,
+        note: note.trim() || null,
         expected_version: schedule.version,
       });
       onUpdated(updated);
@@ -115,6 +123,23 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
           </div>
 
           <div>
+            <label htmlFor="detail-type" className="mb-1 block text-xs font-bold text-slate-600">Loại lịch</label>
+            <select id="detail-type" value={scheduleType} onChange={(event) => {
+              const nextType = event.target.value as typeof scheduleType;
+              setScheduleType(nextType);
+              if (nextType !== 'consultation') {
+                setCapacity('0');
+                setStatus('blocked');
+              }
+            }} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+              <option value="consultation">Khám</option>
+              <option value="busy">Bận</option>
+              <option value="leave">Nghỉ phép</option>
+              <option value="other">Khác</option>
+            </select>
+          </div>
+
+          <div>
             <label htmlFor="detail-location" className="mb-1 block text-xs font-bold text-slate-600">Địa điểm</label>
             <input id="detail-location" value={locationLabel(doctor, schedule)} readOnly className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600" />
           </div>
@@ -122,7 +147,7 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="detail-capacity" className="mb-1 block text-xs font-bold text-slate-600">Số lượt tối đa *</label>
-              <input id="detail-capacity" type="number" min="0" step="1" value={capacity} onChange={(event) => setCapacity(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required />
+              <input id="detail-capacity" type="number" min="0" step="1" value={capacity} onChange={(event) => setCapacity(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" disabled={scheduleType !== 'consultation'} required={scheduleType === 'consultation'} />
             </div>
             <div>
               <label htmlFor="detail-status" className="mb-1 block text-xs font-bold text-slate-600">Trạng thái</label>
@@ -132,6 +157,11 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
                 <option value="inactive">Chưa kích hoạt</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="detail-note" className="mb-1 block text-xs font-bold text-slate-600">Ghi chú</label>
+            <textarea id="detail-note" value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Mô tả lịch bận hoặc ghi chú nội bộ" className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" />
           </div>
 
           {error && <div className="flex gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert"><AlertCircle size={18} className="mt-0.5 shrink-0" /><span>{error}</span></div>}

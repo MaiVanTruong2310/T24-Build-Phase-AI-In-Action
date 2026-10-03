@@ -1,13 +1,12 @@
 import { useState, FormEvent, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '../app/store'
 import { loginUser } from '../features/auth/authSlice'
-import { 
-  Eye, 
-  EyeOff, 
-  ShieldCheck, 
-  User, 
+import {
+  Eye,
+  EyeOff,
+  User,
   ArrowRight,
   Loader2,
   Lock,
@@ -18,30 +17,42 @@ export function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  
+
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
-  
+  const location = useLocation()
+
   const { loading, error, user } = useSelector((state: RootState) => state.auth)
 
   const [validationError, setValidationError] = useState('')
+  const [confirmationNotice, setConfirmationNotice] = useState('')
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1))
+    if (params.get('type') === 'signup' && params.get('access_token')) {
+      setConfirmationNotice('Đã mở liên kết xác nhận email. Vui lòng đăng nhập bằng email và mật khẩu.')
+    } else if (params.get('error')) {
+      setValidationError('Liên kết xác nhận không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu gửi lại email.')
+    }
+    if (params.has('access_token') || params.has('error')) window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }, [])
 
   useEffect(() => {
     if (user) {
       if (user.role === 'staff') {
         navigate('/staff')
       } else {
-        navigate('/patient')
+        const returnTo = new URLSearchParams(location.search).get('returnTo');
+        navigate(returnTo?.startsWith('/') && !returnTo.startsWith('//') && !returnTo.startsWith('/login') ? returnTo : '/patient')
       }
     }
-  }, [user, navigate])
+  }, [user, navigate, location.search])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setValidationError('')
 
-    if (username.length < 7) {
-      setValidationError('Tên đăng nhập (Email/SĐT) quá ngắn.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username.trim())) {
+      setValidationError('Vui lòng nhập email đăng ký tài khoản.')
       return
     }
 
@@ -55,26 +66,28 @@ export function Login() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
+      <div className="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-xl dark:shadow-2xl p-6 sm:p-8 text-slate-900 dark:text-slate-100 transition-colors duration-300">
         {/* Form Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full text-xs font-semibold">
-            <ShieldCheck className="w-4 h-4" />
-            Cổng bảo mật y tế số
-          </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-            Sẵn sàng kết nối AI
+        <div className="flex items-center gap-3.5 mb-3">
+          <img
+            src="/vcare-logo.png"
+            alt="VCare+ Logo"
+            className="w-12 h-12 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm shrink-0 p-0.5"
+          />
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+              Đăng Nhập VCare+
+            </h2>
+            <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Hệ Thống Y Tế Số Đa Tầng</p>
           </div>
         </div>
-
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Đăng nhập MediCare AI</h2>
-        <p className="text-sm text-slate-500 mb-8 leading-relaxed">
-          Chào mừng bạn quay lại. Vui lòng đăng nhập để tiếp tục chăm sóc sức khỏe.
+        <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
+          Chào mừng quay trở lại. Đăng nhập để tiếp tục lộ trình khám bệnh đa tầng và theo dõi bệnh án.
         </p>
 
+        {confirmationNotice && <p role="status" className="mb-4 text-sm text-green-700">{confirmationNotice}</p>}
         {(error || validationError) && (
-          <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600 flex items-start gap-2">
+          <div className="mb-6 p-3 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-500/40 rounded-xl text-xs sm:text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
             <div className="mt-0.5">⚠️</div>
             <p>{validationError || error}</p>
           </div>
@@ -82,22 +95,22 @@ export function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-slate-900 block" htmlFor="username">
-              Số điện thoại, Email hoặc Số CCCD
+            <label className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 block" htmlFor="username">
+              Email đã xác thực
             </label>
             <input
               id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="0912 345 678 hoặc 00120100xxxx"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm placeholder:text-slate-400 bg-white"
+              placeholder="ban@example.com"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-950/60 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-cyan-500/60 transition-all"
               disabled={loading}
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-slate-900 block" htmlFor="password">
+            <label className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 block" htmlFor="password">
               Mật khẩu
             </label>
             <div className="relative">
@@ -107,26 +120,26 @@ export function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-sm placeholder:text-slate-400 bg-white"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-950/60 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-cyan-500/60 transition-all"
                 disabled={loading}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
                 tabIndex={-1}
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-1">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" className="rounded text-sky-600 focus:ring-sky-500/20" />
-              <span className="text-sm font-medium text-slate-600">Ghi nhớ đăng nhập</span>
+              <input type="checkbox" className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-blue-600 focus:ring-0" />
+              <span className="text-xs text-slate-600 dark:text-slate-400">Ghi nhớ đăng nhập</span>
             </label>
-            <Link to="/forgot-password" className="text-sm font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+            <Link to="/forgot-password" className="text-xs font-medium text-blue-600 dark:text-cyan-400 hover:text-blue-700 dark:hover:text-cyan-300 transition-colors">
               Quên mật khẩu?
             </Link>
           </div>
@@ -134,17 +147,17 @@ export function Login() {
           <button
             type="submit"
             disabled={loading || !username || !password}
-            className="w-full bg-sky-700 hover:bg-sky-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 mt-2"
+            className="btn-clinical-primary w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 text-sm mt-3"
           >
             {loading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Đang xử lý...
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Đang xác thực lâm sàng...</span>
               </>
             ) : (
               <>
-                Đăng nhập
-                <ArrowRight className="w-5 h-5" />
+                <span>Đăng Nhập</span>
+                <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
@@ -152,57 +165,58 @@ export function Login() {
 
         <div className="mt-8">
           <div className="relative flex items-center justify-center mb-6">
-            <div className="absolute border-t border-slate-200 w-full"></div>
-            <span className="bg-white px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider relative z-10">
+            <div className="absolute border-t border-slate-200 dark:border-slate-800 w-full"></div>
+            <span className="bg-white dark:bg-slate-900 px-4 text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider relative z-10">
               Hoặc đăng nhập bằng
             </span>
           </div>
 
           <div className="space-y-3">
-            <button className="w-full flex items-center justify-between px-4 py-3 border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors">
+            <button className="w-full flex items-center justify-between px-4 py-3 border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/50 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-all">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-500">
+                <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-500/30 flex items-center justify-center text-red-600 dark:text-red-400">
                   <User className="w-4 h-4" />
                 </div>
-                <span className="text-sm font-semibold text-slate-700">CCCD gắn chip / VNeID</span>
+                <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200">CCCD gắn chip / VNeID</span>
               </div>
-              <div className="bg-cyan-100 text-cyan-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider">
+              <div className="border border-blue-500/20 dark:border-cyan-500/30 bg-blue-50 dark:bg-cyan-950/40 text-blue-700 dark:text-cyan-300 text-[10px] font-semibold px-2 py-0.5 rounded-md uppercase">
                 Ưu tiên y tế
               </div>
             </button>
 
-            <button className="w-full flex items-center px-4 py-3 border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors gap-3">
-              <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center">
-                <span className="font-bold text-blue-600 text-sm">G</span>
+            <button className="w-full flex items-center px-4 py-3 border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/50 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-all gap-3">
+              <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
+                <span className="font-bold text-blue-600 dark:text-blue-400 text-sm">G</span>
               </div>
-              <span className="text-sm font-semibold text-slate-700">Tài khoản Google</span>
+              <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200">Tài khoản Google</span>
             </button>
 
-            <button className="w-full flex items-center justify-between px-4 py-3 border border-slate-200 hover:bg-slate-50 rounded-xl transition-colors">
+            <button className="w-full flex items-center justify-between px-4 py-3 border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/50 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-all">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-500/30 flex items-center justify-center text-blue-600 dark:text-cyan-400">
                   <MessageSquare className="w-4 h-4" />
                 </div>
-                <span className="text-sm font-semibold text-slate-700">Mã OTP qua Zalo / SMS</span>
+                <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200">Mã OTP qua Zalo / SMS</span>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-400" />
+              <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
             </button>
           </div>
         </div>
 
-        <div className="mt-8 text-center text-sm">
-          <span className="text-slate-500">Chưa có hồ sơ sức khỏe? </span>
-          <Link to="/register" className="font-semibold text-sky-600 hover:text-sky-700">
+        <div className="mt-8 text-center text-xs sm:text-sm">
+          <span className="text-slate-600 dark:text-slate-400">Chưa có hồ sơ sức khỏe? </span>
+          <Link to="/register" className="font-semibold text-blue-600 dark:text-cyan-400 hover:text-blue-700 dark:hover:text-cyan-300">
             Đăng ký ngay
           </Link>
         </div>
       </div>
 
       {/* Footer Security Badge */}
-      <div className="mt-6 flex items-center justify-center gap-2 text-xs font-medium text-slate-500">
-        <Lock className="w-3.5 h-3.5 text-emerald-600" />
-        Mã hóa đầu cuối 256-bit chuẩn bảo mật dữ liệu y tế quốc gia
+      <div className="mt-6 flex items-center justify-center gap-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+        <Lock className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+        <span>Mã hóa đầu cuối 256-bit chuẩn bảo mật y tế HIPAA & Bộ Y Tế</span>
       </div>
     </div>
   )
 }
+

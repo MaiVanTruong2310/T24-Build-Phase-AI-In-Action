@@ -30,7 +30,7 @@ export function Header({ onApprove, onReject, isLoading }: HeaderProps) {
         
         <div className="flex items-center gap-2 text-sm text-slate-600">
           <ArrowRightLeft size={16} className="text-emerald-500" />
-          <span>Liên kết trực tiếp với Cổng Bệnh Nhân MediCare CareConnect • Cập nhật thời gian thực (Socket Active)</span>
+          <span>Liên kết trực tiếp với Cổng Bệnh Nhân VCare+ CareConnect • Cập nhật thời gian thực (Socket Active)</span>
         </div>
       </div>
 

@@ -14,11 +14,12 @@ from src.schemas.catalog import (
     BulkImportResponse,
     BulkScheduleImportRequest,
     CatalogAuditResponse,
-    DoctorScheduleCreate,
     DoctorScheduleResponse,
     DoctorScheduleUpdate,
     ScheduleCancellationRequest,
     ScheduleStatus,
+    StaffScheduleCreate,
+    StaffScheduleCreateResponse,
 )
 from src.schemas.common import ApiResponse
 from src.services.catalog import CatalogService
@@ -30,6 +31,7 @@ BUSINESS_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 async def doctor_availability(
     doctor_id: UUID,
     facility_id: UUID | None = None,
+    service_id: UUID | None = None,
     from_datetime: datetime | None = Query(default=None, alias="from"),
     to_datetime: datetime | None = Query(default=None, alias="to"),
     selected_date: date | None = Query(default=None, alias="date"),
@@ -38,7 +40,7 @@ async def doctor_availability(
     _: User = Depends(get_current_user),
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[DoctorScheduleResponse]]:
-    """Return only available slots with positive capacity."""
+    """Return consultation slots and blocking schedule periods for the selected day."""
     try:
         starts_from, starts_to = _availability_window(from_datetime, to_datetime, selected_date)
     except ValueError as exc:
@@ -46,6 +48,7 @@ async def doctor_availability(
     values = await service.list_schedules(
         doctor_id=doctor_id,
         facility_id=facility_id,
+        service_id=service_id,
         starts_from=starts_from,
         starts_to=starts_to,
         public_only=True,
@@ -61,6 +64,7 @@ async def doctor_availability(
 async def staff_list_schedules(
     doctor_id: UUID | None = None,
     facility_id: UUID | None = None,
+    service_id: UUID | None = None,
     schedule_status: ScheduleStatus | None = Query(default=None, alias="status"),
     source_system: str | None = Query(default=None, max_length=64),
     starts_from: datetime | None = Query(default=None, alias="from"),
@@ -74,6 +78,7 @@ async def staff_list_schedules(
     values = await service.list_schedules(
         doctor_id=doctor_id,
         facility_id=facility_id,
+        service_id=service_id,
         starts_from=starts_from,
         starts_to=starts_to,
         schedule_status=schedule_status,
@@ -103,20 +108,30 @@ async def staff_schedule_activity(
         starts_to=starts_to,
         limit=limit,
     )
-    return success_response([CatalogAuditResponse.model_validate(value) for value in values], "Schedule activity retrieved")
+    return success_response(
+        [CatalogAuditResponse.model_validate(value) for value in values], "Schedule activity retrieved"
+    )
 
 
 @staff_router.post(
-    "/schedules", response_model=ApiResponse[DoctorScheduleResponse], status_code=status.HTTP_201_CREATED
+    "/schedules", response_model=ApiResponse[StaffScheduleCreateResponse], status_code=status.HTTP_201_CREATED
 )
 async def staff_create_schedule(
-    request: DoctorScheduleCreate,
+    request: StaffScheduleCreate,
     current_user: User = Depends(require_staff),
     service: CatalogService = Depends(get_catalog_service),
-) -> ApiResponse[DoctorScheduleResponse]:
+) -> ApiResponse[StaffScheduleCreateResponse]:
     """Create a schedule as staff."""
-    value = await service.create_schedule(request, current_user.id)
-    return success_response(DoctorScheduleResponse.model_validate(value), "Schedule created", 201)
+    schedule, booking = await service.create_schedule(request, current_user.id)
+    return success_response(
+        StaffScheduleCreateResponse(
+            schedule=DoctorScheduleResponse.model_validate(schedule),
+            booking_id=booking.id if booking else None,
+            booking_status="confirmed" if booking else None,
+        ),
+        "Schedule created",
+        201,
+    )
 
 
 @staff_router.put("/schedules/{schedule_id}", response_model=ApiResponse[DoctorScheduleResponse])

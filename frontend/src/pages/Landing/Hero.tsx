@@ -1,119 +1,199 @@
-import { ShieldCheck, Activity, ChevronRight, Lock } from 'lucide-react'
+import React from 'react'
+import { Stethoscope, ChevronRight, Activity, Lock, HeartPulse } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { useSelector } from 'react-redux'
+import type { RootState } from '../../app/store'
 
 export function Hero() {
+  const theme = useSelector((state: RootState) => state.layout.theme)
+  const isDark = theme === 'dark'
+
   return (
-    <div className="bg-slate-50 py-16">
-      <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
-        <div>
-          <div className="flex items-center gap-2 text-sky-600 font-semibold text-sm mb-4">
-            <div className="w-2 h-2 rounded-full bg-sky-600"></div>
-            HỆ THỐNG Y TẾ THÔNG MINH THẾ HỆ MỚI
+    <section
+      className="relative py-12 sm:py-20 lg:py-28 border-b border-slate-200 dark:border-slate-800/80 text-slate-900 dark:text-white overflow-hidden bg-[#F8FAFC] dark:bg-[#0B1329] transition-colors duration-300"
+      style={{
+        backgroundImage: isDark
+          ? `linear-gradient(rgba(11, 19, 41, 0.92), rgba(11, 19, 41, 0.94)), url('https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=1920')`
+          : `linear-gradient(rgba(248, 250, 252, 0.93), rgba(248, 250, 252, 0.95)), url('https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=1920')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      {/* Calm Medical Ambient Glow Orbs (Deep Blue & Soft Cyan) */}
+      <div className="medical-glow-orb orb-clinical-blue top-[-10%] left-[8%] w-[480px] h-[480px]" />
+      <div className="medical-glow-orb orb-clinical-cyan top-[35%] right-[5%] w-[420px] h-[420px]" />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-12 gap-8 lg:gap-14 items-center relative z-10">
+
+        {/* Left Column: Clinical Value Proposition */}
+        <div className="lg:col-span-7 reveal-item">
+
+          {/* Clinical Authority Badge */}
+          <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white/85 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 shadow-xs mb-5 sm:mb-6 backdrop-blur-md">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 motion-reduce:hidden" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Hệ Thống Y Tế Số Đa Tầng Bác Sĩ Giám Sát 24/7
+            </span>
+            <span className="font-mono text-[9px] text-blue-700 dark:text-cyan-400 bg-blue-50 dark:bg-cyan-950/60 border border-blue-500/20 dark:border-cyan-500/30 px-1.5 py-0.5 rounded font-medium">
+              CLINICAL AI
+            </span>
           </div>
-          <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-6">
-            Y Tế Thông Minh Với <span className="text-sky-600">AI Agent</span><br />
-            & Bác Sĩ Giám Sát <span className="text-emerald-600">24/7</span><br />
-            Chuyên Khoa
+
+          {/* Heading */}
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-semibold leading-tight mb-4 sm:mb-6 tracking-tight text-slate-900 dark:text-slate-100">
+            Y Tế Thông Minh Với AI Agent &{' '}
+            <span className="clinical-heading-gradient font-bold">
+              Bác Sĩ Giám Sát 24/7
+            </span>
           </h1>
-          <p className="text-lg text-slate-600 mb-8 leading-relaxed">
-            Khám phá tiêu chuẩn chăm sóc sức khỏe mới: AI sàng lọc triệu chứng chính xác trong 30 giây, kết nối đội ngũ bác sĩ chuyên khoa phê duyệt tức thì, an toàn tuyệt đối.
+
+          {/* Subtext */}
+          <p className="text-sm sm:text-base lg:text-lg text-slate-600 dark:text-slate-300 mb-6 sm:mb-8 leading-relaxed max-w-2xl font-normal">
+            Sàng lọc triệu chứng lâm sàng tức thì theo chuẩn phân loại quốc tế ATS Cấp 1–5, kết hợp cùng sự thẩm định, phê duyệt và ký số phác đồ của đội ngũ bác sĩ chuyên khoa giàu kinh nghiệm.
           </p>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-8">
-            <button className="w-full sm:w-auto bg-sky-700 hover:bg-sky-800 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-colors">
-              <Activity className="w-5 h-5" />
-              Tư Vấn & Khám Bệnh Ngay
-            </button>
-            <button className="w-full sm:w-auto bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 px-6 rounded-xl border border-slate-200 flex items-center justify-center gap-2 transition-colors">
-              <ChevronRight className="w-5 h-5 text-slate-400" />
-              Xem Quy Trình Khám Bệnh Đa Tầng
-            </button>
+
+          {/* 2 Rounded-xl Action Buttons (10-12px) */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-7 sm:mb-8">
+            <Link
+              to="/patient"
+              className="btn-clinical-primary px-6 sm:px-7 py-3 sm:py-3.5 rounded-xl flex items-center justify-center gap-2.5 text-sm sm:text-base"
+            >
+              <HeartPulse className="w-5 h-5 text-cyan-200" />
+              <span>Khám & Tư Vấn Bác Sĩ Ngay</span>
+            </Link>
+
+            <a
+              href="#quy-trinh"
+              className="btn-clinical-ghost px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm sm:text-base"
+            >
+              <span>Xem Quy Trình Đa Tầng</span>
+              <ChevronRight className="w-4 h-4 text-slate-400" />
+            </a>
           </div>
-          <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-slate-700 mb-6">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-emerald-600" />
-              Chuẩn BỘ Y TẾ & HIPAA
+
+          {/* Brand Guarantee Bar with VCare+ Logo */}
+          <div className="pt-6 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-slate-50/70 dark:bg-slate-900/50 p-4 sm:p-4.5 rounded-2xl border border-slate-200/70 dark:border-slate-800/70 shadow-xs backdrop-blur-xs">
+            <img
+              src="/vcare-logo.png"
+              alt="VCare+ Logo"
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-contain bg-white shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 shrink-0 p-1"
+            />
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                  VCare+ Health System
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  Chuẩn Bộ Y Tế & HIPAA
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">EST. 2026</span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">
+                Sản phẩm công nghệ y tế phục vụ người Việt, kết hợp AI phân luồng lâm sàng chuẩn quốc tế ATS và hội đồng bác sĩ chuyên khoa bảo chứng y lệnh 24/7.
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-sky-600" />
-              100% Y lệnh <span className="text-slate-500 font-normal">có Bác sĩ duyệt</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <div className="flex text-amber-400 text-lg">
-              {'★★★★★'.split('').map((star, i) => <span key={i}>{star}</span>)}
-            </div>
-            <span className="font-bold text-slate-900">4.9/5</span>
-            <span className="text-slate-500">(50.000+ bệnh nhân)</span>
           </div>
         </div>
-        
-        {/* Right side: Mock UI */}
-        <div className="relative mt-8 lg:mt-0">
-          <div className="bg-white rounded-3xl shadow-[0_20px_50px_rgb(0,0,0,0.1)] border border-slate-100 p-6 relative z-10">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+
+        {/* Right Column: Clinical Live Triage Card */}
+        <div className="lg:col-span-5 reveal-item">
+          <div className="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl rounded-2xl border border-slate-200 dark:border-slate-700/70 p-4 sm:p-7 shadow-xl dark:shadow-2xl dark:shadow-blue-950/40 relative transition-colors duration-300">
+
+            {/* Header of Live Triage Card */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-5">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                  <Activity className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-600/20 border border-blue-200 dark:border-blue-500/30 text-blue-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+                  <Stethoscope className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900">MediCare AI Clinical Triage</h3>
-                  <p className="text-xs text-slate-500">BS. Nguyễn Phương Linh đang giám sát</p>
+                  <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+                    Phân Luồng Lâm Sàng Trực Tiếp
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Quy trình tiếp nhận & xác thực 3 tầng
+                  </p>
                 </div>
               </div>
-              <div className="bg-red-50 text-red-600 text-xs font-bold px-2 py-1 rounded-md shrink-0">
-                Triage Đỏ
+
+              {/* Crimson Alert Badge for Emergency (ATS Level 2) */}
+              <div className="border border-red-500/40 bg-red-100 dark:bg-red-950/70 text-red-700 dark:text-red-300 text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 dark:bg-red-400 animate-pulse"></span>
+                <span>Triage Đỏ (Cấp cứu)</span>
               </div>
             </div>
-            
-            <div className="space-y-4">
-              <div className="bg-slate-50 rounded-2xl p-4 text-sm text-slate-700">
-                "Tôi bị tức thắt ngực trái 2 giờ nay, lan lên khớp vai và cánh tay trái, hơi vã mồ hôi."
-              </div>
-              
-              <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-blue-700">
-                    <Activity className="w-4 h-4" />
-                    Sàng lọc MedPaLM AI
-                  </div>
-                  <span className="text-xs text-slate-500">Độ tin cậy: 98.4%</span>
+
+            {/* Step Sequence Mockup */}
+            <div className="space-y-3.5">
+              {/* Step 1: Patient input */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/70 rounded-xl p-3.5 text-xs sm:text-sm text-slate-800 dark:text-slate-200">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1.5">
+                  <span className="font-semibold text-blue-700 dark:text-cyan-300">1. Người bệnh mô tả:</span>
+                  <span>14:32:10</span>
                 </div>
-                <p className="text-sm text-slate-700">
-                  Dấu hiệu cảnh báo: <span className="text-red-600 font-semibold">Hội chứng vành cấp nghi ngờ</span>. Đề nghị điện tâm đồ ECG 12 chuyển đạo ngay.
+                <p className="italic text-slate-600 dark:text-slate-300">
+                  "Tôi bị tức thắt ngực trái hơn 1 giờ nay, cảm giác đè nặng lan lên vai và cánh tay trái, hơi vã mồ hôi..."
                 </p>
               </div>
-              
-              <div className="flex items-start gap-3 bg-emerald-50/50 rounded-2xl p-4 border border-emerald-100">
-                <img src="https://i.pravatar.cc/150?img=47" alt="Doctor" className="w-10 h-10 rounded-full shrink-0" />
-                <div>
-                  <div className="flex items-center justify-between mb-1 gap-2">
-                    <h4 className="text-sm font-bold text-slate-900">BS. Nguyễn Phương Linh (Trực ban lâm sàng)</h4>
-                    <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded shrink-0">Đã Duyệt</span>
+
+              {/* Step 2: AI Clinical Triage Assessment */}
+              <div className="bg-blue-50/50 dark:bg-slate-800/70 rounded-xl p-3.5 border border-blue-200 dark:border-cyan-500/30">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-cyan-400">
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>2. AI Đề xuất phân luồng (ATS Cấp 2)</span>
                   </div>
-                  <p className="text-xs text-slate-600 italic">
-                    "Tôi đã kích hoạt tiếp nhận ưu tiên tại Khoa Tim Mạch. Bác sĩ trực sẵn sàng đón tiếp bệnh nhân."
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">Độ nhạy: 99.4%</span>
+                </div>
+                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                  Dấu hiệu cảnh báo: <strong className="text-red-600 dark:text-red-400 font-semibold">Hội chứng mạch vành cấp nghi ngờ</strong>. Khuyến nghị đo điện tâm đồ ECG 12 chuyển đạo ngay và chuyển viện cấp cứu.
+                </p>
+              </div>
+
+              {/* Step 3: Verified Doctor Sign-off */}
+              <div className="bg-emerald-50/60 dark:bg-slate-800/80 rounded-xl p-3.5 border border-emerald-200 dark:border-emerald-500/30 flex items-start gap-3">
+                <img
+                  src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=150"
+                  alt="Doctor"
+                  className="w-10 h-10 rounded-xl object-cover border border-emerald-500/40 shrink-0 mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      BS. CKII Nguyễn Minh Đức
+                    </h4>
+                    <span className="border border-emerald-500/40 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-semibold px-2 py-0.5 rounded-md shrink-0">
+                      Bác Sĩ Đã Ký Số
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                    "Đã xác nhận chẩn đoán sơ bộ. Đang điều phối phòng cấp cứu Tim mạch cơ sở 1 tiếp nhận khẩn cấp."
                   </p>
                 </div>
               </div>
             </div>
-            
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-              <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                <Lock className="w-3.5 h-3.5" />
-                Mã hóa end-to-end
+
+            {/* Bottom Card Footer */}
+            <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <Lock className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+                <span>Mã hoá bảo mật HIPAA</span>
               </div>
-              <button className="bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1 transition-colors">
-                Thử hội chẩn thực tế <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <Link
+                to="/patient"
+                className="text-blue-600 dark:text-cyan-400 hover:underline font-medium text-xs flex items-center gap-1 transition-colors"
+              >
+                <span>Hội chẩn thực tế</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
+
           </div>
-          {/* Badge Demo */}
-          <div className="absolute -top-4 -right-4 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-20">
-            <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
-            Demo Mô Phỏng Trực Tiếp
-          </div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-sky-200/50 blur-3xl rounded-full -z-10"></div>
         </div>
+
       </div>
-    </div>
+    </section>
   )
 }

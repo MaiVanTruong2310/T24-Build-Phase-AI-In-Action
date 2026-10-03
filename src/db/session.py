@@ -34,6 +34,15 @@ def get_engine():
     return create_async_engine(
         _async_database_url(settings.database_url),
         pool_pre_ping=True,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
+        pool_timeout=settings.database_pool_timeout_seconds,
+        pool_recycle=settings.database_pool_recycle_seconds,
+        pool_use_lifo=True,
+        connect_args={
+            "connect_timeout": settings.database_connect_timeout_seconds,
+            "application_name": settings.app_name[:63],
+        },
     )
 
 
@@ -49,12 +58,64 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+@lru_cache
+def get_auth_engine():
+    """Allow account data on Supabase while the catalog database remains separate."""
+    settings = get_settings()
+    if not settings.auth_database_url:
+        return get_engine()
+    return create_async_engine(
+        _async_database_url(settings.auth_database_url),
+        pool_pre_ping=True,
+        pool_size=min(settings.database_pool_size, 5),
+        max_overflow=min(settings.database_max_overflow, 5),
+        pool_timeout=settings.database_pool_timeout_seconds,
+        pool_recycle=settings.database_pool_recycle_seconds,
+        connect_args={"connect_timeout": settings.database_connect_timeout_seconds},
+    )
+
+
+@lru_cache
+def get_auth_session_factory() -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(get_auth_engine(), expire_on_commit=False)
+
+
+async def get_auth_db_session() -> AsyncIterator[AsyncSession]:
+    if not get_settings().auth_database_url:
+        async for session in get_db_session():
+            yield session
+        return
+    async with get_auth_session_factory()() as session:
+        yield session
+
+
 async def initialize_database() -> None:
-    """Create missing ORM tables during the first application startup."""
+    """Create missing ORM tables for explicit local bootstrap only.
+
+    Alembic is the normal schema-management path. The advisory transaction
+    lock keeps this legacy opt-in path safe when multiple API processes start
+    at the same time.
+    """
     engine = get_engine()
     table_names = sorted(Base.metadata.tables)
     logger.info("database.initialize_database creating missing tables", extra={"table_count": len(table_names)})
     async with engine.begin() as connection:
+        await connection.execute(text("SELECT pg_advisory_xact_lock(124001)"))
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist"))
         await connection.run_sync(Base.metadata.create_all)
     logger.info("database.initialize_database tables ready", extra={"table_count": len(table_names)})
+
+
+async def check_database_connection() -> None:
+    """Run the smallest useful query for readiness checks."""
+    async with get_engine().connect() as connection:
+        await connection.execute(text("SELECT 1"))
+
+
+async def close_database() -> None:
+    """Release pooled PostgreSQL connections during application shutdown."""
+    settings = get_settings()
+    if settings.database_url:
+        await get_engine().dispose()
+    if settings.auth_database_url:
+        await get_auth_engine().dispose()

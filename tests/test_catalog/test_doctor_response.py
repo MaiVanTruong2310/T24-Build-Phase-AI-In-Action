@@ -38,6 +38,7 @@ def test_doctor_response_includes_resolved_catalog_resources():
         price=350000,
         original_price=None,
         category="consultation",
+        booking_mode="doctor_visit",
         features=[],
         patient_count=0,
         satisfaction_rate=5.0,

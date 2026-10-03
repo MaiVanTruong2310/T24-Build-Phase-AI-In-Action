@@ -5,10 +5,12 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import Settings, get_settings
-from src.core.exceptions import AppError, AuthenticationError, ConflictError, RateLimitError
+from src.core.exceptions import AppError, AuthenticationError, ConflictError, NotFoundError, RateLimitError
 from src.core.logging import get_logger
 from src.core.security import (
     create_access_token,
@@ -128,7 +130,7 @@ class AuthService:
             if user is None:
                 logger.warning("AuthService.verify_registration_otp identity not found")
                 raise AuthenticationError("INVALID_OTP", "Invalid or expired OTP")
-            verification_error = await self._consume_otp(target, "register", code or 999999)
+            verification_error = await self._consume_otp(target, "register", code or "999999")
             if verification_error is None:
                 now = _now()
                 user.status = "active"
@@ -230,19 +232,49 @@ class AuthService:
             await self.auth.revoke_session(stored.id, revoked_at=_now())
         logger.info("AuthService.revoke_session session revoked")
 
+    async def get_user_by_id(self, user_id: UUID) -> User:
+        """Find a user for authorized staff lookup flows."""
+        user = await self.users.get_by_id(user_id)
+        if user is None:
+            logger.info("AuthService.get_user_by_id user not found")
+            raise NotFoundError("User not found")
+        return user
+
+    async def list_patients(self, search: str | None, offset: int, limit: int) -> list[User]:
+        """Return patient identities for staff booking selection."""
+        return await self.users.list_patients(search, offset=offset, limit=limit)
+
     async def update_profile(self, user: User, request: UpdateProfileRequest) -> User:
         """Apply allowed profile changes and flush them in a transaction."""
-        async with self.session.begin():
-            if request.full_name is not None:
-                user.full_name = request.full_name.strip() or None
-            await self.session.flush()
+        try:
+            async with self.session.begin():
+                # Serialize per-field edits to retain other saved details.
+                await self.session.execute(select(User.id).where(User.id == user.id).with_for_update())
+                updates = request.model_dump(exclude_unset=True)
+                if "patient_details" in updates:
+                    await self.session.refresh(user, attribute_names=["patient_details"])
+                    updates["patient_details"] = {**(user.patient_details or {}), **(updates["patient_details"] or {})}
+                if "full_name" in updates:
+                    updates["full_name"] = updates["full_name"].strip() or None if updates["full_name"] else None
+                for field, value in updates.items():
+                    setattr(user, field, value)
+                await self.session.flush()
+        except IntegrityError as exc:
+            raise ConflictError(
+                "PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác."
+            ) from exc
         logger.info("AuthService.update_profile profile updated")
         return user
 
     async def _create_otp(self, user: User, target: str, purpose: str) -> str | None:
         """Create a rate-limited OTP and return its value only for mock delivery."""
         active = await self.auth.get_latest_otp(target, purpose)
-        if active and active.created_at and (_now() - active.created_at) < timedelta(seconds=30):
+        if (
+            active
+            and active.created_at
+            and (_now() - active.created_at) < timedelta(seconds=30)
+            and not isinstance(self.otp_provider, MockOtpProvider)
+        ):
             logger.warning("AuthService._create_otp rate limit reached", extra={"purpose": purpose})
             raise RateLimitError("Please wait before requesting another OTP")
         code = (

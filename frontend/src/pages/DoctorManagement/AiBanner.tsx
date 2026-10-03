@@ -10,7 +10,7 @@ export function AiBanner() {
         </div>
         <div>
           <h4 className="text-base font-bold text-slate-900 flex items-center flex-wrap gap-2">
-            MediCare AI Cân Bằng Tải Lâm Sàng Tuần Tới
+            VCare+ Cân Bằng Tải Lâm Sàng Tuần Tới
             <span className="px-2 py-0.5 bg-teal-100 text-teal-700 text-[10px] font-bold rounded uppercase">HITL Active</span>
           </h4>
           <p className="text-sm text-slate-600 mt-1 max-w-4xl">

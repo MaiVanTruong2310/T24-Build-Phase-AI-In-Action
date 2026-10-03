@@ -1,30 +1,59 @@
-import { MessageSquare, Phone } from 'lucide-react'
+import React from 'react'
+import { Phone, HeartPulse, ShieldCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { useSelector } from 'react-redux'
+import type { RootState } from '../../app/store'
 
 export function CTA() {
+  const theme = useSelector((state: RootState) => state.layout.theme)
+  const isDark = theme === 'dark'
+
   return (
-    <div className="bg-sky-700 py-24 relative overflow-hidden">
-      {/* Background decorations */}
-      <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-sky-600/30 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
-      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-sky-800/30 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3"></div>
-      
-      <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
-        <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
-          Sẵn Sàng Trải Nghiệm Chăm Sóc Sức Khỏe Thông Minh?
-        </h2>
-        <p className="text-sky-100 text-lg mb-10 max-w-2xl mx-auto leading-relaxed">
-          Bắt đầu phác đồ chẩn đoán lâm sàng cùng MediCare AI và đội ngũ Bác sĩ chuyên khoa ngay bây giờ. Hoàn toàn miễn phí sàng lọc ban đầu và bảo mật tuyệt đối.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <button className="w-full sm:w-auto bg-white text-sky-700 hover:bg-sky-50 font-bold py-4 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-sky-900/20">
-            <MessageSquare className="w-5 h-5" />
-            Bắt Đầu Hội Chẩn Miễn Phí
-          </button>
-          <button className="w-full sm:w-auto bg-transparent hover:bg-sky-600 border border-sky-400 text-white font-bold py-4 px-8 rounded-xl transition-colors flex items-center justify-center gap-2">
-            <Phone className="w-5 h-5" />
-            Tổng Đài Cấp Cứu 1900 6868
-          </button>
+    <section
+      className="py-24 relative overflow-hidden border-b border-slate-200 dark:border-slate-800/80 text-slate-900 dark:text-white bg-[#F8FAFC] dark:bg-[#0B1329] transition-colors duration-300"
+      style={{
+        backgroundImage: isDark
+          ? `linear-gradient(rgba(11, 19, 41, 0.94), rgba(11, 19, 41, 0.96)), url('https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=1920')`
+          : `linear-gradient(rgba(248, 250, 252, 0.94), rgba(248, 250, 252, 0.96)), url('https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=1920')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      <div className="max-w-4xl mx-auto px-6 text-center relative z-10 reveal-item">
+        <div className="inline-flex items-center gap-2 text-xs font-medium text-blue-700 dark:text-cyan-300 border border-blue-500/30 dark:border-cyan-500/30 bg-blue-50 dark:bg-cyan-950/40 px-3.5 py-1.5 mb-6 rounded-full shadow-xs">
+          <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+          <span>TIẾP CẬN Y TẾ CHẤT LƯỢNG CAO</span>
         </div>
+
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-slate-900 dark:text-slate-100 mb-6 leading-tight tracking-tight">
+          Sẵn Sàng Trải Nghiệm Khám Bệnh Đa Tầng Bác Sĩ Giám Sát?
+        </h2>
+
+        <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base mb-10 max-w-2xl mx-auto leading-relaxed">
+          Bắt đầu sàng lọc triệu chứng lâm sàng cùng VCare+ và nhận phác đồ được phê duyệt bởi các bác sĩ chuyên khoa ngay hôm nay. Hoàn toàn bảo mật theo chuẩn y tế quốc tế.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+          <Link
+            to="/patient"
+            className="btn-clinical-primary w-full sm:w-auto px-8 py-3.5 rounded-xl flex items-center justify-center gap-2.5 text-sm sm:text-base"
+          >
+            <HeartPulse className="w-5 h-5 text-cyan-200" />
+            <span>Bắt Đầu Tư Vấn Miễn Phí</span>
+          </Link>
+          <a
+            href="tel:19006868"
+            className="btn-clinical-ghost w-full sm:w-auto px-8 py-3.5 rounded-xl flex items-center justify-center gap-2.5 text-sm sm:text-base text-slate-700 dark:text-slate-200"
+          >
+            <Phone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Tổng Đài Y Tế: 1900 6868</span>
+          </a>
+        </div>
+
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Miễn phí sàng lọc ban đầu • Hỗ trợ kết nối BHYT tại các cơ sở liên kết
+        </p>
       </div>
-    </div>
+    </section>
   )
 }

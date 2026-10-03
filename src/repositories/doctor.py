@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
 from src.models.catalog import Doctor, DoctorFacility, DoctorService, DoctorSpecialty
+from src.models.service import Service
 
 
 class DoctorRepositoryMixin:
@@ -37,6 +38,7 @@ class DoctorRepositoryMixin:
         public_only: bool,
         specialty_id: UUID | None,
         facility_id: UUID | None,
+        service_id: UUID | None,
         name: str | None,
         booking_enabled: bool | None,
         offset: int,
@@ -68,7 +70,17 @@ class DoctorRepositoryMixin:
             statement = statement.join(DoctorSpecialty).where(DoctorSpecialty.specialty_id == specialty_id)
         if facility_id:
             statement = statement.join(DoctorFacility).where(DoctorFacility.facility_id == facility_id)
-        if specialty_id or facility_id:
+        if service_id:
+            statement = (
+                statement.join(DoctorService)
+                .join(Service, Service.id == DoctorService.service_id)
+                .where(
+                    DoctorService.service_id == service_id,
+                    DoctorService.active.is_(True),
+                    Service.status == "active",
+                )
+            )
+        if specialty_id or facility_id or service_id:
             statement = statement.distinct()
         return list((await self.session.execute(statement)).scalars().unique().all())
 

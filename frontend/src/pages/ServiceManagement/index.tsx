@@ -13,22 +13,7 @@ export default function ServiceManagement() {
     setServicesState(loading());
     const result = await fetchServices()();
     if (result._tag === 'Right') {
-      // Mock some UI data for the missing API fields
-      const enrichedServices = result.right.map(service => ({
-        ...service,
-        price: service.price ?? 1850000,
-        original_price: service.original_price ?? 2200000,
-        category: service.category ?? 'Tiêu Chuẩn',
-        patient_count: service.patient_count ?? Math.floor(Math.random() * 2000),
-        satisfaction_rate: service.satisfaction_rate ?? 99,
-        features: service.features ?? [
-          'Khám nội khoa tổng quát & đo thị lực, răng hàm mặt',
-          'Công thức máu 18 chỉ số (CBC) & Đường huyết đói',
-          'Đánh giá men gan (AST, ALT) & Chức năng thận',
-          'X-quang ngực thẳng kỹ thuật số & Siêu âm ổ bụng'
-        ]
-      }));
-      setServicesState(success(enrichedServices));
+      setServicesState(success(result.right));
     } else {
       setServicesState(failure(result.left));
     }

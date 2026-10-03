@@ -10,9 +10,27 @@ from src.schemas.catalog import ServiceCreate, ServiceUpdate
 class MedicalServiceMixin:
     """Medical service operations composed into the catalog service."""
 
-    async def list_services(self, *, public_only: bool, offset: int, limit: int) -> list[Service]:
+    async def list_services(
+        self,
+        *,
+        public_only: bool,
+        offset: int,
+        limit: int,
+        name: str | None = None,
+        category: str | None = None,
+        specialty_id: UUID | None = None,
+        facility_id: UUID | None = None,
+    ) -> list[Service]:
         """List medical services."""
-        return await self.catalog.list_services(public_only=public_only, offset=offset, limit=limit)
+        return await self.catalog.list_services(
+            public_only=public_only,
+            offset=offset,
+            limit=limit,
+            name=name,
+            category=category,
+            specialty_id=specialty_id,
+            facility_id=facility_id,
+        )
 
     async def get_service(self, resource_id: UUID, *, public_only: bool) -> Service:
         """Get a medical service or raise a safe not-found error."""

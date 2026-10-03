@@ -9,8 +9,9 @@ class FakeConnection:
     """Minimal async connection used to verify SQLAlchemy sync callbacks."""
 
     async def execute(self, statement) -> None:
-        """Accept the PostgreSQL extension bootstrap statement."""
-        assert "btree_gist" in str(statement)
+        """Accept the bootstrap statements."""
+        statement_text = str(statement)
+        assert "pg_advisory_xact_lock" in statement_text or "btree_gist" in statement_text
 
     async def run_sync(self, callback) -> None:
         """Execute the metadata callback with a fake synchronous connection."""

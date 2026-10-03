@@ -20,11 +20,11 @@ class UserRepository:
         return await self.session.get(User, user_id)
 
     async def get_by_identifier(self, email: str | None, phone: str | None) -> User | None:
-        """Find a user by one normalized email or phone identifier."""
+        """Find a user by email, phone, or citizen_id."""
         if email:
             statement = select(User).where(User.email == email)
         elif phone:
-            statement = select(User).where(User.phone == phone)
+            statement = select(User).where(or_(User.phone == phone, User.citizen_id == phone))
         else:
             return None
         return (await self.session.execute(statement)).scalar_one_or_none()
@@ -37,6 +37,18 @@ class UserRepository:
         if not filters:
             return None
         return (await self.session.execute(select(User).where(or_(*filters)))).scalar_one_or_none()
+
+    async def list_patients(self, search: str | None = None, *, offset: int = 0, limit: int = 100) -> list[User]:
+        """List patient identities for staff-owned booking forms."""
+        statement = select(User).where(User.role == "patient")
+        if search and search.strip():
+            pattern = f"%{search.strip()}%"
+            statement = statement.where(
+                or_(User.full_name.ilike(pattern), User.email.ilike(pattern), User.phone.ilike(pattern))
+            )
+        statement = statement.order_by(User.full_name.asc().nullslast(), User.created_at.desc())
+        statement = statement.offset(offset).limit(limit)
+        return list((await self.session.execute(statement)).scalars().all())
 
     async def create(self, user: User) -> User:
         """Persist a user and flush it so generated fields are available."""
