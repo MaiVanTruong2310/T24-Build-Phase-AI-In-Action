@@ -121,6 +121,18 @@ app.add_exception_handler(StarletteHTTPException, http_error_handler)
 app.add_exception_handler(Exception, unexpected_error_handler)
 
 
+@app.get("/")
+async def root():
+    """Show API status and useful endpoints at the service root."""
+    return {
+        "service": "AI20K Agent API",
+        "status": "ok",
+        "health": "/health",
+        "readiness": "/health/ready",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health")
 async def health():
     """Return a lightweight service health response."""
