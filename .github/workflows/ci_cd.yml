@@ -109,74 +109,108 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  frontend_deploy:
-    name: Deploy frontend to Vercel
-    needs: [lint-and-test, frontend_detection, frontend_check]
-    if: >-
-      github.event_name == 'push' &&
-      needs.frontend_detection.outputs.has_frontend == 'true' &&
-      needs.frontend_check.result == 'success'
-    runs-on: self-hosted
-    defaults:
-      run:
-        working-directory: frontend
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
-      VITE_API_BASE_URL: ${{ github.ref_name == 'main' && secrets.API_DOMAIN_PROD || secrets.API_DOMAIN_DEV }}
-    steps:
-      - uses: actions/checkout@v4
+frontend_deploy:
+  name: Deploy frontend to Vercel
+  needs: [lint-and-test, frontend_detection, frontend_check]
 
-      - name: Override Git User Info
-        run: |
-          git config --global user.name ${{ vars.VERCEL_OWNER_NAME}}
-          git config --global user.email ${{ secrets.VERCEL_OWNER_EMAIL}}
+  if: >-
+    github.event_name == 'push' &&
+    needs.frontend_detection.outputs.has_frontend == 'true' &&
+    needs.frontend_check.result == 'success'
 
-      - name: Validate Vercel configuration
-        shell: bash
-        run: |
-          test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
-          test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID secret"; exit 1; }
-          test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID secret"; exit 1; }
-          test -n "$VITE_API_BASE_URL" || { echo "Missing API_DOMAIN_PROD/API_DOMAIN_DEV secret"; exit 1; }
+  runs-on: self-hosted
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+  defaults:
+    run:
+      working-directory: frontend
 
-      - name: Install frontend dependencies
-        run: npm ci
+  env:
+    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+    VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    VERCEL_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+    VITE_API_BASE_URL: ${{ github.ref_name == 'main' && secrets.API_DOMAIN_PROD || secrets.API_DOMAIN_DEV }}
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+  steps:
+    - uses: actions/checkout@v4
 
-      - name: Pull Vercel project settings
-        run: vercel pull --yes --environment="$VERCEL_ENV" --token="$VERCEL_TOKEN"
+    - name: Validate Vercel configuration
+      shell: bash
+      run: |
+        set -euo pipefail
 
-      - name: Build Vercel deployment
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
-            vercel build --prod --token="$VERCEL_TOKEN"
-          else
-            vercel build --token="$VERCEL_TOKEN"
-          fi
+        test -n "$VERCEL_TOKEN" || {
+          echo "Missing VERCEL_TOKEN"
+          exit 1
+        }
 
-      - name: Deploy prebuilt frontend
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
-            vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
-          else
-            DEPLOY_URL=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
-            vercel alias set "$DEPLOY_URL" ai20k-build-phase-dev.vercel.app --token="$VERCEL_TOKEN"
-          fi
+        test -n "$VERCEL_ORG_ID" || {
+          echo "Missing VERCEL_ORG_ID"
+          exit 1
+        }
 
+        test -n "$VERCEL_PROJECT_ID" || {
+          echo "Missing VERCEL_PROJECT_ID"
+          exit 1
+        }
+
+        test -n "$VITE_API_BASE_URL" || {
+          echo "Missing API domain"
+          exit 1
+        }
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      run: npm ci
+
+    - name: Install Vercel CLI
+      run: npm install --global vercel@latest
+
+    - name: Pull Vercel project settings
+      run: |
+        vercel pull \
+          --yes \
+          --environment="$VERCEL_ENV" \
+          --token="$VERCEL_TOKEN"
+
+    - name: Build Vercel deployment
+      shell: bash
+      run: |
+        if [[ "$GITHUB_REF_NAME" == "main" ]]; then
+          vercel build \
+            --prod \
+            --token="$VERCEL_TOKEN"
+        else
+          vercel build \
+            --token="$VERCEL_TOKEN"
+        fi
+
+    - name: Deploy prebuilt frontend
+      shell: bash
+      run: |
+        if [[ "$GITHUB_REF_NAME" == "main" ]]; then
+          vercel deploy \
+            --prebuilt \
+            --prod \
+            --token="$VERCEL_TOKEN"
+        else
+          DEPLOY_URL=$(vercel deploy \
+            --prebuilt \
+            --token="$VERCEL_TOKEN")
+
+          echo "Preview deployed: $DEPLOY_URL"
+
+          vercel alias set \
+            "$DEPLOY_URL" \
+            ai20k-build-phase-dev.vercel.app \
+            --token="$VERCEL_TOKEN"
+        fi
   backend_deploy:
     needs: lint-and-test
     if: github.event_name == 'push'
@@ -195,14 +229,11 @@ jobs:
 
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1
-        env:
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: GITHUB_SHA,GITHUB_REF_NAME,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
+          envs: GITHUB_SHA,GITHUB_REF_NAME
           script: |
             set -euo pipefail
             cd /opt/app
@@ -242,12 +273,6 @@ jobs:
             POSTGRES_USER=${{ vars.POSTGRES_USER || 'ai20k_app' }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             DATABASE_URL=postgresql+psycopg://${{ vars.POSTGRES_USER || 'ai20k_app' }}:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/${{ vars.POSTGRES_DB || 'ai20k' }}
-            DATABASE_AUTO_CREATE=false
-            GMAIL_SMTP_HOST=smtp.gmail.com
-            GMAIL_SMTP_PORT=587
-            GMAIL_SMTP_USERNAME=${{ secrets.GMAIL_SMTP_USERNAME }}
-            GMAIL_SMTP_APP_PASSWORD=${{ secrets.GMAIL_SMTP_APP_PASSWORD }}
-            GMAIL_FROM_EMAIL=${{ secrets.GMAIL_FROM_EMAIL }}
             LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}
             LANGCHAIN_PROJECT=ai20k-agent
             LANGCHAIN_TRACING_V2=true
@@ -257,32 +282,12 @@ jobs:
             EOF
             chmod 600 .env
 
-            if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
-              echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            fi
-
             docker compose -f docker-compose.yml -f "$OVERRIDE" pull
             docker compose -f docker-compose.yml -f "$OVERRIDE" up -d --remove-orphans
 
-            if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
-              docker logout
-            fi
-
             # đợi healthcheck rồi dọn image cũ
+            sleep 15
             docker compose -f docker-compose.yml -f "$OVERRIDE" ps
-
-            READY=false
-            for attempt in $(seq 1 60); do
-              if curl -fsS http://127.0.0.1:8000/health/ready >/dev/null; then
-                READY=true
-                break
-              fi
-              sleep 5
-            done
-            if [ "$READY" != "true" ]; then
-              docker compose -f docker-compose.yml -f "$OVERRIDE" logs --tail=100 backend db-migrate
-              exit 1
-            fi
 
             # Fail the deployment if the running container does not allow the
             # deployed Vercel origin for authenticated browser requests.
