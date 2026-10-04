@@ -32,6 +32,7 @@ async def handle_zalo_webhook(
             )
 
     # Process event asynchronously in the background to ensure immediate HTTP 200 response (< 5s requirement)
+    logger.info("Received Zalo webhook payload: %s", payload.model_dump())
     service = ZaloBotService()
     background_tasks.add_task(service.handle_webhook_event, payload)
 
@@ -60,7 +61,7 @@ async def get_zalo_bot_status():
     }
 
 
-@router.post("/setup-webhook")
+@router.api_route("/setup-webhook", methods=["GET", "POST"])
 async def setup_zalo_webhook():
     """Trigger registration of the configured Webhook URL with Zalo Bot Platform."""
     settings = get_settings()

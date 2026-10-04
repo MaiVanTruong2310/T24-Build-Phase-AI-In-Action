@@ -38,6 +38,8 @@ class ZaloWebhookResult(BaseModel):
 class ZaloWebhookPayload(BaseModel):
     ok: bool = True
     result: ZaloWebhookResult | None = None
+    event_name: str | None = None
+    message: ZaloMessage | None = None
 
 
 class ZaloSendMessageRequest(BaseModel):

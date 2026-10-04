@@ -41,9 +41,15 @@ class ZaloBotService:
 
     async def handle_webhook_event(self, payload: ZaloWebhookPayload) -> dict:
         """Process webhook payload asynchronously from Zalo Bot Platform."""
+        # Support both wrapped {"ok": true, "result": {...}} and flat {"event_name": "...", "message": {...}}
         result = payload.result
+        if not result and payload.event_name:
+            from src.zalo.schemas import ZaloWebhookResult
+
+            result = ZaloWebhookResult(event_name=payload.event_name, message=payload.message)
+
         if not result:
-            logger.warning("Received empty result in Zalo webhook payload")
+            logger.info("Received verification ping or empty event in Zalo webhook: %s", payload.model_dump())
             return {"ok": True, "status": "ignored_no_result"}
 
         event_name = result.event_name
