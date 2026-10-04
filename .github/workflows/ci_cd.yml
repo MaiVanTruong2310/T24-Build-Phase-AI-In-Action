@@ -346,7 +346,7 @@ jobs:
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
+          username: ${{ secrets.OBSERVABILITY_EC2_USER }}
           key: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
           source: "observability"
           target: "/opt"
@@ -355,7 +355,7 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
+          username: ${{ secrets.OBSERVABILITY_EC2_USER }}
           key: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
           envs: GRAFANA_ADMIN_PASSWORD,PROMETHEUS_DEV_TARGET,PROMETHEUS_PROD_TARGET,GRAFANA_ROOT_URL
           script: |
