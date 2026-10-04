@@ -153,6 +153,22 @@ flowchart LR
         GHA["GitHub Actions<br/>"]
     end
 
+    GHA -->|"Backend image"| REG["Container Registry"]
+    REG --> DEV["EC2 develop<br/>Docker Compose"]
+    REG --> PROD["EC2 production<br/>Docker Compose"]
+    DEV --> DEVAPI["FastAPI + Alloy"]
+    DEV --> DEVPG["PostgreSQL + pgvector"]
+    PROD --> PRODAPI["FastAPI + Alloy"]
+    PROD --> PRODPG["PostgreSQL + pgvector"]
+
+    DEVAPI -->|"metrics :8001"| OBS["Dedicated monitoring EC2"]
+    PRODAPI -->|"metrics :8001"| OBS
+    DEVAPI -->|"logs + OTLP traces"| OBS
+    PRODAPI -->|"logs + OTLP traces"| OBS
+    OBS --> PROM["Prometheus"]
+    OBS --> LOKI["Loki"]
+    OBS --> TEMPO["Tempo"]
+    OBS --> GRAFANA["Grafana dashboard"]
     GHA -->|"Push image theo commit SHA"| REG["Docker Hub Registry"]
     REG --> EC2["EC2<br/>Docker Compose"]
     EC2 --> API["FastAPI container"]
@@ -160,7 +176,8 @@ flowchart LR
 
     GHA -->|"Frontend build"| VC["Vercel<br/>Deploy"]
     VC --> FE["Frontend (hosted on Vercel)"]
-    FE -->|"REST API"| API
+    FE -->|"REST API"| DEVAPI
+    FE -->|"REST API"| PRODAPI
 ```
 
 Hiện tại AWS EC2 chạy Docker Compose cho backend và PostgreSQL/pgvector. GitHub Actions build/test Docker image, push image theo commit SHA lên Docker Hub; EC2 chỉ pull image từ registry rồi khởi động bằng Compose, health check và rollback khi cần. Frontend React/Vite được deploy độc lập trên Vercel. Redis, Kafka và Object Storage được tích hợp theo môi trường triển khai tương ứng.
