@@ -109,112 +109,111 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-frontend_deploy:
-  name: Deploy frontend to Vercel
-  needs: [lint-and-test, frontend_detection, frontend_check]
+  frontend_deploy:
+    name: Deploy frontend to Vercel
+    needs: [lint-and-test, frontend_detection, frontend_check]
 
-  if: >-
-    github.event_name == 'push' &&
-    needs.frontend_detection.outputs.has_frontend == 'true' &&
-    needs.frontend_check.result == 'success'
+    if: >-
+      github.event_name == 'push' &&
+      needs.frontend_detection.outputs.has_frontend == 'true' &&
+      needs.frontend_check.result == 'success'
 
-  runs-on: self-hosted
+    runs-on: self-hosted
 
-  defaults:
-    run:
-      working-directory: frontend
+    defaults:
+      run:
+        working-directory: frontend
 
-  env:
-    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-    VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-    VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-    VERCEL_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
-    VITE_API_BASE_URL: ${{ github.ref_name == 'main' && secrets.API_DOMAIN_PROD || secrets.API_DOMAIN_DEV }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      VITE_API_BASE_URL: ${{ github.ref_name == 'main' && secrets.API_DOMAIN_PROD || secrets.API_DOMAIN_DEV }}
 
-  steps:
-    - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Validate Vercel configuration
-      shell: bash
-      run: |
-        set -euo pipefail
+      - name: Validate Vercel configuration
+        shell: bash
+        run: |
+          set -euo pipefail
 
-        test -n "$VERCEL_TOKEN" || {
-          echo "Missing VERCEL_TOKEN"
-          exit 1
-        }
+          test -n "$VERCEL_TOKEN" || {
+            echo "Missing VERCEL_TOKEN"
+            exit 1
+          }
 
-        test -n "$VERCEL_ORG_ID" || {
-          echo "Missing VERCEL_ORG_ID"
-          exit 1
-        }
+          test -n "$VERCEL_ORG_ID" || {
+            echo "Missing VERCEL_ORG_ID"
+            exit 1
+          }
 
-        test -n "$VERCEL_PROJECT_ID" || {
-          echo "Missing VERCEL_PROJECT_ID"
-          exit 1
-        }
+          test -n "$VERCEL_PROJECT_ID" || {
+            echo "Missing VERCEL_PROJECT_ID"
+            exit 1
+          }
 
-        test -n "$VITE_API_BASE_URL" || {
-          echo "Missing API domain"
-          exit 1
-        }
+          test -n "$VITE_API_BASE_URL" || {
+            echo "Missing API domain"
+            exit 1
+          }
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: "20"
-        cache: npm
-        cache-dependency-path: frontend/package-lock.json
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-    - name: Install frontend dependencies
-      run: npm ci
+      - name: Install frontend dependencies
+        run: npm ci
 
-    - name: Install Vercel CLI
-      run: npm install --global vercel@latest
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
 
-    - name: Pull Vercel project settings
-      run: |
-        vercel pull \
-          --yes \
-          --environment="$VERCEL_ENV" \
-          --token="$VERCEL_TOKEN"
-
-    - name: Build Vercel deployment
-      shell: bash
-      run: |
-        if [[ "$GITHUB_REF_NAME" == "main" ]]; then
-          vercel build \
-            --prod \
+      - name: Pull Vercel project settings
+        run: |
+          vercel pull \
+            --yes \
+            --environment="$VERCEL_ENV" \
             --token="$VERCEL_TOKEN"
-        else
-          vercel build \
-            --token="$VERCEL_TOKEN"
-        fi
 
-    - name: Deploy prebuilt frontend
-      shell: bash
-      run: |
-        if [[ "$GITHUB_REF_NAME" == "main" ]]; then
-          vercel deploy \
-            --prebuilt \
-            --prod \
-            --token="$VERCEL_TOKEN"
-        else
-          DEPLOY_URL=$(vercel deploy \
-            --prebuilt \
-            --token="$VERCEL_TOKEN")
+      - name: Build Vercel deployment
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
+            vercel build --prod --token="$VERCEL_TOKEN"
+          else
+            vercel build --token="$VERCEL_TOKEN"
+          fi
 
-          echo "Preview deployed: $DEPLOY_URL"
+      - name: Deploy prebuilt frontend
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
+            vercel deploy \
+              --prebuilt \
+              --prod \
+              --token="$VERCEL_TOKEN"
+          else
+            DEPLOY_URL=$(vercel deploy \
+              --prebuilt \
+              --token="$VERCEL_TOKEN")
 
-          vercel alias set \
-            "$DEPLOY_URL" \
-            ai20k-build-phase-dev.vercel.app \
-            --token="$VERCEL_TOKEN"
-        fi
+            echo "Preview deployed: $DEPLOY_URL"
+
+            vercel alias set \
+              "$DEPLOY_URL" \
+              ai20k-build-phase-dev.vercel.app \
+              --token="$VERCEL_TOKEN"
+          fi
+
   backend_deploy:
     needs: lint-and-test
     if: github.event_name == 'push'
     runs-on: self-hosted
+
     steps:
       - uses: actions/checkout@v4
 
@@ -248,8 +247,8 @@ frontend_deploy:
               FRONTEND_ORIGIN="${{ secrets.FRONTEND_DEV_URL || 'https://ai20k-build-phase-dev.vercel.app' }}"
             fi
 
-            # CORS compares the browser Origin exactly: no trailing slash or path.
             FRONTEND_ORIGIN="${FRONTEND_ORIGIN%/}"
+
             if [[ ! "$FRONTEND_ORIGIN" =~ ^https?://[^/]+$ ]]; then
               echo "Invalid frontend origin for CORS: $FRONTEND_ORIGIN"
               exit 1
@@ -266,7 +265,6 @@ frontend_deploy:
             JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
             OTP_EXPIRE_MINUTES=5
             OTP_MAX_ATTEMPTS=5
-            # TEMPORARY DEMO ONLY: remove when real OTP delivery is enabled.
             MOCK_OTP_CODE=123456
             CORS_ORIGINS=http://localhost:5173,${FRONTEND_ORIGIN},https://ai20k-build-phase-dev.vercel.app,https://ai20k-build-phase.vercel.app
             POSTGRES_DB=${{ vars.POSTGRES_DB || 'ai20k' }}
@@ -280,23 +278,28 @@ frontend_deploy:
             AI_LOG_API_KEY=${{ secrets.AI_LOG_API_KEY }}
             AI_LOG_DIR=.ai-log
             EOF
+
             chmod 600 .env
 
             docker compose -f docker-compose.yml -f "$OVERRIDE" pull
             docker compose -f docker-compose.yml -f "$OVERRIDE" up -d --remove-orphans
 
-            # đợi healthcheck rồi dọn image cũ
             sleep 15
-            docker compose -f docker-compose.yml -f "$OVERRIDE" ps
 
-            # Fail the deployment if the running container does not allow the
-            # deployed Vercel origin for authenticated browser requests.
+            docker compose \
+              -f docker-compose.yml \
+              -f "$OVERRIDE" \
+              ps
+
             CORS_HEADERS=$(curl -sS -D - -o /dev/null -X OPTIONS \
               http://127.0.0.1:8000/api/v1/users/me \
               -H "Origin: $FRONTEND_ORIGIN" \
               -H "Access-Control-Request-Method: GET" \
               -H "Access-Control-Request-Headers: authorization")
-            if ! printf '%s\n' "$CORS_HEADERS" | grep -Fqi "access-control-allow-origin: $FRONTEND_ORIGIN"; then
+
+            if ! printf '%s\n' "$CORS_HEADERS" \
+              | grep -Fqi "access-control-allow-origin: $FRONTEND_ORIGIN"; then
+
               echo "CORS preflight failed for $FRONTEND_ORIGIN"
               printf '%s\n' "$CORS_HEADERS"
               exit 1
