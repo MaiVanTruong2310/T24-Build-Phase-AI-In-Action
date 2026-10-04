@@ -154,13 +154,26 @@ flowchart LR
     end
 
     GHA -->|"Backend image"| REG["Container Registry"]
-    REG --> EC2["EC2<br/>Docker Compose"]
-    EC2 --> API["FastAPI container"]
-    EC2 --> PG["PostgreSQL + pgvector"]
+    REG --> DEV["EC2 develop<br/>Docker Compose"]
+    REG --> PROD["EC2 production<br/>Docker Compose"]
+    DEV --> DEVAPI["FastAPI + Alloy"]
+    DEV --> DEVPG["PostgreSQL + pgvector"]
+    PROD --> PRODAPI["FastAPI + Alloy"]
+    PROD --> PRODPG["PostgreSQL + pgvector"]
+
+    DEVAPI -->|"metrics :8001"| OBS["Dedicated monitoring EC2"]
+    PRODAPI -->|"metrics :8001"| OBS
+    DEVAPI -->|"logs + OTLP traces"| OBS
+    PRODAPI -->|"logs + OTLP traces"| OBS
+    OBS --> PROM["Prometheus"]
+    OBS --> LOKI["Loki"]
+    OBS --> TEMPO["Tempo"]
+    OBS --> GRAFANA["Grafana dashboard"]
 
     GHA -->|"Frontend build"| VC["Vercel<br/>Deploy"]
     VC --> FE["Frontend (hosted on Vercel)"]
-    FE -->|"REST API"| API
+    FE -->|"REST API"| DEVAPI
+    FE -->|"REST API"| PRODAPI
 ```
 
 Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển khai image đã kiểm thử lên EC2, có health check và rollback. Redis, Object Storage và frontend được tích hợp theo môi trường triển khai tương ứng.

@@ -209,7 +209,7 @@ jobs:
           fi
 
   backend_deploy:
-    needs: lint-and-test
+    needs: [lint-and-test, observability_deploy]
     if: github.event_name == 'push'
     runs-on: self-hosted
 
@@ -222,16 +222,19 @@ jobs:
           host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.yml,docker-compose.prod.yml,docker-compose.dev.yml"
+          source: "docker-compose.yml,docker-compose.prod.yml,docker-compose.dev.yml,docker-compose.observability.yml,observability/alloy/agent.alloy"
           target: "/opt/app"
 
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1
+        env:
+          OBSERVABILITY_LOKI_URL: ${{ secrets.OBSERVABILITY_LOKI_URL }}
+          OBSERVABILITY_TEMPO_OTLP_ENDPOINT: ${{ secrets.OBSERVABILITY_TEMPO_OTLP_ENDPOINT }}
         with:
           host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: GITHUB_SHA,GITHUB_REF_NAME
+          envs: GITHUB_SHA,GITHUB_REF_NAME,OBSERVABILITY_LOKI_URL,OBSERVABILITY_TEMPO_OTLP_ENDPOINT
           script: |
             set -euo pipefail
             cd /opt/app
@@ -266,6 +269,15 @@ jobs:
             OTP_MAX_ATTEMPTS=5
             MOCK_OTP_CODE=123456
             CORS_ORIGINS=http://localhost:5173,${FRONTEND_ORIGIN},https://ai20k-build-phase-dev.vercel.app,https://ai20k-build-phase.vercel.app
+            METRICS_ENABLED=true
+            METRICS_BIND_ADDRESS=0.0.0.0
+            METRICS_PORT=8001
+            OBSERVABILITY_ENVIRONMENT=${ENV_TAG}
+            OTEL_ENABLED=true
+            OTEL_SERVICE_NAME=ai20k-backend
+            OTEL_ENVIRONMENT=${ENV_TAG}
+            LOKI_URL=${OBSERVABILITY_LOKI_URL}
+            TEMPO_OTLP_ENDPOINT=${OBSERVABILITY_TEMPO_OTLP_ENDPOINT}
             POSTGRES_DB=${{ vars.POSTGRES_DB || 'ai20k' }}
             POSTGRES_USER=${{ vars.POSTGRES_USER || 'ai20k_app' }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
@@ -280,15 +292,15 @@ jobs:
 
             chmod 600 .env
 
-            docker compose -f docker-compose.yml -f "$OVERRIDE" pull
-            docker compose -f docker-compose.yml -f "$OVERRIDE" up -d --remove-orphans
+            COMPOSE_FILES=(-f docker-compose.yml -f "$OVERRIDE" -f docker-compose.observability.yml)
+
+            docker compose "${COMPOSE_FILES[@]}" config >/dev/null
+            docker compose "${COMPOSE_FILES[@]}" pull
+            docker compose "${COMPOSE_FILES[@]}" up -d --remove-orphans
 
             sleep 15
 
-            docker compose \
-              -f docker-compose.yml \
-              -f "$OVERRIDE" \
-              ps
+            docker compose "${COMPOSE_FILES[@]}" ps
 
             CORS_HEADERS=$(curl -sS -D - -o /dev/null -X OPTIONS \
               http://127.0.0.1:8000/api/v1/users/me \
@@ -304,4 +316,69 @@ jobs:
               exit 1
             fi
 
+            docker image prune -f
+
+  observability_deploy:
+    name: Deploy observability EC2
+    needs: lint-and-test
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')
+    runs-on: self-hosted
+    env:
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.OBSERVABILITY_GRAFANA_ADMIN_PASSWORD }}
+      PROMETHEUS_DEV_TARGET: ${{ secrets.OBSERVABILITY_DEV_TARGET }}
+      PROMETHEUS_PROD_TARGET: ${{ secrets.OBSERVABILITY_PROD_TARGET }}
+      GRAFANA_ROOT_URL: ${{ secrets.OBSERVABILITY_GRAFANA_ROOT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate observability deployment settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in GRAFANA_ADMIN_PASSWORD PROMETHEUS_DEV_TARGET PROMETHEUS_PROD_TARGET GRAFANA_ROOT_URL; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required observability setting: $name"
+              exit 1
+            fi
+          done
+
+      - name: Copy observability stack to monitoring EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
+          source: "observability"
+          target: "/opt"
+
+      - name: Start observability stack
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
+          envs: GRAFANA_ADMIN_PASSWORD,PROMETHEUS_DEV_TARGET,PROMETHEUS_PROD_TARGET,GRAFANA_ROOT_URL
+          script: |
+            set -euo pipefail
+            cd /opt/observability
+
+            cat > .env <<EOF
+            PROMETHEUS_DEV_TARGET=${PROMETHEUS_DEV_TARGET}
+            PROMETHEUS_PROD_TARGET=${PROMETHEUS_PROD_TARGET}
+            GRAFANA_ADMIN_USER=admin
+            GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+            GRAFANA_ROOT_URL=${GRAFANA_ROOT_URL}
+            GRAFANA_BIND_ADDRESS=0.0.0.0
+            TELEMETRY_BIND_ADDRESS=0.0.0.0
+            PROMETHEUS_RETENTION=15d
+            EOF
+            chmod 600 .env
+
+            docker compose --env-file .env -f docker-compose.yml config >/dev/null
+            docker compose --env-file .env -f docker-compose.yml pull
+            docker compose --env-file .env -f docker-compose.yml up -d --remove-orphans
+
+            sleep 15
+            curl --fail --silent --show-error http://127.0.0.1:3000/api/health
+            docker compose --env-file .env -f docker-compose.yml ps
             docker image prune -f
