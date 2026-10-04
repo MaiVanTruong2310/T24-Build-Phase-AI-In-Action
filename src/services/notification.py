@@ -1,11 +1,12 @@
 """Booking notification lifecycle with direct database and WebSocket delivery."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from src.config import Settings, get_settings
 from src.core.exceptions import NotFoundError
-from src.core.logging import get_logger
+from src.core.logging import get_logger, log_event
 from src.models.booking import Booking
 from src.models.notification import Notification
 from src.realtime.notifications import notification_manager
@@ -34,6 +35,14 @@ class NotificationService:
 
     async def create_for_booking_request(self, booking: Booking, *, cycle: str = "created") -> int:
         """Create an immediately visible approval notification for every active staff user."""
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.booking_request.start",
+            description="Starting staff notifications for a booking request",
+            booking_id=str(booking.id),
+            cycle=cycle,
+        )
         now = datetime.now(UTC)
         staff_ids = await self.notifications.list_active_staff_ids()
         for staff_id in staff_ids:
@@ -46,10 +55,27 @@ class NotificationService:
                 dedupe_key=f"booking:{booking.id}:approval:{cycle}:staff:{staff_id}",
                 available_at=now,
             )
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.booking_request.created",
+            description="Staff approval notifications were created for a new booking request",
+            booking_id=str(booking.id),
+            recipient_count=len(staff_ids),
+            cycle=cycle,
+        )
         return len(staff_ids)
 
     async def create_for_booking_review(self, booking: Booking, status: str) -> None:
         """Create a patient decision notification after staff review."""
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.booking_review.start",
+            description="Starting patient notification for a staff booking decision",
+            booking_id=str(booking.id),
+            status=status,
+        )
         if status == "confirmed":
             await self._create_patient_notification(
                 booking,
@@ -66,9 +92,24 @@ class NotificationService:
                 message=booking.staff_note or "Lịch khám chưa được nhân viên xác nhận.",
                 dedupe_suffix="decision:rejected",
             )
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.booking_review.created",
+            description="Patient notification was created for the staff booking decision",
+            booking_id=str(booking.id),
+            status=status,
+        )
 
     async def create_for_booking_expired(self, booking: Booking) -> None:
         """Create a patient notification when the approval deadline is missed."""
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.booking_expired.start",
+            description="Starting patient notification for an expired booking",
+            booking_id=str(booking.id),
+        )
         await self._create_patient_notification(
             booking,
             kind="booking_expired",
@@ -76,9 +117,23 @@ class NotificationService:
             message="Lịch khám chưa được duyệt trong thời hạn 24 giờ.",
             dedupe_suffix="expired",
         )
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.booking_expired.created",
+            description="Patient notification was created for an expired booking request",
+            booking_id=str(booking.id),
+        )
 
     async def create_due_reminders(self, limit: int = 100) -> int:
         """Create direct in-app reminders for confirmed appointments."""
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.reminder.start",
+            description="Starting due appointment reminder scan",
+            limit=limit,
+        )
         now = datetime.now(UTC)
         deadline = now + timedelta(days=get_settings().appointment_reminder_lead_days)
         async with self.session.begin():
@@ -92,34 +147,131 @@ class NotificationService:
                     dedupe_suffix="reminder:2d",
                     available_at=now,
                 )
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.reminder.created",
+            description="Due appointment reminders were created for confirmed bookings",
+            count=len(bookings),
+        )
         return len(bookings)
 
     async def list_for_user(self, user_id: UUID, *, unread_only: bool, offset: int, limit: int) -> list[Notification]:
         """List visible in-app notifications owned by a user."""
-        return await self.notifications.list_for_user(user_id, unread_only=unread_only, offset=offset, limit=limit)
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.list.start",
+            description="Starting user notification lookup",
+            user_id=str(user_id),
+            unread_only=unread_only,
+            offset=offset,
+            limit=limit,
+        )
+        values = await self.notifications.list_for_user(user_id, unread_only=unread_only, offset=offset, limit=limit)
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.list.done",
+            description="User notifications were listed with the requested read filter",
+            user_id=str(user_id),
+            count=len(values),
+            unread_only=unread_only,
+        )
+        return values
 
     async def mark_read(self, user_id: UUID, notification_id: UUID) -> Notification:
         """Mark one owned notification as read."""
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.read.start",
+            description="Starting one notification read-state update",
+            user_id=str(user_id),
+            notification_id=str(notification_id),
+        )
         async with self.session.begin():
             notification = await self.notifications.get_for_user(notification_id, user_id, for_update=True)
             if notification is None:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "notification.read.not_found",
+                    description="Notification read request found no notification owned by the user",
+                    user_id=str(user_id),
+                    notification_id=str(notification_id),
+                )
                 raise NotFoundError("Notification not found")
             notification.read_at = datetime.now(UTC)
             await self.session.flush()
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.read.done",
+            description="A user notification was marked as read",
+            user_id=str(user_id),
+            notification_id=str(notification_id),
+        )
         return notification
 
     async def mark_all_read(self, user_id: UUID) -> int:
         """Mark all owned visible notifications as read."""
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.read_all.start",
+            description="Starting all-notification read-state update",
+            user_id=str(user_id),
+        )
         async with self.session.begin():
-            return await self.notifications.mark_all_read(user_id, datetime.now(UTC))
+            count = await self.notifications.mark_all_read(user_id, datetime.now(UTC))
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.read_all.done",
+            description="All visible user notifications were marked as read",
+            user_id=str(user_id),
+            count=count,
+        )
+        return count
 
     async def discard_reminders_for_booking(self, booking_id: UUID) -> int:
         """Invalidate reminders for a booking whose time is changing."""
-        return await self.notifications.discard_reminders_for_booking(booking_id, datetime.now(UTC))
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.reminder.discard.start",
+            description="Starting reminder invalidation for a booking change",
+            booking_id=str(booking_id),
+        )
+        count = await self.notifications.discard_reminders_for_booking(booking_id, datetime.now(UTC))
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.reminder.discarded",
+            description="Appointment reminders were invalidated for a booking change",
+            booking_id=str(booking_id),
+            count=count,
+        )
+        return count
 
     async def deliver_pending_emails(self, limit: int = 100) -> int:
         """Deliver queued patient emails without coupling SMTP to booking commits."""
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.email_delivery.start",
+            description="Starting pending notification email delivery",
+            limit=limit,
+        )
         if not self.settings.gmail_smtp_username or not self.settings.gmail_smtp_app_password:
+            log_event(
+                logger,
+                logging.DEBUG,
+                "notification.email.skipped",
+                description="Pending email delivery was skipped because SMTP is not configured",
+                reason="smtp_not_configured",
+            )
             return 0
 
         now = datetime.now(UTC)
@@ -148,14 +300,25 @@ class NotificationService:
                         retry_backoff_seconds=self.settings.notification_retry_backoff_seconds,
                         retry_backoff_max_seconds=self.settings.notification_retry_backoff_max_seconds,
                     )
-                logger.warning(
-                    "NotificationService.deliver_pending_emails retry scheduled",
-                    extra={"notification_id": str(notification.id), "error_type": type(exc).__name__},
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "notification.email.retry_scheduled",
+                    description="Email delivery failed and the notification was scheduled for retry",
+                    notification_id=str(notification.id),
+                    error_type=type(exc).__name__,
                 )
                 continue
             async with self.session.begin():
                 await self.notifications.mark_email_delivered(notification.id, datetime.now(UTC))
             delivered += 1
+        log_event(
+            logger,
+            logging.INFO,
+            "notification.email_delivery.done",
+            description="Pending notification emails were processed",
+            delivered_count=delivered,
+        )
         return delivered
 
     async def _create_patient_notification(
@@ -190,9 +353,13 @@ class NotificationService:
                 available_at=available_at or datetime.now(UTC),
             )
         else:
-            logger.warning(
-                "NotificationService.patient_email skipped because address is missing",
-                extra={"booking_id": str(booking.id)},
+            log_event(
+                logger,
+                logging.WARNING,
+                "notification.email.skipped",
+                description="Patient email notification was skipped because no address was available",
+                booking_id=str(booking.id),
+                reason="address_missing",
             )
         return notification
 

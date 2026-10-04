@@ -9,8 +9,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.response import error_response
 from src.core.exceptions import AppError
+from src.core.logging import get_logger, log_event
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SUPPORTED_CLIENT_ERROR_CODES = frozenset({400, 401, 403, 404, 408, 409, 429})
 
@@ -48,14 +49,28 @@ async def http_error_handler(_: Request, exc: StarletteHTTPException) -> JSONRes
 
 async def unexpected_error_handler(_: Request, exc: Exception) -> JSONResponse:
     """Return a safe envelope while preserving the server-side traceback."""
-    logger.exception("unexpected_error_handler unhandled API exception", exc_info=exc)
+    log_event(
+        logger,
+        logging.ERROR,
+        "api.request.error",
+        description="Unhandled API exception was converted to a safe error response",
+        error_type=type(exc).__name__,
+        exc_info=True,
+    )
     response = error_response(500, "Internal server error", 500)
     return JSONResponse(status_code=500, content=response.model_dump(mode="json"))
 
 
 async def database_unavailable_handler(_: Request, exc: Exception) -> JSONResponse:
     """Handle connection failures inside ExceptionMiddleware so CORS is preserved."""
-    logger.warning("API database unavailable: %s", type(exc).__name__)
+    log_event(
+        logger,
+        logging.ERROR,
+        "database.request.error",
+        description="API request failed because the database was unavailable",
+        error_type=type(exc).__name__,
+        exc_info=True,
+    )
     response = error_response(
         500,
         "Hệ thống tạm thời không thể truy cập dữ liệu. Vui lòng thử lại sau.",

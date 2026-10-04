@@ -1,8 +1,10 @@
 import asyncio
+import logging
 import sys
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
@@ -25,7 +27,8 @@ from src.api.handlers import (
 )
 from src.config import get_settings, parse_cors_origins
 from src.core.exceptions import AppError
-from src.core.logging import get_logger
+from src.core.context import session_id_var, trace_id_var
+from src.core.logging import get_logger, log_event, setup_logging
 from src.db.session import check_database_connection, close_database, get_session_factory, initialize_database
 from src.medical_assistant.api.routes import router as medical_assistant_router
 from src.medical_assistant.db.supabase_client import close_supabase_clients
@@ -34,6 +37,7 @@ from src.services.cookie_session import CookieOriginMiddleware
 from src.services.notification import NotificationService
 
 logger = get_logger(__name__)
+setup_logging()
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -46,21 +50,43 @@ async def _booking_maintenance_loop(interval_seconds: int) -> None:
             async with get_session_factory()() as session:
                 expired_count = await BookingService(session).expire_pending_bookings()
                 if expired_count:
-                    logger.info("main.booking_expiration expired bookings", extra={"count": expired_count})
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "booking.maintenance.expired",
+                        description="Maintenance expired bookings that missed staff approval deadlines",
+                        count=expired_count,
+                    )
                 notification_service = NotificationService(session)
                 reminder_count = await notification_service.create_due_reminders()
                 if reminder_count:
-                    logger.info("main.notification_cleanup queued reminders", extra={"count": reminder_count})
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "notification.maintenance.reminders_queued",
+                        description="Maintenance queued due appointment reminders",
+                        count=reminder_count,
+                    )
                 delivered_email_count = await notification_service.deliver_pending_emails()
                 if delivered_email_count:
-                    logger.info(
-                        "main.notification_email delivered emails",
-                        extra={"count": delivered_email_count},
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "notification.maintenance.emails_delivered",
+                        description="Maintenance delivered pending notification emails",
+                        count=delivered_email_count,
                     )
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("main.booking_maintenance iteration failed")
+        except Exception as exc:
+            log_event(
+                logger,
+                logging.ERROR,
+                "booking.maintenance.error",
+                description="Booking and notification maintenance iteration failed",
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
         await asyncio.sleep(interval_seconds)
 
 
@@ -68,12 +94,26 @@ async def _booking_maintenance_loop(interval_seconds: int) -> None:
 async def lifespan(app: FastAPI):
     """Log application startup and shutdown around the FastAPI lifespan."""
     settings = get_settings()
-    logger.info("Starting %s in %s mode", settings.app_name, settings.app_env)
+    log_event(
+        logger,
+        logging.INFO,
+        "app.start",
+        description="Application startup completed its initial configuration",
+        app_name=settings.app_name,
+        environment=settings.app_env,
+    )
     if settings.database_auto_create:
         try:
             await initialize_database()
-        except Exception:
-            logger.exception("main.lifespan database initialization failed")
+        except Exception as exc:
+            log_event(
+                logger,
+                logging.CRITICAL,
+                "database.initialize.error",
+                description="Automatic database initialization failed during application startup",
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
             raise
     cleanup_task = None
     try:
@@ -86,7 +126,7 @@ async def lifespan(app: FastAPI):
 
         await close_database()
         close_supabase_clients()
-        logger.info("Shutting down")
+        log_event(logger, logging.INFO, "app.stop", description="Application resources were closed during shutdown")
 
 
 app = FastAPI(
@@ -95,6 +135,20 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def context_middleware(request: Request, call_next):
+    """Attach request correlation identifiers to every application log."""
+    trace_token = trace_id_var.set(request.headers.get("X-Trace-Id") or uuid.uuid4().hex)
+    session_token = session_id_var.set(request.headers.get("X-Session-Id") or "-")
+    try:
+        response = await call_next(request)
+        response.headers["X-Trace-Id"] = trace_id_var.get()
+        return response
+    finally:
+        trace_id_var.reset(trace_token)
+        session_id_var.reset(session_token)
 
 settings = get_settings()
 
@@ -135,6 +189,12 @@ async def readiness():
     try:
         await check_database_connection()
     except Exception as exc:
-        logger.warning("main.readiness database unavailable: %s", type(exc).__name__)
+        log_event(
+            logger,
+            logging.WARNING,
+            "database.readiness.error",
+            description="Readiness check could not reach the configured database",
+            error_type=type(exc).__name__,
+        )
         raise HTTPException(status_code=503, detail="Database is unavailable") from exc
     return {"status": "ready", "database": "connected"}

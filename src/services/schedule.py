@@ -1,5 +1,6 @@
 """Doctor schedule business operations."""
 
+import logging
 from datetime import datetime
 from uuid import UUID
 
@@ -7,6 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from src.core.exceptions import ConflictError, NotFoundError
+from src.core.logging import get_logger, log_event
 from src.models.booking import Booking
 from src.models.catalog import DoctorSchedule
 from src.schemas.catalog import (
@@ -21,6 +23,8 @@ from src.schemas.catalog import (
 )
 from src.services.booking import BookingService
 
+logger = get_logger(__name__)
+
 
 class ScheduleServiceMixin:
     """Schedule operations composed into the catalog service."""
@@ -29,6 +33,18 @@ class ScheduleServiceMixin:
         self, request: DoctorScheduleCreate, actor_id: UUID
     ) -> tuple[DoctorSchedule, Booking | None]:
         """Create a schedule and optionally a direct-confirmed doctor booking."""
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.create.start",
+            description="Starting doctor schedule creation and optional direct booking",
+            actor_id=str(actor_id),
+            doctor_id=str(request.doctor_id),
+            facility_id=str(request.facility_id) if request.facility_id else None,
+            service_id=str(request.service_id) if request.service_id else None,
+            patient_id=str(request.patient_id) if request.patient_id else None,
+            schedule_type=request.type,
+        )
         try:
             async with self.session.begin():
                 await self._validate_schedule_owners(
@@ -127,15 +143,43 @@ class ScheduleServiceMixin:
                         patient_note=request.patient_note,
                     )
         except IntegrityError as exc:
+            log_event(
+                logger,
+                logging.ERROR,
+                "catalog.schedule.create.error",
+                description="Schedule creation failed because the database rejected the schedule constraints",
+                doctor_id=str(request.doctor_id),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
             self._raise_schedule_integrity_error(exc)
         created = await self._required(self.catalog.get_schedule(value.id), "Schedule not found")
         created.remaining_capacity = (
             None if created.type != "consultation" else max(created.capacity - (1 if booking else 0), 0)
         )
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.create.done",
+            description="Doctor schedule was created and optional direct booking was staged",
+            schedule_id=str(created.id),
+            doctor_id=str(created.doctor_id),
+            booking_created=booking is not None,
+        )
         return created, booking
 
     async def update_schedule(self, schedule_id: UUID, request: DoctorScheduleUpdate, actor_id: UUID) -> DoctorSchedule:
         """Replace mutable schedule fields with optimistic locking."""
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.update.start",
+            description="Starting doctor schedule update with optimistic locking",
+            schedule_id=str(schedule_id),
+            actor_id=str(actor_id),
+            expected_version=request.expected_version,
+            changed_fields=list(request.model_dump(exclude={"expected_version"}, exclude_unset=True).keys()),
+        )
         try:
             async with self.session.begin():
                 current = await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
@@ -198,8 +242,26 @@ class ScheduleServiceMixin:
                 await self.session.flush()
                 await self._audit(actor_id, "doctor_schedule", value.id, "updated", {"version": value.version})
         except IntegrityError as exc:
+            log_event(
+                logger,
+                logging.ERROR,
+                "catalog.schedule.update.error",
+                description="Schedule update failed because the database rejected the schedule constraints",
+                schedule_id=str(schedule_id),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
             self._raise_schedule_integrity_error(exc)
-        return await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
+        value = await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.update.done",
+            description="Doctor schedule fields were updated with optimistic locking",
+            schedule_id=str(schedule_id),
+            actor_id=str(actor_id),
+        )
+        return value
 
     async def list_schedules(
         self,
@@ -216,6 +278,20 @@ class ScheduleServiceMixin:
         source_system: str | None = None,
     ) -> list[DoctorSchedule]:
         """List schedules for public availability or staff operations."""
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.list.start",
+            description="Starting doctor schedule availability query",
+            doctor_id=str(doctor_id) if doctor_id else None,
+            facility_id=str(facility_id) if facility_id else None,
+            service_id=str(service_id) if service_id else None,
+            public_only=public_only,
+            schedule_status=schedule_status,
+            source_system=source_system,
+            offset=offset,
+            limit=limit,
+        )
         values = await self.catalog.list_schedules(
             doctor_id=doctor_id,
             facility_id=facility_id,
@@ -234,10 +310,26 @@ class ScheduleServiceMixin:
             value.remaining_capacity = (
                 None if value_type != "consultation" else max(value.capacity - counts.get(value.id, 0), 0)
             )
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.list.done",
+            description="Doctor schedules were listed with calculated remaining capacity",
+            count=len(values),
+            public_only=public_only,
+        )
         return values
 
     async def get_schedule(self, schedule_id: UUID, *, public_only: bool) -> DoctorSchedule:
         """Get a schedule, enforcing public availability rules when requested."""
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.get.start",
+            description="Starting doctor schedule lookup",
+            schedule_id=str(schedule_id),
+            public_only=public_only,
+        )
         value = await self.catalog.get_schedule(schedule_id)
         if value is not None:
             counts = await self.catalog.count_active_bookings_for_schedules([value.id])
@@ -247,7 +339,21 @@ class ScheduleServiceMixin:
                 else max(value.capacity - counts.get(value.id, 0), 0)
             )
         if value is None or (public_only and not self._schedule_is_public(value)):
+            log_event(
+                logger,
+                logging.WARNING,
+                "catalog.schedule.get.not_found",
+                description="Schedule lookup returned no public or existing schedule",
+                schedule_id=str(schedule_id),
+            )
             raise NotFoundError("Schedule not found")
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.get.done",
+            description="Doctor schedule was loaded with remaining capacity",
+            schedule_id=str(schedule_id),
+        )
         return value
 
     async def cancel_schedule(
@@ -257,6 +363,14 @@ class ScheduleServiceMixin:
         actor_id: UUID,
     ) -> DoctorSchedule:
         """Soft-cancel a schedule while retaining its database row."""
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.cancel.start",
+            description="Starting doctor schedule cancellation",
+            schedule_id=str(schedule_id),
+            actor_id=str(actor_id),
+        )
         async with self.session.begin():
             value = await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
             if value.status == "cancelled":
@@ -267,7 +381,16 @@ class ScheduleServiceMixin:
             value.version += 1
             await self.session.flush()
             await self._audit(actor_id, "doctor_schedule", value.id, "cancelled", {"version": value.version})
-        return await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
+        value = await self._required(self.catalog.get_schedule(schedule_id), "Schedule not found")
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.cancel.done",
+            description="Doctor schedule was soft-cancelled and retained for audit history",
+            schedule_id=str(schedule_id),
+            actor_id=str(actor_id),
+        )
+        return value
 
     async def bulk_import_schedules(
         self,
@@ -275,6 +398,14 @@ class ScheduleServiceMixin:
         actor_id: UUID,
     ) -> BulkImportResponse:
         """Upsert a JSON schedule batch and return per-record results."""
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.bulk_import.start",
+            description="Starting schedule import batch validation and upsert",
+            actor_id=str(actor_id),
+            record_count=len(request.records),
+        )
         created = updated = failed = 0
         items: list[BulkImportItemResult] = []
         async with self.session.begin():
@@ -304,15 +435,42 @@ class ScheduleServiceMixin:
                 except (ConflictError, NotFoundError) as exc:
                     failed += 1
                     items.append(BulkImportItemResult(external_schedule_id=external_schedule_id, error=exc.message))
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.bulk_import.done",
+            description="Schedule import batch was validated and upserted",
+            created_count=created,
+            updated_count=updated,
+            failed_count=failed,
+        )
         return BulkImportResponse(created=created, updated=updated, failed=failed, items=items)
 
     async def schedule_history(self, schedule_id: UUID, *, limit: int = 100):
         """Return durable audit history for a schedule for internal callers."""
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.history.start",
+            description="Starting schedule audit history query",
+            schedule_id=str(schedule_id),
+            limit=limit,
+        )
         await self.get_schedule(schedule_id, public_only=False)
         return await self.catalog.list_audit_events(schedule_id, limit=limit)
 
     async def schedule_activity(self, *, doctor_id: UUID, starts_from: datetime, starts_to: datetime, limit: int = 100):
         """Return audit activity for a doctor's schedules in a time window."""
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.schedule.activity.start",
+            description="Starting doctor schedule activity query",
+            doctor_id=str(doctor_id),
+            starts_from=starts_from.isoformat(),
+            starts_to=starts_to.isoformat(),
+            limit=limit,
+        )
         return await self.catalog.list_schedule_audit_events(
             doctor_id=doctor_id,
             starts_from=starts_from,

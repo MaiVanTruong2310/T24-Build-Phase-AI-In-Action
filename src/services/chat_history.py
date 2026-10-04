@@ -1,11 +1,16 @@
 """Account-owned chat archive, idempotent turns, and bounded graph checkpoints."""
 
 import json
+import logging
 from datetime import date
 from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import text
+
+from src.core.logging import get_logger, log_event
+
+logger = get_logger(__name__)
 
 STATE_FIELDS = {
     "messages",
@@ -65,6 +70,16 @@ class ChatHistoryService:
         self.session = session
 
     async def begin_turn(self, user, request):
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.turn.start",
+            description="Starting chat turn lease and idempotency check",
+            user_id=str(user.id),
+            session_id=request.session_id,
+            request_id=str(request.request_id),
+            message_length=len(request.message),
+        )
         lease = uuid4()
         async with self.session.begin():
             await self.session.execute(
@@ -95,8 +110,28 @@ class ChatHistoryService:
                 .first()
             )
             if previous and previous["user_text"] != request.message:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "chat.turn.idempotency_conflict",
+                    description="Chat turn request id was reused with different message content",
+                    user_id=str(user.id),
+                    session_id=request.session_id,
+                    request_id=str(request.request_id),
+                    conversation_id=str(conv["id"]),
+                )
                 raise HTTPException(409, "Mã lượt chat đã được dùng cho một tin nhắn khác.")
             if previous and previous["status"] == "completed":
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "chat.turn.cached",
+                    description="A completed chat turn was returned from the idempotency record",
+                    user_id=str(user.id),
+                    session_id=request.session_id,
+                    request_id=str(request.request_id),
+                    conversation_id=str(conv["id"]),
+                )
                 return {"cached": previous["result"], "conversation_id": conv["id"]}
             claimed = (
                 await self.session.execute(
@@ -107,6 +142,16 @@ class ChatHistoryService:
                 )
             ).first()
             if not claimed:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "chat.turn.lease_unavailable",
+                    description="Chat turn was rejected because the conversation is being processed",
+                    user_id=str(user.id),
+                    session_id=request.session_id,
+                    request_id=str(request.request_id),
+                    conversation_id=str(conv["id"]),
+                )
                 raise HTTPException(409, "Cuộc trò chuyện đang xử lý một tin nhắn. Vui lòng đợi.")
             await self.session.execute(
                 text("""INSERT INTO public.chat_turns(id,conversation_id,request_id,user_text,status)
@@ -114,14 +159,34 @@ class ChatHistoryService:
               DO UPDATE SET status='processing',assistant_text=NULL,result=NULL"""),
                 {"id": uuid4(), "cid": conv["id"], "rid": request.request_id, "message": request.message},
             )
-            return {
+            turn = {
                 "conversation_id": conv["id"],
                 "lease": lease,
                 "request_id": request.request_id,
                 "checkpoint": conv["checkpoint"] or {},
             }
+            log_event(
+                logger,
+                logging.INFO,
+                "chat.turn.initialized",
+                description="Chat turn was leased and marked as processing",
+                user_id=str(user.id),
+                session_id=request.session_id,
+                request_id=str(request.request_id),
+                conversation_id=str(conv["id"]),
+            )
+            return turn
 
     async def complete(self, turn, result, state):
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.turn.complete.start",
+            description="Starting chat turn checkpoint and response persistence",
+            conversation_id=str(turn["conversation_id"]),
+            request_id=str(turn["request_id"]),
+            state_fields=sorted(key for key in state if key in STATE_FIELDS),
+        )
         checkpoint = {key: state[key] for key in STATE_FIELDS if key in state}
         # These entries are data from the conversation, never authorization claims.
         async with self.session.begin():
@@ -137,6 +202,14 @@ class ChatHistoryService:
                 )
             ).first()
             if not owned:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "chat.turn.complete.lease_expired",
+                    description="Chat turn completion was rejected because the lease is no longer owned",
+                    conversation_id=str(turn["conversation_id"]),
+                    request_id=str(turn["request_id"]),
+                )
                 raise HTTPException(409, "Lượt chat đã hết hiệu lực. Vui lòng tải lại cuộc trò chuyện.")
             await self.session.execute(
                 text("""UPDATE public.chat_turns SET status='completed',assistant_text=:answer,result=CAST(:result AS jsonb)
@@ -149,7 +222,25 @@ class ChatHistoryService:
                 },
             )
 
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.turn.complete.done",
+            description="Chat turn response and checkpoint were persisted",
+            conversation_id=str(turn["conversation_id"]),
+            request_id=str(turn["request_id"]),
+            state_field_count=len(checkpoint),
+        )
+
     async def fail(self, turn):
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.turn.fail.start",
+            description="Starting chat turn lease release after processing failure",
+            conversation_id=str(turn["conversation_id"]),
+            request_id=str(turn["request_id"]),
+        )
         async with self.session.begin():
             owned = (
                 await self.session.execute(
@@ -163,8 +254,26 @@ class ChatHistoryService:
                     text("UPDATE public.chat_turns SET status='failed' WHERE conversation_id=:cid AND request_id=:rid"),
                     {"cid": turn["conversation_id"], "rid": turn["request_id"]},
                 )
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.turn.fail.done",
+            description="Chat turn lease was released and failure status was recorded when owned",
+            conversation_id=str(turn["conversation_id"]),
+            request_id=str(turn["request_id"]),
+            turn_owned=bool(owned),
+        )
 
     async def list_conversations(self, user_id, limit=30, offset=0):
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.conversation.list.start",
+            description="Starting account conversation list query",
+            user_id=str(user_id),
+            limit=limit,
+            offset=offset,
+        )
         rows = (
             (
                 await self.session.execute(
@@ -177,9 +286,29 @@ class ChatHistoryService:
             .all()
         )
         await self.session.commit()
-        return {"conversations": [dict(r) for r in rows[:limit]], "has_more": len(rows) > limit}
+        response = {"conversations": [dict(r) for r in rows[:limit]], "has_more": len(rows) > limit}
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.conversation.list.done",
+            description="Account conversations were listed",
+            user_id=str(user_id),
+            count=len(response["conversations"]),
+            has_more=response["has_more"],
+        )
+        return response
 
     async def history(self, user_id, session_id, limit=50, offset=0):
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.history.start",
+            description="Starting account chat history query",
+            user_id=str(user_id),
+            session_id=session_id,
+            limit=limit,
+            offset=offset,
+        )
         conv = (
             (
                 await self.session.execute(
@@ -194,6 +323,14 @@ class ChatHistoryService:
         )
         if not conv:
             await self.session.commit()
+            log_event(
+                logger,
+                logging.WARNING,
+                "chat.history.not_found",
+                description="Chat history lookup returned no conversation for the session",
+                user_id=str(user_id),
+                session_id=session_id,
+            )
             raise HTTPException(404, "Không tìm thấy cuộc trò chuyện.")
         rows = (
             (
@@ -207,13 +344,33 @@ class ChatHistoryService:
             .all()
         )
         await self.session.commit()
-        return {
+        response = {
             "title": conv["title"],
             "turns": [dict(r) for r in reversed(rows[:limit])],
             "has_more": len(rows) > limit,
         }
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.history.done",
+            description="Account chat history was loaded",
+            user_id=str(user_id),
+            session_id=session_id,
+            conversation_id=str(conv["id"]),
+            turn_count=len(response["turns"]),
+            has_more=response["has_more"],
+        )
+        return response
 
     async def checkpoint(self, user_id, session_id):
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.checkpoint.start",
+            description="Starting account chat checkpoint query",
+            user_id=str(user_id),
+            session_id=session_id,
+        )
         result = (
             await self.session.execute(
                 text("SELECT checkpoint FROM public.chat_conversations WHERE user_id=:uid AND session_id=:sid"),
@@ -221,4 +378,14 @@ class ChatHistoryService:
             )
         ).scalar_one_or_none()
         await self.session.commit()
-        return result or {}
+        checkpoint = result or {}
+        log_event(
+            logger,
+            logging.INFO,
+            "chat.checkpoint.done",
+            description="Account chat checkpoint was loaded",
+            user_id=str(user_id),
+            session_id=session_id,
+            has_checkpoint=bool(checkpoint),
+        )
+        return checkpoint

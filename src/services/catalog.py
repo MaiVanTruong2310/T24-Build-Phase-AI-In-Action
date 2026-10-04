@@ -1,6 +1,7 @@
 """Compatibility facade composing the catalog domain service modules."""
 
 import inspect
+import logging
 from datetime import date, datetime
 from uuid import UUID
 
@@ -8,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import ConflictError, NotFoundError
-from src.core.logging import get_logger
+from src.core.logging import get_logger, log_event
 from src.models.catalog import CatalogAuditEvent, Doctor, DoctorSchedule
 from src.repositories.catalog import CatalogRepository
 from src.schemas.catalog import DoctorFacilityAssignment
@@ -80,7 +81,15 @@ class CatalogService(
                 payload=_json_safe(payload),
             )
         )
-        logger.info("CatalogService.audit", extra={"entity_type": entity_type, "action": action})
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.audit.recorded",
+            description="A catalog business change was recorded in the audit trail",
+            entity_type=entity_type,
+            entity_id=str(entity_id),
+            action=action,
+        )
 
     @staticmethod
     async def _required(value, message: str):
