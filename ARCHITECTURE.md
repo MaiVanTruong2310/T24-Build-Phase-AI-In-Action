@@ -75,7 +75,7 @@ flowchart LR
   - Patient App: Chat với AI, đặt/đổi/huỷ lịch, xem hồ sơ, nhận nhắc lịch
   - Staff Dashboard: HITL Queue, duyệt lịch, chat takeover, xử lý escalation
   - Kết nối real-time qua WebSocket cho chat và cập nhật trạng thái lịch hẹn
-- **State Management:**  Global store (Redux) cho session người dùng và trạng thái chat
+- **State Management:** Global store (Redux) cho session người dùng và trạng thái chat
 
 ### Backend (FastAPI)
 
@@ -104,18 +104,18 @@ flowchart LR
     Intent --> Safety{"Safety/Emergency<br/>Check"}
 
     Safety -->|"Khẩn cấp"| Emg["Khuyến nghị cấp cứu<br/>Cảnh báo nhân viên y tế"]
-    Emg -->|"RestAPI API"| HITL1["Staff Dashboard:<br/>Escalation"]
+    Emg -->|"RestAPI"| HITL1["Staff Dashboard:<br/>Escalation"]
 
     Safety -->|"An toàn"| Gather["Thu thập thông tin<br/>Hỏi triệu chứng/nhu cầu"]
     Gather --> RAG["RAG Retrieval<br/>Tìm kiếm tri thức y khoa"]
     RAG --> Reason["Reasoning<br/>Chọn chuyên khoa/bác sĩ"]
-    Reason --> Confidenceidence{"Confidenceidence Check<br/>Đánh giá độ tin cậy"}
+    Reason --> Confidence{"Confidence Check<br/>Đánh giá độ tin cậy"}
 
     Confidence -->|"Cao"| Suggest["Trả kết quả:<br/>Gợi ý chuyên khoa/bác sĩ/slot"]
-    Suggest -->|"RestAPI API"| ToolCall["Agent Tool API<br/>(gọi Backend)"]
+    Suggest -->|"RestAPI"| ToolCall["Agent Tool API<br/>(gọi Backend)"]
 
     Confidence -->|"Thấp"| HandOff["Tạo HITL Task"]
-    HandOff -->|"RestAPI API"| HITL2["Staff Dashboard:<br/>HITL Queue"]
+    HandOff -->|"RestAPI"| HITL2["Staff Dashboard:<br/>HITL Queue"]
     HandOff -->|"WebSocket"| Waiting["Chờ điều phối viên<br/>tiếp quản"]
 
     HITL2 -->|"WebSocket (chat takeover)"| Waiting
@@ -169,6 +169,10 @@ flowchart LR
     OBS --> LOKI["Loki"]
     OBS --> TEMPO["Tempo"]
     OBS --> GRAFANA["Grafana dashboard"]
+    GHA -->|"Push image theo commit SHA"| REG["Docker Hub Registry"]
+    REG --> EC2["EC2<br/>Docker Compose"]
+    EC2 --> API["FastAPI container"]
+    EC2 --> PG["PostgreSQL + pgvector"]
 
     GHA -->|"Frontend build"| VC["Vercel<br/>Deploy"]
     VC --> FE["Frontend (hosted on Vercel)"]
@@ -176,7 +180,7 @@ flowchart LR
     FE -->|"REST API"| PRODAPI
 ```
 
-Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển khai image đã kiểm thử lên EC2, có health check và rollback. Redis, Object Storage và frontend được tích hợp theo môi trường triển khai tương ứng.
+Hiện tại AWS EC2 chạy Docker Compose cho backend và PostgreSQL/pgvector. GitHub Actions build/test Docker image, push image theo commit SHA lên Docker Hub; EC2 chỉ pull image từ registry rồi khởi động bằng Compose, health check và rollback khi cần. Frontend React/Vite được deploy độc lập trên Vercel. Redis, Kafka và Object Storage được tích hợp theo môi trường triển khai tương ứng.
 
 ## Security
 
@@ -187,10 +191,10 @@ Hiện tại Docker Compose chạy backend và PostgreSQL/pgvector; CD triển k
 
 ## Design Decisions
 
-| Decision            | Choice                                | Reason                                              |
-| ------------------- | ------------------------------------- | --------------------------------------------------- |
-| API                 | FastAPI                               | Async, type-safe, tự sinh OpenAPI                   |
-| Agent orchestration | LangGraph                             | State rõ ràng, branching và HITL                    |
-| Primary database    | PostgreSQL + pgvector                 | Dữ liệu quan hệ và vector search trong một nền tảng |
-| Cache / events      | Redis + WebSocket                     | Giảm độ trễ và cập nhật notification realtime       |
-| Deployment          | Docker Compose + EC2 + GitHub Actions | Đơn giản cho MVP, có CI/CD và rollback              |
+| Decision            | Choice                                                          | Reason                                                                               |
+| ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| API                 | FastAPI                                                         | Async, type-safe, tự sinh OpenAPI                                                    |
+| Agent orchestration | LangGraph                                                       | State rõ ràng, branching và HITL                                                     |
+| Primary database    | PostgreSQL + pgvector                                           | Dữ liệu quan hệ và vector search trong một nền tảng                                  |
+| Cache / events      | Redis + Kafka                                                   | Giảm độ trễ và xử lý notification bất đồng bộ                                        |
+| Deployment          | AWS EC2 + Docker Compose + Docker Hub + GitHub Actions + Vercel | Backend pull image đã kiểm thử; frontend deploy độc lập; có health check và rollback |
