@@ -10,6 +10,47 @@ logger = get_logger(__name__)
 ZALO_BOT_API_BASE = "https://bot-api.zaloplatforms.com"
 
 
+def split_message_chunks(text: str, max_chars: int = 1800) -> list[str]:
+    """Split long text into readable chunks bounded by newlines or sentence ends."""
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = text.strip()
+
+    while remaining:
+        if len(remaining) <= max_chars:
+            chunks.append(remaining)
+            break
+
+        # Look for natural split point within limit
+        split_idx = -1
+        # Priority 1: Paragraph break \n\n
+        split_idx = remaining.rfind("\n\n", 0, max_chars)
+        # Priority 2: Line break \n
+        if split_idx == -1:
+            split_idx = remaining.rfind("\n", 0, max_chars)
+        # Priority 3: Sentence break (period/question/exclamation followed by space)
+        if split_idx == -1:
+            for sep in [". ", "? ", "! "]:
+                idx = remaining.rfind(sep, 0, max_chars)
+                if idx > split_idx:
+                    split_idx = idx + 1
+        # Fallback: whitespace
+        if split_idx == -1:
+            split_idx = remaining.rfind(" ", 0, max_chars)
+        # Hard cut if no whitespace found
+        if split_idx == -1:
+            split_idx = max_chars
+
+        chunk = remaining[:split_idx].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[split_idx:].strip()
+
+    return chunks
+
+
 class ZaloBotClient:
     """HTTP client for Zalo Bot API endpoints."""
 
@@ -59,26 +100,29 @@ class ZaloBotClient:
         text: str,
         parse_mode: str = "markdown",
     ) -> dict:
-        """Send a text message to a user or group on Zalo."""
+        """Send a text message (auto-split if exceeding length limit) to a user on Zalo."""
         if not self.is_configured:
             logger.warning("Attempted to send Zalo message without token: chat_id=%s", chat_id)
             return {"ok": False, "description": "Zalo bot token not configured"}
 
         url = f"{self.base_url}/sendMessage"
-        # Truncate text if exceeds Zalo 2000 character limit
-        safe_text = text[:1990] if len(text) > 2000 else text
-        payload = {
-            "chat_id": chat_id,
-            "text": safe_text,
-            "parse_mode": parse_mode,
-        }
+        chunks = split_message_chunks(text, max_chars=1800)
+        last_resp = {"ok": True}
+
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(url, json=payload)
-                data = resp.json()
-                if not data.get("ok"):
-                    logger.error("Failed to send Zalo message to %s: %s", chat_id, data)
-                return data
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for chunk in chunks:
+                    payload = {
+                        "chat_id": chat_id,
+                        "text": chunk,
+                        "parse_mode": parse_mode,
+                    }
+                    resp = await client.post(url, json=payload)
+                    last_resp = resp.json()
+                    if not last_resp.get("ok"):
+                        logger.error("Failed to send Zalo message to %s: %s", chat_id, last_resp)
+            return last_resp
         except Exception:
             logger.exception("Exception while sending Zalo message to %s", chat_id)
             return {"ok": False, "description": "HTTP request failed"}
+
