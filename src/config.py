@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""
 
+    # Zalo Bot
+    zalo_bot_token: str = ""
+    zalo_bot_secret_token: str = ""
+    zalo_bot_mode: Literal["disabled", "polling", "webhook"] = "disabled"
+    zalo_webhook_url: str = ""
+
 
 def parse_cors_origins(value: str) -> list[str]:
     """Parse comma-separated origins into values browsers can match exactly."""

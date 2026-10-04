@@ -8,17 +8,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.api.endpoints.workbench import router as workbench_router, patient_router as live_coordination_router
 from src.api.endpoints.auth import router as auth_router
 from src.api.endpoints.auth import user_router
 from src.api.endpoints.booking import router as booking_router
 from src.api.endpoints.booking import staff_router as staff_booking_router
-from src.api.endpoints.coordination import router as coordination_router
-from src.api.endpoints.coordination import staff_router as staff_coordination_router
 from src.api.endpoints.catalog import router as catalog_router
 from src.api.endpoints.catalog import staff_router as catalog_staff_router
-from src.api.endpoints.package import router as package_router, staff_router as staff_package_router
+from src.api.endpoints.coordination import router as coordination_router
+from src.api.endpoints.coordination import staff_router as staff_coordination_router
 from src.api.endpoints.notification import router as notification_router
+from src.api.endpoints.package import router as package_router
+from src.api.endpoints.package import staff_router as staff_package_router
+from src.api.endpoints.workbench import patient_router as live_coordination_router
+from src.api.endpoints.workbench import router as workbench_router
+from src.api.endpoints.zalo import router as zalo_router
 from src.api.handlers import (
     app_error_handler,
     database_unavailable_handler,
@@ -133,6 +136,7 @@ app.include_router(package_router, prefix="/api/v1")
 app.include_router(staff_package_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(catalog_staff_router, prefix="/api/v1")
+app.include_router(zalo_router, prefix="/api/v1")
 app.add_exception_handler(OperationalError, database_unavailable_handler)
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)

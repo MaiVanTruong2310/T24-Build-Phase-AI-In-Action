@@ -60,6 +60,32 @@ class NotificationService:
                 )
             )
 
+        # Trigger Zalo notification if patient linked Zalo Bot
+        try:
+            from src.zalo.service import send_zalo_notification_to_user
+
+            if status == "confirmed":
+                time_str = (
+                    booking.starts_at.strftime("%H:%M ngày %d/%m/%Y")
+                    if booking.starts_at
+                    else "Theo thông báo"
+                )
+                await send_zalo_notification_to_user(
+                    self.session,
+                    booking.user_id,
+                    "Lịch khám đã được duyệt ✅",
+                    f"Lịch khám của bạn (Mã: #{str(booking.id)[:8]}) đã được nhân viên y tế xác nhận thành công!\nThời gian: {time_str}.",
+                )
+            elif status == "rejected":
+                await send_zalo_notification_to_user(
+                    self.session,
+                    booking.user_id,
+                    "Thông báo về lịch khám ⚠️",
+                    booking.staff_note or "Lịch khám của bạn chưa được nhân viên xác nhận.",
+                )
+        except Exception:
+            pass
+
     async def list_for_user(self, user_id: UUID, *, unread_only: bool, offset: int, limit: int) -> list[Notification]:
         """List notifications owned by a user."""
         return await self.notifications.list_for_user(user_id, unread_only=unread_only, offset=offset, limit=limit)
