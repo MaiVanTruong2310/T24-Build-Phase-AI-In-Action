@@ -210,9 +210,9 @@ async def analyze_node(state: AgentState) -> dict:
         current_dept=current_dept,
         language=lang,
     )
-    if not intent_check:
+    if not intent_check or intent_check.get("intent") == "SELF_CARE_FOLLOWUP":
         fac_inquiry, fac_reg = extract_facility_inquiry(query)
-        if fac_inquiry and fac_reg:
+        if fac_inquiry:
             intent_check = {
                 "intent": "FACILITY_INFO",
                 "matched_pattern": "smart_facility_extraction",

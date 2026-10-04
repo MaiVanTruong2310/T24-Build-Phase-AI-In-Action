@@ -212,7 +212,7 @@ class ClinicalGuardrailService:
 
         self_care_followup = re.search(
             r"\b(?:(?:vay|the|con)\s+)?(?:toi|minh|tui)\s+nen\s+kham\s+"
-            r"(?:o dau|khoa nao|cho nao)\b",
+            r"(?:khoa nao|chuyen khoa nao)\b",
             query_normalized,
         )
         if self_care_followup and current_department:
