@@ -1,0 +1,76 @@
+/* Glass fan adapted from Uiverse.io by codebykay101. */
+.health-services-container {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  isolation: isolate;
+  padding: 44px 12px 50px;
+}
+.health-services-container::before {
+  content: '';
+  position: absolute;
+  width: 70%;
+  height: 75%;
+  background: radial-gradient(ellipse, #d5eadf 0%, #f1e3da 45%, transparent 72%);
+  filter: blur(24px);
+  z-index: -1;
+  pointer-events: none;
+}
+.health-service-glass {
+  position: relative;
+  flex: 0 1 260px;
+  min-width: 0;
+  height: 390px;
+  background: linear-gradient(145deg, rgb(255 255 255 / .82), rgb(229 244 236 / .55));
+  border: 1px solid rgb(114 164 139 / .3);
+  box-shadow: 0 20px 30px rgb(37 79 64 / .14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform .5s, margin .5s, box-shadow .5s;
+  border-radius: 16px;
+  margin: 0 -40px;
+  backdrop-filter: blur(10px);
+  transform: rotate(calc(var(--service-angle) * 1deg));
+  color: #295c49;
+  overflow: hidden;
+}
+.health-service-body { width: 100%; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 20px; }
+.health-service-icon { width: 56px; height: 56px; flex-shrink: 0; stroke-width: 1.5; }
+.health-service-details { max-height: 0; overflow: hidden; opacity: 0; transition: opacity .35s, max-height .5s; }
+.health-service-details p { font-size: 12px; line-height: 1.7; }
+.health-service-details ul { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.health-service-details li { display: flex; align-items: flex-start; gap: 7px; font-size: 11px; line-height: 1.5; }
+.health-service-details li svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
+.health-service-title {
+  width: 100%;
+  min-height: 80px;
+  margin: 0;
+  padding: 16px 18px;
+  background: rgb(198 225 210 / .48);
+  border-top: 1px solid rgb(114 164 139 / .16);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.health-services-container:hover .health-service-glass,
+.health-services-container:focus-within .health-service-glass { transform: rotate(0); margin: 0 8px; }
+.health-services-container:hover .health-service-details,
+.health-services-container:focus-within .health-service-details { opacity: 1; max-height: 260px; }
+.health-service-glass:focus-visible { outline: 2px solid #37856a; outline-offset: 4px; }
+.dark .health-service-glass { background: linear-gradient(145deg, rgb(35 61 49 / .85), rgb(19 37 30 / .6)); color: #d4eadf; border-color: rgb(148 204 175 / .2); box-shadow: 0 20px 30px rgb(0 0 0 / .25); }
+.dark .health-service-title { background: rgb(115 169 138 / .12); }
+.dark .health-services-container::before { opacity: .15; }
+@media (max-width: 1023px), (hover: none) {
+  .health-services-container { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 12px 0 20px; }
+  .health-service-glass, .health-services-container:hover .health-service-glass, .health-services-container:focus-within .health-service-glass { transform: none; margin: 0; height: auto; min-height: 330px; }
+  .health-service-details { opacity: 1; max-height: none; overflow: visible; }
+  .health-service-body { justify-content: flex-start; }
+}
+@media (max-width: 539px) { .health-services-container { grid-template-columns: 1fr; gap: 16px; } .health-service-glass { min-height: 300px; } }
+@media (prefers-reduced-motion: reduce) { .health-service-glass, .health-service-details { transition: none; } }

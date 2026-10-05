@@ -22,4 +22,14 @@ export interface DoctorForm {
   enableEmergencyCode: boolean;
 }
 
+export interface FacilityAssignmentForm {
+  facility_id: string;
+  department: string;
+  room: string;
+  position: string;
+  active_from: string;
+  active_to: string;
+  is_primary: boolean;
+}
+
 export type FieldErrors = Partial<Record<keyof DoctorForm, string>>;

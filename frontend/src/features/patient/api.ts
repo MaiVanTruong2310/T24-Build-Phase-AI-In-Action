@@ -1,4 +1,8 @@
 import { fetchWithAuth } from '../../app/apiClient';
+import { cachedQuery, peekQuery, rememberQuery } from '../../app/queryCache';
+
+const PROFILE_KEY = 'patient-profile';
+const PROFILE_TTL_MS = 30_000;
 
 export interface PatientProfile {
   id: string;
@@ -43,10 +47,16 @@ export type PatientProfileUpdate = Partial<Pick<
 >>;
 
 export async function fetchCurrentUser(): Promise<PatientProfile> {
-  const response = await fetchWithAuth('/users/me');
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || 'Không thể tải hồ sơ bệnh nhân');
-  return payload.data;
+  return cachedQuery(PROFILE_KEY, PROFILE_TTL_MS, async () => {
+    const response = await fetchWithAuth('/users/me');
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Không thể tải hồ sơ bệnh nhân');
+    return payload.data as PatientProfile;
+  });
+}
+
+export function peekCurrentUser(): PatientProfile | undefined {
+  return peekQuery<PatientProfile>(PROFILE_KEY, true);
 }
 
 export async function updateCurrentUser(update: PatientProfileUpdate): Promise<PatientProfile> {
@@ -57,5 +67,6 @@ export async function updateCurrentUser(update: PatientProfileUpdate): Promise<P
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || 'Không thể cập nhật hồ sơ bệnh nhân');
+  rememberQuery(PROFILE_KEY, payload.data as PatientProfile, PROFILE_TTL_MS);
   return payload.data;
 }

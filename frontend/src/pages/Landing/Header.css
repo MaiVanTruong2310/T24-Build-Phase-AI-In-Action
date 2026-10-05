@@ -1,0 +1,55 @@
+/* Navigation button treatment inspired by Uiverse.io / Praashoo7. */
+.patient-nav-tab {
+  --tab-background: #ffffff;
+  --tab-border: #6a9d86;
+  --tab-text: #285c45;
+  --tab-shadow: rgba(25, 65, 47, 0.2);
+  outline: none;
+  color: var(--tab-text);
+  border: 2px dashed var(--tab-border);
+  border-radius: 15px;
+  background-color: var(--tab-background);
+  box-shadow: 0 0 0 4px var(--tab-background), 2px 2px 4px 2px var(--tab-shadow);
+  transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out, color 0.4s, background-color 0.4s, border-color 0.4s;
+}
+
+.patient-nav-tab:hover {
+  --tab-background: #ffffff;
+  --tab-border: #32795a;
+  --tab-text: #174a34;
+}
+
+.patient-nav-tab[aria-current="page"] {
+  --tab-background: #ffffff;
+  --tab-border: #24734e;
+  --tab-text: #14532d;
+  font-weight: 600;
+}
+
+.patient-nav-tab:active {
+  transform: translateX(0.1em) translateY(0.1em);
+  box-shadow: 0 0 0 4px var(--tab-background), 1.5px 1.5px 2.5px 1.5px var(--tab-shadow);
+}
+
+.patient-nav-tab:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 6px;
+}
+
+.dark .patient-nav-tab {
+  --tab-background: #151f33;
+  --tab-border: #5c9e7c;
+  --tab-text: #c8ebd8;
+  --tab-shadow: rgba(0, 0, 0, 0.35);
+}
+
+.dark .patient-nav-tab:hover,
+.dark .patient-nav-tab[aria-current="page"] {
+  --tab-background: #173b32;
+  --tab-border: #8ed3ae;
+  --tab-text: #f6fcf9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .patient-nav-tab { transition: none; }
+}

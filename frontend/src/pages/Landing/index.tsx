@@ -40,7 +40,7 @@ export function Landing() {
 
   return (
     <>
-      <div className="min-h-screen font-sans bg-[#F8FAFC] dark:bg-[#0B1329] text-slate-900 dark:text-slate-100 transition-colors duration-300">
+      <div className="min-h-screen font-sans bg-[#F8FAFC] light:bg-app-page dark:bg-[#0B1329] text-slate-900 light:text-app-text dark:text-slate-100 transition-colors duration-300">
         <Header />
         <Hero />
         <Stats />

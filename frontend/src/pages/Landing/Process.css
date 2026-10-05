@@ -1,0 +1,48 @@
+/* Adapted from Uiverse.io by arshshaikh06: four expandable process colors. */
+.care-process-container { width: 100%; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 24px rgb(37 79 64 / .1); font-family: inherit; }
+.care-process-palette { display: flex; min-height: 350px; width: 100%; }
+.care-process-color {
+  flex: 1;
+  min-width: 0;
+  min-height: 350px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 22px;
+  padding: 28px 24px;
+  border: none;
+  text-align: left;
+  color: white;
+  cursor: pointer;
+  transition: flex .4s ease, box-shadow .3s;
+}
+.care-process-color:nth-child(1) { background: #264653; }
+.care-process-color:nth-child(2) { background: #2a9d8f; color: #092e29; }
+.care-process-color:nth-child(3) { background: #e9c46a; color: #493818; }
+.care-process-color:nth-child(4) { background: #f4a261; color: #4b2b16; }
+.care-process-color.is-active { flex: 2; box-shadow: 0 7px 29px rgb(0 0 0 / .12); }
+.care-process-color:focus-visible { outline: 3px solid currentColor; outline-offset: -7px; }
+.care-process-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.care-process-number { font-size: 30px; font-weight: 800; opacity: .75; }
+.care-process-name { font-size: clamp(16px, 1.6vw, 21px); line-height: 1.4; font-weight: 700; }
+.care-process-detail { display: flex; flex-direction: column; gap: 20px; animation: care-process-reveal .35s ease both; }
+.care-process-detail[hidden] { display: none; }
+.care-process-description { font-size: 13px; line-height: 1.75; }
+.care-process-description span { color: inherit !important; }
+.care-process-meta { border-top: 1px solid currentColor; padding-top: 14px; font-size: 11px; font-weight: 600; }
+.care-process-stats { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 64px; padding: 18px 24px; background: #fff; color: #527565; }
+.care-process-stats h2 { font-size: clamp(14px, 1.5vw, 18px); font-weight: 600; line-height: 1.5; margin: 0; }
+.care-process-stats svg { fill: currentColor; flex-shrink: 0; }
+.dark .care-process-stats { background: #13251e; color: #c3ddd0; }
+@keyframes care-process-reveal { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 767px) {
+  .care-process-palette { flex-direction: column; }
+  .care-process-color { flex: none; min-height: 100px; gap: 12px; padding: 20px 24px; }
+  .care-process-color.is-active { flex: none; }
+  .care-process-top { justify-content: flex-start; }
+  .care-process-number { font-size: 22px; }
+  .care-process-name { font-size: 17px; }
+  .care-process-stats { padding: 18px 20px; }
+}
+@media (prefers-reduced-motion: reduce) { .care-process-color { transition: none; } .care-process-detail { animation: none; } }

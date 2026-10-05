@@ -35,7 +35,6 @@ function timeRange(schedule?: Schedule): string {
 
 function locationLabel(doctor: Doctor | null, schedule?: Schedule): string {
   if (!doctor || !schedule) return 'Chưa xác định địa điểm';
-  if (!schedule.facility_id) return 'Tất cả cơ sở';
   const assignment = doctor.facilities?.find((item) => item.facility_id === schedule.facility_id);
   const facility = assignment?.facility?.name || `Cơ sở ${schedule.facility_id.slice(0, 8)}`;
   return assignment?.room ? `${facility} • Phòng ${assignment.room}` : facility;

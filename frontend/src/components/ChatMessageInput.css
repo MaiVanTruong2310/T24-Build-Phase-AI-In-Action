@@ -1,0 +1,31 @@
+/* Adapted from Uiverse.io by 0xnihilism; scoped to the chat composer. */
+.chat-message-input-container { position: relative; flex: 1; min-width: 0; margin: 3px 6px 7px 2px; }
+.chat-message-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 44px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  color: #000;
+  background-color: #e7f3ec;
+  border: 3px solid #000;
+  border-radius: 0;
+  outline: none;
+  box-shadow: 4px 4px 0 #264653;
+  transition: background-color .3s, color .3s, border-color .3s, box-shadow .3s, transform .3s;
+}
+.chat-message-input::placeholder { color: #888; }
+.chat-message-input:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #264653; }
+.chat-message-input:focus { background-color: #e7f3ec; color: #000; border-color: #264653; caret-color: #000; }
+.chat-message-input:focus::placeholder { color: #888; }
+.chat-message-input:not(:placeholder-shown) { font-weight: bold; letter-spacing: .5px; }
+.chat-message-input:disabled { opacity: .6; cursor: not-allowed; }
+/* Use the native caret so it follows the insertion point and selection. */
+.chat-message-input-mic { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 30px; height: 36px; border: 0; background: transparent; color: #527565; opacity: .65; cursor: not-allowed; }
+.dark .chat-message-input-mic { color: #abc9b8; }
+.dark .chat-message-input { background: #15271f; color: #e7f2eb; border-color: #abc9b8; box-shadow: 4px 4px 0 #123644; }
+.dark .chat-message-input:hover:not(:disabled) { box-shadow: 6px 6px 0 #123644; }
+.dark .chat-message-input:focus { background: #15271f; color: #e7f2eb; border-color: #abc9b8; caret-color: #e7f2eb; }
+@media (max-width: 480px) { .chat-message-input { height: 42px; padding-left: 10px; font-size: 16px; } }
+@media (prefers-reduced-motion: reduce) { .chat-message-input { animation: none !important; transition: none; } }
