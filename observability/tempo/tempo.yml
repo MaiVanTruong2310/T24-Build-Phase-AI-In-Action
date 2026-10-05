@@ -23,9 +23,6 @@ metrics_generator:
     external_labels:
       source: tempo
       cluster: ai20k
-  processor:
-    service-graphs:
-    span-metrics:
   storage:
     path: /var/tempo/generator/wal
     remote_write:

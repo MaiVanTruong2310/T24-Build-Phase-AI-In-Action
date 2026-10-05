@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     database_pool_recycle_seconds: int = Field(default=900, ge=30, le=86400)
     database_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
 
+    # Redis (cache/session store). Each EC2 environment uses its local
+    # Compose service by default; override with REDIS_URL when needed.
+    redis_url: str = "redis://localhost:6379/0"
+
     # Direct notification delivery
     notification_processing_timeout_seconds: int = Field(default=300, ge=30, le=86400)
     notification_max_attempts: int = Field(default=5, ge=1, le=20)
