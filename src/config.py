@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     model_name: str = "gpt-4o-mini"
     llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model_name: str = "DeepSeek-V4.1-Flash"
 
     # Database
     database_url: str = ""

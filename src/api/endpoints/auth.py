@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_current_user, oauth2_scheme, require_staff
+from src.api.dependencies import get_current_user, oauth2_scheme, require_patient, require_staff
 from src.api.response import success_response
 from src.config import get_settings
 from src.db.dependencies import get_auth_db_session
@@ -223,10 +223,10 @@ async def get_me(current_user: User = Depends(get_current_user)) -> ApiResponse[
 @user_router.patch("/me", response_model=ApiResponse[UserResponse])
 async def update_me(
     request: UpdateProfileRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_patient),
     service: AuthService = Depends(get_auth_service),
 ) -> ApiResponse[UserResponse]:
-    """Update and return the authenticated user's profile."""
+    """Update and return the authenticated patient's profile."""
     user = await service.update_profile(current_user, request)
     return success_response(UserResponse.model_validate(user), "Profile updated")
 
@@ -239,7 +239,7 @@ async def get_portrait(current_user: User = Depends(get_current_user)):
 @user_router.patch("/me/portrait", response_model=ApiResponse[str | None])
 async def update_portrait(
     request: PortraitUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_patient),
     service: AuthService = Depends(get_auth_service),
 ):
     await service.update_portrait(current_user, request.image)

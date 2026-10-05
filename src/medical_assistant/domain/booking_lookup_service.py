@@ -247,7 +247,15 @@ class BookingLookupService:
             specialty_code=intake_data.get("specialty_code") or state.get("suggested_department_code") or "",
         )
 
-        async with self.session_factory()() as db, db.begin():
+        maker = self.session_factory
+        try:
+            session_ctx = maker()
+        except TypeError:
+            session_ctx = maker
+        if callable(session_ctx) and not hasattr(session_ctx, "__aenter__"):
+            session_ctx = session_ctx()
+
+        async with session_ctx as db, db.begin():
             effective_user = user
             if effective_user is None and state.get("user_id"):
                 try:

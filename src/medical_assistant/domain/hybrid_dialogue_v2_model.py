@@ -92,64 +92,19 @@ class CandidateSpecialty(BaseModel):
 
 
 class HybridDialogueResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
-    schema_version: Literal["2.0"]
-    language: Literal["vi", "en"]
-    primary_intent: Literal[
-        "symptom_report",
-        "visit_request",
-        "schedule_request",
-        "slot_selection",
-        "faq",
-        "department_info",
-        "facility_info",
-        "medication_request",
-        "diagnosis_request",
-        "human_request",
-        "language_change",
-        "out_of_scope",
-        "unclear",
-    ]
-    secondary_intents: list[
-        Literal[
-            "symptom_report",
-            "visit_request",
-            "schedule_request",
-            "slot_selection",
-            "faq",
-            "department_info",
-            "facility_info",
-            "medication_request",
-            "diagnosis_request",
-            "human_request",
-            "language_change",
-            "out_of_scope",
-            "unclear",
-        ]
-    ] = Field(default_factory=list)
-    topic_change: Literal["none", "administrative_detour", "symptom_changed", "patient_changed", "correction"] = "none"
+    schema_version: str = "2.0"
+    language: str = "vi"
+    primary_intent: str = "unclear"
+    secondary_intents: list[str] = Field(default_factory=list)
+    topic_change: str = "none"
     facts_delta: FactsDelta = Field(default_factory=FactsDelta)
     safety_concerns: list[SafetyConcern] = Field(default_factory=list)
     missing_facts: list[MissingFact] = Field(default_factory=list)
     needs_clarification: bool = False
     clarification_reason: str | None = None
-    proposed_action: Literal[
-        "clarify_visit_purpose",
-        "ask_clarifying_question",
-        "suggest_specialty",
-        "search_available_slot",
-        "hold_slot",
-        "answer_faq",
-        "show_department_info",
-        "show_facility_info",
-        "decline_medication_request",
-        "respond_to_diagnosis_request",
-        "request_safety_review",
-        "request_human_help",
-        "acknowledge_language_change",
-        "out_of_scope_decline",
-    ]
+    proposed_action: str = "clarify_visit_purpose"
     action_args: ActionArgs = Field(default_factory=ActionArgs)
     candidate_specialties: list[CandidateSpecialty] = Field(default_factory=list)
     extraction_confidence: float = Field(default=0.9, ge=0.0, le=1.0)

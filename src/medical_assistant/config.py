@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     google_ai_api_key: str = ""
     google_ai_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     google_ai_model_name: str = "gemini-3.1-flash-lite"
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model_name: str = "DeepSeek-V4.1-Flash"
     llm_request_timeout_seconds: float = Field(default=12.0, gt=0.0, le=120.0)
     llm_hedge_delay_seconds: float = Field(default=3.0, gt=0.0, le=30.0)
     llm_total_timeout_seconds: float = Field(default=15.0, gt=0.0, le=120.0)

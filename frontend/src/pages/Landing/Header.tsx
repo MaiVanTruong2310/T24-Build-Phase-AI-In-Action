@@ -72,7 +72,7 @@ export function Header() {
 
     { to: '/patient/appointments', label: 'Đặt lịch khám', end: true, icon: Calendar },
 
-    ...(user
+    ...(user?.role === 'patient'
 
       ? [
 
@@ -83,6 +83,7 @@ export function Header() {
         ]
 
       : []),
+    ...(user?.role === 'staff' ? [{ to: '/staff', label: 'Bảng điều phối', end: false, icon: ShieldCheck }] : []),
 
   ];
 

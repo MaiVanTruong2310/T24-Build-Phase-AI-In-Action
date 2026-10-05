@@ -228,13 +228,20 @@ def detect_booking_confirmation(text: str) -> bool:
         return False
     lower = text.lower().strip()
     confirm_patterns = [
-        r"\b(?:tôi\s+)?xác\s+nhận(?:\s+đặt\s+lịch|\s+đặt\s+hẹn|\s+đặt\s+khám)?\b",
-        r"\b(?:tôi\s+thấy\s+)?lịch\s+(?:này\s+)?ổn[,\s]+đặt\s+(?:cho\s+tôi|giúp\s+tôi|hộ\s+tôi)\b",
-        r"\bđặt\s+lịch(?:\s+cho\s+tôi|\s+giúp\s+tôi|\s+đi|\s+luôn|\s+nhé)\b",
-        r"\bchốt\s+lịch(?:\s+này|\s+giúp\s+tôi|\s+cho\s+tôi|\s+đi|\s+nhé)\b",
-        r"\bđồng\s+ý\s+(?:đặt\s+lịch|lịch\s+này|thông\s+tin\s+này)\b",
-        r"\bđặt\s+khám(?:\s+luôn|\s+đi|\s+cho\s+tôi|\s+nhé)\b",
-        r"\bok[,\s]+đặt(?:\s+lịch)?\b",
+        # Match "xác nhận ... đặt lịch / đặt khám / đặt hẹn / chốt lịch / gửi thông tin"
+        r"\b(?:tôi\s+)?xác\s+nhận(?:\s+.*?)?(?:đặt\s+lịch|đặt\s+hẹn|đặt\s+khám|chốt\s+lịch|gửi\s+thông\s+tin|giúp\s+tôi|cho\s+tôi)\b",
+        # Match "(bạn) hãy đặt lịch / chốt lịch / giữ chỗ cho tôi / giúp tôi"
+        r"\b(?:bạn\s+)?(?:hãy\s+)?(?:đặt\s+lịch|đặt\s+hẹn|đặt\s+khám|chốt\s+lịch|giữ\s+chỗ)(?:\s+(?:cho\s+tôi|giúp\s+tôi|hộ\s+tôi|đi|luôn|ngay|nhé|nha|với|ạ))*\b",
+        # Match "chốt lịch giúp tôi", "giữ chỗ giúp tôi"
+        r"\bchốt\s+lịch(?:\s+(?:cho\s+tôi|giúp\s+tôi|hộ\s+tôi|đi|luôn|ngay|nhé|nha|ạ))*\b",
+        # Match "lịch này ổn, đặt cho tôi"
+        r"\b(?:tôi\s+thấy\s+)?lịch\s+(?:này\s+)?ổn[,\s]+(?:hãy\s+)?đặt\s+(?:cho\s+tôi|giúp\s+tôi|hộ\s+tôi)\b",
+        # Match "đồng ý đặt lịch / đồng ý chốt lịch / đồng ý gửi thông tin"
+        r"\bđồng\s+ý\s+(?:đặt\s+lịch|chốt\s+lịch|lịch\s+này|thông\s+tin\s+này|gửi\s+thông\s+tin)\b",
+        # Match "tiến hành đặt lịch / tiếp tục đặt lịch"
+        r"\b(?:tiến\s+hành|tiếp\s+tục)\s+(?:đặt\s+lịch|đặt\s+hẹn|đặt\s+khám|chốt\s+lịch)\b",
+        # Match "ok đặt lịch", "ok chốt lịch"
+        r"\bok[,\s]+(?:hãy\s+)?(?:đặt|chốt)(?:\s+lịch)?\b",
     ]
     for pat in confirm_patterns:
         if re.search(pat, lower):
@@ -243,11 +250,18 @@ def detect_booking_confirmation(text: str) -> bool:
         "đặt lịch đi", "dat lich di",
         "tôi xác nhận đặt lịch", "toi xac nhan dat lich",
         "xác nhận đặt lịch", "xac nhan dat lich",
+        "xác nhận bạn hãy đặt lịch cho tôi", "xac nhan ban hay dat lich cho toi",
+        "bạn hãy đặt lịch cho tôi", "ban hay dat lich cho toi",
+        "hãy đặt lịch cho tôi", "hay dat lich cho toi",
+        "đặt lịch cho tôi", "dat lich cho toi",
         "tôi thấy lịch này ổn, đặt cho tôi", "toi thay lich nay on, dat cho toi",
         "tôi thấy lịch này ổn đặt cho tôi", "toi thay lich nay on dat cho toi",
         "đặt cho tôi đi", "dat cho toi di",
         "chốt lịch đi", "chot lich di",
-        "xác nhận giúp tôi", "xac nhan giup toi"
+        "chốt lịch giúp tôi", "chot lich giup toi",
+        "xác nhận giúp tôi", "xac nhan giup toi",
+        "xác nhận gửi thông tin đặt khám", "xac nhan gui thong tin dat kham",
+        "xác nhận gửi thông tin", "xac nhan gui thong tin",
     ]
     return any(p in lower for p in exact_phrases)
 
@@ -529,10 +543,13 @@ def extract_clinical_details(
     if not severity:
         if any(w in lower_comb for w in ["dữ dội", "quặn thắt", "quặn từng cơn", "nhói buốt", "không chịu nổi", "như dao đâm"]):
             severity = "Mức độ nặng (Dữ dội / Đau quặn)"
+        elif any(w in lower_comb for w in ["ở mức nhẹ", "mức nhẹ", "hơi đau", "nhẹ"]):
+            if any(w in lower_comb for w in ["âm ỉ", "kéo dài"]):
+                severity = "Mức độ nhẹ (Âm ỉ kéo dài)"
+            else:
+                severity = "Mức độ nhẹ"
         elif any(w in lower_comb for w in ["âm ỉ", "tức nặng", "nóng rát", "nhức nhối", "khó chịu nhiều"]):
             severity = "Mức độ trung bình (Âm ỉ / Tức nặng)"
-        elif any(w in lower_comb for w in ["nhẹ", "hơi đau", "châm chích", "thoang thoảng"]):
-            severity = "Mức độ nhẹ"
 
     # 3. Duration & Onset
     duration = ""
@@ -549,6 +566,8 @@ def extract_clinical_details(
         duration = "Từ hôm qua"
     elif "mới bị" in lower_comb or "đột ngột" in lower_comb:
         duration = "Khởi phát đột ngột gần đây"
+    elif "kéo dài" in lower_comb or "dai dẳng" in lower_comb:
+        duration = "Kéo dài âm ỉ"
     elif facts.get("duration_days"):
         duration = f"{facts['duration_days']} ngày nay"
 
@@ -556,7 +575,7 @@ def extract_clinical_details(
     associated = []
     assoc_patterns = [
         (r"\b(gặp vấn đề về đi lại|vấn đề về đi lại|khó đi lại|đi lại khó khăn|khó khăn khi đi lại|đi khập khiễng|hạn chế vận động)\b", "Hạn chế vận động, khó đi lại"),
-        (r"\b(buồn nôn|nôn nao)\b", "Buồn nôn"),
+        (r"\b(nôn khan|nôn nao|buồn nôn|nôn nhưng không ra|nôn khan đấy)\b", "Nôn khan"),
         (r"\b(nôn ói|nôn mửa|nôn nhiều|đã nôn|nôn ra|nôn)\b", "Nôn ói"),
         (r"\b(sốt nhẹ|sốt cao|nóng sốt|phát sốt)\b", "Sốt"),
         (r"\b(chóng mặt|hoa mắt|choáng váng)\b", "Chóng mặt"),
@@ -569,7 +588,10 @@ def extract_clinical_details(
     ]
     for pattern, name in assoc_patterns:
         if re.search(pattern, lower_comb) and not re.search(rf"không\s+{pattern}", lower_comb):
-            associated.append(name)
+            if name == "Nôn ói" and "Nôn khan" in associated and not any(w in lower_comb for w in ["nôn ói", "nôn mửa", "nôn ra máu", "nôn ra"]):
+                continue
+            if name not in associated:
+                associated.append(name)
 
     # 5. Negative Findings / Exclusions
     negatives = []
@@ -586,35 +608,38 @@ def extract_clinical_details(
         if re.search(pattern, lower_comb):
             negatives.append(label)
 
-    # 6. Primary Complaint description
-    complaint = ""
-    if any(w in lower_comb for w in ["đau bụng", "đau dạ dày", "đau thượng vị"]):
-        complaint = "Đau bụng"
-    elif any(w in lower_comb for w in ["đau ngực", "tức ngực", "nặng ngực"]):
-        complaint = "Đau tức ngực"
-    elif any(w in lower_comb for w in ["đau đầu", "nhức đầu"]):
-        complaint = "Đau đầu"
-    elif any(w in lower_comb for w in ["đau họng", "rát họng", "viêm họng"]):
-        complaint = "Đau rát họng"
-    elif any(w in lower_comb for w in ["đau lưng", "đau mỏi thắt lưng"]):
-        complaint = "Đau mỏi thắt lưng"
-    elif any(w in lower_comb for w in ["đau khớp", "mỏi khớp", "nhức khớp", "viêm khớp", "sưng khớp", "đau ngón", "sưng ngón", "cứng khớp", "khớp ngón", "trật khớp"]):
-        complaint = "Đau nhức khớp"
-    elif any(w in lower_comb for w in ["đau cơ", "mỏi cơ", "chuột rút"]):
-        complaint = "Đau mỏi cơ"
-    elif any(w in lower_comb for w in ["chóng mặt", "choáng váng"]):
-        complaint = "Chóng mặt / Choáng váng"
-    elif any(w in lower_comb for w in ["khó thở", "hụt hơi"]):
-        complaint = "Khó thở"
-    elif any(w in lower_comb for w in ["sốt cao", "sốt nhẹ", "phát sốt"]):
-        complaint = "Sốt"
-    elif any(w in lower_comb for w in ["ho khan", "ho đờm", "ho dai dẳng"]):
-        complaint = "Ho kéo dài"
-    else:
+    # 6. Multi-complaint description (Do not drop symptoms in multi-symptom triage)
+    complaints = []
+    if any(w in lower_comb for w in ["đau đầu", "nhức đầu", "nửa đầu"]) and "đau đầu gối" not in lower_comb and "nhức đầu gối" not in lower_comb:
+        complaints.append("Đau đầu")
+    if any(w in lower_comb for w in ["đau bụng", "đau dạ dày", "đau thượng vị", "tức bụng", "đau vùng bụng"]):
+        complaints.append("Đau bụng")
+    if any(w in lower_comb for w in ["đau ngực", "tức ngực", "nặng ngực", "thắt ngực"]):
+        complaints.append("Đau tức ngực")
+    if any(w in lower_comb for w in ["đau đầu gối", "đau gối", "khớp gối", "mỏi gối", "sưng đầu gối", "đau khớp", "mỏi khớp", "nhức khớp", "viêm khớp", "sưng khớp", "đau ngón", "sưng ngón", "cứng khớp", "khớp ngón", "trật khớp"]):
+        complaints.append("Đau nhức khớp")
+    if any(w in lower_comb for w in ["đau họng", "rát họng", "viêm họng"]):
+        complaints.append("Đau rát họng")
+    if any(w in lower_comb for w in ["đau lưng", "đau mỏi thắt lưng"]):
+        complaints.append("Đau mỏi thắt lưng")
+    if any(w in lower_comb for w in ["đau cơ", "mỏi cơ", "chuột rút"]):
+        complaints.append("Đau mỏi cơ")
+    if any(w in lower_comb for w in ["chóng mặt", "choáng váng"]):
+        complaints.append("Chóng mặt / Choáng váng")
+    if any(w in lower_comb for w in ["khó thở", "hụt hơi"]):
+        complaints.append("Khó thở")
+    if any(w in lower_comb for w in ["sốt cao", "sốt nhẹ", "phát sốt"]):
+        complaints.append("Sốt")
+    if any(w in lower_comb for w in ["ho khan", "ho đờm", "ho dai dẳng"]):
+        complaints.append("Ho kéo dài")
+
+    if not complaints:
         # Fallback to symptoms list from facts
         active_codes = facts.get("active_complaint_codes") or []
         if active_codes:
-            complaint = active_codes[0].replace("_", " ").capitalize()
+            complaints = [active_codes[0].replace("_", " ").capitalize()]
+
+    complaint = ", ".join(complaints) if complaints else ""
 
     return {
         "primary_complaint": complaint,
@@ -643,11 +668,11 @@ def generate_clinical_summary(state: dict[str, Any], current_text: str = "") -> 
     dur = details.get("duration")
 
     lead = f"Bệnh nhân có triệu chứng {comp.lower()}"
-    if loc:
+    if loc and loc.lower() not in comp.lower():
         lead += f" ({loc})"
     if sev:
         lead += f", {sev}"
-    if dur:
+    if dur and dur.lower() not in (sev or "").lower():
         lead += f", diễn tiến {dur}"
     lead += "."
     parts.append(lead)
@@ -750,11 +775,21 @@ def build_booking_guidance_text(
 
     has_missing = len(missing_items) > 0
 
+    ranked_specs = current_intake.get("ranked_specialties") or []
+    if current_intake.get("is_multi_specialty") and len(ranked_specs) > 1:
+        pipeline_en = " ➔ ".join([f"{item.get('department_name')}" for item in ranked_specs])
+        spec_line_en = f"• 🩺 **Specialty Care Pipeline:** {pipeline_en}"
+        pipeline_vi = " ➔ ".join([f"{item.get('department_name')}" for item in ranked_specs])
+        spec_line_vi = f"• 🩺 **Lộ trình chuyên khoa (Ưu tiên):** {pipeline_vi}"
+    else:
+        spec_line_en = f"• 🩺 **Specialty:** {specialty_name}"
+        spec_line_vi = f"• 🩺 **Chuyên khoa:** {specialty_name}"
+
     if lang == "en":
         summary_lines = [
             f"• 👤 **Patient:** {name if name else '*(Not provided)*'}",
             f"• 📞 **Phone:** {phone if phone else '*(Not provided)*'}",
-            f"• 🩺 **Specialty:** {specialty_name}",
+            spec_line_en,
             f"• 👨‍⚕️ **Doctor:** {doc_display}",
             f"• 🏥 **Facility:** {facility if facility else '*(Not selected)*'}",
             f"• 📅 **Date:** {date_display}",
@@ -784,7 +819,7 @@ def build_booking_guidance_text(
     summary_lines = [
         f"• 👤 **Bệnh nhân:** {name if name else '*(Chưa có thông tin)*'}",
         f"• 📞 **Số điện thoại:** {phone if phone else '*(Chưa có thông tin)*'}",
-        f"• 🩺 **Chuyên khoa:** {specialty_name}",
+        spec_line_vi,
         f"• 👨‍⚕️ **Bác sĩ:** {doc_display}",
         f"• 🏥 **Cơ sở khám:** {facility if facility else '*(Chưa chọn cơ sở)*'}",
         f"• 📅 **Ngày khám:** {date_display}",

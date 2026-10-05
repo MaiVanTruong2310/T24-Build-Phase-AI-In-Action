@@ -135,17 +135,34 @@ async def analyze_node(state: AgentState) -> dict:
         cached = (app_res["formatted_response"], ["Tiến trình điều trị", "Đặt lịch mới"], "APPOINTMENT_LOOKUP")
     else:
         identity_query = remove_accents(query.lower())
-        is_identity_query = re.search(r"(?:ten|so dien thoai|sdt|thong tin) (?:cua )?(?:toi|minh)|my (?:name|phone|contact)", identity_query)
+        id_pattern = (
+            r"(?:ten|so dien thoai|sdt|dia chi|thong tin(?: ca nhan)?|ho so)\b.*?\b(?:cua (?:toi|minh)|my)\b|"
+            r"(?:hien thi|xem|kiem tra)\b.*?\b(?:thong tin(?: ca nhan)?|ho so)\b.*?\b(?:cua (?:toi|minh))|"
+            r"my (?:name|phone|address|profile|info|contact)"
+        )
+        is_identity_query = bool(re.search(id_pattern, identity_query))
         profile = state.get("patient_profile") or {}
-        if is_identity_query and profile:
-            name = profile.get("name") or state.get("patient_name") or ""
-            phone = profile.get("phone") or state.get("patient_phone") or ""
-            identity_response = (
-                f"Dạ, tên Anh/Chị đã cung cấp là **{name}**. "
-                + (f"Số điện thoại trong phiên này là **{phone}**." if phone else "Anh/Chị chưa cung cấp số điện thoại trong phiên này.")
-                if lang == "vi" else f"Your provided name is **{name}**. " + (f"Your phone number in this session is **{phone}**." if phone else "No phone number was provided in this session.")
-            )
-            cached = (identity_response, [], "SESSION_PROFILE")
+        if is_identity_query:
+            name = profile.get("name") or state.get("patient_name") or "Chưa cung cấp"
+            phone = profile.get("phone") or state.get("patient_phone") or "Chưa cung cấp"
+            address = profile.get("address") or state.get("patient_address") or "Chưa cập nhật địa chỉ"
+            if lang == "vi":
+                identity_response = (
+                    f"📋 **Thông tin tài khoản/hồ sơ của Anh/Chị:**\n\n"
+                    f"• 👤 **Họ và tên:** {name}\n"
+                    f"• 📞 **Số điện thoại:** {phone}\n"
+                    f"• 📍 **Địa chỉ:** {address}\n\n"
+                    f"Anh/Chị có cần hỗ trợ tư vấn triệu chứng hoặc đặt lịch khám chuyên khoa không ạ?"
+                )
+            else:
+                identity_response = (
+                    f"📋 **Your Account/Profile Details:**\n\n"
+                    f"• 👤 **Name:** {name}\n"
+                    f"• 📞 **Phone:** {phone}\n"
+                    f"• 📍 **Address:** {address}\n\n"
+                    f"Would you like medical guidance or help booking an appointment?"
+                )
+            cached = (identity_response, ["Tư vấn khám bệnh", "Đặt lịch khám"], "SESSION_PROFILE")
         else:
             cached = cache_service.check_cache(query, language=lang)
     if cached is not None:
@@ -352,43 +369,51 @@ async def analyze_node(state: AgentState) -> dict:
         clinical_facts = fact_service.merge(clinical_facts, extracted_facts)
 
     booking_entities = extract_booking_entities(query, state)
+    intake_state = state.get("booking_intake") or (state.get("metadata") or {}).get("booking_intake") or {}
     patient_name = (
         booking_entities.get("patient_name")
         or (state.get("patient_profile") or {}).get("name")
         or v2_response.facts_delta.patient_name
         or state.get("patient_name")
+        or intake_state.get("patient_name")
     )
     patient_phone = (
         booking_entities.get("patient_phone")
         or (state.get("patient_profile") or {}).get("phone")
         or state.get("patient_phone")
+        or intake_state.get("patient_phone")
     )
     patient_dob = (
         booking_entities.get("date_of_birth")
         or (state.get("patient_profile") or {}).get("date_of_birth")
         or state.get("patient_dob")
+        or intake_state.get("date_of_birth")
     )
     patient_gender = (
         booking_entities.get("gender")
         or (state.get("patient_profile") or {}).get("gender")
         or state.get("patient_gender")
+        or intake_state.get("gender")
     )
-    patient_email = state.get("patient_email")
+    patient_email = state.get("patient_email") or intake_state.get("patient_email")
     facility_pref = (
         booking_entities.get("facility_preference")
         or state.get("facility_preference")
         or facility_pref
+        or intake_state.get("facility_preference")
     )
-    preferred_date = booking_entities.get("preferred_date") or state.get("preferred_date")
-    preferred_period = booking_entities.get("preferred_period") or state.get("preferred_period")
+    preferred_date = booking_entities.get("preferred_date") or state.get("preferred_date") or intake_state.get("preferred_date")
+    preferred_period = booking_entities.get("preferred_period") or state.get("preferred_period") or intake_state.get("preferred_period")
     doctor_pref = (
         booking_entities.get("doctor_preference")
         or state.get("doctor_preference")
+        or intake_state.get("doctor_preference")
         or ""
     )
     doctor_name = (
         booking_entities.get("doctor_name")
         or state.get("doctor_name")
+        or intake_state.get("doctor_name")
         or ""
     )
 
@@ -560,9 +585,11 @@ async def analyze_node(state: AgentState) -> dict:
         pruned_departments=state.get("pruned_departments"),
         current_dept=current_dept,
     )
-    if is_describe_more or (
-        (getattr(v2_response, "needs_clarification", False) or v2_response.proposed_action == "clarify_visit_purpose")
-        and not (intent_check and intent_check.get("intent") in {"FACILITY_INFO", "FACILITY_DOCTORS", "DEPARTMENT_INFO", "VIEW_SCHEDULE"})
+    if action != "confirm_booking_conversationally" and (
+        is_describe_more or (
+            (getattr(v2_response, "needs_clarification", False) or v2_response.proposed_action == "clarify_visit_purpose")
+            and not (intent_check and intent_check.get("intent") in {"FACILITY_INFO", "FACILITY_DOCTORS", "DEPARTMENT_INFO", "VIEW_SCHEDULE"})
+        )
     ):
         action = "clarify_visit_purpose"
     if "HEADACHE_WITH_VISUAL_CHANGE" in triage_result.triggered_rule_ids:
@@ -815,8 +842,10 @@ async def analyze_node(state: AgentState) -> dict:
             "FACILITY_DOCTORS",
             "FACILITY_BOOKING_START",
             "TRIAGED_READY_FOR_BOOKING",
+            "CONFIRM_BOOKING_CONVERSATIONALLY",
+            "BOOKING_CONTACT_REQUIRED",
         }
-        or (action == "search_available_slot")
+        or (action in {"search_available_slot", "confirm_booking_conversationally"})
     )
 
     return {

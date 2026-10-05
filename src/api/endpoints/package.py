@@ -79,38 +79,36 @@ async def create_package_request(
 ):
     """Register for a health package / pathway."""
     async with db.begin():
+        from src.medical_assistant.domain.booking_request_service import _is_minor, PHONE_PATTERN
+        if not payload.consent_to_contact:
+            raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
+        patient_name = (payload.patient_name or (user.full_name if user else "") or "").strip()
+        if len(patient_name) < 2:
+            raise ConflictError("NAME_REQUIRED", "Vui lòng nhập họ và tên người khám (tối thiểu 2 ký tự)")
+        phone_raw = payload.patient_phone or (user.phone if user else "")
+        clean_phone = re.sub(r"[\s.()-]", "", phone_raw or "")
+        if not PHONE_PATTERN.fullmatch(clean_phone):
+            raise ConflictError("INVALID_PHONE", "Số điện thoại chưa đúng định dạng Việt Nam")
+        gender = payload.gender or (user.gender if user else None)
+        if not gender:
+            raise ConflictError("GENDER_REQUIRED", "Vui lòng chọn giới tính")
+        dob = payload.date_of_birth or (user.date_of_birth if user else None)
+        if not dob:
+            raise ConflictError("DOB_REQUIRED", "Vui lòng chọn ngày sinh")
+        if dob > datetime.now(VN_TZ).date():
+            raise ConflictError("INVALID_DOB", "Ngày sinh không thể nằm trong tương lai")
+        if _is_minor(dob, datetime.now(VN_TZ).date()) and (len((payload.guardian_name or '').strip()) < 2 or not PHONE_PATTERN.fullmatch(re.sub(r"[\s.()-]", "", payload.guardian_phone or ""))):
+            raise ConflictError("GUARDIAN_REQUIRED", "Người dưới 18 tuổi cần họ tên và điện thoại người giám hộ.")
+        if payload.preferred_date < datetime.now(VN_TZ).date():
+            raise ConflictError("DATE_INVALID", "Ngày khám mong muốn không thể nằm trong quá khứ")
         if user is None:
-            if not payload.patient_name or len(payload.patient_name.strip()) < 2:
-                raise ConflictError("NAME_REQUIRED", "Vui lòng nhập họ và tên người khám (tối thiểu 2 ký tự)")
-            if not payload.patient_phone:
-                raise ConflictError("PHONE_REQUIRED", "Vui lòng nhập số điện thoại liên hệ")
-            clean_phone = re.sub(r"[\s.()-]", "", payload.patient_phone)
-            if not re.fullmatch(r"^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$", clean_phone):
-                raise ConflictError("INVALID_PHONE", "Số điện thoại chưa đúng định dạng Việt Nam")
-            if not payload.gender:
-                raise ConflictError("GENDER_REQUIRED", "Vui lòng chọn giới tính")
-            if not payload.date_of_birth:
-                raise ConflictError("DOB_REQUIRED", "Vui lòng chọn ngày sinh")
-            if payload.date_of_birth > datetime.now(VN_TZ).date():
-                raise ConflictError("INVALID_DOB", "Ngày sinh không thể nằm trong tương lai")
-
-            patient = User(full_name=payload.patient_name.strip(), phone=None, email=None,
-                           gender=payload.gender, date_of_birth=payload.date_of_birth,
+            patient = User(full_name=patient_name, phone=None, email=None,
+                           gender=gender, date_of_birth=dob,
                            role="patient", status="guest")
             db.add(patient)
             await db.flush()
         else:
             patient = user
-
-        if not payload.consent_to_contact:
-            raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
-        from src.medical_assistant.domain.booking_request_service import _is_minor, PHONE_PATTERN
-        dob = payload.date_of_birth or patient.date_of_birth
-        if dob and _is_minor(dob) and (not payload.guardian_name or not PHONE_PATTERN.fullmatch(re.sub(r"[\s.()-]", "", payload.guardian_phone or ""))):
-            raise ConflictError("GUARDIAN_REQUIRED", "Người dưới 18 tuổi cần họ tên và điện thoại người giám hộ.")
-
-        if payload.preferred_date < datetime.now(VN_TZ).date():
-            raise ConflictError("DATE_INVALID", "Ngày khám mong muốn không thể nằm trong quá khứ")
 
         service = await db.get(Service, payload.service_id)
         if not service or service.status != "active":
@@ -126,11 +124,11 @@ async def create_package_request(
             facility_id=facility.id,
             preferred_date=payload.preferred_date,
             preferred_period=payload.preferred_period,
-            patient_name=payload.patient_name.strip() if payload.patient_name else patient.full_name,
-            patient_phone=clean_phone if user is None else patient.phone,
+            patient_name=patient_name,
+            patient_phone=clean_phone,
             patient_email=payload.patient_email.lower().strip() if payload.patient_email else patient.email,
-            gender=payload.gender or patient.gender,
-            date_of_birth=payload.date_of_birth or patient.date_of_birth,
+            gender=gender,
+            date_of_birth=dob,
             note=payload.note.strip() if payload.note else None,
         )
         db.add(item)

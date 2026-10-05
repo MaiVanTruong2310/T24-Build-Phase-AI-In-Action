@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from src.models.workbench import CoordinationCase as Case, CoordinationDeposit as Deposit, CoordinationEvent as Event, CoordinationMessage as Message, CoordinationPolicy as Policy, CoordinatorMember as Member
@@ -122,10 +122,16 @@ async def capture_chat(db, case, request, response, state):
 async def intake(db, request, user, token, state):
     import re
     from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN, _is_minor
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).date()
     phone = re.sub(r'[\s.()-]', '', request.patient_phone)
-    if not PHONE_PATTERN.fullmatch(phone) or request.date_of_birth > now().date():
+    if len(request.patient_name.strip()) < 2:
+        raise HTTPException(422, 'Họ tên người khám cần ít nhất 2 ký tự.')
+    if not PHONE_PATTERN.fullmatch(phone) or request.date_of_birth > today:
         raise HTTPException(422, 'Thông tin điện thoại hoặc ngày sinh không hợp lệ.')
-    if _is_minor(request.date_of_birth) and (not request.guardian_name or not PHONE_PATTERN.fullmatch(re.sub(r'[\s.()-]', '', request.guardian_phone or ''))):
+    if request.preferred_date is None or request.preferred_date < today:
+        raise HTTPException(422, 'Ngày khám mong muốn không thể bỏ trống hoặc nằm trong quá khứ.')
+    if _is_minor(request.date_of_birth, today) and (len((request.guardian_name or '').strip()) < 2 or not PHONE_PATTERN.fullmatch(re.sub(r'[\s.()-]', '', request.guardian_phone or ''))):
         raise HTTPException(422, 'Người dưới 18 tuổi cần thông tin người giám hộ hợp lệ.')
     if state.get('is_emergency'):
         raise HTTPException(409, 'Ca cấp cứu không được chuyển sang đặt lịch thường.')
@@ -155,17 +161,18 @@ async def intake(db, request, user, token, state):
 
 async def sync_sources(db, limit_per_source: int = 50, days_back: int = 14):
     """Import existing requests idempotently with a bounded window; never move a case backwards."""
+    # Transaction-scoped, nonblocking lock coordinates background workers.
+    if not (await db.execute(text("SELECT pg_try_advisory_xact_lock(:key)"), {'key': 124_20261005})).scalar_one():
+        return
     cutoff = now() - timedelta(days=days_back)
     sources = [(ConsultationRequest, 'consultation'), (PackageRequest, 'package'), (Booking, 'booking')]
     for model, source in sources:
-        existing_source_ids = set((await db.execute(
-            select(Case.source_id).where(Case.source == source, Case.created_at >= cutoff)
-        )).scalars().all())
-        query = select(model).where(model.created_at >= cutoff).order_by(model.created_at.desc()).limit(limit_per_source)
+        # Filter imported rows BEFORE LIMIT so each batch advances the backlog.
+        imported = select(Case.id).where(Case.source == source, Case.source_id == cast(model.id, String)).exists()
+        query = select(model).where(model.created_at >= cutoff, ~imported).order_by(model.created_at, model.id).limit(limit_per_source)
         if source == 'booking':
             query = query.where(~select(Case.id).where(Case.booking_id == Booking.id).exists())
-        candidates = (await db.execute(query)).scalars().all()
-        rows = [item for item in candidates if str(item.id) not in existing_source_ids]
+        rows = (await db.execute(query)).scalars().all()
         for item in rows:
             patient_id = getattr(item, 'patient_id', getattr(item, 'user_id', None))
             patient = await db.get(User, patient_id) if patient_id else None
@@ -182,16 +189,11 @@ async def sync_sources(db, limit_per_source: int = 50, days_back: int = 14):
                              .on_conflict_do_nothing(index_elements=['source', 'source_id']))
     # Patient cancellations made through the existing portal also close the workbench case.
     for model, source in sources:
-        cancelled_ids = (await db.execute(
-            select(model.id).where(model.created_at >= cutoff, model.status.in_(['cancelled', 'rejected'])).limit(limit_per_source)
+        affected = (await db.execute(
+            select(Case).join(model, (Case.source == source) & (Case.source_id == cast(model.id, String)))
+            .where(model.created_at >= cutoff, model.status.in_(['cancelled', 'rejected']), Case.status.notin_(['cancelled', 'completed']))
+            .order_by(Case.id).limit(limit_per_source).with_for_update(of=Case, skip_locked=True)
         )).scalars().all()
-        if cancelled_ids:
-            str_ids = [str(x) for x in cancelled_ids]
-            affected = (await db.execute(
-                select(Case).where(Case.source == source, Case.source_id.in_(str_ids), Case.status.notin_(['cancelled', 'completed'])).limit(limit_per_source).with_for_update()
-            )).scalars().all()
-        else:
-            affected = []
         for case in affected:
             await release_hold(db, case)
             for deposit in (await db.execute(select(Deposit).where(Deposit.case_id == case.id, Deposit.status.in_(['requested', 'verified'])))).scalars():
@@ -208,7 +210,7 @@ async def create_source_case(db, source, item, patient, user, guest_token, paylo
     from src.medical_assistant.domain.triage_service import get_triage_service
     evaluation = get_triage_service().evaluate_symptoms(text) if text else None
     ai = {'is_emergency': evaluation.is_emergency, 'ats_level': evaluation.ats_level.value, 'max_booking_days': evaluation.max_booking_days, 'suggested_department_name': evaluation.suggested_specialty, 'emergency_warning': evaluation.patient_guidance if evaluation.is_emergency else None, 'captured_at': now().isoformat(), 'source': 'intake_safety_rules'} if evaluation else {}
-    profile = {'name': payload.patient_name if not user else patient.full_name, 'phone': payload.patient_phone if not user else patient.phone, 'email': payload.patient_email if not user else patient.email, 'notes': text, 'date_of_birth': str(payload.date_of_birth or patient.date_of_birth) if payload.date_of_birth or patient.date_of_birth else None, 'gender': payload.gender or patient.gender, 'consent_to_contact': payload.consent_to_contact, 'guardian_name': payload.guardian_name, 'guardian_phone': payload.guardian_phone}
+    profile = {'name': payload.patient_name or patient.full_name, 'phone': payload.patient_phone or patient.phone, 'email': payload.patient_email or patient.email, 'notes': text, 'date_of_birth': str(payload.date_of_birth or patient.date_of_birth) if payload.date_of_birth or patient.date_of_birth else None, 'gender': payload.gender or patient.gender, 'consent_to_contact': payload.consent_to_contact, 'guardian_name': payload.guardian_name, 'guardian_phone': payload.guardian_phone}
     plan = {'service_id': str(item.service_id)}
     if hasattr(item, 'specialty_id'):
         plan['specialty_id'] = str(item.specialty_id)
@@ -271,6 +273,8 @@ async def action(db, case, actor, member, payload):
             target_user = await db.get(User, payload.assigned_to) if payload.assigned_to else None
             if not target or not target.enabled or not target_user or target_user.status != 'active' or target_user.role != 'staff' or (target.facility_ids and case.facility_id and str(case.facility_id) not in target.facility_ids):
                 raise HTTPException(422, 'Người nhận không có quyền hoặc không thuộc phạm vi ca.')
+            if payload.assigned_to == actor.id or not target.on_duty:
+                raise HTTPException(409, 'Chọn điều phối viên khác đang trực để nhận ca.')
             case.assigned_to = payload.assigned_to
         elif a == 'takeover':
             if not case.session_id:
@@ -429,6 +433,10 @@ async def request_deposit(db, case, actor, member, payload):
 async def verify_deposit(db, case, actor, payload):
     require_version(case, payload.version)
     assert_owner(case, actor)
+    if case.status not in {'waiting_deposit', 'deposit_expired'}:
+        raise HTTPException(409, 'Chỉ xác minh cọc cho ca đang chờ cọc hoặc cọc hết hạn. Ca đã đóng cần xử lý tiền đến muộn theo luồng hoàn tiền.')
+    if case.priority == 0 or case.ai_snapshot.get('is_emergency'):
+        raise HTTPException(409, 'Không xử lý cọc trong luồng cấp cứu.')
     deposit = (await db.execute(select(Deposit).where(Deposit.case_id == case.id, Deposit.status.in_(['requested', 'expired'])).order_by(Deposit.created_at.desc()).with_for_update())).scalars().first()
     if not deposit:
         raise HTTPException(409, 'Không có yêu cầu cọc chờ xác minh.')

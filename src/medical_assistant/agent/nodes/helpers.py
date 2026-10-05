@@ -26,5 +26,10 @@ def extract_facility_inquiry(query: str) -> tuple[bool, str | None]:
         "bệnh viện", "cơ sở", "phòng khám", "ở đâu", "chỗ nào", "nơi nào",
         "khám ở", "viện nào", "địa chỉ", "chi nhánh"
     ]
+    # Bỏ qua nếu là câu hỏi về thông tin / địa chỉ cá nhân của người dùng
+    if any(p in q for p in ["của tôi", "cua toi", "của mình", "cua minh", "thông tin cá nhân", "thong tin ca nhan"]):
+        if not any(k in q for k in ["bệnh viện", "benh vien", "phòng khám", "phong kham", "cơ sở", "co so", "vinmec"]):
+            return False, None
+
     is_asking_facility = any(k in q for k in facility_keywords)
     return is_asking_facility, region

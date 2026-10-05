@@ -50,7 +50,7 @@ ANATOMICAL_SYSTEMS = {
         "name": "Khoa Thần kinh",
         "organ_name": "Não bộ & Hệ thần kinh trung ương",
         "patterns": [
-            r"\b(?:dau\s+dau|nua\s+dau|chong\s+mat|choang\s+ngat|choang\s+vang|tien\s+ngat|ngat\s+thoang\s+qua|yeu\s+tay|yeu\s+chan|tay.*yeu|yeu.*tay|cam\s+dua.*roi|yeu\s+chi|yeu\s+nua\s+nguoi|nhin\s+mo|mo\s+mat|sup\s+mi|meo\s+mieng|noi\s+do|co\s+giat|day\s+than\s+kinh|quay\s+cuong|dien\s+giat|nua\s+mat)\b"
+            r"\b(?:dau\s+dau(?!\s+goi)|nhuc\s+dau(?!\s+goi)|nua\s+dau|chong\s+mat|choang\s+ngat|choang\s+vang|tien\s+ngat|ngat\s+thoang\s+qua|yeu\s+tay|yeu\s+chan|tay.*yeu|yeu.*tay|cam\s+dua.*roi|yeu\s+chi|yeu\s+nua\s+nguoi|nhin\s+mo|mo\s+mat|sup\s+mi|meo\s+mieng|noi\s+do|co\s+giat|day\s+than\s+kinh|quay\s+cuong|dien\s+giat|nua\s+mat)\b"
         ],
         "rationale": "Não bộ và hệ thần kinh trung ương kiểm soát toàn bộ cơ thể; cần ưu tiên đánh giá sớm để loại trừ đột quỵ, cơn thiếu máu não thoáng qua hoặc tổn thương nội sọ.",
     },
@@ -115,7 +115,7 @@ ANATOMICAL_SYSTEMS = {
         "name": "Khoa Chấn thương chỉnh hình & Cột sống",
         "organ_name": "Hệ vận động & Cơ xương khớp",
         "patterns": [
-            r"\b(?:khop\s+goi|dau\s+lung|that\s+lung|dau\s+goi|khop\s+vai|co\s+vai\s+gay|moi\s+co|dau\s+got|got\s+chan|ngon\s+chan|gut|gout|sung\s+khop|moi\s+khop|cung\s+khop|khop\s+ngon\s+tay)\b"
+            r"\b(?:khop\s+goi|dau\s+dau\s+goi|dau\s+goi|dau\s+khop\s+goi|dau\s+khop|nhuc\s+khop|sung\s+khop|moi\s+khop|cung\s+khop|sung\s+dau\s+goi|dau\s+lung|that\s+lung|khop\s+vai|co\s+vai\s+gay|moi\s+co|dau\s+got|got\s+chan|ngon\s+chan|gut|gout|khop\s+ngon\s+tay)\b"
         ],
         "rationale": "Hệ cơ xương khớp ngoại vi; triệu chứng có thể gây đau buốt dữ dội nhưng thường ít đe dọa sinh mạng ngay tức thì so với các tạng sinh tồn.",
     },

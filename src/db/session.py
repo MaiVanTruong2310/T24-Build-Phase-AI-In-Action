@@ -51,7 +51,7 @@ def get_engine():
         pool_size=settings.database_pool_size,
         max_overflow=settings.database_max_overflow,
         pool_timeout=settings.database_pool_timeout_seconds,
-        pool_recycle=settings.database_pool_recycle_seconds,
+        pool_recycle=min(settings.database_pool_recycle_seconds, 60),
         pool_use_lifo=True,
         connect_args={
             "connect_timeout": settings.database_connect_timeout_seconds,
@@ -86,7 +86,7 @@ def get_auth_engine():
         pool_size=min(settings.database_pool_size, 2),
         max_overflow=min(settings.database_max_overflow, 1),
         pool_timeout=settings.database_pool_timeout_seconds,
-        pool_recycle=settings.database_pool_recycle_seconds,
+        pool_recycle=min(settings.database_pool_recycle_seconds, 60),
         connect_args={"connect_timeout": settings.database_connect_timeout_seconds},
     )
 

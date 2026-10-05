@@ -214,9 +214,22 @@ def get_llm() -> FailoverChatModel:
             )
         )
 
+    # 3. Nhà cung cấp dự phòng: DeepSeek
+    deepseek_api_key = _usable_secret(getattr(settings, "deepseek_api_key", ""))
+    if deepseek_api_key:
+        providers.append(
+            _build_openai_compatible_model(
+                api_key=deepseek_api_key,
+                base_url=getattr(settings, "deepseek_base_url", "https://api.deepseek.com"),
+                model=getattr(settings, "deepseek_model_name", "DeepSeek-V4.1-Flash"),
+                temperature=settings.llm_temperature,
+                timeout=settings.llm_request_timeout_seconds,
+            )
+        )
+
     providers.extend(openrouter_backups)
 
-    # 3. Backward compatibility cho OPENAI_API_KEY trực tiếp
+    # 4. Backward compatibility cho OPENAI_API_KEY trực tiếp
     openai_api_key = _usable_secret(settings.openai_api_key)
     if not providers and openai_api_key:
         providers.append(

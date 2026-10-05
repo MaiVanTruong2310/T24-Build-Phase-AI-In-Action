@@ -1,7 +1,5 @@
-import time
 from uuid import UUID, uuid4
 
-_last_cases_sync: float = 0.0
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -72,7 +70,7 @@ async def end_duty(identity=Depends(access), db=Depends(get_db_session)):
 
 @router.get('/catalog')
 async def catalog(doctor_id: UUID | None = None, identity=Depends(access), db=Depends(get_db_session)):
-    from src.models.doctor import Doctor
+    from src.models.doctor import Doctor, DoctorSpecialty, DoctorService, DoctorFacility
     from src.models.facility import Facility
     from src.models.service import Service
     from src.models.specialty import Specialty
@@ -83,6 +81,14 @@ async def catalog(doctor_id: UUID | None = None, identity=Depends(access), db=De
         query = select(model).where(model.status == 'active')
         if model == Doctor:
             query = query.where(Doctor.professional_role == 'Bác sĩ', Doctor.review_status == 'approved', Doctor.booking_enabled == True)
+        if model == Doctor and member.facility_ids:
+            query = query.where(select(DoctorFacility.id).where(DoctorFacility.doctor_id == Doctor.id, DoctorFacility.facility_id.in_([UUID(x) for x in member.facility_ids])).exists())
+        if doctor_id and model == Specialty:
+            query = query.where(select(DoctorSpecialty.id).where(DoctorSpecialty.doctor_id == doctor_id, DoctorSpecialty.specialty_id == Specialty.id).exists())
+        if doctor_id and model == Service:
+            query = query.where(select(DoctorService.id).where(DoctorService.doctor_id == doctor_id, DoctorService.service_id == Service.id).exists())
+        if doctor_id and model == Facility:
+            query = query.where(select(DoctorFacility.id).where(DoctorFacility.doctor_id == doctor_id, DoctorFacility.facility_id == Facility.id).exists())
         if model == Facility and member.facility_ids:
             query = query.where(Facility.id.in_([UUID(x) for x in member.facility_ids]))
         rows = (await db.execute(query.order_by(getattr(model, label)))).scalars().all()
@@ -99,30 +105,23 @@ async def catalog(doctor_id: UUID | None = None, identity=Depends(access), db=De
 
 
 @router.get('/cases')
-async def cases(status: str | None = None, priority: int | None = Query(None, ge=0, le=3), mine: bool = False, conversations: bool = False, q: str = Query('', max_length=200), offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), sync: bool = False, identity=Depends(access), db=Depends(get_db_session)):
-    global _last_cases_sync
+async def cases(status: str | None = None, priority: int | None = Query(None, ge=0, le=3), mine: bool = False, conversations: bool = False, q: str = Query('', max_length=200), offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), identity=Depends(access), db=Depends(get_db_session)):
     user, member = identity
-    now_ts = time.time()
-    if sync or (now_ts - _last_cases_sync > 30.0):
-        _last_cases_sync = now_ts
-        async with db.begin():
-            await svc.sync_sources(db)
-            await svc.expire_deposits(db)
-        filters = [svc.scope(member)]
-        filters.append(Case.source == 'chat' if conversations else Case.status != 'observing')
-        if status:
-            filters.append(Case.status == status)
-        if priority is not None:
-            filters.append(Case.priority == priority)
-        if mine:
-            filters.append(Case.assigned_to == user.id)
-        if q.strip():
-            # Parameterized query. Escape LIKE wildcard input.
-            query = '%' + q.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
-            from sqlalchemy import String, cast
-            filters.append(or_(cast(Case.id, String).ilike(query, escape='\\'), cast(Case.patient, String).ilike(query, escape='\\')))
-        total = (await db.execute(select(func.count()).select_from(Case).where(*filters))).scalar_one()
-        rows = (await db.execute(select(Case).where(*filters).order_by(Case.priority, Case.created_at).offset(offset).limit(limit))).scalars().all()
+    filters = [svc.scope(member)]
+    filters.append(Case.source == 'chat' if conversations else Case.status != 'observing')
+    if status:
+        filters.append(Case.status == status)
+    if priority is not None:
+        filters.append(Case.priority == priority)
+    if mine:
+        filters.append(Case.assigned_to == user.id)
+    if q.strip():
+        # Parameterized query. Escape LIKE wildcard input.
+        query = '%' + q.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+        from sqlalchemy import String, cast
+        filters.append(or_(cast(Case.id, String).ilike(query, escape='\\'), cast(Case.patient, String).ilike(query, escape='\\')))
+    total = (await db.execute(select(func.count()).select_from(Case).where(*filters))).scalar_one()
+    rows = (await db.execute(select(Case).where(*filters).order_by(Case.priority, Case.created_at).offset(offset).limit(limit))).scalars().all()
     return success_response({'items': [svc.case_dict(x) for x in rows], 'total': total})
 
 
@@ -130,8 +129,6 @@ async def cases(status: str | None = None, priority: int | None = Query(None, ge
 async def dashboard(identity=Depends(access), db=Depends(get_db_session)):
     user, member = identity
     async with db.begin():
-        await svc.sync_sources(db)
-        await svc.expire_deposits(db)
         rows = (await db.execute(select(Case.status, func.count()).where(svc.scope(member), Case.status != 'observing').group_by(Case.status))).all()
         active = [svc.scope(member), Case.status.notin_(['observing', 'cancelled', 'completed'])]
         overdue = (await db.execute(select(func.count()).select_from(Case).where(*active, Case.due_at < svc.now()))).scalar_one()
@@ -147,10 +144,12 @@ async def case_detail(case_id: UUID, identity=Depends(access), db=Depends(get_db
         return success_response(await svc.detail(db, case))
 
 
-async def mutate(case_id, identity, db, operation):
+async def mutate(case_id, identity, db, operation, additional_member_ids=()):
     try:
         async with db.begin():
-            member = await db.get(Member, identity[0].id, with_for_update=True, populate_existing=True)
+            # Lock both sides of handover in stable order, before the case lock.
+            locked_members = (await db.execute(select(Member).where(Member.user_id.in_([identity[0].id, *additional_member_ids])).order_by(Member.user_id).with_for_update().execution_options(populate_existing=True))).scalars().all()
+            member = next((m for m in locked_members if m.user_id == identity[0].id), None)
             if not member or not member.enabled:
                 raise HTTPException(403, 'Quyền điều phối đã bị thu hồi.')
             case = await svc.locked_case(db, case_id, member)
@@ -164,7 +163,7 @@ async def mutate(case_id, identity, db, operation):
 
 @router.post('/cases/{case_id}/actions')
 async def case_action(case_id: UUID, payload: CaseAction, identity=Depends(access), db=Depends(get_db_session)):
-    return await mutate(case_id, identity, db, lambda c: svc.action(db, c, *identity, payload))
+    return await mutate(case_id, identity, db, lambda c: svc.action(db, c, *identity, payload), additional_member_ids=[payload.assigned_to] if payload.action == 'handover' and payload.assigned_to else [])
 
 
 @router.put('/cases/{case_id}/plan')

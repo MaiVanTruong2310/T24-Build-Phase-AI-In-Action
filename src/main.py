@@ -45,25 +45,37 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
-async def _booking_hold_cleanup_loop(interval_seconds: int) -> None:
+async def _booking_hold_cleanup_loop(interval_seconds: int, stop_event: asyncio.Event | None = None) -> None:
     """Release expired booking holds periodically until application shutdown."""
-    while True:
+    event = stop_event or asyncio.Event()
+    while not event.is_set():
         try:
             async with get_session_factory()() as session:
                 released_count = await BookingService(session).release_expired_holds()
                 if released_count:
                     logger.info("main.booking_hold_cleanup released holds", extra={"count": released_count})
-                from src.services.workbench import expire_deposits
+                from src.services.workbench import expire_deposits, sync_sources
                 async with session.begin():
+                    await sync_sources(session)
                     await expire_deposits(session)
                 reminder_count = await NotificationService(session).process_due_reminders()
                 if reminder_count:
                     logger.info("main.notification_cleanup delivered reminders", extra={"count": reminder_count})
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("main.booking_hold_cleanup iteration failed")
-        await asyncio.sleep(interval_seconds)
+        except (asyncio.CancelledError, GeneratorExit):
+            break
+        except Exception as exc:
+            task = asyncio.current_task()
+            if event.is_set() or (task and task.cancelling()):
+                break
+            logger.warning("main.booking_hold_cleanup iteration warning: %s", exc)
+
+        try:
+            await asyncio.wait_for(event.wait(), timeout=min(interval_seconds, 30))
+            break
+        except asyncio.TimeoutError:
+            pass
+        except (asyncio.CancelledError, GeneratorExit):
+            break
 
 
 @asynccontextmanager
@@ -77,14 +89,19 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("main.lifespan database initialization failed")
             raise
+    stop_event = asyncio.Event()
     cleanup_task = None
     try:
-        cleanup_task = asyncio.create_task(_booking_hold_cleanup_loop(settings.booking_hold_cleanup_interval_seconds))
+        cleanup_task = asyncio.create_task(_booking_hold_cleanup_loop(settings.booking_hold_cleanup_interval_seconds, stop_event))
         yield
     finally:
+        stop_event.set()
         if cleanup_task is not None:
-            cleanup_task.cancel()
-            await asyncio.gather(cleanup_task, return_exceptions=True)
+            try:
+                await asyncio.wait_for(asyncio.shield(cleanup_task), timeout=1.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                cleanup_task.cancel()
+                await asyncio.gather(cleanup_task, return_exceptions=True)
 
         await close_database()
         close_supabase_clients()

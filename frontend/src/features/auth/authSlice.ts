@@ -33,7 +33,7 @@ const cachedSession = readPublishedSession();
 
 const initialState: AuthState = {
   user: cachedSession,
-  initialized: Boolean(cachedSession),
+  initialized: false,
   restoreError: null,
   restoreRequestId: null,
   loading: false,

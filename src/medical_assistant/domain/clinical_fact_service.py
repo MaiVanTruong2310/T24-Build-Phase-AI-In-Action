@@ -51,7 +51,15 @@ FACT_PATTERNS = {
     ],
     "constipation": [r"tao bon", r"kho di ngoai", r"phan (?:kho|cung)", r"ngay moi di (?:cau|ngoai)"],
     # Thần kinh / Đau đầu
-    "headache": [r"dau dau", r"nhuc dau", r"dau nua dau", r"buot dau", r"nang dau", r"headache", r"migraine"],
+    "headache": [
+        r"dau dau(?!\s+goi)",
+        r"nhuc dau(?!\s+goi)",
+        r"dau nua dau",
+        r"buot dau",
+        r"nang dau",
+        r"headache",
+        r"migraine",
+    ],
     "one_sided_headache": [r"nua dau (?:ben )?(?:trai|phai)", r"dau mot ben"],
     "nausea": [r"buon non", r"mac non", r"nausea"],
     "photophobia": [r"so anh sang", r"choi mat"],
@@ -89,7 +97,18 @@ FACT_PATTERNS = {
     "shortness_of_breath": [r"kho tho", r"hut hoi", r"tho gap", r"shortness of breath", r"dyspnea"],
     "cough": [r"\bho khan\b", r"\bho co dom\b", r"\bbi ho\b", r"\bcon ho\b", r"\bcough\b"],
     # Cơ xương khớp
-    "joint_pain": [r"dau khop", r"dau xuong khop", r"nhuc khop"],
+    "joint_pain": [
+        r"dau khop",
+        r"dau xuong khop",
+        r"nhuc khop",
+        r"dau dau goi",
+        r"dau goi",
+        r"khop goi",
+        r"moi goi",
+        r"sung dau goi",
+        r"sung goi",
+        r"knee pain",
+    ],
     "back_pain": [r"dau lung", r"moi lung", r"dau cot song"],
     "neck_shoulder_pain": [r"dau vai gay", r"moi vai gay", r"moi co", r"cổ vai gáy"],
 }

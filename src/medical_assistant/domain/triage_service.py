@@ -657,10 +657,10 @@ class ClinicalTriageService:
             ),
             (
                 "HEADACHE_WITH_VISUAL_CHANGE",
-                r"(?:đau đầu|nhức đầu|đau nửa đầu|headache|migraine).*?"
+                r"(?:đau đầu(?!\s+gối)|nhức đầu(?!\s+gối)|đau nửa đầu|headache|migraine).*?"
                 r"(?:nhìn mờ|nhìn đôi|mất thị lực|blurred vision|double vision|vision loss)|"
                 r"(?:nhìn mờ|nhìn đôi|mất thị lực|blurred vision|double vision|vision loss).*?"
-                r"(?:đau đầu|nhức đầu|đau nửa đầu|headache|migraine)",
+                r"(?:đau đầu(?!\s+gối)|nhức đầu(?!\s+gối)|đau nửa đầu|headache|migraine)",
                 "Thần kinh",
                 "Đau đầu kèm thay đổi thị giác cần đánh giá trực tiếp trong ngày",
             ),
