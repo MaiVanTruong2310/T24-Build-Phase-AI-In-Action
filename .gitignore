@@ -79,6 +79,8 @@ out/
 .ai-log/archive/
 
 AGENT.md
+CACHE.md
+ExceptionDesign.md
 task/*
 docs-spec/*
 planning/*

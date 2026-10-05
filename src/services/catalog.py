@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.cache import invalidate_catalog_cache
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger, log_event
 from src.models.catalog import CatalogAuditEvent, Doctor, DoctorSchedule
@@ -35,6 +36,11 @@ class CatalogService(
         """Initialize the service with one request-scoped session."""
         self.session = session
         self.catalog = CatalogRepository(session)
+
+    @staticmethod
+    def _invalidate_catalog_cache() -> None:
+        """Invalidate public catalog reads after a committed catalog mutation."""
+        invalidate_catalog_cache()
 
     async def _validate_assignments(
         self,

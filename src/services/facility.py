@@ -3,6 +3,9 @@
 import logging
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
+
+from src.core.errors import raise_integrity_conflict
 from src.core.exceptions import NotFoundError
 from src.core.logging import get_logger, log_event
 from src.models.catalog import Facility
@@ -75,12 +78,24 @@ class FacilityServiceMixin:
             actor_id=str(actor_id),
             facility_code=request.code,
         )
-        async with self.session.begin():
-            await self._ensure_code_available(Facility, request.code)
-            value = Facility(**request.model_dump())
-            self.session.add(value)
-            await self.session.flush()
-            await self._audit(actor_id, "facility", value.id, "created", {"code": value.code})
+        try:
+            async with self.session.begin():
+                await self._ensure_code_available(Facility, request.code)
+                value = Facility(**request.model_dump())
+                self.session.add(value)
+                await self.session.flush()
+                await self._audit(actor_id, "facility", value.id, "created", {"code": value.code})
+        except IntegrityError as exc:
+            raise_integrity_conflict(
+                exc,
+                logger=logger,
+                event="catalog.facility.create.persistence_conflict",
+                code="FACILITY_CODE_EXISTS",
+                message="Facility code already exists",
+                log_description="Facility creation hit a duplicate code constraint",
+                actor_id=str(actor_id),
+                facility_code=request.code,
+            )
         log_event(
             logger,
             logging.INFO,
@@ -89,6 +104,7 @@ class FacilityServiceMixin:
             resource_id=str(value.id),
             actor_id=str(actor_id),
         )
+        self._invalidate_catalog_cache()
         return value
 
     async def update_facility(self, resource_id: UUID, request: FacilityUpdate, actor_id: UUID) -> Facility:
@@ -116,4 +132,5 @@ class FacilityServiceMixin:
             resource_id=str(value.id),
             actor_id=str(actor_id),
         )
+        self._invalidate_catalog_cache()
         return value

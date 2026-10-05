@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.errors import raise_integrity_conflict
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger, log_event
 from src.models.booking import Booking
@@ -59,8 +60,21 @@ class BookingService:
             specialty_id=str(request.specialty_id),
             schedule_id=str(request.schedule_id) if request.schedule_id else None,
         )
-        async with self.session.begin():
-            booking = await self._create_in_transaction(user_id, request)
+        try:
+            async with self.session.begin():
+                booking = await self._create_in_transaction(user_id, request)
+        except IntegrityError as exc:
+            raise_integrity_conflict(
+                exc,
+                logger=logger,
+                event="booking.create.persistence_conflict",
+                code="BOOKING_CREATE_CONFLICT",
+                message="Booking could not be created",
+                log_description="Booking creation conflicted with a selected slot or related resource",
+                user_id=str(user_id),
+                service_id=str(request.service_id),
+                specialty_id=str(request.specialty_id),
+            )
         log_event(
             logger,
             logging.INFO,
@@ -119,7 +133,16 @@ class BookingService:
                     error_type=type(exc).__name__,
                     exc_info=True,
                 )
-                raise
+                raise_integrity_conflict(
+                    exc,
+                    logger=logger,
+                    event="booking.create.persistence_conflict",
+                    code="BOOKING_CREATE_CONFLICT",
+                    message="Booking could not be created",
+                    log_description="Idempotent booking creation conflicted with a selected slot or related resource",
+                    user_id=str(user_id),
+                    idempotency_key=normalized_key,
+                )
             booking = existing
             replay = True
         if replay:

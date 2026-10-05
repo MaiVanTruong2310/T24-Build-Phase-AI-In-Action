@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     database_pool_recycle_seconds: int = Field(default=900, ge=30, le=86400)
     database_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
 
+    # Read-heavy public catalog API cache
+    catalog_cache_enabled: bool = True
+    catalog_cache_ttl_seconds: int = Field(default=30, ge=1, le=3600)
+    catalog_cache_max_entries: int = Field(default=1024, ge=10, le=10000)
+
     # Direct notification delivery
     notification_processing_timeout_seconds: int = Field(default=300, ge=30, le=86400)
     notification_max_attempts: int = Field(default=5, ge=1, le=20)

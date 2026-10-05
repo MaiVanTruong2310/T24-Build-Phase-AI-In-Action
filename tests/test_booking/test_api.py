@@ -34,7 +34,7 @@ async def test_booking_routes_require_authentication(client):
     response = await client.get("/api/v1/bookings")
 
     assert response.status_code == 401
-    assert response.json()["error"] == {"code": 401}
+    assert response.json()["error_code"] == "NOT_AUTHENTICATED"
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_staff_booking_routes_reject_non_staff_users(client):
         app.dependency_overrides.clear()
 
     assert response.status_code == 403
-    assert response.json()["error"] == {"code": 403}
+    assert response.json()["error_code"] == "FORBIDDEN"
 
 
 def test_booking_routes_are_mounted_under_api_v1():
@@ -102,4 +102,4 @@ async def test_notification_route_requires_authentication(client):
     response = await client.get("/api/v1/notifications")
 
     assert response.status_code == 401
-    assert response.json()["error"] == {"code": 401}
+    assert response.json()["error_code"] == "NOT_AUTHENTICATED"

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import Settings, get_settings
+from src.core.errors import raise_integrity_conflict
 from src.core.exceptions import AppError, AuthenticationError, ConflictError, NotFoundError, RateLimitError
 from src.core.logging import get_logger, log_event
 from src.core.security import (
@@ -56,30 +57,41 @@ class AuthService:
             identity_type="email" if request.email else "phone",
         )
         email, phone = normalize_identity(request.email, request.phone)
-        async with self.session.begin():
-            if await self.users.get_by_identity(email, phone):
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "auth.register.conflict",
-                    description="Registration was rejected because the account already exists",
-                    reason="account_exists",
+        try:
+            async with self.session.begin():
+                if await self.users.get_by_identity(email, phone):
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "auth.register.conflict",
+                        description="Registration was rejected because the account already exists",
+                        reason="account_exists",
+                    )
+                    raise ConflictError("ACCOUNT_EXISTS", "An account already exists")
+                user = User(
+                    email=email,
+                    phone=phone,
+                    password_hash=hash_password(request.password) if request.password else None,
+                    full_name=request.full_name,
+                    role="patient",
+                    status="pending_verification",
+                    date_of_birth=request.date_of_birth,
+                    gender=request.gender,
+                    citizen_id=request.citizen_id,
+                    health_insurance_code=request.health_insurance_code,
                 )
-                raise ConflictError("ACCOUNT_EXISTS", "An account already exists")
-            user = User(
-                email=email,
-                phone=phone,
-                password_hash=hash_password(request.password) if request.password else None,
-                full_name=request.full_name,
-                role="patient",
-                status="pending_verification",
-                date_of_birth=request.date_of_birth,
-                gender=request.gender,
-                citizen_id=request.citizen_id,
-                health_insurance_code=request.health_insurance_code,
+                await self.users.create(user)
+                await self._create_otp(user, otp_target(email, phone), "register")
+        except IntegrityError as exc:
+            raise_integrity_conflict(
+                exc,
+                logger=logger,
+                event="auth.register.persistence_conflict",
+                code="ACCOUNT_EXISTS",
+                message="Account already exists",
+                log_description="Registration hit a unique account identity constraint",
+                identity_type="email" if email else "phone",
             )
-            await self.users.create(user)
-            await self._create_otp(user, otp_target(email, phone), "register")
         log_event(
             logger,
             logging.INFO,

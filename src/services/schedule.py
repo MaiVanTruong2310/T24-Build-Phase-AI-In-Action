@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from src.core.errors import raise_integrity_conflict, savepoint
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger, log_event
 from src.models.booking import Booking
@@ -423,18 +424,36 @@ class ScheduleServiceMixin:
                     )
                     continue
                 try:
-                    value, was_created = await self._upsert_schedule(record, actor_id)
-                    created += int(was_created)
-                    updated += int(not was_created)
-                    items.append(
-                        BulkImportItemResult(
-                            external_schedule_id=record.external_schedule_id,
-                            schedule=DoctorScheduleResponse.model_validate(value),
+                    async with savepoint(self.session):
+                        value, was_created = await self._upsert_schedule(record, actor_id)
+                        created += int(was_created)
+                        updated += int(not was_created)
+                        items.append(
+                            BulkImportItemResult(
+                                external_schedule_id=record.external_schedule_id,
+                                schedule=DoctorScheduleResponse.model_validate(value),
+                            )
                         )
-                    )
                 except (ConflictError, NotFoundError) as exc:
                     failed += 1
                     items.append(BulkImportItemResult(external_schedule_id=external_schedule_id, error=exc.message))
+                except IntegrityError as exc:
+                    failed += 1
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "catalog.schedule.bulk_import.persistence_conflict",
+                        description="One imported schedule conflicted with a database constraint",
+                        external_schedule_id=external_schedule_id,
+                        error_type=type(exc.orig).__name__,
+                        exc_info=True,
+                    )
+                    items.append(
+                        BulkImportItemResult(
+                            external_schedule_id=external_schedule_id,
+                            error="Schedule conflicts with an existing record or schedule constraint",
+                        )
+                    )
         log_event(
             logger,
             logging.INFO,
@@ -577,7 +596,14 @@ class ScheduleServiceMixin:
                 "SCHEDULE_TIME_CONFLICT",
                 "Doctor already has a schedule overlapping this time range",
             ) from exc
-        raise exc
+        raise_integrity_conflict(
+            exc,
+            logger=logger,
+            event="catalog.schedule.persistence_conflict",
+            code="SCHEDULE_PERSISTENCE_CONFLICT",
+            message="Schedule could not be saved",
+            log_description="Schedule persistence conflicted with another schedule or schedule constraint",
+        )
 
 
 def _import_record_label(payload: object, index: int) -> str:

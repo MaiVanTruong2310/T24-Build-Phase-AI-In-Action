@@ -5,10 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import OperationalError
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.endpoints.auth import router as auth_router
 from src.api.endpoints.auth import user_router
@@ -18,16 +15,9 @@ from src.api.endpoints.catalog import router as catalog_router
 from src.api.endpoints.catalog import staff_router as catalog_staff_router
 from src.api.endpoints.chat_takeover import router as chat_takeover_router
 from src.api.endpoints.notification import router as notification_router
-from src.api.handlers import (
-    app_error_handler,
-    database_unavailable_handler,
-    http_error_handler,
-    unexpected_error_handler,
-    validation_error_handler,
-)
+from src.api.exception_handlers import register_exception_handlers
 from src.config import get_settings, parse_cors_origins
 from src.core.context import session_id_var, trace_id_var
-from src.core.exceptions import AppError
 from src.core.logging import get_logger, log_event, setup_logging
 from src.core.observability import setup_observability
 from src.db.session import check_database_connection, close_database, get_session_factory, initialize_database
@@ -172,11 +162,7 @@ app.include_router(notification_router, prefix="/api/v1")
 app.include_router(chat_takeover_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(catalog_staff_router, prefix="/api/v1")
-app.add_exception_handler(OperationalError, database_unavailable_handler)
-app.add_exception_handler(AppError, app_error_handler)
-app.add_exception_handler(RequestValidationError, validation_error_handler)
-app.add_exception_handler(StarletteHTTPException, http_error_handler)
-app.add_exception_handler(Exception, unexpected_error_handler)
+register_exception_handlers(app)
 setup_observability(app)
 
 

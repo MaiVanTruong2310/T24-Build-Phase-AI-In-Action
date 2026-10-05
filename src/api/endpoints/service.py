@@ -2,11 +2,12 @@
 
 from uuid import UUID
 
-from fastapi import Depends, Query, status
+from fastapi import Depends, Query, Response, status
 
 from src.api.dependencies import get_current_user, require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
+from src.core.cache import cache_key, get_catalog_cache, set_cache_headers
 from src.models.user import User
 from src.schemas.catalog import ServiceCreate, ServiceResponse, ServiceUpdate
 from src.schemas.common import ApiResponse
@@ -15,6 +16,7 @@ from src.services.catalog import CatalogService
 
 @router.get("/services", response_model=ApiResponse[list[ServiceResponse]])
 async def list_public_services(
+    response: Response,
     name: str | None = Query(default=None, max_length=200),
     category: str | None = Query(default=None, max_length=100),
     specialty_id: UUID | None = None,
@@ -25,6 +27,12 @@ async def list_public_services(
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[ServiceResponse]]:
     """List active medical services for patient search and booking selection."""
+    cache = get_catalog_cache()
+    key = cache_key("services:list", name, category, specialty_id, facility_id, offset, limit)
+    hit, cached = cache.get(key)
+    if hit:
+        set_cache_headers(response, hit=True)
+        return success_response([ServiceResponse.model_validate(item) for item in cached], "Services retrieved")
     values = await service.list_services(
         public_only=True,
         offset=offset,
@@ -34,18 +42,31 @@ async def list_public_services(
         specialty_id=specialty_id,
         facility_id=facility_id,
     )
-    return success_response([ServiceResponse.model_validate(value) for value in values], "Services retrieved")
+    data = [ServiceResponse.model_validate(value) for value in values]
+    cache.set(key, [item.model_dump(mode="json") for item in data])
+    set_cache_headers(response, hit=False)
+    return success_response(data, "Services retrieved")
 
 
 @router.get("/services/{service_id}", response_model=ApiResponse[ServiceResponse])
 async def get_public_service(
     service_id: UUID,
+    response: Response,
     _: User = Depends(get_current_user),
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[ServiceResponse]:
     """Get one active medical service for a patient."""
+    cache = get_catalog_cache()
+    key = cache_key("services:detail", service_id)
+    hit, cached = cache.get(key)
+    if hit:
+        set_cache_headers(response, hit=True)
+        return success_response(ServiceResponse.model_validate(cached), "Service retrieved")
     value = await service.get_service(service_id, public_only=True)
-    return success_response(ServiceResponse.model_validate(value), "Service retrieved")
+    data = ServiceResponse.model_validate(value)
+    cache.set(key, data.model_dump(mode="json"))
+    set_cache_headers(response, hit=False)
+    return success_response(data, "Service retrieved")
 
 
 @staff_router.get("/services", response_model=ApiResponse[list[ServiceResponse]])

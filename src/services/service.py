@@ -3,6 +3,9 @@
 import logging
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
+
+from src.core.errors import raise_integrity_conflict
 from src.core.exceptions import NotFoundError
 from src.core.logging import get_logger, log_event
 from src.models.catalog import Service
@@ -97,12 +100,24 @@ class MedicalServiceMixin:
             actor_id=str(actor_id),
             service_code=request.code,
         )
-        async with self.session.begin():
-            await self._ensure_code_available(Service, request.code)
-            value = Service(**request.model_dump())
-            self.session.add(value)
-            await self.session.flush()
-            await self._audit(actor_id, "service", value.id, "created", {"code": value.code})
+        try:
+            async with self.session.begin():
+                await self._ensure_code_available(Service, request.code)
+                value = Service(**request.model_dump())
+                self.session.add(value)
+                await self.session.flush()
+                await self._audit(actor_id, "service", value.id, "created", {"code": value.code})
+        except IntegrityError as exc:
+            raise_integrity_conflict(
+                exc,
+                logger=logger,
+                event="catalog.service.create.persistence_conflict",
+                code="SERVICE_CODE_EXISTS",
+                message="Service code already exists",
+                log_description="Medical service creation hit a duplicate code constraint",
+                actor_id=str(actor_id),
+                service_code=request.code,
+            )
         log_event(
             logger,
             logging.INFO,
@@ -111,6 +126,7 @@ class MedicalServiceMixin:
             resource_id=str(value.id),
             actor_id=str(actor_id),
         )
+        self._invalidate_catalog_cache()
         return value
 
     async def update_service(self, resource_id: UUID, request: ServiceUpdate, actor_id: UUID) -> Service:
@@ -138,4 +154,5 @@ class MedicalServiceMixin:
             resource_id=str(value.id),
             actor_id=str(actor_id),
         )
+        self._invalidate_catalog_cache()
         return value
