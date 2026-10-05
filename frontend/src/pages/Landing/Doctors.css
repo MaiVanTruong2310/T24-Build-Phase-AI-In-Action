@@ -1,0 +1,64 @@
+/* Card interaction adapted from Uiverse.io by Javierrocadev. */
+.home-doctors-carousel { overflow: hidden; padding: 8px 0 16px; }
+.home-doctors-track { display: flex; width: max-content; animation: home-doctors-cycle 120s linear infinite; }
+.home-doctors-group { display: flex; align-items: stretch; gap: 24px; padding-right: 24px; }
+.home-doctors-carousel:hover .home-doctors-track,
+.home-doctors-carousel:focus-within .home-doctors-track,
+.home-doctors-carousel:active .home-doctors-track { animation-play-state: paused; }
+@keyframes home-doctors-cycle { to { transform: translateX(-50%); } }
+.home-doctor-card {
+  --doctor-paper: #fff;
+  --doctor-ink: #254f40;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  width: 300px;
+  flex-shrink: 0;
+  min-height: 380px;
+  padding: 24px 20px;
+  border-radius: 20px;
+  border: 1px solid #d9e9e0;
+  background: var(--doctor-paper);
+  color: var(--doctor-ink);
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgb(37 79 64 / .05);
+}
+.home-doctor-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 225px;
+  border-radius: 20px 20px 0 0;
+  background: linear-gradient(225deg, #d8eee3, #f6e8d5, #a6c9b2);
+  transition: transform .5s, height .5s, border-radius .5s;
+  z-index: -1;
+}
+.home-doctor-photo { width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--doctor-paper); overflow: hidden; background: #edf7f1; flex-shrink: 0; z-index: 1; box-shadow: 0 3px 12px rgb(37 79 64 / .12); transition: transform .5s; }
+.home-doctor-photo img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 18%; transform: scale(1.45); transform-origin: center 20%; }
+.home-doctor-info { width: 100%; z-index: 1; transition: transform .5s; }
+.home-doctor-credentials { font-size: 11px; line-height: 1.5; color: #6b7e74; margin-bottom: 4px; }
+.home-doctor-info h3 { font-size: 19px; font-weight: 700; line-height: 1.3; }
+.home-doctor-specialty { font-size: 13px; font-weight: 600; line-height: 1.5; margin-top: 7px; color: #37856a; }
+.home-doctor-facility { font-size: 11px; line-height: 1.6; color: #6b7e74; margin-top: 8px; }
+.home-doctor-profile { margin-top: auto; padding: 8px 16px; border-radius: 9px; background: #37856a; color: #fff; font-size: 12px; font-weight: 600; z-index: 1; transition: transform .5s, background-color .3s; }
+.home-doctor-profile:hover { transform: scale(1.08); background: #296c55; }
+.home-doctor-profile:focus-visible { outline: 2px solid #37856a; outline-offset: 4px; }
+@media (hover: hover) and (min-width: 640px) {
+  .home-doctor-card:hover::before, .home-doctor-card:focus-within::before { height: 280px; border-radius: 20px 20px 32px 32px; }
+  .home-doctor-card:hover .home-doctor-photo, .home-doctor-card:focus-within .home-doctor-photo { transform: translateY(-4px) scale(1.06); }
+}
+.dark .home-doctor-card { --doctor-paper: #13251e; --doctor-ink: #e3f0e9; border-color: #2c493c; }
+.dark .home-doctor-card::before { background: linear-gradient(225deg, #284c3d, #3b4432, #326047); }
+.dark .home-doctor-credentials, .dark .home-doctor-facility { color: #a9c2b5; }
+.dark .home-doctor-specialty { color: #91d5b8; }
+@media (max-width: 639px) { .home-doctor-card { width: 270px; } .home-doctors-group { gap: 16px; padding-right: 16px; } }
+@media (prefers-reduced-motion: reduce) {
+  .home-doctors-carousel { overflow-x: auto; }
+  .home-doctors-track { animation: none; }
+  .home-doctors-group[aria-hidden='true'] { display: none; }
+  .home-doctor-card::before, .home-doctor-photo, .home-doctor-info, .home-doctor-profile { transition: none; }
+}

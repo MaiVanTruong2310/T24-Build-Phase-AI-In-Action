@@ -28,20 +28,6 @@ export const STATUS_CONFIG: Record<
     text: 'text-rose-700',
     border: 'border-rose-200',
   },
-  cancelled: {
-    label: 'ÄÃ£ há»§y',
-    dot: 'bg-slate-500',
-    bg: 'bg-slate-50',
-    text: 'text-slate-700',
-    border: 'border-slate-200',
-  },
-  expired: {
-    label: 'ÄÃ£ háº¿t háº¡n',
-    dot: 'bg-orange-500',
-    bg: 'bg-orange-50',
-    text: 'text-orange-700',
-    border: 'border-orange-200',
-  },
 };
 
 /* ───────────────── Risk config ────────────────── */
@@ -65,8 +51,6 @@ export interface BookingCounts {
   pending_approval: number;
   confirmed: number;
   rejected: number;
-  cancelled: number;
-  expired: number;
 }
 
 /* ───────────────── Format helpers ────────────────── */

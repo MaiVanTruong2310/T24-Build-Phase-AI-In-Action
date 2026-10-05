@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { TypewriterLoader } from './components/TypewriterLoader';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import type { AppDispatch, RootState } from './app/store'
@@ -10,35 +11,43 @@ import {
   REFRESH_TOKEN_KEY,
   readPublishedSession,
 } from './features/auth/session'
-import { PatientLayout, RootLayout, StaffLayout, AuthLayout } from './layouts'
-import { Landing } from './pages/Landing'
-import { Login } from './pages/Login'
-import { Register } from './pages/Register'
-import { ForgotPassword } from './pages/ForgotPassword'
-import EmergencyCoordinator from './pages/EmergencyCoordinator'
-import AppointmentBooking from './pages/AppointmentBooking'
-import AppointmentHistory from './pages/AppointmentHistory'
-import AppointmentProgress from './pages/AppointmentProgress'
-import AppointmentDetail from './pages/AppointmentDetail'
-import DoctorManagement from './pages/DoctorManagement'
-import CreateDoctor from './pages/DoctorManagement/Create'
-import ServiceManagement from './pages/ServiceManagement'
-import CreateService from './pages/ServiceManagement/Create'
-import ScheduleApprove from './pages/ScheduleApprove'
-import AppointmentApproval from './pages/AppointmentApproval'
-import DoctorSchedule from './pages/DoctorSchedule'
-import PatientProfile from './pages/PatientProfile'
-import PatientDepartments from './pages/PatientDepartments'
-import PatientConsultation from './pages/PatientConsultation'
-import ChatTakeover from './pages/ChatTakeover'
-import StaffDashboard from './pages/StaffDashboard'
+import { PatientLayout } from './layouts/PatientLayout'
+import { RootLayout } from './layouts/RootLayout'
+
+const AuthLayout = lazy(() => import('./layouts/AuthLayout').then((module) => ({ default: module.AuthLayout })))
+const StaffLayout = lazy(() => import('./layouts/StaffLayout').then((module) => ({ default: module.StaffLayout })))
+const Landing = lazy(() => import('./pages/Landing').then((module) => ({ default: module.Landing })))
+const Login = lazy(() => import('./pages/Login').then((module) => ({ default: module.Login })))
+const Register = lazy(() => import('./pages/Register').then((module) => ({ default: module.Register })))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then((module) => ({ default: module.ForgotPassword })))
+const CoordinatorWorkbench = lazy(() => import('./pages/CoordinatorWorkbench'))
+const PatientCoordinationRequests = lazy(() => import('./pages/PatientCoordinationRequests'))
+const ConsultationBooking = lazy(() => import('./pages/ConsultationBooking'))
+const DoctorDirectory = lazy(() => import('./pages/DoctorDirectory'))
+const DoctorProfile = lazy(() => import('./pages/DoctorProfile'))
+const CoordinatorSchedule = lazy(() => import('./pages/CoordinatorSchedule'))
+const AppointmentHistory = lazy(() => import('./pages/AppointmentHistory'))
+const AppointmentProgress = lazy(() => import('./pages/AppointmentProgress'))
+const AppointmentDetail = lazy(() => import('./pages/AppointmentDetail'))
+const DoctorManagement = lazy(() => import('./pages/DoctorManagement'))
+const CreateDoctor = lazy(() => import('./pages/DoctorManagement/Create'))
+const ServiceManagement = lazy(() => import('./pages/ServiceManagement'))
+const CreateService = lazy(() => import('./pages/ServiceManagement/Create'))
+
+
+const DoctorSchedule = lazy(() => import('./pages/DoctorSchedule'))
+const PatientProfile = lazy(() => import('./pages/PatientProfile'))
+const PatientDepartments = lazy(() => import('./pages/PatientDepartments'))
+const PatientConsultation = lazy(() => import('./pages/PatientConsultation'))
+
+
 
 function Placeholder({ title, description }: { title: string; description: string }) {
   return (
-    <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-sky-600">VCare+</p>
-      <h1 className="mt-2 text-2xl font-bold text-slate-900">{title}</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
+    <section className="rounded-2xl border border-dashed border-slate-300 light:border-app-border bg-white light:bg-app-surface p-8 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wider text-sky-600 light:text-app-primary">VCare+</p>
+      <h1 className="mt-2 text-2xl font-bold text-slate-900 light:text-app-text">{title}</h1>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 light:text-app-secondary">{description}</p>
     </section>
   )
 }
@@ -54,7 +63,7 @@ const router = createBrowserRouter([
     ]
   },
   // Standalone Patient Profile Page (renders full-bleed layout with its own header & footer)
-  { path: '/patient/profile', element: <PatientProfile /> },
+  { path: '/patient/profile', element: <PatientAuthGate><PatientProfile /></PatientAuthGate> },
   { path: '/patient/records', element: <Navigate to="/patient/profile" replace /> },
   {
     element: <RootLayout />,
@@ -64,12 +73,15 @@ const router = createBrowserRouter([
         element: <PatientLayout />,
         children: [
           { index: true, element: <PatientConsultation /> },
-          { path: 'profile', element: <PatientProfile /> },
-          { path: 'records', element: <PatientProfile /> },
+          { path: 'profile', element: <PatientAuthGate><PatientProfile /></PatientAuthGate> },
+          { path: 'records', element: <Navigate to="/patient/profile" replace /> },
           { path: 'departments', element: <PatientDepartments /> },
-          { path: 'appointments', element: <AppointmentBooking /> },
+          { path: 'appointments', element: <ConsultationBooking /> },
+          { path: 'requests', element: <PatientCoordinationRequests /> },
+          { path: 'doctors', element: <DoctorDirectory /> },
+          { path: 'doctors/:id', element: <DoctorProfile /> },
           { path: 'appointments/history', element: <AppointmentHistory /> },
-          { path: 'progress', element: <AppointmentProgress /> },
+          { path: 'progress', element: <PatientAuthGate><AppointmentProgress /></PatientAuthGate> },
           { path: 'appointments/:id', element: <AppointmentDetail /> }
         ]
       }
@@ -77,25 +89,39 @@ const router = createBrowserRouter([
   },
   {
     path: 'staff',
-    element: <StaffLayout />,
+    element: <StaffGate />,
     children: [
-      { index: true, element: <StaffDashboard /> },
-      { path: 'overview', element: <StaffDashboard /> },
-      { path: 'queue', element: <AppointmentApproval /> },
-      { path: 'emergency', element: <EmergencyCoordinator /> },
-      { path: 'chat', element: <ChatTakeover /> },
+      { index: true, element: <CoordinatorWorkbench mode="dashboard" /> },
+      { path: 'overview', element: <CoordinatorWorkbench mode="dashboard" /> },
+      { path: 'dieu-phoi', element: <CoordinatorWorkbench /> },
+      { path: 'shifts', element: <CoordinatorSchedule /> },
+      { path: 'settings', element: <CoordinatorWorkbench mode="settings" /> },
+      { path: 'queue', element: <CoordinatorWorkbench /> },
+      { path: 'emergency', element: <CoordinatorWorkbench mode="emergency" /> },
+      { path: 'chat', element: <CoordinatorWorkbench mode="chat" /> },
       { path: 'doctors', element: <DoctorManagement /> },
       { path: 'doctors/create', element: <CreateDoctor /> },
+      { path: 'doctors/:id/edit', element: <CreateDoctor /> },
       { path: 'services', element: <ServiceManagement /> },
       { path: 'services/create', element: <CreateService /> },
-      { path: 'appointments', element: <AppointmentApproval /> },
-      { path: 'appointments/approve/:id', element: <ScheduleApprove /> },
+      { path: 'appointments', element: <CoordinatorWorkbench /> },
+      { path: 'appointments/approve/:id', element: <Navigate to="/staff/queue" replace /> },
       { path: 'doctor-schedule', element: <DoctorSchedule /> },
       { path: 'patients', element: <Placeholder title="Quản lý bệnh nhân" description="Page quản lý bệnh nhân sẽ được bổ sung sau." /> },
-      { path: 'monitoring', element: <Placeholder title="Giám sát hệ thống" description="Page giám sát hệ thống sẽ được bổ sung sau." /> }
+      { path: 'monitoring', element: <CoordinatorWorkbench mode="emergency" /> }
     ]
   }
 ])
+
+function PatientAuthGate({ children }: { children: ReactNode }) {
+  const user = useSelector((state: RootState) => state.auth.user)
+  return user ? <>{children}</> : <Navigate to="/login" replace />
+}
+
+function StaffGate() {
+  const user = useSelector((state: RootState) => state.auth.user)
+  return user?.role === 'staff' ? <StaffLayout /> : <Navigate to="/login" replace />
+}
 
 export function App() {
   const dispatch = useDispatch<AppDispatch>()
@@ -122,10 +148,12 @@ export function App() {
     }
   }, [dispatch])
 
-  if (!initialized) return <main className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600" role="status">Đang khôi phục phiên đăng nhập…</main>
+  if (!initialized) return <main className="flex min-h-screen items-center justify-center bg-slate-50 light:bg-app-page text-slate-600 light:text-app-secondary" role="status">Đang khôi phục phiên đăng nhập…</main>
 
   return <>
-    <RouterProvider router={router} />
+    <Suspense fallback={<main className="flex min-h-screen items-center justify-center flex-col gap-5 bg-slate-50 light:bg-app-page text-slate-600 light:text-app-secondary dark:bg-[#0B1329] dark:text-slate-300" role="status"><TypewriterLoader size="lg" /><span>Đang tải trang…</span></main>}>
+      <RouterProvider router={router} />
+    </Suspense>
     {restoreError && <div role="status" className="fixed bottom-4 left-1/2 z-[100] flex max-w-[90vw] -translate-x-1/2 items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-lg">
       <span>{restoreError}</span>
       <button type="button" disabled={loading} onClick={() => void dispatch(initializeAuth())} className="shrink-0 font-semibold underline disabled:opacity-50">Thử lại</button>

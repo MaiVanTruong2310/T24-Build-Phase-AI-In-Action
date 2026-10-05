@@ -1,35 +1,37 @@
+import { PatientUpdates, type PatientUpdatesHandle, type SupportRequestState } from '../features/coordinator/PatientUpdates';
+import '../components/ChatMessageInput.css';
+import '../components/ChatSendButton.css';
+import { AIIdentity } from '../components/AIIdentity';
+import { BookingDrawer } from '../features/chat/BookingDrawer';
 import { ChatHistoryPanel } from '../features/chat/ChatHistoryPanel';
 import { ChatAccessGate } from '../features/chat/ChatAccessGate';
 import { GUEST_PROFILE_EVENT, readGuestProfile, saveGuestProfile, type ChatProfile } from '../features/chat/profile';
 import { AssistantMessage } from '../features/chat/AssistantMessage';
-import { useEffect, useRef, useState, useCallback, type FormEvent } from 'react';
+import { AssistantTurnMetrics } from '../features/chat/AssistantTurnMetrics';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   History,
+  Headset,
   Activity,
   AlertTriangle,
   Bot,
-  Calendar,
   CheckCircle2,
+  ClipboardList,
   LoaderCircle,
   Maximize2,
   Mic,
   Minimize2,
   Minus,
   RotateCcw,
-  Send,
-  ShieldCheck,
   Sparkles,
-  Stethoscope,
 } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { closeChat, toggleChat, type RootState } from '../app/store';
 import {
   getConversation,
   type SavedChatTurn,
-  checkAgentStatus,
   sendChat,
   streamChat,
-  submitBooking,
   type BookingIntake,
   type ChatMetadata,
 } from '../features/chat/api';
@@ -46,6 +48,7 @@ interface Message {
   pending?: boolean;
   error?: boolean;
   metadata?: ChatMetadata;
+  elapsedMs?: number | null;
 }
 
 const DEFAULT_QUICK_REPLIES = [
@@ -58,7 +61,7 @@ const DEFAULT_QUICK_REPLIES = [
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   sender: 'bot',
-  text: 'Kính chào Quý bệnh nhân! Em là Trợ lý Y tế Lâm sàng P-124 thuộc hệ thống VCare+.\n\nBác vui lòng mô tả các triệu chứng hiện tại (vị trí đau, thời gian xuất hiện, mức độ khó chịu) để em hỗ trợ phân tầng mức ưu tiên và kết nối chuyên khoa phù hợp.',
+  text: 'Kính chào Quý bệnh nhân! Em là VgreenAI, trợ lý tư vấn thuộc hệ thống VCare+.\n\nBác vui lòng mô tả các triệu chứng hiện tại (vị trí đau, thời gian xuất hiện, mức độ khó chịu) để em hỗ trợ phân tầng mức ưu tiên và kết nối chuyên khoa phù hợp.',
   time: '',
 };
 
@@ -76,7 +79,15 @@ function savedMessages(turns: SavedChatTurn[]): Message[] {
     const time = new Date(turn.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     return [
       { id: `${turn.id}-user`, sender: 'user' as const, text: turn.user_text, time },
-      { id: `${turn.id}-bot`, sender: 'bot' as const, text: turn.assistant_text || 'Lượt chat chưa hoàn tất. Bạn có thể gửi lại tin nhắn.', time, error: turn.status !== 'completed', metadata: turn.result || undefined },
+      {
+        id: `${turn.id}-bot`,
+        sender: 'bot' as const,
+        text: turn.assistant_text || 'Lượt chat chưa hoàn tất. Bạn có thể gửi lại tin nhắn.',
+        time,
+        error: turn.status !== 'completed',
+        metadata: turn.result || undefined,
+        elapsedMs: turn.result?.elapsed_ms ?? undefined,
+      },
     ];
   });
 }
@@ -136,142 +147,6 @@ function AtsBadge({ metadata }: { metadata?: ChatMetadata }) {
   );
 }
 
-function BookingForm({ intake, sessionId }: { intake: BookingIntake; sessionId: string }) {
-  const [status, setStatus] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubmitting(true);
-    setStatus('Đang gửi thông tin đăng ký tới bệnh viện…');
-    const values = new FormData(event.currentTarget);
-    const payload: Record<string, unknown> = Object.fromEntries(values.entries());
-    payload.session_id = sessionId;
-    payload.selected_slot_id = intake.selected_slot_id || null;
-    payload.consent_to_contact = values.get('consent_to_contact') === 'on';
-    payload.preferred_doctor_id = values.get('preferred_doctor_id') || null;
-    payload.preferred_date = values.get('preferred_date') || null;
-    payload.facility_preference = values.get('facility_preference') || null;
-
-    try {
-      const result = await submitBooking(intake.endpoint || '/api/v1/booking-requests', payload);
-      setSaved(true);
-      setStatus(`Đã lưu mã yêu cầu: ${result.request_code}. Điều phối viên lâm sàng sẽ liên hệ xác nhận lịch hẹn.`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Không thể lưu yêu cầu khám.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="mt-3 space-y-3 rounded-2xl border border-blue-200/90 dark:border-blue-900/60 bg-blue-50/70 dark:bg-[#0d1c3a]/90 p-4 text-xs">
-      <div className="flex items-center justify-between border-b border-blue-200/60 dark:border-blue-900/50 pb-2">
-        <div className="flex items-center gap-1.5 font-bold text-blue-950 dark:text-cyan-200">
-          <Calendar className="h-4 w-4 text-blue-600 dark:text-cyan-400" />
-          <span>Phiếu Hẹn Khám Bác Sĩ Chuyên Khoa</span>
-        </div>
-        <span className="text-[10px] text-blue-700 dark:text-cyan-400 font-medium">Yêu cầu đặt lịch</span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        <div className="col-span-1 sm:col-span-2">
-          <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Họ và tên bệnh nhân *</label>
-          <input
-            name="patient_name"
-            defaultValue={intake.patient_name}
-            required
-            minLength={2}
-            placeholder="Ví dụ: Nguyễn Văn A"
-            className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/90 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
-            disabled={saved}
-          />
-        </div>
-
-        <div className="col-span-1 sm:col-span-2">
-          <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Số điện thoại liên hệ *</label>
-          <input
-            name="patient_phone"
-            defaultValue={intake.patient_phone}
-            type="tel"
-            required
-            placeholder="Ví dụ: 0912 345 678"
-            className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/90 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
-            disabled={saved}
-          />
-        </div>
-
-        <div>
-          <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Ngày sinh *</label>
-          <input
-            name="date_of_birth"
-            type="date"
-            required
-            className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/90 px-3 py-1.5 text-slate-900 dark:text-slate-100 outline-none focus:border-blue-500"
-            disabled={saved}
-          />
-        </div>
-
-        <div>
-          <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Ngày muốn khám</label>
-          <input
-            name="preferred_date"
-            type="date"
-            className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/90 px-3 py-1.5 text-slate-900 dark:text-slate-100 outline-none focus:border-blue-500"
-            disabled={saved}
-          />
-        </div>
-
-        <div className="col-span-1 sm:col-span-2">
-          <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Bác sĩ đề xuất / mong muốn</label>
-          <select
-            name="preferred_doctor_id"
-            defaultValue={intake.selected_doctor_id || ''}
-            className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/90 px-3 py-2 text-slate-900 dark:text-slate-100 outline-none focus:border-blue-500"
-            disabled={saved}
-          >
-            <option value="">Để Điều phối viên chuyên khoa phân bổ Bác sĩ tốt nhất</option>
-            {(intake.doctors || []).map((doctor) => (
-              <option key={doctor.id || doctor.name} value={doctor.id}>
-                {doctor.name} {doctor.title ? `— ${doctor.title}` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="col-span-1 sm:col-span-2">
-          <input
-            name="facility_preference"
-            placeholder="Cơ sở bệnh viện / phòng khám ưu tiên (tuỳ chọn)"
-            className="w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/90 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-blue-500"
-            disabled={saved}
-          />
-        </div>
-      </div>
-
-      <label className="flex items-start gap-2 pt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-        <input name="consent_to_contact" type="checkbox" required className="mt-0.5 rounded text-blue-600 focus:ring-blue-500" disabled={saved} />
-        <span>Tôi đồng ý chia sẻ thông tin triệu chứng trên để Bác sĩ và Điều phối viên liên hệ xác nhận lịch khám.</span>
-      </label>
-
-      <button
-        type="submit"
-        disabled={submitting || saved}
-        className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold py-2.5 shadow-md shadow-blue-500/25 transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
-      >
-        {submitting ? 'Đang gửi thông tin…' : saved ? '✓ Đã gửi yêu cầu khám' : 'Gửi Yêu Cầu Đặt Khám Bác Sĩ'}
-      </button>
-
-      {status && (
-        <p className={`text-[11px] font-medium leading-relaxed rounded-lg p-2 ${saved ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300'}`}>
-          {status}
-        </p>
-      )}
-    </form>
-  );
-}
-
 export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const dispatch = useDispatch();
   const floatingChatOpen = useSelector((state: RootState) => state.layout.isChatOpen);
@@ -287,9 +162,12 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [isSending, setIsSending] = useState(false);
-  const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [sessionId, setSessionId] = useState(createSessionId);
+  const supportRef = useRef<PatientUpdatesHandle>(null);
+  const [supportState, setSupportState] = useState<SupportRequestState>({ busy: false, requested: false, control: 'ai' });
+  const [isBookingDrawerOpen, setIsBookingDrawerOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyDeleting, setHistoryDeleting] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [historyMore, setHistoryMore] = useState(false);
@@ -361,12 +239,6 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   useEffect(() => () => activeRequest.current?.abort(), []);
 
   useEffect(() => {
-    const request = new AbortController();
-    void checkAgentStatus(request.signal).then(setAgentOnline);
-    return () => request.abort();
-  }, []);
-
-  useEffect(() => {
     const refreshGuest = () => setGuestProfile(readGuestProfile());
     window.addEventListener(GUEST_PROFILE_EVENT, refreshGuest);
     return () => window.removeEventListener(GUEST_PROFILE_EVENT, refreshGuest);
@@ -430,7 +302,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   };
 
   const openConversation = (id: string) => {
-    if (isSending || historyLoading) return;
+    if (isSending || historyDeleting || historyLoading) return;
     sessionStorage.setItem('p124_chat_session_id', id); setSessionId(id);
     setHistoryOpen(false); setMessages([WELCOME_MESSAGE]); setHistoryError(''); setInputText('');
     if (id === sessionId) setHistoryReload(value => value + 1);
@@ -458,7 +330,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
   const sendMessage = async (rawText: string) => {
     const text = rawText.trim();
-    if (!text || isSending || chatLocked || historyLoading || historyError) return;
+    if (!text || isSending || historyDeleting || chatLocked || historyLoading || historyError) return;
 
     const request = new AbortController();
     activeRequest.current = request;
@@ -482,8 +354,10 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     let completed = false;
     let streamedText = '';
     let receivedMetadata = false;
+    const sendStartTime = Date.now();
+    let recordedElapsedMs: number | undefined;
+
     const showConnectionError = () => {
-      setAgentOnline(false);
       updateBot(botId, {
         text: 'Không thể nhận phản hồi từ trợ lý. Vui lòng kiểm tra kết nối hoặc thử lại sau.',
         pending: false,
@@ -510,12 +384,29 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         },
         onMetadata: (metadata) => {
           receivedMetadata = true;
-          updateBot(botId, { metadata });
+          const currentElapsed = metadata.elapsed_ms ?? (Date.now() - sendStartTime);
+          recordedElapsedMs = currentElapsed;
+          updateBot(botId, {
+            metadata: {
+              ...metadata,
+              elapsed_ms: currentElapsed,
+            },
+            elapsedMs: currentElapsed,
+          });
+          if (metadata.booking_intake?.required) {
+            setIsBookingDrawerOpen(true);
+          }
         },
       });
       completed = true;
-      setAgentOnline(true);
-      updateBot(botId, { pending: false });
+      const finalElapsed = recordedElapsedMs ?? (Date.now() - sendStartTime);
+      updateBot(botId, (current) => ({
+        pending: false,
+        elapsedMs: current.elapsedMs ?? finalElapsed,
+        metadata: current.metadata
+          ? { ...current.metadata, elapsed_ms: current.metadata.elapsed_ms ?? finalElapsed }
+          : undefined,
+      }));
       setTimeout(() => {
         if (isNearBottomRef.current) {
           scrollToBottom(true);
@@ -531,8 +422,16 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
       try {
         const result = await sendChat(text, sessionId, request.signal, profile || undefined, requestId);
         completed = true;
-        setAgentOnline(true);
-        updateBot(botId, { text: result.response, pending: false, metadata: result });
+        const finalElapsed = result.elapsed_ms ?? (Date.now() - sendStartTime);
+        updateBot(botId, {
+          text: result.response,
+          pending: false,
+          metadata: { ...result, elapsed_ms: finalElapsed },
+          elapsedMs: finalElapsed,
+        });
+        if (result.booking_intake?.required) {
+          setIsBookingDrawerOpen(true);
+        }
         setTimeout(() => {
           if (isNearBottomRef.current) {
             scrollToBottom(true);
@@ -550,11 +449,47 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     }
   };
 
+  const rawIntake = [...messages]
+    .reverse()
+    .find((message) => message.sender === 'bot' && message.metadata?.booking_intake)
+    ?.metadata?.booking_intake;
+
+  const latestBookingIntake: BookingIntake = rawIntake
+    ? {
+        ...rawIntake,
+        date_of_birth: rawIntake.date_of_birth || authUser?.date_of_birth || '',
+        gender: rawIntake.gender || authUser?.gender || '',
+        is_authenticated: Boolean(authUser),
+      }
+    : {
+        required: true,
+        patient_name: profile?.name || '',
+        patient_phone: profile?.phone || '',
+        date_of_birth: authUser?.date_of_birth || profile?.date_of_birth || '',
+        gender: authUser?.gender || profile?.gender || 'male',
+        is_authenticated: Boolean(authUser),
+      };
+
+  const handleBookingSubmitted = useCallback((requestCode: string) => {
+    setMessages((current) => [
+      ...current,
+      {
+        id: `system-${Date.now()}`,
+        sender: 'bot',
+        text: `✓ **Đã tiếp nhận yêu cầu đặt khám thành công!**\nMã tiếp nhận của bác là: **${requestCode}**.\nĐiều phối viên y tế sẽ sớm liên hệ theo số điện thoại đã cung cấp để hỗ trợ hoàn tất lịch khám cho bác.`,
+        time: displayTime(),
+      },
+    ]);
+  }, []);
+
   const latestQuickReplies =
     [...messages]
       .reverse()
       .find((message) => message.sender === 'bot' && message.metadata?.quick_replies?.length)
       ?.metadata?.quick_replies || DEFAULT_QUICK_REPLIES;
+  const supportLabel = supportState.control === 'human'
+    ? 'Đang kết nối bác sĩ'
+    : supportState.requested ? 'Đã gửi yêu cầu' : 'Yêu cầu hỗ trợ';
 
   return (
     <div
@@ -572,53 +507,45 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               ? 'h-full min-h-[660px] w-full shadow-lg dark:shadow-2xl'
               : isExpanded
               ? 'h-[88vh] w-[min(48rem,calc(100vw-2rem))] shadow-2xl shadow-blue-950/25 dark:shadow-cyan-950/40 ring-1 ring-blue-500/10 dark:ring-cyan-500/20'
-              : 'h-[620px] max-h-[85vh] w-[min(27rem,calc(100vw-1.5rem))] shadow-2xl shadow-blue-950/20 dark:shadow-black/60 ring-1 ring-blue-500/10 dark:ring-cyan-500/20'
+              : 'h-[min(744px,calc(100dvh-2rem))] w-[min(32.5rem,calc(100vw-1.5rem))] shadow-2xl shadow-blue-950/20 dark:shadow-black/60 ring-1 ring-blue-500/10 dark:ring-cyan-500/20'
           }`}
           aria-label="P-124 Medical Assistant"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-[#0B1329] via-[#0E2046] to-[#0B1329] px-4 py-3.5 text-white">
+          <div className="flex items-center justify-between border-b border-[#d5e8de] dark:border-white/10 bg-gradient-to-r from-[#edf7f1] via-[#f6fcf9] to-[#edf7f1] dark:from-[#0B1329] dark:via-[#0E2046] dark:to-[#0B1329] px-4 py-3.5 text-[#295c49] dark:text-white">
             <div className="flex items-center gap-3">
-              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-md shadow-blue-500/30">
-                <Stethoscope className="h-5 w-5" />
-                <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-[#0B1329]" />
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold tracking-tight text-white sm:text-sm">
-                    VCare+ · Trợ Lý Y Tế P-124
-                  </h3>
-                </div>
-                <div className="flex items-center gap-2 text-[10.5px] text-slate-300">
-                  <span className="flex items-center gap-1 font-medium">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        agentOnline === false
-                          ? 'bg-amber-400'
-                          : agentOnline === true
-                          ? 'animate-pulse bg-emerald-400'
-                          : 'animate-pulse bg-cyan-400'
-                      }`}
-                    />
-                    {agentOnline === false
-                      ? 'Chưa kết nối trợ lý'
-                      : agentOnline === true
-                      ? 'Trợ lý trực tuyến'
-                      : 'Đang kết nối trợ lý'}
-                  </span>
-                  <span className="text-slate-500">•</span>
-                  <span className="hidden sm:inline text-cyan-300 font-medium">Hỗ trợ tư vấn</span>
-                </div>
+              <div className="flex min-w-0 flex-col gap-2">
+                <AIIdentity />
               </div>
             </div>
 
             {/* Action buttons */}
-            <div className="flex items-center gap-1 text-slate-300">
-              {authUser && <button type="button" disabled={isSending || historyLoading} aria-label="Lịch sử trò chuyện" title="Lịch sử trò chuyện" onClick={() => setHistoryOpen(value => !value)} className="rounded-lg p-2 hover:bg-white/10 disabled:opacity-50"><History className="h-4 w-4" /></button>}
+            <div className="flex items-center gap-1 text-[#527565] dark:text-slate-300">
+              <button
+                type="button"
+                disabled={chatLocked || supportState.busy || supportState.requested || supportState.control === 'human'}
+                aria-label={supportLabel}
+                title={supportLabel}
+                onClick={() => supportRef.current?.requestHuman()}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium hover:bg-emerald-100 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Headset className="h-4 w-4 shrink-0" />
+                <span className={embedded ? 'hidden sm:inline' : 'sr-only'}>{supportLabel}</span>
+              </button>
+              {authUser && <button type="button" disabled={isSending || historyDeleting || historyLoading} aria-label="Lịch sử trò chuyện" title="Lịch sử trò chuyện" onClick={() => setHistoryOpen(value => !value)} className="rounded-lg p-2 hover:bg-emerald-100 dark:hover:bg-white/10 disabled:opacity-50"><History className="h-4 w-4" /></button>}
+              <button
+                type="button"
+                onClick={() => setIsBookingDrawerOpen((prev) => !prev)}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-[#28785c] dark:text-cyan-200 hover:bg-emerald-100 dark:hover:bg-white/10 hover:text-emerald-800 dark:hover:text-white transition-colors cursor-pointer"
+                title="Mở phiếu hẹn khám bác sĩ chuyên khoa"
+              >
+                <ClipboardList className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Phiếu khám</span>
+              </button>
               <button
                 type="button"
                 onClick={resetConversation}
-                className="rounded-lg p-1.5 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                className="rounded-lg p-1.5 transition-colors hover:bg-emerald-100 dark:hover:bg-white/10 hover:text-emerald-800 dark:hover:text-white cursor-pointer"
                 title="Tạo cuộc hội chẩn mới"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -627,7 +554,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                 <button
                   type="button"
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className="hidden sm:inline-flex rounded-lg p-1.5 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                  className="hidden sm:inline-flex rounded-lg p-1.5 transition-colors hover:bg-emerald-100 dark:hover:bg-white/10 hover:text-emerald-800 dark:hover:text-white cursor-pointer"
                   title={isExpanded ? 'Thu nhỏ' : 'Mở rộng'}
                 >
                   {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -637,7 +564,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                 <button
                   type="button"
                   onClick={() => dispatch(closeChat())}
-                  className="rounded-lg p-1.5 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                  className="rounded-lg p-1.5 transition-colors hover:bg-emerald-100 dark:hover:bg-white/10 hover:text-emerald-800 dark:hover:text-white cursor-pointer"
                   title="Đóng cửa sổ chat"
                 >
                   <Minus className="h-4 w-4" />
@@ -648,19 +575,8 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
           <div className="relative flex min-h-0 flex-1 flex-col">
           <div inert={chatLocked} aria-hidden={chatLocked || undefined} className={`flex min-h-0 flex-1 flex-col ${chatLocked ? 'pointer-events-none select-none blur-sm' : ''}`}>
-          {/* Clinical Security & Supervision Strip */}
-          <div className="flex items-center justify-between border-b border-blue-900/30 dark:border-slate-800/80 bg-blue-950/40 dark:bg-[#070D1E] px-4 py-1.5 text-[10.5px] text-blue-200 dark:text-cyan-300">
-            <div className="flex items-center gap-1.5 font-medium">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-              <span>Trợ lý AI · Hỗ trợ sàng lọc sơ bộ</span>
-            </div>
-            <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
-              Mã: {sessionId.slice(0, 11)}…
-            </span>
-          </div>
-
           {/* Message List */}
-          {authUser && historyOpen && <ChatHistoryPanel key={authUser.id} activeSessionId={sessionId} onSelect={openConversation} />}
+          {authUser && historyOpen && <ChatHistoryPanel key={authUser.id} activeSessionId={sessionId} onSelect={openConversation} busy={isSending || historyLoading} onDeletingChange={setHistoryDeleting} onDeleted={id => { if (id === sessionId) { historyRequest.current?.abort(); setHistoryError(''); setHistoryMore(false); setHistoryOffset(0); resetConversation(); } }} />}
           {authUser && <p className="border-b border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800">Sử dụng hồ sơ sức khỏe của bạn · Lịch sử được lưu theo tài khoản.</p>}
           {historyError && <p role="alert" className="px-4 py-2 text-xs text-red-600">{historyError} <button type="button" onClick={() => setHistoryReload(value => value + 1)} className="underline">Thử tải lại</button></p>}
           {historyLoading && <p className="px-4 py-2 text-xs text-slate-500">Đang tải cuộc trò chuyện…</p>}
@@ -668,7 +584,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
           <div
             ref={messagesContainerRef}
             onScroll={handleMessagesScroll}
-            className="flex-1 space-y-4 overflow-y-auto bg-slate-50/70 dark:bg-[#080E1F]/90 p-4 text-xs transition-colors scroll-smooth"
+            className="flex-1 space-y-4 overflow-y-auto bg-[#f6fcf9] dark:bg-[#080E1F]/90 p-4 text-xs transition-colors scroll-smooth"
             aria-live="polite"
           >
             {messages.map((message) => {
@@ -678,15 +594,13 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               return (
                 <div key={message.id} className={isUser ? 'flex justify-end' : 'flex items-start gap-2.5'}>
                   {!isUser && (
-                    <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/80 border border-blue-200 dark:border-cyan-500/30 text-blue-600 dark:text-cyan-300 shadow-xs">
-                      <Stethoscope className="h-3.5 w-3.5" />
-                    </div>
+                    <span className="mt-1 shrink-0"><AIIdentity avatarOnly /></span>
                   )}
 
                   <div
                     className={`${
                       isUser
-                        ? 'max-w-[85%] rounded-2xl rounded-tr-xs bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 text-white shadow-md shadow-blue-600/20'
+                        ? 'max-w-[85%] rounded-2xl rounded-tr-xs bg-gradient-to-r from-[#37856a] to-[#296c55] dark:from-blue-600 dark:to-blue-700 px-4 py-3 text-white shadow-md shadow-emerald-900/10 dark:shadow-blue-600/20'
                         : `max-w-[90%] rounded-2xl rounded-tl-xs border bg-white dark:bg-[#0F1B35] p-4 shadow-sm text-slate-800 dark:text-slate-100 ${
                             message.error
                               ? 'border-red-200 dark:border-red-900/50'
@@ -699,7 +613,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                       <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-1.5">
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                           <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                          Trợ lý AI
+                          VgreenAI
                         </span>
                         <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                           {message.time || displayTime()}
@@ -722,10 +636,19 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                       </div>
                     )}
 
+                    {/* Small telemetry info under medical disclaimer */}
+                    {!isUser && !message.pending && message.id !== 'welcome' && message.text && (
+                      <AssistantTurnMetrics
+                        tokenUsage={message.metadata?.token_usage}
+                        elapsedMs={message.elapsedMs ?? message.metadata?.elapsed_ms}
+                        text={message.text}
+                      />
+                    )}
+
                     {/* Candidate Specialties Card */}
                     {candidates.length > 0 && (
-                      <div className="mt-3 rounded-xl border border-blue-200/80 dark:border-blue-900/60 bg-blue-50/60 dark:bg-[#0c1830] p-3 text-[11px] text-blue-950 dark:text-cyan-200">
-                        <div className="flex items-center gap-1 font-bold text-blue-900 dark:text-cyan-300 mb-1.5">
+                      <div className="mt-3 rounded-xl border border-[#cde5d7] dark:border-blue-900/60 bg-[#edf7f1] dark:bg-[#0c1830] p-3 text-[11px] text-[#295c49] dark:text-cyan-200">
+                        <div className="flex items-center gap-1 font-bold text-[#295c49] dark:text-cyan-300 mb-1.5">
                           <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-cyan-400" />
                           <span>Chuyên khoa gợi ý đối chiếu:</span>
                         </div>
@@ -753,10 +676,6 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                       </div>
                     )}
 
-                    {/* Booking Form Integration */}
-                    {message.metadata?.booking_intake?.required && (
-                      <BookingForm intake={{ ...message.metadata.booking_intake, patient_name: message.metadata.booking_intake.patient_name || profile?.name, patient_phone: message.metadata.booking_intake.patient_phone || profile?.phone }} sessionId={sessionId} />
-                    )}
 
                     {/* User timestamp */}
                     {isUser && message.time && (
@@ -766,6 +685,14 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                 </div>
               );
             })}
+            <PatientUpdates
+              key={ownerKey + sessionId}
+              ref={supportRef}
+              sessionId={sessionId}
+              owner={ownerKey}
+              showRequestButton={false}
+              onSupportStateChange={setSupportState}
+            />
             <div ref={messagesEndRef} />
           </div>
 
@@ -776,12 +703,12 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                 <button
                   key={reply}
                   type="button"
-                  disabled={isSending || historyLoading || Boolean(historyError)}
+                  disabled={isSending || historyDeleting || historyLoading || Boolean(historyError)}
                   onClick={() => {
                     void sendMessage(reply);
                     ensureChatVisibleInPage();
                   }}
-                  className="whitespace-nowrap rounded-full border border-blue-200/70 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/90 px-3 py-1.5 text-[11px] font-medium text-slate-700 dark:text-slate-200 hover:border-blue-500 hover:bg-blue-50/70 hover:text-blue-600 dark:hover:border-cyan-400 dark:hover:bg-slate-700 dark:hover:text-cyan-300 disabled:opacity-50 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+                  className="whitespace-nowrap rounded-full border border-[#cde5d7] dark:border-slate-700/80 bg-[#f6fcf9] dark:bg-slate-800/90 px-3 py-1.5 text-[11px] font-medium text-slate-700 dark:text-slate-200 hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:border-cyan-400 dark:hover:bg-slate-700 dark:hover:text-cyan-300 disabled:opacity-50 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
                 >
                   {reply}
                 </button>
@@ -799,39 +726,47 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               }}
               className="flex items-center gap-2"
             >
-              <div className="relative flex-1">
+              <div className="chat-message-input-container">
                 <input
                   ref={inputRef}
                   type="text"
                   value={inputText}
-                  disabled={isSending || historyLoading || Boolean(historyError)}
+                  disabled={isSending || historyDeleting || historyLoading || Boolean(historyError)}
                   onFocus={ensureChatVisibleInPage}
                   onChange={(event) => setInputText(event.target.value)}
                   placeholder="Mô tả triệu chứng, vị trí và thời gian bắt đầu…"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-900/90 py-2.5 pl-3.5 pr-9 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-1 focus:ring-blue-500/30 disabled:opacity-60 transition-all"
+                  aria-label="Nội dung tin nhắn"
+                    className="chat-message-input"
                 />
+              </div>
                 <button
                   type="button"
                   disabled
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600"
+                  className="chat-message-input-mic"
+                    aria-label="Nhập bằng giọng nói (sắp ra mắt)"
                   title="Tính năng nhập giọng nói sắp ra mắt"
                 >
                   <Mic className="h-4 w-4" />
                 </button>
-              </div>
 
               <button
                 type="submit"
-                disabled={isSending || historyLoading || Boolean(historyError) || !inputText.trim()}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md shadow-blue-500/25 hover:from-blue-500 hover:to-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 transition-all active:scale-95 cursor-pointer"
+                disabled={isSending || historyDeleting || historyLoading || Boolean(historyError) || !inputText.trim()}
+                className="chat-send-button"
                 aria-label="Gửi tin nhắn"
               >
-                {isSending ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
+                  <span>Gửi</span>
+                  <span className="chat-send-button__icon" aria-hidden="true">
+                    {isSending ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <svg height="24" width="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M0 0h24v24H0z" fill="none" />
+                        <path d="M16.172 11l-5.364-5.364 1.414-1.414L20 12l-7.778 7.778-1.414-1.414L16.172 13H4v-2z" fill="currentColor" />
+                      </svg>
+                    )}
+                  </span>
+                </button>
             </form>
 
             <p className="mt-2 text-center text-[10px] text-slate-400 dark:text-slate-500">
@@ -848,6 +783,16 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         </section>
       )}
 
+      {isChatOpen && !chatLocked && (
+        <BookingDrawer
+          open={isBookingDrawerOpen}
+          onOpenChange={setIsBookingDrawerOpen}
+          intake={latestBookingIntake}
+          sessionId={sessionId}
+          onSubmitted={handleBookingSubmitted}
+        />
+      )}
+
       {/* ─── FLOATING ACTION BUTTON (FAB) TRIGGER ─── */}
       {!embedded && !isChatOpen && (
         <div className="animate-gentle-float pointer-events-auto">
@@ -855,7 +800,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
             type="button"
             onClick={() => dispatch(toggleChat())}
             className="group relative flex items-center gap-3 rounded-full border border-blue-200/90 dark:border-cyan-500/35 bg-white/95 dark:bg-[#0B1329]/95 backdrop-blur-xl py-2.5 pl-4 pr-3 shadow-xl dark:shadow-2xl shadow-blue-900/10 dark:shadow-cyan-500/15 hover:shadow-2xl hover:shadow-blue-500/30 dark:hover:shadow-cyan-400/25 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer ring-1 ring-blue-500/10 dark:ring-cyan-400/20"
-            aria-label="Mở Trợ Lý Y Tế AI 24/7"
+            aria-label="Mở VgreenAI · AI Vip Pro Max"
           >
             {/* Live Pulsing Dot */}
             <div className="relative flex h-3 w-3 shrink-0 items-center justify-center">
@@ -867,24 +812,21 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
             <div className="flex flex-col text-left pr-0.5">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-cyan-300 transition-colors">
-                  Trợ Lý Y Tế AI
+                  VgreenAI
                 </span>
                 <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-blue-50 dark:bg-cyan-950/60 text-blue-600 dark:text-cyan-300 border border-blue-200/60 dark:border-cyan-500/40">
                   24/7
                 </span>
               </div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                Trợ lý tư vấn AI
+                AI Vip Pro Max
               </span>
             </div>
 
-            {/* Glowing Icon Orb */}
-            <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 via-blue-700 to-cyan-500 text-white shadow-md shadow-blue-600/30 group-hover:rotate-6 transition-transform duration-300">
-              <Stethoscope className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-white" />
-              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0B1329] text-[8px] font-bold text-white">
-                ✓
-              </span>
-            </div>
+            <AIIdentity
+              avatarOnly
+              size="md"
+            />
           </button>
         </div>
       )}

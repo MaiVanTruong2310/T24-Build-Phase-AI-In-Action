@@ -1,0 +1,351 @@
+/* From Uiverse.io by mamyapro123 */ 
+.auth-doodle-wrapper {
+  /* Color Palette */
+  --ink: #323232;
+  --paper-front: #fff9e6;
+  --paper-back: #e6f0ff;
+  --bg-color: #ffffff;
+  --primary-btn: #ff6b6b;
+  --primary-btn-hover: #ff5252;
+  --secondary-btn: #4ecdc4;
+  --secondary-btn-hover: #3bbfb6;
+  --switch-bg: #ffe66d;
+  --input-focus: #2d8cf0;
+
+  /* Sizing */
+  --card-width: 300px;
+  --card-height: 350px;
+  --input-width: 250px;
+  --input-height: 40px;
+  --btn-width: 120px;
+  --btn-height: 40px;
+
+  --border-width: 2px;
+  --shadow-offset: 4px;
+
+  /* Doodle Border Radiuses */
+  --sketch-radius-1: 8px 24px 8px 24px / 24px 8px 24px 8px;
+  --sketch-radius-2: 24px 8px 24px 8px / 8px 24px 8px 24px;
+  --sketch-radius-btn: 16px 5px 16px 5px / 5px 16px 5px 16px;
+
+  font-family: "Comic Sans MS", "Chalkboard SE", "Marker Felt", "Gochi Hand",
+    sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Hide Checkbox Visually but keep accessible */
+.auth-doodle-toggle {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Header & Switch */
+.auth-doodle-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 25px;
+  z-index: 5;
+}
+
+.auth-doodle-mode-text {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--ink);
+  transition: opacity 0.3s;
+}
+
+.auth-doodle-toggle:not(:checked) ~ .auth-doodle-header .signup-text {
+  opacity: 0.5;
+}
+.auth-doodle-toggle:checked ~ .auth-doodle-header .login-text {
+  opacity: 0.5;
+}
+
+.auth-doodle-switch-label {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+  background-color: var(--switch-bg);
+  border: var(--border-width) solid var(--ink);
+  border-radius: 20px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px var(--ink);
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
+}
+
+.auth-doodle-switch-label:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px var(--ink);
+}
+
+.auth-doodle-switch-handle {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background-color: var(--bg-color);
+  border: var(--border-width) solid var(--ink);
+  border-radius: 50%;
+  transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.auth-doodle-toggle:checked
+  ~ .auth-doodle-header
+  .auth-doodle-switch-label
+  .auth-doodle-switch-handle {
+  transform: translateX(24px);
+}
+
+/* 3D Scene Setup */
+.auth-doodle-card-scene {
+  position: relative;
+  perspective: 1000px;
+  width: var(--card-width);
+  height: var(--card-height);
+  z-index: 2;
+}
+
+/* Decorative SVGs */
+.auth-doodle-svg {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+.auth-doodle-star {
+  top: -25px;
+  left: -35px;
+  width: 48px;
+  height: 48px;
+  animation: auth-float-star 4s ease-in-out infinite;
+}
+.auth-doodle-sparkle {
+  bottom: -20px;
+  right: -25px;
+  width: 40px;
+  height: 40px;
+  animation: auth-float-sparkle 4s ease-in-out infinite 1s;
+}
+.auth-doodle-swirl {
+  top: 30px;
+  right: -30px;
+  width: 32px;
+  height: 32px;
+  animation: auth-float-swirl 4s ease-in-out infinite 2s;
+}
+
+/* Individual animations to preserve their rotations */
+@keyframes auth-float-star {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-15deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(-10deg);
+  }
+}
+@keyframes auth-float-sparkle {
+  0%,
+  100% {
+    transform: translateY(0) rotate(10deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(15deg);
+  }
+}
+@keyframes auth-float-swirl {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(5deg);
+  }
+}
+
+/* Card Inner & Faces */
+.auth-doodle-card-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.4, 0.2, 0.2, 1);
+}
+
+.auth-doodle-toggle:checked ~ .auth-doodle-card-scene .auth-doodle-card-inner {
+  transform: rotateY(180deg);
+}
+
+.auth-doodle-card-front,
+.auth-doodle-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  border: var(--border-width) solid var(--ink);
+  border-radius: var(--sketch-radius-1);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--ink);
+
+  /* Lined Notebook Paper Effect */
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 28px,
+    rgba(0, 0, 0, 0.06) 28px,
+    rgba(0, 0, 0, 0.06) 30px
+  );
+  background-position: 0 15px;
+}
+
+.auth-doodle-card-front {
+  background-color: var(--paper-front);
+}
+
+.auth-doodle-card-back {
+  background-color: var(--paper-back);
+  transform: rotateY(180deg);
+  border-radius: var(--sketch-radius-2);
+}
+
+/* Typography & Forms */
+.auth-doodle-title {
+  font-size: 25px;
+  font-weight: 900;
+  color: var(--ink);
+  margin: 10px 0 20px 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transform: rotate(-3deg);
+  text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.1);
+}
+
+.auth-doodle-title-alt {
+  transform: rotate(2deg);
+  margin: 0px 0 15px 0;
+}
+
+.auth-doodle-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+  align-items: center;
+}
+
+.auth-doodle-input-wrapper {
+  position: relative;
+}
+
+/* Inputs */
+.auth-doodle-input {
+  width: var(--input-width);
+  height: var(--input-height);
+  padding: 5px 15px;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background-color: var(--bg-color);
+  border: var(--border-width) solid var(--ink);
+  border-radius: var(--sketch-radius-1);
+  box-shadow: 3px 3px 0px var(--ink);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.auth-doodle-input::placeholder {
+  color: #666;
+  opacity: 0.8;
+}
+
+.auth-doodle-input:hover {
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0px var(--ink);
+}
+
+.auth-doodle-input:focus,
+.auth-doodle-input:focus-visible {
+  border: var(--border-width) solid var(--input-focus);
+  border-radius: var(--sketch-radius-2);
+  background-color: #fffdf5;
+  box-shadow: 4px 4px 0px var(--ink);
+}
+
+/* Buttons */
+.auth-doodle-btn {
+  margin: 15px 0;
+  width: var(--btn-width);
+  height: var(--btn-height);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--ink);
+  background-color: var(--primary-btn);
+  border: var(--border-width) solid var(--ink);
+  border-radius: var(--sketch-radius-btn);
+  box-shadow: 4px 4px 0px var(--ink);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  transform: rotate(-1deg);
+}
+
+.auth-doodle-btn-alt {
+  background-color: var(--secondary-btn);
+  transform: rotate(1deg);
+}
+
+/* Button States */
+.auth-doodle-btn:hover {
+  background-color: var(--primary-btn-hover);
+  transform: translateY(-2px) rotate(-2deg);
+  box-shadow: 5px 5px 0px var(--ink);
+}
+
+.auth-doodle-btn-alt:hover {
+  background-color: var(--secondary-btn-hover);
+  transform: translateY(-2px) rotate(2deg);
+}
+
+.auth-doodle-btn:active {
+  transform: translate(3px, 3px) rotate(0deg);
+  box-shadow: 0px 0px 0px var(--ink);
+}
+
+/* Title Wiggle on Hover */
+.auth-doodle-card-scene:hover .auth-doodle-title {
+  animation: auth-doodle-wiggle 0.5s ease-in-out;
+}
+
+@keyframes auth-doodle-wiggle {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  25% {
+    transform: rotate(2deg);
+  }
+  50% {
+    transform: rotate(-4deg);
+  }
+  75% {
+    transform: rotate(1deg);
+  }
+}

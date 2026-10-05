@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom'
 
 export function PatientLayout() {
   return (
-    <div className="w-full">
+    <div className="patient-theme w-full">
       <Outlet />
     </div>
   )
