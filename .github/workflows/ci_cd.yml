@@ -133,31 +133,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate Vercel configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          test -n "$VERCEL_TOKEN" || {
-            echo "Missing VERCEL_TOKEN"
-            exit 1
-          }
-
-          test -n "$VERCEL_ORG_ID" || {
-            echo "Missing VERCEL_ORG_ID"
-            exit 1
-          }
-
-          test -n "$VERCEL_PROJECT_ID" || {
-            echo "Missing VERCEL_PROJECT_ID"
-            exit 1
-          }
-
-          test -n "$VITE_API_BASE_URL" || {
-            echo "Missing API domain"
-            exit 1
-          }
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -165,15 +140,18 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Check Node environment
+        run: |
+          node --version
+          npm --version
+          npx --version
+
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
       - name: Pull Vercel project settings
         run: |
-          vercel pull \
+          npx vercel@latest pull \
             --yes \
             --environment="$VERCEL_ENV" \
             --token="$VERCEL_TOKEN"
@@ -182,30 +160,37 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF_NAME" == "main" ]]; then
-            vercel build --prod --token="$VERCEL_TOKEN"
+            npx vercel@latest build \
+              --prod \
+              --token="$VERCEL_TOKEN"
           else
-            vercel build --token="$VERCEL_TOKEN"
+            npx vercel@latest build \
+              --token="$VERCEL_TOKEN"
           fi
 
       - name: Deploy prebuilt frontend
         shell: bash
         run: |
           if [[ "$GITHUB_REF_NAME" == "main" ]]; then
-            vercel deploy \
+
+            npx vercel@latest deploy \
               --prebuilt \
               --prod \
               --token="$VERCEL_TOKEN"
+
           else
-            DEPLOY_URL=$(vercel deploy \
+
+            DEPLOY_URL=$(npx vercel@latest deploy \
               --prebuilt \
               --token="$VERCEL_TOKEN")
 
             echo "Preview deployed: $DEPLOY_URL"
 
-            vercel alias set \
+            npx vercel@latest alias set \
               "$DEPLOY_URL" \
               ai20k-build-phase-dev.vercel.app \
               --token="$VERCEL_TOKEN"
+
           fi
 
   backend_deploy:
@@ -348,8 +333,9 @@ jobs:
           host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
           username: ${{ secrets.OBSERVABILITY_EC2_USER }}
           key: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
-          source: "observability"
-          target: "/opt"
+          source: "observability/*"
+          target: "/opt/observability"
+          strip_components: 1
 
       - name: Start observability stack
         uses: appleboy/ssh-action@v1
