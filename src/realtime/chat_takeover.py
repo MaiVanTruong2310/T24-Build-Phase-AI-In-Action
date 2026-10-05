@@ -40,7 +40,9 @@ class ChatTakeoverConnectionManager:
     async def publish_staff(self, payload: dict) -> None:
         await self._publish(tuple(self._staff_connections), payload)
 
-    async def _publish(self, connections: tuple[WebSocket, ...], payload: dict, *, session_id: str | None = None) -> None:
+    async def _publish(
+        self, connections: tuple[WebSocket, ...], payload: dict, *, session_id: str | None = None
+    ) -> None:
         for websocket in connections:
             try:
                 await websocket.send_json(payload)

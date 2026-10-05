@@ -2,7 +2,6 @@
 
 import inspect
 import logging
-from datetime import date, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -18,6 +17,7 @@ from src.services.facility import FacilityServiceMixin
 from src.services.schedule import ScheduleServiceMixin
 from src.services.service import MedicalServiceMixin
 from src.services.specialty import SpecialtyServiceMixin
+from src.utils.serialization import json_safe
 
 logger = get_logger(__name__)
 
@@ -78,7 +78,7 @@ class CatalogService(
                 entity_type=entity_type,
                 entity_id=entity_id,
                 action=action,
-                payload=_json_safe(payload),
+                payload=json_safe(payload),
             )
         )
         log_event(
@@ -123,10 +123,3 @@ class CatalogService(
             and facility is not None
             and facility.status == "active"
         )
-
-
-def _json_safe(values: dict) -> dict:
-    """Convert UUID/date values to JSON-safe audit payloads."""
-    return {
-        key: value.isoformat() if isinstance(value, (UUID, date, datetime)) else value for key, value in values.items()
-    }

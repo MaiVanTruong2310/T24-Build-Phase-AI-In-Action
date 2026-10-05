@@ -207,17 +207,21 @@ class ChatTakeoverService:
             limit=limit,
         )
         turns = (
-            await self.session.execute(
-                text(
-                    """SELECT t.id, t.request_id, t.user_text, t.assistant_text, t.status, t.created_at
+            (
+                await self.session.execute(
+                    text(
+                        """SELECT t.id, t.request_id, t.user_text, t.assistant_text, t.status, t.created_at
                     FROM public.chat_turns t
                     JOIN public.chat_conversations c ON c.id = t.conversation_id
                     WHERE c.user_id = :user_id AND c.session_id = :session_id
                     ORDER BY t.created_at ASC, t.id ASC LIMIT :limit"""
-                ),
-                {"user_id": case.patient_user_id, "session_id": case.session_id, "limit": limit},
+                    ),
+                    {"user_id": case.patient_user_id, "session_id": case.session_id, "limit": limit},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         staff_messages = await self.repository.list_messages(case.id, limit)
         takeover_request_ids = {
             message.client_message_id
@@ -304,7 +308,9 @@ class ChatTakeoverService:
         async with self.session.begin():
             case = await self._owned_case(case_id, staff_user_id, for_update=True)
             if case.status != "taken_over":
-                raise ConflictError("TAKEOVER_NOT_ACTIVE", "Chá»‰ cÃ³ thá»ƒ tráº£ case Ä‘ang Ä‘Æ°á»£c tiáº¿p quáº£n vá» hÃ ng Ä‘á»£i.")
+                raise ConflictError(
+                    "TAKEOVER_NOT_ACTIVE", "Chá»‰ cÃ³ thá»ƒ tráº£ case Ä‘ang Ä‘Æ°á»£c tiáº¿p quáº£n vá» hÃ ng Ä‘á»£i."
+                )
             case.status = "released"
             case.assigned_staff_id = None
             case.claimed_at = None
@@ -381,7 +387,9 @@ class ChatTakeoverService:
             await self.repository.add_audit(case.id, staff_user_id, "message_sent", {"message_id": str(message.id)})
         payload = {"type": "takeover.message_created", "message": message_payload(message)}
         await chat_takeover_manager.publish_session(case.session_id, payload)
-        await chat_takeover_manager.publish_staff({"type": "takeover.message_created", "case": case_payload(case), "message": message_payload(message)})
+        await chat_takeover_manager.publish_staff(
+            {"type": "takeover.message_created", "case": case_payload(case), "message": message_payload(message)}
+        )
         log_event(
             logger,
             logging.INFO,
@@ -425,7 +433,9 @@ class ChatTakeoverService:
             await self.repository.add_audit(case.id, patient_user_id, "patient_message_received")
         payload = {"type": "takeover.message_created", "message": message_payload(message)}
         await chat_takeover_manager.publish_session(session_id, payload)
-        await chat_takeover_manager.publish_staff({"type": "takeover.message_created", "case": case_payload(case), "message": message_payload(message)})
+        await chat_takeover_manager.publish_staff(
+            {"type": "takeover.message_created", "case": case_payload(case), "message": message_payload(message)}
+        )
         log_event(
             logger,
             logging.INFO,

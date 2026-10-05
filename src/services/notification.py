@@ -13,6 +13,7 @@ from src.realtime.notifications import notification_manager
 from src.repositories.booking import BookingRepository
 from src.repositories.notification import NotificationRepository
 from src.services.email import GmailEmailSender
+from src.utils.response_mappers import notification_response
 
 logger = get_logger(__name__)
 
@@ -435,19 +436,3 @@ class NotificationService:
             },
         )
         return notification
-
-
-def notification_response(value: Notification):
-    """Map a delivered in-app notification to the stable API response."""
-    from src.schemas.notification import NotificationResponse
-
-    return NotificationResponse(
-        id=value.id,
-        booking_id=value.booking_id,
-        kind=value.kind,
-        title=value.title,
-        message=value.message,
-        available_at=value.available_at,
-        read_at=value.read_at,
-        created_at=value.created_at,
-    )

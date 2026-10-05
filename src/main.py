@@ -26,8 +26,8 @@ from src.api.handlers import (
     validation_error_handler,
 )
 from src.config import get_settings, parse_cors_origins
-from src.core.exceptions import AppError
 from src.core.context import session_id_var, trace_id_var
+from src.core.exceptions import AppError
 from src.core.logging import get_logger, log_event, setup_logging
 from src.core.observability import setup_observability
 from src.db.session import check_database_connection, close_database, get_session_factory, initialize_database
@@ -150,6 +150,7 @@ async def context_middleware(request: Request, call_next):
     finally:
         trace_id_var.reset(trace_token)
         session_id_var.reset(session_token)
+
 
 settings = get_settings()
 

@@ -78,7 +78,9 @@ async def test_active_takeover_pauses_agent_and_records_patient_message(monkeypa
     user = profile()
     request = ChatRequest(message="Tôi vẫn còn đau", session_id="same")
 
-    response = await routes.run_turn(request, user, {}, {"checkpoint": {"workflow_status": "HUMAN_HELP_REQUESTED"}}, service)
+    response = await routes.run_turn(
+        request, user, {}, {"checkpoint": {"workflow_status": "HUMAN_HELP_REQUESTED"}}, service
+    )
 
     assert response["workflow_status"] == "HUMAN_HELP_REQUESTED"
     assert "nhân viên y tế" in response["response"]

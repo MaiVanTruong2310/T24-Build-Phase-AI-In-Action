@@ -17,7 +17,8 @@ from src.repositories.user import UserRepository
 from src.schemas.common import ApiResponse
 from src.schemas.notification import NotificationResponse
 from src.services.cookie_session import ACCESS_COOKIE
-from src.services.notification import NotificationService, notification_response
+from src.services.notification import NotificationService
+from src.utils.response_mappers import notification_response
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 

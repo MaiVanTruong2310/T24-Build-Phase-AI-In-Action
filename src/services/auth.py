@@ -1,9 +1,8 @@
 """Authentication use cases."""
 
-import hashlib
 import logging
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -26,6 +25,7 @@ from src.repositories.auth import AuthRepository
 from src.repositories.user import UserRepository
 from src.schemas.auth import LoginRequest, RegisterRequest, UpdateProfileRequest
 from src.services.otp import MockOtpProvider, OtpProvider
+from src.utils.auth import hash_otp, normalize_identity, otp_target, utc_now
 
 logger = get_logger(__name__)
 
@@ -55,7 +55,7 @@ class AuthService:
             description="Starting patient account registration and OTP challenge creation",
             identity_type="email" if request.email else "phone",
         )
-        email, phone = _normalized_identity(request.email, request.phone)
+        email, phone = normalize_identity(request.email, request.phone)
         async with self.session.begin():
             if await self.users.get_by_identity(email, phone):
                 log_event(
@@ -79,11 +79,11 @@ class AuthService:
                 health_insurance_code=request.health_insurance_code,
             )
             await self.users.create(user)
-            await self._create_otp(user, _target(email, phone), "register")
+            await self._create_otp(user, otp_target(email, phone), "register")
         log_event(
             logger,
             logging.INFO,
-            "auth.register.done",
+            "AuthService.register account created",
             description="Patient account and registration challenge were created",
             user_id=str(user.id),
             role=user.role,
@@ -101,8 +101,8 @@ class AuthService:
             purpose=purpose,
             identity_type="email" if email else "phone",
         )
-        normalized_email, normalized_phone = _normalized_identity(email, phone)
-        target = _target(normalized_email, normalized_phone)
+        normalized_email, normalized_phone = normalize_identity(email, phone)
+        target = otp_target(normalized_email, normalized_phone)
         async with self.session.begin():
             user = await self.users.get_by_identifier(normalized_email, normalized_phone)
             if user is None:
@@ -136,8 +136,8 @@ class AuthService:
             description="Starting password reset identity lookup and OTP creation",
             identity_type="email" if email else "phone",
         )
-        normalized_email, normalized_phone = _normalized_identity(email, phone)
-        target = _target(normalized_email, normalized_phone)
+        normalized_email, normalized_phone = normalize_identity(email, phone)
+        target = otp_target(normalized_email, normalized_phone)
         async with self.session.begin():
             user = await self.users.get_by_identifier(normalized_email, normalized_phone)
             if user is None:
@@ -169,8 +169,8 @@ class AuthService:
             description="Starting OTP verification and password update",
             identity_type="email" if email else "phone",
         )
-        normalized_email, normalized_phone = _normalized_identity(email, phone)
-        target = _target(normalized_email, normalized_phone)
+        normalized_email, normalized_phone = normalize_identity(email, phone)
+        target = otp_target(normalized_email, normalized_phone)
         verification_error: AuthenticationError | None = None
         async with self.session.begin():
             user = await self.users.get_by_identifier(normalized_email, normalized_phone)
@@ -186,11 +186,16 @@ class AuthService:
             verification_error = await self._consume_otp(target, "reset_password", code)
             if verification_error is None:
                 user.password_hash = hash_password(new_password)
-                await self.auth.revoke_user_sessions(user.id, revoked_at=_now())
+                await self.auth.revoke_user_sessions(user.id, revoked_at=utc_now())
                 await self.session.flush()
         if verification_error:
             raise verification_error
-        log_event(logger, logging.INFO, "auth.password_reset.done", description="Password was updated and active sessions were revoked")
+        log_event(
+            logger,
+            logging.INFO,
+            "auth.password_reset.done",
+            description="Password was updated and active sessions were revoked",
+        )
 
     async def verify_registration_otp(self, email: str | None, phone: str | None, code: str) -> User:
         """Consume a registration OTP and activate the matching account."""
@@ -201,8 +206,8 @@ class AuthService:
             description="Starting registration OTP verification and account activation",
             identity_type="email" if email else "phone",
         )
-        normalized_email, normalized_phone = _normalized_identity(email, phone)
-        target = _target(normalized_email, normalized_phone)
+        normalized_email, normalized_phone = normalize_identity(email, phone)
+        target = otp_target(normalized_email, normalized_phone)
         verification_error: AuthenticationError | None = None
         async with self.session.begin():
             user = await self.users.get_by_identifier(normalized_email, normalized_phone)
@@ -217,7 +222,7 @@ class AuthService:
                 raise AuthenticationError("INVALID_OTP", "Invalid or expired OTP")
             verification_error = await self._consume_otp(target, "register", code or "999999")
             if verification_error is None:
-                now = _now()
+                now = utc_now()
                 user.status = "active"
                 user.verified_at = now
         if verification_error:
@@ -242,7 +247,7 @@ class AuthService:
             identity_type="email" if request.email else "phone",
             method="password" if request.password else "otp",
         )
-        email, phone = _normalized_identity(request.email, request.phone)
+        email, phone = normalize_identity(request.email, request.phone)
         authentication_error: AuthenticationError | None = None
         result: tuple[User, str, str, datetime, datetime] | None = None
         async with self.session.begin():
@@ -267,7 +272,9 @@ class AuthService:
                     )
                     raise AuthenticationError("INVALID_CREDENTIALS", "Invalid login credentials")
             else:
-                authentication_error = await self._consume_otp(_target(email, phone), "login", request.otp_code or "")
+                authentication_error = await self._consume_otp(
+                    otp_target(email, phone), "login", request.otp_code or ""
+                )
             if authentication_error is None:
                 refresh_token, expires_at, _ = await self._issue_tokens(user)
                 access_token, access_expires_at = create_access_token(str(user.id), user.role)
@@ -294,7 +301,7 @@ class AuthService:
             "auth.refresh.start",
             description="Starting refresh-token validation and rotation",
         )
-        now = _now()
+        now = utc_now()
         reuse_detected = False
         result: tuple[User, str, str, datetime] | None = None
         async with self.session.begin():
@@ -382,7 +389,7 @@ class AuthService:
                     reason="session_not_found",
                 )
                 return
-            await self.auth.revoke_session(stored.id, revoked_at=_now())
+            await self.auth.revoke_session(stored.id, revoked_at=utc_now())
         log_event(logger, logging.INFO, "auth.logout.done", description="Refresh session was revoked during logout")
 
     async def list_sessions(self, user_id: UUID) -> list[RefreshSession]:
@@ -439,7 +446,7 @@ class AuthService:
                     reason="session_not_found",
                 )
                 raise AppError("SESSION_NOT_FOUND", "Session not found", 404)
-            await self.auth.revoke_session(stored.id, revoked_at=_now())
+            await self.auth.revoke_session(stored.id, revoked_at=utc_now())
         log_event(
             logger,
             logging.INFO,
@@ -468,7 +475,9 @@ class AuthService:
                 user_id=str(user_id),
             )
             raise NotFoundError("User not found")
-        log_event(logger, logging.INFO, "auth.user.get.done", description="User account was loaded", user_id=str(user_id))
+        log_event(
+            logger, logging.INFO, "auth.user.get.done", description="User account was loaded", user_id=str(user_id)
+        )
         return user
 
     async def list_patients(self, search: str | None, offset: int, limit: int) -> list[User]:
@@ -543,7 +552,7 @@ class AuthService:
         if (
             active
             and active.created_at
-            and (_now() - active.created_at) < timedelta(seconds=30)
+            and (utc_now() - active.created_at) < timedelta(seconds=30)
             and not isinstance(self.otp_provider, MockOtpProvider)
         ):
             log_event(
@@ -564,8 +573,8 @@ class AuthService:
             user_id=user.id,
             target=target,
             purpose=purpose,
-            code_hash=_hash_code(code),
-            expires_at=_now() + timedelta(minutes=self.settings.otp_expire_minutes),
+            code_hash=hash_otp(code),
+            expires_at=utc_now() + timedelta(minutes=self.settings.otp_expire_minutes),
         )
         await self.auth.create_otp(challenge)
         await self.otp_provider.send(target, code, purpose)
@@ -582,7 +591,7 @@ class AuthService:
     async def _consume_otp(self, target: str, purpose: str, code: str) -> AuthenticationError | None:
         """Validate and consume the latest OTP while persisting failed attempts."""
         challenge = await self.auth.get_latest_otp(target, purpose, for_update=True)
-        now = _now()
+        now = utc_now()
         error: AuthenticationError | None = None
         if challenge is None or challenge.expires_at <= now:
             error = AuthenticationError("OTP_EXPIRED", "Invalid or expired OTP")
@@ -591,7 +600,7 @@ class AuthService:
         elif challenge.attempts >= self.settings.otp_max_attempts:
             error = AuthenticationError("OTP_ATTEMPTS_EXCEEDED", "OTP attempts exceeded")
             challenge.consumed_at = now
-        elif not secrets.compare_digest(challenge.code_hash, _hash_code(code)):
+        elif not secrets.compare_digest(challenge.code_hash, hash_otp(code)):
             challenge.attempts += 1
             if challenge.attempts >= self.settings.otp_max_attempts:
                 challenge.consumed_at = now
@@ -609,7 +618,9 @@ class AuthService:
                 error_code=error.code,
             )
         else:
-            log_event(logger, logging.DEBUG, "auth.otp.consumed", description="OTP verification succeeded", purpose=purpose)
+            log_event(
+                logger, logging.DEBUG, "auth.otp.consumed", description="OTP verification succeeded", purpose=purpose
+            )
         return error
 
     async def _issue_tokens(self, user: User) -> tuple[str, datetime, UUID]:
@@ -631,23 +642,3 @@ class AuthService:
             role=user.role,
         )
         return refresh_token, expires_at, session.id
-
-
-def _normalized_identity(email: str | None, phone: str | None) -> tuple[str | None, str | None]:
-    """Normalize optional email and phone identity values for lookup."""
-    return (email.strip().lower() if email else None, phone.strip() if phone else None)
-
-
-def _target(email: str | None, phone: str | None) -> str:
-    """Select the non-empty identity value used by an OTP challenge."""
-    return email or phone or ""
-
-
-def _hash_code(code: str) -> str:
-    """Hash an OTP code before storing or comparing it."""
-    return hashlib.sha256(code.encode("utf-8")).hexdigest()
-
-
-def _now() -> datetime:
-    """Return the current timezone-aware UTC timestamp."""
-    return datetime.now(UTC)

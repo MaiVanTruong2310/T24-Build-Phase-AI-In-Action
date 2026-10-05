@@ -19,7 +19,8 @@ from src.schemas.booking import (
     StaffBookingStatusUpdate,
 )
 from src.schemas.common import ApiResponse
-from src.services.booking import BookingService, booking_response, staff_booking_response
+from src.services.booking import BookingService
+from src.utils.response_mappers import booking_response, staff_booking_response
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 staff_router = APIRouter(prefix="/staff/bookings", tags=["staff-bookings"])

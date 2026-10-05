@@ -57,7 +57,9 @@ class ChatTakeoverRepository:
         )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
-    async def add_audit(self, case_id: UUID, actor_user_id: UUID | None, event_type: str, metadata: dict | None = None) -> None:
+    async def add_audit(
+        self, case_id: UUID, actor_user_id: UUID | None, event_type: str, metadata: dict | None = None
+    ) -> None:
         self.session.add(
             ChatTakeoverAuditEvent(
                 case_id=case_id,
