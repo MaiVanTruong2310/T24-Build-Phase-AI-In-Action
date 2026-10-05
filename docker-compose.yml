@@ -10,6 +10,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       db-migrate:
         condition: service_completed_successfully
     env_file:
@@ -17,6 +19,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai20k_app}:${POSTGRES_PASSWORD:-123456}@postgres:5432/${POSTGRES_DB:-ai20k}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     volumes:
       - ${APP_DATA_PATH:-./data}:/app/data
     networks:
@@ -55,6 +58,20 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   db-migrate:
     image: ${IMAGE_REPO}:${IMAGE_TAG}
     command: ["alembic", "upgrade", "head"]
@@ -70,6 +87,8 @@ services:
 volumes:
   postgres_data:
     name: ${POSTGRES_VOLUME_NAME:-ai20k-postgres}
+  redis_data:
+    name: ${REDIS_VOLUME_NAME:-ai20k-redis}
 
 networks:
   default:
