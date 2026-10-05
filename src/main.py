@@ -29,6 +29,7 @@ from src.config import get_settings, parse_cors_origins
 from src.core.exceptions import AppError
 from src.core.context import session_id_var, trace_id_var
 from src.core.logging import get_logger, log_event, setup_logging
+from src.core.observability import setup_observability
 from src.db.session import check_database_connection, close_database, get_session_factory, initialize_database
 from src.medical_assistant.api.routes import router as medical_assistant_router
 from src.medical_assistant.db.supabase_client import close_supabase_clients
@@ -175,6 +176,7 @@ app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(StarletteHTTPException, http_error_handler)
 app.add_exception_handler(Exception, unexpected_error_handler)
+setup_observability(app)
 
 
 @app.get("/health")

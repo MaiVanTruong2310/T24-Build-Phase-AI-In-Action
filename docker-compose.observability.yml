@@ -1,0 +1,32 @@
+services:
+  backend:
+    # Prometheus reaches this restricted port from the monitoring EC2 only.
+    # Enforce the corresponding security-group rule at the AWS layer.
+    ports:
+      - "${METRICS_BIND_ADDRESS:-0.0.0.0}:${METRICS_PORT:-8001}:8000"
+    environment:
+      METRICS_ENABLED: "true"
+      OTEL_ENABLED: "true"
+      OTEL_ENVIRONMENT: ${OBSERVABILITY_ENVIRONMENT:-${APP_ENV:-development}}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-ai20k-backend}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+
+  alloy:
+    image: ${ALLOY_IMAGE:-grafana/alloy:v1.6.1}
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    environment:
+      OBSERVABILITY_ENVIRONMENT: ${OBSERVABILITY_ENVIRONMENT:-${APP_ENV:-development}}
+      LOKI_URL: ${LOKI_URL:?LOKI_URL is required when observability is enabled}
+      TEMPO_OTLP_ENDPOINT: ${TEMPO_OTLP_ENDPOINT:?TEMPO_OTLP_ENDPOINT is required when observability is enabled}
+    volumes:
+      - ./observability/alloy/agent.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    expose:
+      - "4317"
+      - "4318"
+      - "12345"
+    restart: unless-stopped
