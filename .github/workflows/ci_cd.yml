@@ -367,4 +367,5 @@ jobs:
             sleep 15
             curl --fail --silent --show-error http://127.0.0.1:3000/api/health
             docker compose --env-file .env -f docker-compose.yml ps
-            docker image prune -f
+            docker image prune -a -f --filter "until=168h"
+            docker builder prune -a -f --filter "until=168h"
