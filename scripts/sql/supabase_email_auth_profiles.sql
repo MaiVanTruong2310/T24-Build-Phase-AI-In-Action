@@ -1,5 +1,5 @@
 BEGIN;
--- Align source profile columns with P124-Dev's existing User model.
+-- Align source profile columns with P-124's existing User model.
 -- Existing profile data and application roles are retained.
 ALTER TABLE public.users
     ADD COLUMN IF NOT EXISTS date_of_birth date,
