@@ -2,7 +2,9 @@
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 
 revision: str = "0010_booking_holds_idempotency"
@@ -13,57 +15,55 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Create expiring holds and protect booking retries by user/key."""
-    # Some development databases were bootstrapped with ORM metadata before
-    # Alembic was enabled. Keep this migration safe for that already-existing
-    # schema instead of asking developers to drop booking_holds.
-    op.execute(
-        """
-        CREATE TABLE IF NOT EXISTS booking_holds (
-            id uuid NOT NULL PRIMARY KEY,
-            user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            schedule_id uuid NOT NULL REFERENCES doctor_schedules(id) ON DELETE RESTRICT,
-            service_id uuid NOT NULL REFERENCES services(id) ON DELETE RESTRICT,
-            specialty_id uuid NOT NULL REFERENCES specialties(id) ON DELETE RESTRICT,
-            status varchar(16) DEFAULT 'active' NOT NULL,
-            expires_at timestamptz NOT NULL,
-            released_at timestamptz,
-            created_at timestamptz DEFAULT now() NOT NULL,
-            updated_at timestamptz DEFAULT now() NOT NULL,
-            CONSTRAINT ck_booking_holds_status
-                CHECK (status IN ('active', 'released', 'expired', 'consumed'))
-        )
-        """
+    op.create_table(
+        "booking_holds",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("schedule_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("service_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("specialty_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("status", sa.String(length=16), server_default="active", nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("released_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["schedule_id"], ["doctor_schedules.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["service_id"], ["services.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["specialty_id"], ["specialties.id"], ondelete="RESTRICT"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint("status IN ('active', 'released', 'expired', 'consumed')", name="ck_booking_holds_status"),
     )
-    op.execute("CREATE INDEX IF NOT EXISTS ix_booking_holds_user_id ON booking_holds (user_id)")
-    op.execute("CREATE INDEX IF NOT EXISTS ix_booking_holds_schedule_id ON booking_holds (schedule_id)")
-    op.execute("CREATE INDEX IF NOT EXISTS ix_booking_holds_schedule_status ON booking_holds (schedule_id, status)")
-    op.execute("CREATE INDEX IF NOT EXISTS ix_booking_holds_expires_at ON booking_holds (expires_at)")
-    op.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_booking_holds_active_user_schedule "
-        "ON booking_holds (user_id, schedule_id) WHERE status = 'active'"
+    op.create_index("ix_booking_holds_user_id", "booking_holds", ["user_id"])
+    op.create_index("ix_booking_holds_schedule_id", "booking_holds", ["schedule_id"])
+    op.create_index("ix_booking_holds_schedule_status", "booking_holds", ["schedule_id", "status"])
+    op.create_index("ix_booking_holds_expires_at", "booking_holds", ["expires_at"])
+    op.create_index(
+        "uq_booking_holds_active_user_schedule",
+        "booking_holds",
+        ["user_id", "schedule_id"],
+        unique=True,
+        postgresql_where=sa.text("status = 'active'"),
     )
 
-    op.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS hold_id uuid")
-    op.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS idempotency_key varchar(128)")
-    op.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS idempotency_hash varchar(64)")
-    op.execute(
-        """
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = 'fk_bookings_hold_id_booking_holds'
-            ) THEN
-                ALTER TABLE bookings
-                ADD CONSTRAINT fk_bookings_hold_id_booking_holds
-                FOREIGN KEY (hold_id) REFERENCES booking_holds(id) ON DELETE SET NULL;
-            END IF;
-        END $$
-        """
+    op.add_column("bookings", sa.Column("hold_id", postgresql.UUID(as_uuid=True), nullable=True))
+    op.add_column("bookings", sa.Column("idempotency_key", sa.String(length=128), nullable=True))
+    op.add_column("bookings", sa.Column("idempotency_hash", sa.String(length=64), nullable=True))
+    op.create_foreign_key(
+        "fk_bookings_hold_id_booking_holds",
+        "bookings",
+        "booking_holds",
+        ["hold_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
-    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_bookings_hold_id ON bookings (hold_id)")
-    op.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_bookings_user_id_idempotency_key "
-        "ON bookings (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
+    op.create_index("ix_bookings_hold_id", "bookings", ["hold_id"], unique=True)
+    op.create_index(
+        "uq_bookings_user_id_idempotency_key",
+        "bookings",
+        ["user_id", "idempotency_key"],
+        unique=True,
+        postgresql_where=sa.text("idempotency_key IS NOT NULL"),
     )
 
 

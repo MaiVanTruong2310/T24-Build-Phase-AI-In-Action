@@ -33,8 +33,14 @@ def chat_agent_input(request: ChatRequest) -> dict:
     payload = {"query": request.message, "user_id": request.user_id, "enable_citation": request.enable_citation}
     # Keep identity separate from clinical history. Omission preserves checkpoint memory.
     if request.patient_profile:
-        profile = request.patient_profile.model_dump()
-        payload.update(patient_profile=profile, patient_name=profile["name"], patient_phone=profile["phone"])
+        profile = request.patient_profile.model_dump(exclude_none=True)
+        payload.update(
+            patient_profile=profile,
+            patient_name=profile.get("name"),
+            patient_phone=profile.get("phone"),
+            patient_dob=profile.get("date_of_birth"),
+            patient_gender=profile.get("gender"),
+        )
     return payload
 
 
@@ -49,7 +55,7 @@ async def optional_chat_user(http_request: Request, session: AsyncSession = Depe
     return await get_current_user(token, session)
 
 
-def public_result(result, session_id):
+def public_result(result, session_id, elapsed_ms: float | None = None):
     meta = result.get("metadata") or {}
     payload = {
         key: result.get(key)
@@ -68,6 +74,7 @@ def public_result(result, session_id):
         session_id=session_id,
         is_emergency=bool(result.get("is_emergency")),
         token_usage=result.get("token_usage") or meta.get("token_usage"),
+        elapsed_ms=elapsed_ms or result.get("elapsed_ms") or meta.get("elapsed_ms"),
         quick_replies=meta.get("quick_replies", []),
         booking_intake=meta.get("booking_intake"),
         suggested_department=result.get("suggested_department_name"),
@@ -82,6 +89,7 @@ async def prepare_turn(request, user, session):
     turn = await service.begin_turn(user, request) if user else None
     payload = chat_agent_input(request)
     payload["user_id"] = str(user.id) if user else None
+    payload["session_id"] = request.session_id
     if user:
         checkpoint = turn.get("checkpoint", {})
         defaults = {key: None for key in STATE_FIELDS}
@@ -102,21 +110,48 @@ async def prepare_turn(request, user, session):
             workflow_status="IDLE",
         )
         payload = {**defaults, **checkpoint, **payload, "error": None}
+        dob_str = str(user.date_of_birth) if user.date_of_birth else None
+        profile_dict = {
+            "name": user.full_name or "",
+            "phone": user.phone or "",
+        }
+        if dob_str:
+            profile_dict["date_of_birth"] = dob_str
+        if getattr(user, "gender", None):
+            profile_dict["gender"] = user.gender
         payload.update(
-            patient_profile={"name": user.full_name or "", "phone": user.phone or ""},
+            patient_profile=profile_dict,
             patient_name=user.full_name,
             patient_phone=user.phone,
+            patient_dob=dob_str,
+            patient_gender=user.gender,
+            patient_email=getattr(user, "email", None),
+            is_authenticated=True,
             patient_health_record=health_record(user),
         )
+        # Nạp Cross-session Memory (Hồ sơ dài hạn & Open Loops)
+        from src.medical_assistant.domain.patient_memory_service import get_patient_memory_service
+        try:
+            mem_svc = get_patient_memory_service()
+            payload["patient_memory_profile"] = await mem_svc.get_patient_profile(user.id)
+            payload["active_open_loops"] = await mem_svc.get_active_open_loops(user.id)
+        except Exception as exc:
+            logger.warning("Could not load cross-session memory: %s", exc)
+            payload["patient_memory_profile"] = []
+            payload["active_open_loops"] = []
     else:
         payload["patient_health_record"] = None
+        payload["is_authenticated"] = False
+        payload["patient_memory_profile"] = []
+        payload["active_open_loops"] = []
     logger.info("chat.prepare elapsed_ms=%.0f", (time.perf_counter() - started) * 1000)
     return payload, turn, service
 
 
-async def run_turn(request, user, payload, turn, service):
-    if turn and turn.get("cached"):
-        return turn["cached"]
+async def run_turn(request, user, payload, turn, service, guest_token=""):
+    started = time.perf_counter()
+    from src.db.session import get_session_factory
+    from src.services.coordinator_chat import before_turn, after_turn, waiting_response
     try:
         if user:
             takeover = ChatTakeoverService(service.session)
@@ -143,8 +178,37 @@ async def run_turn(request, user, payload, turn, service):
         )
         agent_finished = time.perf_counter()
         response = public_result(result, request.session_id)
+        async with get_session_factory()() as coordination_db:
+            case_id, control, emergency, state_context = await before_turn(coordination_db, request, user, guest_token)
+        if not user:
+            payload = {**(state_context.get("checkpoint") or {}), **payload, "error": None}
+        payload["guest_token"] = guest_token
+        payload["session_id"] = request.session_id
+        if user:
+            payload["user_id"] = str(user.id)
+        if turn and turn.get("cached"):
+            return turn["cached"]
+        if emergency:
+            result = {**payload, "is_emergency": True, "ats_level": emergency.ats_level.value,
+                      "max_booking_days": 0, "urgency_tier": emergency.urgency_tier.value,
+                      "workflow_status": "EMERGENCY", "emergency_warning": emergency.patient_guidance,
+                      "response": emergency.patient_guidance}
+        elif control == "human":
+            response = waiting_response(request.session_id)
+            if user and turn:
+                await service.complete(turn, response, payload)
+            return response
+        else:
+            if state_context.get("handover_summary"):
+                payload["metadata"] = {**(payload.get("metadata") or {}), "coordinator_handover_summary": state_context["handover_summary"]}
+            result = await agent.ainvoke(payload, config={"configurable": {"thread_id": graph_thread(request.session_id, user, guest_token)}})
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+        result["elapsed_ms"] = elapsed_ms
+        response = public_result(result, request.session_id, elapsed_ms=elapsed_ms)
         if not response["response"].strip():
             raise RuntimeError("Empty agent response")
+        async with get_session_factory()() as coordination_db:
+            response = await after_turn(coordination_db, case_id, request, response, result)
         if user:
             await service.complete(turn, response, result)
             await ChatTakeoverService(service.session).ensure_case_from_result(
@@ -158,9 +222,32 @@ async def run_turn(request, user, payload, turn, service):
             (agent_finished - started) * 1000,
             (time.perf_counter() - agent_finished) * 1000,
         )
+            # Tự động đồng bộ hóa Cross-session Memory & Open Loops
+            try:
+                from src.medical_assistant.domain.patient_memory_service import get_patient_memory_service
+                mem_svc = get_patient_memory_service()
+                fac = result.get("facility_preference")
+                if fac:
+                    await mem_svc.save_patient_fact(
+                        user_id=user.id,
+                        category="facility_preference",
+                        fact_key="preferred_facility",
+                        fact_value={"name": fac},
+                        provenance="patient_reported",
+                        source_session_id=request.session_id,
+                    )
+                if result.get("workflow_status") == "HOLD_BOOKING" and result.get("selected_slot"):
+                    await mem_svc.create_open_loop(
+                        user_id=user.id,
+                        loop_type="slot_hold_unconfirmed",
+                        payload=result.get("selected_slot") or {},
+                        due_minutes=15,
+                    )
+            except Exception as exc:
+                logger.warning("Could not persist cross-session memory after turn: %s", exc)
         return response
     except BaseException:
-        if turn:
+        if turn and not turn.get("cached"):
             with suppress(Exception):
                 await service.fail(turn)
         raise
@@ -168,11 +255,11 @@ async def run_turn(request, user, payload, turn, service):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
-    request: ChatRequest, user=Depends(optional_chat_user), session: AsyncSession = Depends(get_auth_db_session)
+    request: ChatRequest, http_request: Request, user=Depends(optional_chat_user), session: AsyncSession = Depends(get_auth_db_session)
 ):
     payload, turn, service = await prepare_turn(request, user, session)
     try:
-        return await run_turn(request, user, payload, turn, service)
+        return await run_turn(request, user, payload, turn, service, http_request.state.coordination_guest)
     except HTTPException:
         raise
     except Exception as exc:
@@ -193,7 +280,7 @@ async def chat_stream(
         task = None
         try:
             yield f"data: {json.dumps({'type': 'init', 'session_id': request.session_id})}\n\n"
-            task = asyncio.create_task(run_turn(request, user, payload, turn, service))
+            task = asyncio.create_task(run_turn(request, user, payload, turn, service, http_request.state.coordination_guest))
             while not task.done():
                 if await http_request.is_disconnected():
                     task.cancel()
@@ -239,6 +326,16 @@ async def conversations(
     return await ChatHistoryService(session).list_conversations(user.id, limit, offset)
 
 
+@router.delete("/chat/conversations/{session_id}")
+async def delete_conversation(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_auth_db_session),
+):
+    await ChatHistoryService(session).delete_conversation(user, session_id)
+    return {"deleted": True}
+
+
 @router.get("/chat/conversations/{session_id}")
 async def conversation_messages(
     session_id: str,
@@ -268,6 +365,7 @@ async def takeover_conversation(
 @router.post("/booking-requests", response_model=BookingIntakeResponse, status_code=201)
 async def create_booking_request(
     request: BookingIntakeRequest,
+    http_request: Request,
     user=Depends(optional_chat_user),
     session: AsyncSession = Depends(get_auth_db_session),
 ) -> BookingIntakeResponse:
@@ -275,15 +373,18 @@ async def create_booking_request(
     if not request.consent_to_contact:
         raise HTTPException(status_code=422, detail="Cần đồng ý để điều phối viên liên hệ.")
 
-    config = {"configurable": {"thread_id": graph_thread(request.session_id, user)}}
+    config = {"configurable": {"thread_id": graph_thread(request.session_id, user, http_request.state.coordination_guest)}}
     snapshot = await agent.aget_state(config)
     state = dict(snapshot.values or {})
     if not state and user:
         state = await ChatHistoryService(session).checkpoint(user.id, request.session_id)
     if not state:
-        raise HTTPException(
-            status_code=409, detail="Phiên tư vấn không còn hiệu lực. Vui lòng trao đổi lại với trợ lý."
-        )
+        state = {
+            "suggested_department_name": request.specialty_name or "Tư vấn tổng quát",
+            "is_emergency": False,
+            "available_slots": [],
+            "collected_details": [request.patient_notes] if request.patient_notes else [],
+        }
     if state.get("is_emergency"):
         raise HTTPException(status_code=409, detail="Ca có dấu hiệu cấp cứu không được chuyển sang đặt lịch thường.")
 
@@ -295,8 +396,6 @@ async def create_booking_request(
             (doctor for doctor in available_doctors if str(doctor.get("id")) == request.preferred_doctor_id),
             None,
         )
-        if chosen_doctor is None:
-            raise HTTPException(status_code=400, detail="Bác sĩ được chọn không thuộc kết quả của phiên hiện tại.")
     if request.selected_slot_id:
         for doctor in available_doctors:
             slot = next(
@@ -310,22 +409,23 @@ async def create_booking_request(
             if slot:
                 chosen_doctor, chosen_slot = doctor, slot
                 break
-        if chosen_slot is None or not chosen_slot.get("verified"):
-            raise HTTPException(
-                status_code=400, detail="Khung giờ này chưa được database xác minh hoặc không còn trong phiên."
-            )
 
     context = {
         "user_id": str(user.id) if user else None,
-        "specialty_code": state.get("suggested_department_code"),
-        "specialty_name": state.get("suggested_department_name"),
+        "specialty_code": request.specialty_code or state.get("suggested_department_code"),
+        "specialty_name": request.specialty_name or state.get("suggested_department_name") or "Chuyên khoa phù hợp",
         "doctor_id": chosen_doctor.get("id") if chosen_doctor else None,
         "doctor_name": chosen_doctor.get("full_name") if chosen_doctor else None,
         "schedule_id": chosen_slot.get("schedule_id") if chosen_slot else None,
-        "symptoms_summary": " | ".join(state.get("collected_details") or [])[:2000] or None,
+        "symptoms_summary": (request.patient_notes or " | ".join(state.get("collected_details") or []))[:2000] or None,
     }
     try:
-        result = await asyncio.to_thread(BookingRequestService().submit, request, context)
+        from src.db.session import get_session_factory
+        from src.services.workbench import intake
+        await session.commit()
+        async with get_session_factory()() as coordination_db, coordination_db.begin():
+            case = await intake(coordination_db, request, user, http_request.state.coordination_guest, state)
+            result = {"request_id": str(case.id), "request_code": "YC-" + str(case.id).split("-")[0].upper(), "status": "PENDING_CONTACT"}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except BookingPersistenceError as exc:

@@ -38,18 +38,6 @@ class UserRepository:
             return None
         return (await self.session.execute(select(User).where(or_(*filters)))).scalar_one_or_none()
 
-    async def list_patients(self, search: str | None = None, *, offset: int = 0, limit: int = 100) -> list[User]:
-        """List patient identities for staff-owned booking forms."""
-        statement = select(User).where(User.role == "patient")
-        if search and search.strip():
-            pattern = f"%{search.strip()}%"
-            statement = statement.where(
-                or_(User.full_name.ilike(pattern), User.email.ilike(pattern), User.phone.ilike(pattern))
-            )
-        statement = statement.order_by(User.full_name.asc().nullslast(), User.created_at.desc())
-        statement = statement.offset(offset).limit(limit)
-        return list((await self.session.execute(statement)).scalars().all())
-
     async def create(self, user: User) -> User:
         """Persist a user and flush it so generated fields are available."""
         self.session.add(user)

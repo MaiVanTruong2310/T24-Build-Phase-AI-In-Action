@@ -17,9 +17,30 @@ class SpecialtyRepositoryMixin:
             statement = statement.where(Specialty.status == "active")
         return (await self.session.execute(statement)).scalar_one_or_none()
 
-    async def list_specialties(self, *, public_only: bool, offset: int, limit: int) -> list[Specialty]:
-        """List specialties with pagination."""
-        statement = select(Specialty).order_by(Specialty.name).offset(offset).limit(limit)
+    async def list_specialties(
+        self,
+        *,
+        public_only: bool,
+        offset: int,
+        limit: int,
+        facility_id: UUID | None = None,
+    ) -> list[Specialty]:
+        """List specialties with pagination, optionally filtered by facility."""
+        statement = select(Specialty)
         if public_only:
             statement = statement.where(Specialty.status == "active")
+        if facility_id:
+            from src.models.doctor import Doctor, DoctorFacility, DoctorSpecialty
+
+            statement = (
+                statement.join(DoctorSpecialty, DoctorSpecialty.specialty_id == Specialty.id)
+                .join(DoctorFacility, DoctorFacility.doctor_id == DoctorSpecialty.doctor_id)
+                .join(Doctor, Doctor.id == DoctorSpecialty.doctor_id)
+                .where(
+                    DoctorFacility.facility_id == facility_id,
+                    Doctor.status == "active",
+                )
+                .distinct()
+            )
+        statement = statement.order_by(Specialty.name).offset(offset).limit(limit)
         return list((await self.session.execute(statement)).scalars().all())

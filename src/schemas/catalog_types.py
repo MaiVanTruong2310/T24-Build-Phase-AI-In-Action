@@ -9,7 +9,6 @@ BookingMode = Literal["group", "doctor_visit"]
 ReviewStatus = Literal["needs_review", "approved", "rejected"]
 ScheduleStatus = Literal["available", "inactive", "blocked", "cancelled"]
 MutableScheduleStatus = Literal["available", "inactive", "blocked"]
-ScheduleType = Literal["consultation", "busy", "leave", "other"]
 
 
 class CatalogBase(BaseModel):

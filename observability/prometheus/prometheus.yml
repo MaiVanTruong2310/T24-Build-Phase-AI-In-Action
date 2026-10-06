@@ -6,10 +6,10 @@ scrape_configs:
   - job_name: ai20k-backend
     metrics_path: /metrics
     static_configs:
-      - targets: ["${PROMETHEUS_DEV_TARGET}"]
+      - targets: ["__PROMETHEUS_DEV_TARGET__"]
         labels:
           environment: development
-      - targets: ["${PROMETHEUS_PROD_TARGET}"]
+      - targets: ["__PROMETHEUS_PROD_TARGET__"]
         labels:
           environment: production
 

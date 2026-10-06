@@ -15,6 +15,8 @@ export interface User {
   phone?: string | null;
   full_name: string;
   role: 'patient' | 'staff';
+  date_of_birth?: string | null;
+  gender?: string | null;
 }
 
 interface AuthState {
@@ -27,8 +29,10 @@ interface AuthState {
   restoreRequestId: string | null;
 }
 
+const cachedSession = readPublishedSession();
+
 const initialState: AuthState = {
-  user: readPublishedSession(),
+  user: cachedSession,
   initialized: false,
   restoreError: null,
   restoreRequestId: null,
@@ -65,6 +69,8 @@ function toSessionUser(profile: User): SessionUser {
     phone: profile.phone,
     full_name: profile.full_name,
     role: profile.role,
+    date_of_birth: profile.date_of_birth,
+    gender: profile.gender,
   };
 }
 
@@ -77,6 +83,8 @@ export const initializeAuth = createAsyncThunk(
       const response = await fetchWithAuth('/users/me');
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
+          const currentUserId = readPublishedSession()?.id;
+          if (currentUserId && currentUserId !== originalUserId) return rejectWithValue({ kind: 'unavailable' });
           clearSession();
           return null;
         }
@@ -104,8 +112,9 @@ export const loginUser = createAsyncThunk(
     try {
       const isEmail = credentials.username.includes('@');
       
+      const identity = credentials.username.trim();
       const payload: Record<string, string> = {
-        [isEmail ? 'email' : 'phone']: credentials.username,
+        [isEmail ? 'email' : /^\d+$/.test(identity) ? 'phone' : 'username']: identity,
       };
 
       if (credentials.password) {
@@ -145,6 +154,8 @@ export const loginUser = createAsyncThunk(
         phone: userData.data.phone,
         full_name: userData.data.full_name || 'Người dùng',
         role: userData.data.role,
+        date_of_birth: userData.data.date_of_birth || null,
+        gender: userData.data.gender || null,
       } as User;
       publishSession(toSessionUser(user));
       return user;

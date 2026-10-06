@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['vcare-logo.png'],
       manifest: {
         name: 'VCare+',
         short_name: 'VCare+',
@@ -20,9 +20,8 @@ export default defineConfig({
         lang: 'vi',
         icons: [
           {
-            src: '/favicon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml'
+            src: '/vcare-logo.png',
+            type: 'image/png'
           }
         ]
       }

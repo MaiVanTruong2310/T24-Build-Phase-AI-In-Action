@@ -62,17 +62,17 @@ const STATUS_STYLES: Record<
   { badge: string; sparkStroke: string; sparkFill: string }
 > = {
   normal: {
-    badge: 'bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-200/60',
+    badge: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-300 ring-1 ring-inset ring-emerald-200/60 dark:ring-emerald-400/60',
     sparkStroke: '#10b981',
     sparkFill: 'rgba(16,185,129,0.08)',
   },
   warning: {
-    badge: 'bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-200/60',
+    badge: 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-300 ring-1 ring-inset ring-amber-200/60 dark:ring-amber-400/60',
     sparkStroke: '#f59e0b',
     sparkFill: 'rgba(245,158,11,0.08)',
   },
   critical: {
-    badge: 'bg-red-50 text-red-600 ring-1 ring-inset ring-red-200/60',
+    badge: 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 ring-1 ring-inset ring-red-200/60 dark:ring-red-400/60',
     sparkStroke: '#ef4444',
     sparkFill: 'rgba(239,68,68,0.08)',
   },
@@ -80,18 +80,18 @@ const STATUS_STYLES: Record<
 
 /* ─── Per-icon accent ───────────────────────────────────────────── */
 const ICON_STYLES: Record<string, { bg: string; emoji: string }> = {
-  'heart-pulse': { bg: 'bg-teal-50', emoji: '🫀' },
-  activity: { bg: 'bg-rose-50', emoji: '❤️' },
-  scale: { bg: 'bg-cyan-50', emoji: '⚖️' },
-  droplets: { bg: 'bg-violet-50', emoji: '🩸' },
+  'heart-pulse': { bg: 'bg-teal-50 dark:bg-teal-950/50', emoji: '🫀' },
+  activity: { bg: 'bg-rose-50 dark:bg-rose-950/50', emoji: '❤️' },
+  scale: { bg: 'bg-cyan-50 dark:bg-cyan-950/50 light:bg-app-muted', emoji: '⚖️' },
+  droplets: { bg: 'bg-violet-50 dark:bg-violet-950/50', emoji: '🩸' },
 };
 
 export const VitalCard = memo(function VitalCard({ vital }: VitalCardProps) {
   const sts = STATUS_STYLES[vital.status];
-  const icon = ICON_STYLES[vital.icon] ?? { bg: 'bg-slate-50', emoji: '💊' };
+  const icon = ICON_STYLES[vital.icon] ?? { bg: 'bg-slate-50 dark:bg-app-surface light:bg-app-page', emoji: '💊' };
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
+    <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 dark:border-app-border light:border-app-border bg-white dark:bg-app-surface light:bg-app-surface shadow-sm transition hover:shadow-md">
       {/* Card body */}
       <div className="flex flex-1 flex-col px-4 pt-4 pb-2">
         {/* Top row: icon + status */}
@@ -107,22 +107,22 @@ export const VitalCard = memo(function VitalCard({ vital }: VitalCardProps) {
         </div>
 
         {/* Label */}
-        <p className="mt-2.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+        <p className="mt-2.5 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-app-secondary light:text-app-secondary">
           {vital.label}
         </p>
 
         {/* Value */}
         <div className="mt-0.5 flex items-baseline gap-1">
-          <span className="text-[28px] font-extrabold leading-none tracking-tight text-slate-900">
+          <span className="text-[28px] font-extrabold leading-none tracking-tight text-slate-900 dark:text-app-text light:text-app-text">
             {vital.value}
           </span>
-          <span className="text-[13px] font-medium text-slate-400">
+          <span className="text-[13px] font-medium text-slate-400 dark:text-app-secondary light:text-app-secondary">
             {vital.unit}
           </span>
         </div>
 
         {/* Sub-label */}
-        <p className="mt-1 text-[11px] text-slate-400">
+        <p className="mt-1 text-[11px] text-slate-400 dark:text-app-secondary light:text-app-secondary">
           {vital.referenceRange}
         </p>
       </div>

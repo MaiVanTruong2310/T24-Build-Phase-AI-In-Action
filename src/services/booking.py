@@ -6,32 +6,31 @@ import hashlib
 import json
 import logging
 from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.errors import raise_integrity_conflict
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger, log_event
 from src.models.booking import Booking
-from src.models.catalog import CatalogAuditEvent, DoctorSchedule
-from src.models.user import User
+from src.models.booking_hold import BookingHold
+from src.models.coordination import ConsultationRequest, ConsultationRequestEvent, ConsultationSession
+from src.models.catalog import CatalogAuditEvent
 from src.repositories.booking import BookingRepository
-from src.repositories.user import UserRepository
 from src.schemas.booking import (
     BookingCreate,
+    BookingHoldCreate,
+    BookingHoldResponse,
     BookingRescheduleCreate,
     StaffBookingStatusUpdate,
 )
-from src.schemas.schedule import GuestPatientCreate
 from src.services.notification import NotificationService
 
 logger = get_logger(__name__)
-BUSINESS_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
-DEFAULT_WORKING_START = time(8, 0)
-DEFAULT_WORKING_END = time(18, 0)
 
 
 class BookingService:
@@ -40,13 +39,7 @@ class BookingService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.bookings = BookingRepository(session)
-        self.users = UserRepository(session)
         self.notifications = NotificationService(session)
-
-    @staticmethod
-    def _approval_expiry(now: datetime) -> datetime:
-        """Return the fixed approval deadline for a newly submitted booking."""
-        return now + timedelta(hours=24)
 
     async def create(self, user_id: UUID, request: BookingCreate) -> Booking:
         """Create a scheduled booking or a requested-time booking awaiting staff review."""
@@ -204,24 +197,47 @@ class BookingService:
         active_count = await self.bookings.count_active_for_schedule(schedule.id)
         if active_count >= 1:
             raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
+    async def hold(self, user_id: UUID, request: BookingHoldCreate) -> BookingHold:
+        """Reserve schedule capacity for five to ten minutes."""
+        async with self.session.begin():
+            service = await self.bookings.get_service(request.service_id)
+            specialty = await self.bookings.get_specialty(request.specialty_id)
+            if service is None or service.status != "active":
+                raise NotFoundError("Service not found")
+            if specialty is None or specialty.status != "active":
+                raise NotFoundError("Specialty not found")
 
-        patient = await self._resolve_staff_patient(patient_id, guest_patient)
-        booking = Booking(
-            user_id=patient.id,
-            schedule_id=schedule.id,
-            doctor_id=schedule.doctor_id,
-            facility_id=schedule.facility_id,
-            starts_at=schedule.starts_at,
-            ends_at=schedule.ends_at,
-            service_id=service.id,
-            specialty_id=specialty.id,
-            encounter_type=encounter_type,
-            reason=reason.strip(),
-            patient_note=patient_note.strip() if patient_note else None,
-            status="confirmed",
-            expired_at=self._approval_expiry(datetime.now(UTC)),
-            reviewed_by=actor_id,
-            reviewed_at=datetime.now(UTC),
+            schedule = await self.bookings.get_schedule_for_update(request.schedule_id)
+            if schedule is None:
+                raise NotFoundError("Schedule not found")
+            self._validate_schedule(schedule)
+            if schedule.starts_at <= datetime.now(UTC):
+                raise ConflictError("SLOT_IN_PAST", "Requested schedule is no longer bookable")
+            await self._validate_catalog_relationships(schedule, service, specialty)
+
+            existing = await self.bookings.get_active_hold_for_user_schedule(user_id, schedule.id, for_update=True)
+            if existing is not None:
+                if existing.service_id == service.id and existing.specialty_id == specialty.id:
+                    hold = existing
+                else:
+                    raise ConflictError("HOLD_ALREADY_EXISTS", "Patient already holds this schedule")
+            else:
+                active_count = await self.bookings.count_reservations_for_schedule(schedule.id)
+                if service.booking_mode == "doctor_visit" and active_count >= 1:
+                    raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
+                if service.booking_mode == "group" and active_count >= schedule.capacity:
+                    raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
+                hold = BookingHold(
+                    user_id=user_id,
+                    schedule_id=schedule.id,
+                    service_id=service.id,
+                    specialty_id=specialty.id,
+                    status="active",
+                    expires_at=datetime.now(UTC) + timedelta(seconds=request.hold_seconds),
+                )
+                await self.bookings.add_hold(hold)
+        logger.info(
+            "BookingService.hold created", extra={"hold_id": str(hold.id), "schedule_id": str(request.schedule_id)}
         )
         await self.bookings.add(booking)
         await self.notifications.create_for_booking_review(booking, "confirmed")
@@ -236,32 +252,28 @@ class BookingService:
         )
         return booking
 
-    async def _resolve_staff_patient(self, patient_id: UUID | None, guest_patient: GuestPatientCreate | None) -> User:
-        """Resolve an existing patient or create a temporary guest patient."""
-        if patient_id:
-            patient = await self.users.get_by_id(patient_id)
-            if patient is None or patient.role != "patient":
-                raise NotFoundError("Patient not found")
-            return patient
-        if guest_patient is None:
-            raise ConflictError("PATIENT_REQUIRED", "A patient or guest contact is required")
-
-        patient = await self.users.get_by_identity(guest_patient.email, guest_patient.phone)
-        if patient is not None:
-            if patient.role != "patient":
-                raise ConflictError("PATIENT_IDENTITY_CONFLICT", "Contact belongs to a non-patient account")
-            return patient
-
-        return await self.users.create(
-            User(
-                full_name=guest_patient.full_name,
-                email=guest_patient.email,
-                phone=guest_patient.phone,
-                password_hash=None,
-                role="patient",
-                status="guest",
+    async def release_hold(self, user_id: UUID, hold_id: UUID, *, is_staff: bool = False) -> BookingHold:
+        """Release an owned hold; repeated release is safe."""
+        async with self.session.begin():
+            hold = (
+                await self.bookings.get_hold(hold_id, for_update=True)
+                if is_staff
+                else await self.bookings.get_hold_for_user(hold_id, user_id, for_update=True)
             )
-        )
+            if hold is None:
+                raise NotFoundError("Hold not found")
+            if hold.status == "active":
+                now = datetime.now(UTC)
+                hold.status = "expired" if hold.expires_at <= now else "released"
+                hold.released_at = now
+                await self.session.flush()
+        return hold
+
+    async def release_expired_holds(self) -> int:
+        """Release expired holds for a periodic worker or maintenance command."""
+        async with self.session.begin():
+            count = await self.bookings.release_expired_holds()
+        return count
 
     async def _create_in_transaction(self, user_id: UUID, request: BookingCreate) -> Booking:
         """Validate and stage a booking while the caller owns the transaction."""
@@ -273,6 +285,7 @@ class BookingService:
             raise NotFoundError("Specialty not found")
 
         schedule = None
+        hold = None
         if request.schedule_id:
             schedule = await self.bookings.get_schedule_for_update(request.schedule_id)
             if schedule is None:
@@ -282,13 +295,24 @@ class BookingService:
             facility_id = schedule.facility_id
             starts_at = schedule.starts_at
             ends_at = schedule.ends_at
+            if request.hold_id:
+                hold = await self.bookings.get_hold_for_user(request.hold_id, user_id, for_update=True)
+                if hold is None:
+                    raise NotFoundError("Hold not found")
+                if hold.status != "active" or hold.expires_at <= datetime.now(UTC):
+                    raise ConflictError("HOLD_EXPIRED", "The booking hold has expired or was released")
+                if hold.schedule_id != schedule.id:
+                    raise ConflictError("HOLD_SCHEDULE_MISMATCH", "Hold does not belong to this schedule")
+                if hold.service_id != service.id or hold.specialty_id != specialty.id:
+                    raise ConflictError("HOLD_REQUEST_MISMATCH", "Hold does not match the booking request")
         else:
+            if request.hold_id:
+                raise ConflictError("HOLD_SCHEDULE_REQUIRED", "A hold booking must include schedule_id")
             doctor_id = request.doctor_id
             facility_id = request.facility_id
             starts_at = request.starts_at
             ends_at = request.ends_at
-            doctor_finder = getattr(self.bookings, "get_doctor_for_update", self.bookings.get_doctor)
-            doctor = await doctor_finder(doctor_id)
+            doctor = await self.bookings.get_doctor(doctor_id)
             facility = await self.bookings.get_facility(facility_id)
             if doctor is None or doctor.status != "active" or doctor.review_status != "approved":
                 raise ConflictError("DOCTOR_UNAVAILABLE", "Doctor is not available for booking")
@@ -300,54 +324,6 @@ class BookingService:
                 raise ConflictError("SLOT_IN_PAST", "Requested booking time must be in the future")
             if not await self.bookings.has_doctor_facility(doctor_id, facility_id):
                 raise ConflictError("FACILITY_NOT_AVAILABLE", "Doctor is not available at this facility")
-            local_start = starts_at.astimezone(BUSINESS_TZ)
-            local_end = ends_at.astimezone(BUSINESS_TZ)
-            if (
-                local_start.date() != local_end.date()
-                or local_start.time() < DEFAULT_WORKING_START
-                or local_end.time() > DEFAULT_WORKING_END
-            ):
-                raise ConflictError(
-                    "OUTSIDE_WORKING_HOURS", "Requested booking time is outside the default working hours"
-                )
-            published_finder = getattr(self.bookings, "find_schedule_conflict", None)
-            published_schedule = (
-                await published_finder(
-                    doctor_id=doctor_id,
-                    starts_at=starts_at,
-                    ends_at=ends_at,
-                )
-                if published_finder
-                else None
-            )
-            if published_schedule is not None:
-                raise ConflictError("SCHEDULE_REQUIRED", "Select the published consultation schedule for this time")
-            blocking_finder = getattr(self.bookings, "find_blocking_schedule", None)
-            blocking = (
-                await blocking_finder(
-                    doctor_id=doctor_id,
-                    facility_id=facility_id,
-                    starts_at=starts_at,
-                    ends_at=ends_at,
-                )
-                if blocking_finder
-                else None
-            )
-            if blocking is not None:
-                raise ConflictError("DOCTOR_BUSY", "Doctor is busy during the requested time")
-            if service.booking_mode == "doctor_visit":
-                conflict_finder = getattr(self.bookings, "find_active_booking_conflict", None)
-                conflict = (
-                    await conflict_finder(
-                        doctor_id=doctor_id,
-                        starts_at=starts_at,
-                        ends_at=ends_at,
-                    )
-                    if conflict_finder
-                    else None
-                )
-                if conflict is not None:
-                    raise ConflictError("SCHEDULE_CONFLICT", "This doctor is already booked during the requested time")
 
         await self._validate_catalog_relationships(
             schedule, service, specialty, doctor_id=doctor_id, facility_id=facility_id
@@ -355,7 +331,10 @@ class BookingService:
 
         if schedule:
             # The schedule row lock is held until commit, serializing capacity decisions.
-            active_count = await self.bookings.count_active_for_schedule(schedule.id)
+            if hold:
+                active_count = await self.bookings.count_reservations_for_schedule(schedule.id, exclude_hold_id=hold.id)
+            else:
+                active_count = await self.bookings.count_active_for_schedule(schedule.id)
             if service.booking_mode == "doctor_visit" and active_count >= 1:
                 raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
             if service.booking_mode == "group" and active_count >= schedule.capacity:
@@ -363,6 +342,7 @@ class BookingService:
 
         booking = Booking(
             user_id=user_id,
+            hold_id=hold.id if hold else None,
             schedule_id=schedule.id if schedule else None,
             doctor_id=doctor_id,
             facility_id=facility_id,
@@ -374,10 +354,11 @@ class BookingService:
             reason=request.reason.strip(),
             patient_note=request.patient_note.strip() if request.patient_note else None,
             status="pending_approval",
-            expired_at=self._approval_expiry(datetime.now(UTC)),
         )
         await self.bookings.add(booking)
-        await self.notifications.create_for_booking_request(booking)
+        if hold:
+            hold.status = "consumed"
+            hold.released_at = datetime.now(UTC)
         return booking
 
     async def _validate_catalog_relationships(
@@ -475,7 +456,18 @@ class BookingService:
                 raise ConflictError("BOOKING_NOT_CANCELLABLE", "Rejected booking cannot be cancelled")
             booking.status = "cancelled"
             booking.cancellation_reason = reason.strip() if reason else None
-            await self.notifications.discard_reminders_for_booking(booking.id)
+            consultation = (await self.session.execute(select(ConsultationRequest).where(
+                ConsultationRequest.booking_id == booking.id,
+            ).with_for_update())).scalar_one_or_none()
+            if consultation is not None:
+                await self.session.execute(select(ConsultationSession.id).where(
+                    ConsultationSession.id == consultation.session_id,
+                ).with_for_update())
+                consultation.status = "cancelled"
+                self.session.add(ConsultationRequestEvent(
+                    request_id=consultation.id, actor_id=user_id,
+                    action="cancelled", note=booking.cancellation_reason,
+                ))
             await self.session.flush()
         log_event(
             logger,
@@ -503,6 +495,11 @@ class BookingService:
             booking = await self.bookings.get_for_user(booking_id, user_id, for_update=True)
             if booking is None:
                 raise NotFoundError("Booking not found")
+            is_coordinated = (await self.session.execute(select(ConsultationRequest.id).where(
+                ConsultationRequest.booking_id == booking.id,
+            ))).first()
+            if is_coordinated:
+                raise ConflictError("COORDINATED_BOOKING", "Please contact the coordinator to reschedule this appointment")
             if booking.status in ("cancelled", "rejected"):
                 raise ConflictError("BOOKING_NOT_RESCHEDULABLE", "This booking cannot be rescheduled")
             if booking.schedule_id is None:
@@ -517,8 +514,19 @@ class BookingService:
                 raise NotFoundError("Schedule not found")
             self._validate_schedule(new_schedule)
 
+            hold = await self.bookings.get_hold_for_user(request.hold_id, user_id, for_update=True)
+            if hold is None:
+                raise NotFoundError("Hold not found")
+            if hold.status != "active" or hold.expires_at <= datetime.now(UTC):
+                raise ConflictError("HOLD_EXPIRED", "The booking hold has expired or was released")
+            if hold.schedule_id != new_schedule.id:
+                raise ConflictError("HOLD_SCHEDULE_MISMATCH", "Hold does not belong to this schedule")
+            if hold.service_id != booking.service_id or hold.specialty_id != booking.specialty_id:
+                raise ConflictError("HOLD_REQUEST_MISMATCH", "Hold does not match the booking request")
+
             active_count = await self.bookings.count_reservations_for_schedule(
                 new_schedule.id,
+                exclude_hold_id=hold.id,
                 exclude_booking_id=booking.id,
             )
             if booking.service.booking_mode == "doctor_visit" and active_count >= 1:
@@ -539,12 +547,13 @@ class BookingService:
             booking.facility_id = new_schedule.facility_id
             booking.starts_at = new_schedule.starts_at
             booking.ends_at = new_schedule.ends_at
+            booking.hold_id = hold.id
             booking.status = "pending_approval"
-            booking.expired_at = self._approval_expiry(datetime.now(UTC))
             booking.staff_note = None
             booking.reviewed_by = None
             booking.reviewed_at = None
-            await self.notifications.create_for_booking_request(booking, cycle="rescheduled")
+            hold.status = "consumed"
+            hold.released_at = datetime.now(UTC)
             self.session.add(
                 CatalogAuditEvent(
                     actor_id=user_id,
@@ -649,64 +658,13 @@ class BookingService:
                 raise NotFoundError("Booking not found")
             if booking.status != "pending_approval":
                 raise ConflictError("BOOKING_ALREADY_REVIEWED", "Only pending bookings can be reviewed")
-            if booking.expired_at <= datetime.now(UTC):
-                booking.status = "expired"
-                await self.notifications.create_for_booking_expired(booking)
-                await self.session.flush()
-                expired = True
-            if not expired and request.status == "rejected" and not request.note:
+            if request.status == "rejected" and not request.note:
                 raise ConflictError("REJECTION_NOTE_REQUIRED", "A rejection reason is required")
-            created_schedule = False
-            if not expired and request.status == "confirmed" and booking.schedule_id is None:
-                blocking_finder = getattr(self.bookings, "find_blocking_schedule", None)
-                blocking = (
-                    await blocking_finder(
-                        doctor_id=booking.doctor_id,
-                        facility_id=booking.facility_id,
-                        starts_at=booking.starts_at,
-                        ends_at=booking.ends_at,
-                    )
-                    if blocking_finder
-                    else None
-                )
-                if blocking is not None:
-                    raise ConflictError("DOCTOR_BUSY", "Doctor is busy during the requested time")
-                conflict = await self.bookings.find_schedule_conflict(
-                    doctor_id=booking.doctor_id,
-                    starts_at=booking.starts_at,
-                    ends_at=booking.ends_at,
-                )
-                if conflict is not None:
-                    raise ConflictError("SCHEDULE_TIME_CONFLICT", "Doctor already has a schedule overlapping this time")
-                schedule = DoctorSchedule(
-                    doctor_id=booking.doctor_id,
-                    facility_id=booking.facility_id,
-                    starts_at=booking.starts_at,
-                    ends_at=booking.ends_at,
-                    capacity=1,
-                    status="available",
-                    type="consultation",
-                    created_by=actor_id,
-                    updated_by=actor_id,
-                )
-                await self.bookings.add_schedule(schedule)
-                booking.schedule_id = schedule.id
-                created_schedule = True
-                self.session.add(
-                    CatalogAuditEvent(
-                        actor_id=actor_id,
-                        entity_type="doctor_schedule",
-                        entity_id=schedule.id,
-                        action="created_from_booking",
-                        payload={"booking_id": str(booking.id)},
-                    )
-                )
-            if not expired and request.status == "confirmed" and booking.schedule_id is not None:
+            if request.status == "confirmed" and booking.schedule_id is not None:
                 schedule = await self.bookings.get_schedule_for_update(booking.schedule_id)
                 if schedule is None:
                     raise ConflictError("SCHEDULE_UNAVAILABLE", "Schedule is not available")
-                if not created_schedule:
-                    self._validate_schedule(schedule)
+                self._validate_schedule(schedule)
                 active_count = await self.bookings.count_reservations_for_schedule(
                     schedule.id,
                     exclude_booking_id=booking.id,
@@ -770,8 +728,6 @@ class BookingService:
     @staticmethod
     def _validate_schedule(schedule) -> None:
         """Validate public schedule state before counting capacity."""
-        if (getattr(schedule, "type", "consultation") or "consultation") != "consultation":
-            raise ConflictError("SCHEDULE_UNAVAILABLE", "This schedule is not a consultation slot")
         if schedule.status != "available":
             raise ConflictError("SCHEDULE_UNAVAILABLE", "Schedule is not available")
         if schedule.capacity <= 0:
@@ -780,5 +736,73 @@ class BookingService:
             raise ConflictError("DOCTOR_UNAVAILABLE", "Doctor is not available for booking")
         if not schedule.doctor.booking_enabled:
             raise ConflictError("DOCTOR_BOOKING_DISABLED", "Doctor booking is disabled")
-        if getattr(schedule, "facility", None) is None or schedule.facility.status != "active":
+        if schedule.facility.status != "active":
             raise ConflictError("FACILITY_UNAVAILABLE", "Facility is not available for booking")
+
+
+def booking_response(value: Booking) -> BookingResponse:
+    """Map a loaded booking to its stable API representation."""
+    return BookingResponse(
+        id=value.id,
+        user_id=value.user_id,
+        schedule_id=value.schedule_id,
+        hold_id=value.hold_id,
+        service_id=value.service_id,
+        specialty_id=value.specialty_id,
+        doctor_id=value.doctor_id,
+        facility_id=value.facility_id,
+        starts_at=value.starts_at,
+        ends_at=value.ends_at,
+        booking_mode=value.service.booking_mode,
+        encounter_type=value.encounter_type,
+        reason=value.reason,
+        patient_note=value.patient_note,
+        status=value.status,
+        cancellation_reason=value.cancellation_reason,
+        staff_note=value.staff_note,
+        reviewed_by=value.reviewed_by,
+        reviewed_at=value.reviewed_at,
+        created_at=value.created_at,
+        updated_at=value.updated_at,
+    )
+
+
+def booking_hold_response(value: BookingHold) -> BookingHoldResponse:
+    """Map a hold to its stable API representation."""
+    return BookingHoldResponse(
+        id=value.id,
+        user_id=value.user_id,
+        schedule_id=value.schedule_id,
+        service_id=value.service_id,
+        specialty_id=value.specialty_id,
+        status=value.status,
+        expires_at=value.expires_at,
+        released_at=value.released_at,
+        created_at=value.created_at,
+    )
+
+
+def staff_booking_response(value: Booking) -> StaffBookingResponse:
+    """Map a booking to the staff queue contract with resolved context."""
+    base = booking_response(value)
+    patient = value.user
+    doctor = value.doctor
+    facility = value.facility
+    return StaffBookingResponse(
+        **base.model_dump(),
+        patient_name=patient.full_name if patient else None,
+        patient_email=patient.email if patient else None,
+        patient_phone=patient.phone if patient else None,
+        patient_date_of_birth=patient.date_of_birth if patient else None,
+        patient_gender=patient.gender if patient else None,
+        patient_citizen_id=patient.citizen_id if patient else None,
+        patient_health_insurance_code=patient.health_insurance_code if patient else None,
+        doctor_name=doctor.full_name if doctor else None,
+        doctor_title=doctor.title if doctor else None,
+        doctor_avatar=doctor.avatar_url if doctor else None,
+        specialty_name=value.specialty.name if value.specialty else None,
+        service_name=value.service.name if value.service else None,
+        facility_name=facility.name if facility else None,
+        facility_address=facility.address if facility else None,
+        room=None,
+    )

@@ -1,6 +1,6 @@
 import { fetchWithAuth } from '../../app/apiClient';
 
-export type ApprovalStatus = 'pending_approval' | 'confirmed' | 'rejected' | 'cancelled' | 'expired';
+export type ApprovalStatus = 'pending_approval' | 'confirmed' | 'rejected';
 
 export interface TriageResult {
   specialty_match: string;
@@ -32,7 +32,6 @@ export interface PendingBooking {
   reason: string;
   patient_note: string | null;
   status: ApprovalStatus;
-  expired_at: string;
   staff_note: string | null;
   reviewed_at: string | null;
   triage: TriageResult | null;
@@ -55,7 +54,6 @@ interface StaffBookingResponse {
   reason: string;
   patient_note: string | null;
   status: ApprovalStatus;
-  expired_at: string;
   cancellation_reason: string | null;
   staff_note: string | null;
   reviewed_at: string | null;
@@ -112,7 +110,6 @@ function toPendingBooking(value: StaffBookingResponse): PendingBooking {
     reason: value.reason,
     patient_note: value.patient_note,
     status: value.status,
-    expired_at: value.expired_at,
     staff_note: value.staff_note,
     reviewed_at: value.reviewed_at,
     triage: null,

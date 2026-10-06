@@ -2,7 +2,6 @@ services:
   backend:
     environment:
       APP_ENV: production
-      KAFKA_ENABLED: "true"
     restart: always
 
   postgres:

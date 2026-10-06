@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 class ChatPatientProfile(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     phone: str = Field(default="", max_length=20)
+    date_of_birth: str | None = Field(default=None, max_length=20)
+    gender: str | None = Field(default=None, max_length=20)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -18,7 +20,6 @@ class ChatPatientProfile(BaseModel):
     @classmethod
     def normalize_phone(cls, value: str) -> str:
         import re
-
         phone = re.sub(r"[\s().-]", "", value)
         if phone and not re.fullmatch(r"\+?\d{9,15}", phone):
             raise ValueError("Số điện thoại không hợp lệ")
@@ -30,11 +31,8 @@ class ChatRequest(BaseModel):
     patient_profile: ChatPatientProfile | None = None
     message: str = Field(..., min_length=1, max_length=5000, description="Tin nhắn từ user")
     session_id: str = Field(
-        default_factory=lambda: str(uuid4()),
-        min_length=1,
-        max_length=200,
-        pattern=r"^[A-Za-z0-9_-]+$",
-        description="Thread ID / Session ID định danh phiên chat của bệnh nhân",
+        default_factory=lambda: str(uuid4()), min_length=1, max_length=200,
+        pattern=r"^[A-Za-z0-9_-]+$", description="Thread ID / Session ID định danh phiên chat của bệnh nhân"
     )
     user_id: str | None = Field(default=None, description="Mã bệnh nhân nếu đã đăng nhập")
     enable_citation: bool = Field(
@@ -71,6 +69,7 @@ class ChatResponse(BaseModel):
     conflict_reason: str | None = Field(default=None, description="Lý do cần làm rõ giữa các hướng chuyên khoa")
     acuity_status: str | None = Field(default=None, description="Độ chắc chắn của mức khẩn cấp")
     disposition: str | None = Field(default=None, description="Hướng xử lý an toàn hiện tại")
+    elapsed_ms: float | None = Field(default=None, description="Thời gian phản hồi (ms)")
 
 
 class BookingIntakeRequest(BaseModel):
@@ -82,6 +81,8 @@ class BookingIntakeRequest(BaseModel):
     gender: Literal["female", "male", "other", "prefer_not_to_say"] | None = None
     guardian_name: str | None = Field(default=None, max_length=120)
     guardian_phone: str | None = Field(default=None, max_length=20)
+    specialty_name: str | None = Field(default=None, max_length=120)
+    specialty_code: str | None = Field(default=None, max_length=60)
     preferred_doctor_id: str | None = Field(default=None, max_length=200)
     selected_slot_id: str | None = Field(default=None, max_length=100)
     preferred_date: date | None = None

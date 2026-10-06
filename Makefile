@@ -1,10 +1,7 @@
-.PHONY: run migrate test lint format typecheck check clean
+.PHONY: run test lint format typecheck check clean
 
 run:
 	uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
-
-migrate:
-	alembic upgrade head
 
 test:
 	pytest tests/ -v

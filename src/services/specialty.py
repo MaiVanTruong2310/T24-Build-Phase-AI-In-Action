@@ -17,7 +17,14 @@ logger = get_logger(__name__)
 class SpecialtyServiceMixin:
     """Specialty operations composed into the catalog service."""
 
-    async def list_specialties(self, *, public_only: bool, offset: int, limit: int) -> list[Specialty]:
+    async def list_specialties(
+        self,
+        *,
+        public_only: bool,
+        offset: int,
+        limit: int,
+        facility_id: UUID | None = None,
+    ) -> list[Specialty]:
         """List specialties."""
         log_event(
             logger,

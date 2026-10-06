@@ -1,0 +1,116 @@
+/* Adapt the Uiverse doodle card to the existing full medical forms. */
+.auth-doodle-wrapper {
+  --card-width: 460px;
+  --primary-btn: #edb2b1;
+  --primary-btn-hover: #e7a09f;
+  --secondary-btn: #a6ddc9;
+  --secondary-btn-hover: #8bceb6;
+  --input-focus: #37856a;
+  width: 100%;
+  max-width: 680px;
+  padding: 0 12px;
+  font-family: inherit;
+}
+.auth-doodle-signup { --card-width: 680px; }
+.auth-doodle-header { gap: 16px; margin-bottom: 30px; }
+.auth-doodle-mode-text { font-size: 16px; opacity: .5; text-decoration: none; }
+.auth-doodle-mode-text.is-active { opacity: 1; }
+.auth-doodle-mode-text:focus-visible { outline: 2px solid var(--input-focus); outline-offset: 5px; border-radius: 4px; }
+.auth-doodle-switch-label { width: 52px; height: 28px; flex-shrink: 0; }
+.auth-doodle-toggle { width: 100%; height: 100%; inset: 0; z-index: 2; margin: 0; cursor: pointer; }
+.auth-doodle-toggle:focus-visible + .auth-doodle-switch-handle { outline: 3px solid var(--input-focus); outline-offset: 4px; }
+.auth-doodle-toggle:checked + .auth-doodle-switch-handle { transform: translateX(24px); }
+.auth-doodle-toggle:disabled { cursor: wait; }
+.auth-doodle-switch-handle { top: 4px; left: 3px; }
+.auth-doodle-card-scene { width: min(100%, var(--card-width)); height: auto; }
+.auth-doodle-card-inner { height: auto; }
+.auth-doodle-card-inner.is-login { animation: auth-doodle-flip-login .8s cubic-bezier(.4,.2,.2,1) both; }
+.auth-doodle-card-inner.is-signup { transform: rotateY(180deg); animation: auth-doodle-flip-signup .8s cubic-bezier(.4,.2,.2,1) both; }
+.auth-doodle-active-face { position: relative; height: auto; min-height: 360px; padding: 28px; align-items: stretch; justify-content: flex-start; }
+.auth-doodle-placeholder { position: absolute; inset: 0; height: 100%; gap: 12px; font-size: 28px; font-weight: 900; }
+.auth-doodle-placeholder img { width: 64px; height: 64px; object-fit: contain; }
+.auth-doodle-active-face > div { max-width: none; }
+/* Remove the old outer panel while retaining its sections, messages and fields. */
+.auth-doodle-active-face > div > div:first-child:not(.relative),
+.auth-doodle-active-face > div:has(> h2) {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  padding: 0 !important;
+}
+.auth-doodle-active-face h2 {
+  font-size: clamp(22px, 4vw, 28px);
+  font-weight: 900;
+  transform: rotate(-2deg);
+  text-shadow: 1px 1px 0 rgb(0 0 0 / .1);
+}
+.auth-doodle-signup .auth-doodle-active-face h2 { transform: rotate(2deg); }
+.auth-doodle-active-face input:not([type='checkbox']),
+.auth-doodle-active-face select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--ink) !important;
+  background-color: var(--bg-color) !important;
+  border: 2px solid var(--ink) !important;
+  border-radius: var(--sketch-radius-1);
+  box-shadow: 3px 3px 0 var(--ink);
+  transition: border-color .2s, box-shadow .2s, background-color .2s;
+}
+.auth-doodle-active-face input::placeholder { color: #727272 !important; }
+.auth-doodle-active-face input:not([type='checkbox']):focus,
+.auth-doodle-active-face select:focus {
+  border-color: var(--input-focus) !important;
+  border-radius: var(--sketch-radius-2);
+  box-shadow: 4px 4px 0 var(--ink);
+  outline: 2px solid var(--input-focus);
+  outline-offset: 2px;
+}
+.auth-doodle-active-face input[class*='border-red-500'],
+.auth-doodle-active-face select[class*='border-red-500'] { border-color: #dc2626 !important; }
+.auth-doodle-active-face button[type='submit'] {
+  min-height: 46px;
+  color: #323232 !important;
+  background: var(--primary-btn) !important;
+  border: 2px solid var(--ink);
+  border-radius: var(--sketch-radius-btn);
+  box-shadow: 4px 4px 0 var(--ink);
+  font-weight: 800;
+  transform: rotate(-1deg);
+  transition: transform .15s, box-shadow .15s, background-color .15s;
+}
+.auth-doodle-signup .auth-doodle-active-face button[type='submit'] { background: var(--secondary-btn) !important; transform: rotate(1deg); }
+.auth-doodle-active-face button[type='submit']:hover:not(:disabled) { background: var(--primary-btn-hover) !important; transform: translateY(-2px); box-shadow: 5px 5px 0 var(--ink); }
+.auth-doodle-signup .auth-doodle-active-face button[type='submit']:hover:not(:disabled) { background: var(--secondary-btn-hover) !important; }
+.auth-doodle-active-face button[type='submit']:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
+.auth-doodle-active-face button:disabled { opacity: .55; cursor: not-allowed; }
+.auth-doodle-active-face a { text-underline-offset: 3px; }
+.auth-doodle-svg { z-index: 1; }
+.auth-doodle-star { left: -12px; top: -24px; }
+.auth-doodle-sparkle { right: -10px; bottom: -20px; }
+.auth-doodle-swirl { right: -12px; top: 38px; }
+.dark .auth-doodle-wrapper {
+  --ink: #d2e7dd;
+  --paper-front: #182b24;
+  --paper-back: #172b32;
+  --bg-color: #10211b;
+  --input-focus: #a6ddc9;
+  --switch-bg: #d6bf62;
+}
+.dark .auth-doodle-active-face input::placeholder { color: #91aa9f !important; }
+@keyframes auth-doodle-flip-login { from { transform: rotateY(180deg); } to { transform: rotateY(0); } }
+@keyframes auth-doodle-flip-signup { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+@media (max-width: 639px) {
+  .auth-doodle-wrapper { padding: 0 5px; }
+  .auth-doodle-active-face { padding: 22px 16px; }
+  .auth-doodle-header { gap: 12px; }
+  .auth-doodle-mode-text { font-size: 14px; }
+  .auth-doodle-star { width: 34px; height: 34px; left: -5px; top: -20px; }
+  .auth-doodle-sparkle { right: -4px; width: 30px; height: 30px; }
+  .auth-doodle-swirl { right: -5px; width: 24px; height: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-doodle-wrapper *, .auth-doodle-wrapper *::before, .auth-doodle-wrapper *::after { animation: none !important; transition: none !important; }
+}

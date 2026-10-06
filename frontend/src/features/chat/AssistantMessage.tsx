@@ -19,7 +19,7 @@ export function AssistantMessage({ text }: { text: string }) {
             // Only real web links may open from generated assistant content.
             if (!href || !/^https?:\/\//i.test(href)) return <span>{children}</span>;
             return (
-              <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-cyan-300 dark:hover:text-cyan-200">
+              <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 light:text-app-primary underline underline-offset-2 hover:text-blue-800 light:hover:text-app-primary-strong dark:text-cyan-300 dark:hover:text-cyan-200">
                 {children}
               </a>
             );

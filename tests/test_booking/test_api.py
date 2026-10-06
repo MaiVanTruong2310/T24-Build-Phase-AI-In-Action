@@ -5,7 +5,6 @@ from uuid import uuid4
 import pytest
 
 from src.api.dependencies import get_current_user
-from src.api.endpoints.booking import create_booking, reschedule_booking
 from src.db.dependencies import get_db_session
 from src.main import app
 
@@ -82,18 +81,21 @@ def test_booking_routes_are_mounted_under_api_v1():
     }.issubset({(method.upper(), path) for path, operations in paths.items() for method in operations})
 
     assert {
+        ("POST", "/api/v1/bookings/hold"),
+        ("DELETE", "/api/v1/bookings/holds/{hold_id}"),
         ("GET", "/api/v1/staff/bookings"),
         ("GET", "/api/v1/staff/bookings/{booking_id}"),
         ("PATCH", "/api/v1/staff/bookings/{booking_id}/status"),
     }.issubset({(method.upper(), path) for path, operations in paths.items() for method in operations})
 
 
-def test_common_booking_mutations_require_authentication_only():
-    """Non-staff booking mutations use authentication, not a patient-only role gate."""
-    from inspect import signature
+@pytest.mark.asyncio
+async def test_hold_route_requires_patient_authentication(client):
+    """Unauthenticated users cannot reserve booking capacity."""
+    response = await client.post("/api/v1/bookings/hold", json={})
 
-    assert signature(create_booking).parameters["current_user"].default.dependency is get_current_user
-    assert signature(reschedule_booking).parameters["current_user"].default.dependency is get_current_user
+    assert response.status_code == 401
+    assert response.json()["error"] == {"code": 401}
 
 
 @pytest.mark.asyncio

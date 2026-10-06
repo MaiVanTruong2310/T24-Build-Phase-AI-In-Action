@@ -1,16 +1,15 @@
-import {
-  clearSession,
-  markCookieSession, readPublishedSession 
-} from '../features/auth/session';
-
-// Local Vite development uses the shared development backend exposed through ngrok.
-// Set VITE_API_BASE_URL in frontend/.env.local to override this when needed.
+import { clearSession, markCookieSession, readPublishedSession } from '../features/auth/session';
 const LOCAL_API_ORIGIN = 'http://localhost:8000';
 function normalizeApiOrigin(value: string): string {
   const trimmed = value.trim().replace(/\/$/, '');
-  return (!trimmed ? LOCAL_API_ORIGIN : /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`).replace(/\/api\/v1$/, '');
+  const scheme = /^(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(trimmed) ? 'http://' : 'https://';
+  const origin = !trimmed ? LOCAL_API_ORIGIN : /^https?:\/\//.test(trimmed) ? trimmed : scheme + trimmed;
+  return origin.replace(/\/api\/v1$/, '');
 }
-const API_ORIGIN = normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
+const RAILWAY_FRONTEND_HOST = 'creative-enjoyment-production-e3d9.up.railway.app';
+const API_ORIGIN = typeof window !== 'undefined' && window.location.hostname === RAILWAY_FRONTEND_HOST
+  ? window.location.origin
+  : normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
 const API_BASE = `${API_ORIGIN}/api/v1`;
 const REVISION_KEY = 'p124_cookie_revision';
 let refreshPromise: Promise<boolean> | null = null;
@@ -79,12 +78,6 @@ export function resolveApiUrl(url: string): string {
   if (url.startsWith('/api/')) return `${API_ORIGIN}${url}`;
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }
-
-export function resolveWebSocketUrl(url: string): string {
-  const httpUrl = resolveApiUrl(url);
-  return httpUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
-}
-
 export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<Response> {
   const resolved = resolveApiUrl(url);
   const headers = new Headers(options.headers);
@@ -135,7 +128,13 @@ async function migrateLegacyUnlocked(): Promise<void> {
   if (payload?.data?.authenticated !== true) throw new Error('Chưa thể xác nhận phiên cookie.');
   markCookieSession();
 }
-export function migrateLegacySession(): Promise<void> { return withSessionLock(migrateLegacyUnlocked); }
+export function migrateLegacySession(): Promise<void> {
+  if (!localStorage.getItem('refresh_token')) {
+    localStorage.removeItem('access_token');
+    return Promise.resolve();
+  }
+  return withSessionLock(migrateLegacyUnlocked);
+}
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   let response = await fetchPublicApi(url,options);
   // Authentication actions have their own error semantics and must never be replayed.

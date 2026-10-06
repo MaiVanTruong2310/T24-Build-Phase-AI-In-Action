@@ -1,16 +1,13 @@
-"""Booking notification lifecycle with direct database and WebSocket delivery."""
+"""Booking notification and reminder business rules."""
 
 import logging
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from src.config import Settings, get_settings
 from src.core.exceptions import NotFoundError
 from src.core.logging import get_logger, log_event
 from src.models.booking import Booking
 from src.models.notification import Notification
-from src.realtime.notifications import notification_manager
-from src.repositories.booking import BookingRepository
 from src.repositories.notification import NotificationRepository
 from src.services.email import GmailEmailSender
 from src.utils.response_mappers import notification_response
@@ -19,31 +16,15 @@ logger = get_logger(__name__)
 
 
 class NotificationService:
-    """Create in-app notifications and queue patient email delivery."""
+    """Create transactional booking notifications and process reminders."""
 
-    def __init__(
-        self,
-        session,
-        *,
-        settings: Settings | None = None,
-        email_sender: GmailEmailSender | None = None,
-    ) -> None:
+    def __init__(self, session) -> None:
         self.session = session
-        self.settings = settings or get_settings()
-        self.bookings = BookingRepository(session)
         self.notifications = NotificationRepository(session)
         self.email_sender = email_sender or GmailEmailSender(self.settings)
 
     async def create_for_booking_request(self, booking: Booking, *, cycle: str = "created") -> int:
         """Create an immediately visible approval notification for every active staff user."""
-        log_event(
-            logger,
-            logging.INFO,
-            "notification.booking_request.start",
-            description="Starting staff notifications for a booking request",
-            booking_id=str(booking.id),
-            cycle=cycle,
-        )
         now = datetime.now(UTC)
         staff_ids = await self.notifications.list_active_staff_ids()
         for staff_id in staff_ids:
@@ -77,21 +58,23 @@ class NotificationService:
             booking_id=str(booking.id),
             status=status,
         )
+
+    async def create_for_booking_review(self, booking: Booking, status: str) -> None:
+        """Create the decision notification and a reminder when confirmed."""
+        now = datetime.now(UTC)
         if status == "confirmed":
-            await self._create_patient_notification(
-                booking,
-                kind="booking_confirmed",
-                title="Lịch khám đã được duyệt",
-                message="Lịch khám của bạn đã được nhân viên xác nhận.",
-                dedupe_suffix="decision:confirmed",
-            )
-        elif status == "rejected":
-            await self._create_patient_notification(
-                booking,
-                kind="booking_rejected",
-                title="Lịch khám chưa được duyệt",
-                message=booking.staff_note or "Lịch khám chưa được nhân viên xác nhận.",
-                dedupe_suffix="decision:rejected",
+            await self.notifications.add(
+                Notification(
+                    user_id=booking.user_id,
+                    booking_id=booking.id,
+                    kind="booking_confirmed",
+                    status="delivered",
+                    title="Lịch khám đã được duyệt",
+                    message="Lịch khám của bạn đã được nhân viên xác nhận.",
+                    dedupe_key=f"booking:{booking.id}:decision:confirmed",
+                    available_at=now,
+                    delivered_at=now,
+                )
             )
         log_event(
             logger,
@@ -142,11 +125,30 @@ class NotificationService:
             for booking in bookings:
                 await self._create_patient_notification(
                     booking,
+            await self.notifications.add(
+                Notification(
+                    user_id=booking.user_id,
+                    booking_id=booking.id,
                     kind="appointment_reminder",
+                    status="pending",
                     title="Nhắc lịch khám",
                     message="Bạn có lịch khám sắp diễn ra. Vui lòng chuẩn bị trước giờ hẹn.",
-                    dedupe_suffix="reminder:2d",
+                    dedupe_key=f"booking:{booking.id}:reminder:24h",
+                    available_at=booking.starts_at - timedelta(hours=24),
+                )
+            )
+        elif status == "rejected":
+            await self.notifications.add(
+                Notification(
+                    user_id=booking.user_id,
+                    booking_id=booking.id,
+                    kind="booking_rejected",
+                    status="delivered",
+                    title="Lịch khám chưa được duyệt",
+                    message=booking.staff_note or "Lịch khám chưa được nhân viên xác nhận.",
+                    dedupe_key=f"booking:{booking.id}:decision:rejected",
                     available_at=now,
+                    delivered_at=now,
                 )
         log_event(
             logger,
@@ -180,6 +182,37 @@ class NotificationService:
             unread_only=unread_only,
         )
         return values
+            )
+
+        # Trigger Zalo notification if patient linked Zalo Bot
+        try:
+            from src.zalo.service import send_zalo_notification_to_user
+
+            if status == "confirmed":
+                time_str = (
+                    booking.starts_at.strftime("%H:%M ngày %d/%m/%Y")
+                    if booking.starts_at
+                    else "Theo thông báo"
+                )
+                await send_zalo_notification_to_user(
+                    self.session,
+                    booking.user_id,
+                    "Lịch khám đã được duyệt ✅",
+                    f"Lịch khám của bạn (Mã: #{str(booking.id)[:8]}) đã được nhân viên y tế xác nhận thành công!\nThời gian: {time_str}.",
+                )
+            elif status == "rejected":
+                await send_zalo_notification_to_user(
+                    self.session,
+                    booking.user_id,
+                    "Thông báo về lịch khám ⚠️",
+                    booking.staff_note or "Lịch khám của bạn chưa được nhân viên xác nhận.",
+                )
+        except Exception:
+            pass
+
+    async def list_for_user(self, user_id: UUID, *, unread_only: bool, offset: int, limit: int) -> list[Notification]:
+        """List notifications owned by a user."""
+        return await self.notifications.list_for_user(user_id, unread_only=unread_only, offset=offset, limit=limit)
 
     async def mark_read(self, user_id: UUID, notification_id: UUID) -> Notification:
         """Mark one owned notification as read."""
@@ -224,6 +257,7 @@ class NotificationService:
             description="Starting all-notification read-state update",
             user_id=str(user_id),
         )
+        """Mark all owned delivered notifications as read."""
         async with self.session.begin():
             count = await self.notifications.mark_all_read(user_id, datetime.now(UTC))
         log_event(
@@ -436,3 +470,24 @@ class NotificationService:
             },
         )
         return notification
+    async def process_due_reminders(self, limit: int = 100) -> int:
+        """Deliver or discard due reminder rows in one transaction."""
+        async with self.session.begin():
+            notifications = await self.notifications.claim_due_reminders(datetime.now(UTC), limit)
+        return sum(notification.status == "delivered" for notification in notifications)
+
+
+def notification_response(value: Notification):
+    """Map a notification model to the stable API response."""
+    from src.schemas.notification import NotificationResponse
+
+    return NotificationResponse(
+        id=value.id,
+        booking_id=value.booking_id,
+        kind=value.kind,
+        title=value.title,
+        message=value.message,
+        available_at=value.available_at,
+        read_at=value.read_at,
+        created_at=value.created_at,
+    )

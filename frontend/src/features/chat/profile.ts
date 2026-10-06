@@ -1,16 +1,28 @@
 export interface ChatProfile {
   name: string;
   phone: string;
+  date_of_birth?: string;
+  gender?: string;
 }
 
 export const GUEST_PROFILE_KEY = 'p124_chat_guest_profile';
 export const GUEST_PROFILE_EVENT = 'p124:guest-profile';
 
-export function normalizeChatProfile(name: string, phone: string): ChatProfile | null {
+export function normalizeChatProfile(
+  name: string,
+  phone: string,
+  dob?: string,
+  gender?: string
+): ChatProfile | null {
   const cleanName = name.trim().replace(/\s+/g, ' ');
   const cleanPhone = phone.trim().replace(/[\s().-]/g, '');
   if (cleanName.length < 2 || cleanName.length > 120 || !/^[+]?\d{9,15}$/.test(cleanPhone)) return null;
-  return { name: cleanName, phone: cleanPhone };
+  return {
+    name: cleanName,
+    phone: cleanPhone,
+    date_of_birth: dob?.trim() || undefined,
+    gender: gender?.trim() || undefined,
+  };
 }
 
 export function readGuestProfile(): ChatProfile | null {
