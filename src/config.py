@@ -54,8 +54,8 @@ class Settings(BaseSettings):
     notification_retry_backoff_max_seconds: int = Field(default=3600, ge=1, le=86400)
 
     # Authentication
-    auth_cookie_secure: bool | None = None
-    auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    auth_cookie_secure: bool | None = True
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = "none"
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)

@@ -341,9 +341,19 @@ async def mutate(case_id, identity, db, operation, additional_member_ids=()):
             await operation(case)
             await db.flush()
             value = await svc.detail(db, case)
-        return success_response(value)
+            chat_session_id = case.session_id if case.source == "chat" else None
+            chat_case = case if chat_session_id else None
+        response = success_response(value)
     except IntegrityError as exc:
         raise HTTPException(409, "Giao dịch hoặc lịch đã được sử dụng. Vui lòng tải lại.") from exc
+    if chat_case:
+        from src.realtime.chat_takeover import chat_takeover_manager
+        from src.services.chat_takeover import case_payload
+
+        event = {"type": "takeover.case_updated", "case": case_payload(chat_case)}
+        await chat_takeover_manager.publish_session(chat_session_id, event)
+        await chat_takeover_manager.publish_staff(event)
+    return response
 
 
 @router.post("/cases/{case_id}/actions")
@@ -388,7 +398,24 @@ async def message(case_id: UUID, payload: MessageInput, identity=Depends(access)
         validate_guidance(payload.body)
         await svc.add_message(db, case, payload.client_id, "coordinator", payload.body, identity[0])
 
-    return await mutate(case_id, identity, db, send)
+    response = await mutate(case_id, identity, db, send)
+    case = await db.get(Case, case_id)
+    if case and case.source == "chat" and case.session_id:
+        row = (
+            await db.execute(select(Message).where(Message.case_id == case.id, Message.client_id == payload.client_id))
+        ).scalar_one_or_none()
+        if row:
+            from src.realtime.chat_takeover import chat_takeover_manager
+            from src.services.chat_takeover import case_payload, message_payload
+
+            message_event = {
+                "type": "takeover.message_created",
+                "case": case_payload(case),
+                "message": message_payload(row, case),
+            }
+            await chat_takeover_manager.publish_session(case.session_id, message_event)
+            await chat_takeover_manager.publish_staff(message_event)
+    return response
 
 
 @router.get("/members")
@@ -396,9 +423,7 @@ async def members(identity=Depends(access), db=Depends(get_db_session)):
     member = identity[1]
     rows = (
         await db.execute(
-            select(Member, User)
-            .join(User, User.id == Member.user_id)
-            .where(Member.enabled, User.status == "active")
+            select(Member, User).join(User, User.id == Member.user_id).where(Member.enabled, User.status == "active")
         )
     ).all()
     await db.commit()

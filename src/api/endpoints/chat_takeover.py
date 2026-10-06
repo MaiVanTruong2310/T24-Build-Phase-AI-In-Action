@@ -9,8 +9,8 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from src.api.dependencies import require_staff
 from src.api.response import success_response
 from src.core.security import decode_access_token
-from src.db.dependencies import get_auth_db_session
-from src.db.session import get_auth_session_factory
+from src.db.dependencies import get_db_session
+from src.db.session import get_auth_session_factory, get_session_factory
 from src.models.user import User
 from src.realtime.chat_takeover import chat_takeover_manager, user_id_from_payload
 from src.repositories.user import UserRepository
@@ -27,7 +27,7 @@ from src.services.cookie_session import ACCESS_COOKIE
 router = APIRouter(prefix="/staff/chat-takeover", tags=["chat-takeover"])
 
 
-def get_takeover_service(session: AsyncSession = Depends(get_auth_db_session)) -> ChatTakeoverService:
+def get_takeover_service(session: AsyncSession = Depends(get_db_session)) -> ChatTakeoverService:
     return ChatTakeoverService(session)
 
 
@@ -44,20 +44,20 @@ async def list_cases(
     status: str | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
-    _: User = Depends(require_staff),
+    current_user: User = Depends(require_staff),
     service: ChatTakeoverService = Depends(get_takeover_service),
 ) -> ApiResponse[list[ChatTakeoverCaseResponse]]:
-    cases = await service.list_cases(status, offset, limit)
+    cases = await service.list_cases(status, offset, limit, current_user.id)
     return success_response([case_response(case) for case in cases], "Takeover cases retrieved")
 
 
 @router.get("/cases/{case_id}", response_model=ApiResponse[ChatTakeoverCaseDetail])
 async def get_case(
     case_id: UUID,
-    _: User = Depends(require_staff),
+    current_user: User = Depends(require_staff),
     service: ChatTakeoverService = Depends(get_takeover_service),
 ) -> ApiResponse[ChatTakeoverCaseDetail]:
-    case = await service.get_case(case_id)
+    case = await service.get_case(case_id, current_user.id)
     messages = await service.history(case)
     return success_response(
         ChatTakeoverCaseDetail(
@@ -129,6 +129,10 @@ async def staff_socket(websocket: WebSocket) -> None:
     if user is None or user.role != "staff":
         await websocket.close(code=1008)
         return
+    async with get_session_factory()() as session:
+        if not await ChatTakeoverService(session).staff_access(user.id):
+            await websocket.close(code=1008)
+            return
     await chat_takeover_manager.connect_staff(websocket)
     try:
         while True:
@@ -145,8 +149,8 @@ async def patient_socket(session_id: str, websocket: WebSocket) -> None:
     if user is None:
         await websocket.close(code=1008)
         return
-    async with get_auth_session_factory()() as session:
-        case = await ChatTakeoverService(session).repository.get_by_patient_session(user.id, session_id)
+    async with get_session_factory()() as session:
+        case = await ChatTakeoverService(session).get_case_for_patient(user.id, session_id)
     if case is None:
         await websocket.close(code=1008)
         return

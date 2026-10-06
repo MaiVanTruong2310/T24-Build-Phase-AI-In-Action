@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -67,6 +68,8 @@ async def test_completed_retry_does_not_invoke_agent(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_active_takeover_pauses_agent_and_records_patient_message(monkeypatch):
+    import src.db.session
+
     invoke = AsyncMock()
     monkeypatch.setattr(routes.agent, "ainvoke", invoke)
     takeover = SimpleNamespace(
@@ -74,6 +77,12 @@ async def test_active_takeover_pauses_agent_and_records_patient_message(monkeypa
         record_patient_message=AsyncMock(),
     )
     monkeypatch.setattr(routes, "ChatTakeoverService", lambda session: takeover)
+
+    @asynccontextmanager
+    async def coordination_session():
+        yield object()
+
+    monkeypatch.setattr(src.db.session, "get_session_factory", lambda: coordination_session)
     service = SimpleNamespace(session=object(), complete=AsyncMock(), fail=AsyncMock())
     user = profile()
     request = ChatRequest(message="Tôi vẫn còn đau", session_id="same")

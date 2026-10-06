@@ -32,6 +32,7 @@ from src.schemas.booking import (
     StaffBookingStatusUpdate,
 )
 from src.services.notification import NotificationService
+from src.services.workbench import record_booking_review
 
 logger = get_logger(__name__)
 
@@ -725,6 +726,7 @@ class BookingService:
                 booking.reviewed_by = actor_id
                 booking.reviewed_at = datetime.now(UTC)
                 await self.notifications.create_for_booking_review(booking, request.status)
+                await record_booking_review(self.session, booking, actor_id, request.status, request.note or "")
                 await self.session.flush()
         if expired:
             log_event(

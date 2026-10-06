@@ -4,7 +4,7 @@ import type { StaffContext } from '../layouts/StaffLayout'
 import { saveAndRefresh } from '../features/coordinator/mutations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, canAdminister, dateTime, priorities, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
+import { api, canAdminister, dateTime, priorities, resolveStaffWorkbenchWebSocketUrl, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
 import './CoordinatorWorkbench.css'
 
 const sourceNames: Record<string, string> = { chat: 'Hội thoại', consultation: 'Phiếu khám', package: 'Gói khám', booking: 'Lịch chờ duyệt' }
@@ -96,9 +96,9 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
     if (generation !== requestGeneration.current) return
     setItems(list.items); setTotal(list.total)
     if (refreshStats) {
-      const [stats, people, identity] = await Promise.all([api<Dashboard>('/dashboard'), api<Member[]>('/members'), api<Member>('/me')])
+      const [stats, people] = await Promise.all([api<Dashboard>('/dashboard'), api<Member[]>('/members')])
       if (generation !== requestGeneration.current) return
-      setDashboard(stats); setMembers(people); setMe(identity); statsAt.current = Date.now()
+      setDashboard(stats); setMembers(people); statsAt.current = Date.now()
     }
     if (!resourcesReady.current && mode !== 'chat') {
       const [options, p] = await Promise.all([api<Catalog>('/catalog'), api<Policy | null>('/policy')])
@@ -114,17 +114,44 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
       if (generation === requestGeneration.current && detailRequest === detailGeneration.current) setSelected(current => acceptCaseDetail(current, value, selectedRef.current))
     }
     setLoading(false)
-  }, [offset, status, search, mine, mode, setMe])
+  }, [offset, status, search, mine, mode])
   useEffect(() => {
     let stopped = false
-    let timer: ReturnType<typeof setTimeout>
-    const poll = async () => {
-      if (!busyRef.current) try { await load(); if (!stopped) setPollError('') } catch (e) { if (!stopped) { setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.'); setLoading(false) } }
-      if (!stopped) timer = setTimeout(poll, 5000)
+    let socket: WebSocket | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+    let reconnectDelay = 1000
+    const refresh = () => {
+      if (busyRef.current) return
+      void load().then(() => { if (!stopped) setPollError('') }).catch(e => {
+        if (!stopped) setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.')
+      })
     }
-    void poll()
-    return () => { stopped = true; clearTimeout(timer); requestGeneration.current += 1 }
-  }, [load])
+    const connect = () => {
+      if (stopped || mode !== 'chat') return
+      socket = new WebSocket(resolveStaffWorkbenchWebSocketUrl())
+      socket.onopen = () => { reconnectDelay = 1000; refresh() }
+      socket.onmessage = event => {
+        try {
+          const update = JSON.parse(event.data) as { type?: string }
+          if (update.type === 'takeover.case_updated' || update.type === 'takeover.message_created') refresh()
+        } catch { /* Ignore malformed realtime events. */ }
+      }
+      socket.onclose = () => {
+        if (stopped) return
+        reconnectTimer = setTimeout(connect, reconnectDelay)
+        reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
+      }
+      socket.onerror = () => socket?.close()
+    }
+    if (mode === 'chat') connect()
+    else refresh()
+    return () => {
+      stopped = true
+      clearTimeout(reconnectTimer)
+      socket?.close()
+      requestGeneration.current += 1
+    }
+  }, [load, mode])
   useEffect(() => {
     let active = true
     const detailRequest = ++detailGeneration.current
@@ -171,6 +198,17 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
     finally { busyRef.current = false; setBusy(false) }
   }
   const act = (action: string) => selected && run(() => api<CaseDetail>('/cases/' + selected.id + '/actions', 'POST', { version: selected.version, action, note, assigned_to: handover || null, follow_up_at: followUp ? new Date(followUp).toISOString() : null, reference: reference || null }), 'Đã lưu thao tác.')
+  const takeOverChat = () => {
+    if (!selected || !me) return
+    const caseId = selected.id
+    void run(async () => {
+      let current = selected
+      if (!current.assigned_to) {
+        current = await api<CaseDetail>('/cases/' + caseId + '/actions', 'POST', { version: current.version, action: 'claim' })
+      }
+      return api<CaseDetail>('/cases/' + caseId + '/actions', 'POST', { version: current.version, action: 'takeover' })
+    }, 'Đã tiếp quản hội thoại từ AI.')
+  }
   const owned = Boolean(selected && me && selected.assigned_to === me.user_id)
   const allowed = (action: string) => canCaseAction(selected, me, action)
   const choose = (id: string) => setParams({ case: id })
@@ -198,9 +236,9 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
         {!selectedId ? <div className="cw-chat-placeholder"><h2>Chọn một hội thoại để xem tin nhắn</h2><p>Bạn có thể theo dõi AI hoặc nhận ca và tiếp quản để trả lời trực tiếp.</p></div> : !selected ? <p role="status">Đang tải hội thoại…</p> : <>
           <header className="cw-heading"><div><h2>{selected.patient.name || 'Hội thoại bệnh nhân'}</h2><small>{selected.patient.phone || 'Chưa có điện thoại'} · {person(selected.assigned_to)}</small><p>{selected.control === 'human' ? 'Điều phối viên đang trả lời; AI tạm dừng.' : 'AI đang hỗ trợ bệnh nhân.'}</p></div><button onClick={() => setParams({})}>Đóng hội thoại</button></header>
           {selected.priority === 0 && <div className="cw-emergency"><strong>Hội thoại có cảnh báo cấp cứu</strong><p>Tiếp nhận và ghi diễn biến trong trang xử lý cấp cứu.</p><Link to={'/staff/emergency?case=' + encodeURIComponent(selected.id)}>Mở ca cấp cứu</Link></div>}
-          <div className="cw-actions"><button disabled={busy || !me?.on_duty || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>Nhận ca</button><button disabled={busy || !allowed('takeover')} onClick={() => void act('takeover')}>Tiếp quản từ AI</button>{selected.status !== 'observing' && <Link to={'/staff/queue?case=' + encodeURIComponent(selected.id)}>Mở phiếu điều phối và xếp lịch</Link>}</div>
+          <div className="cw-actions"><button disabled={busy || !me?.on_duty || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>Nhận ca</button><button className="cw-primary" disabled={busy || !me?.on_duty || !selected.session_id || selected.control === 'human' || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={takeOverChat}>{selected.control === 'human' ? 'Đang do nhân viên xử lý' : 'Tiếp quản từ AI'}</button>{selected.status !== 'observing' && <Link to={'/staff/queue?case=' + encodeURIComponent(selected.id)}>Mở phiếu điều phối và xếp lịch</Link>}</div>
           <div className="cw-messages cw-chat-messages" role="log" aria-label="Tin nhắn bệnh nhân và nhân viên">
-            {selected.messages.length ? selected.messages.map(m => <article key={m.id} className={'cw-message-' + m.sender}><strong>{m.sender === 'patient' ? 'Bệnh nhân' : m.sender === 'coordinator' ? person(m.actor_id) : m.sender === 'ai' ? 'AI' : 'Thông báo'}</strong><time>{dateTime(m.created_at)}</time><p>{m.body}</p></article>) : <p>Chưa có tin nhắn được lưu.</p>}
+            {selected.messages.length ? selected.messages.map(m => <article key={m.id} className={'cw-message-' + m.sender}><div className="cw-message-meta"><strong>{m.sender === 'patient' ? 'Bệnh nhân' : m.sender === 'coordinator' ? person(m.actor_id) : m.sender === 'ai' ? 'AI hỗ trợ' : 'Thông báo'}</strong><time>{dateTime(m.created_at)}</time></div><p>{m.body}</p></article>) : <p className="cw-chat-empty">Chưa có tin nhắn được lưu.</p>}
           </div>
           <form onSubmit={e => { e.preventDefault(); if (!allowed('message') || !message.trim()) return; const body = message.trim(); const caseId = selected.id; void run(async () => { await api('/cases/' + caseId + '/messages', 'POST', { client_id: crypto.randomUUID(), body }); if (selectedRef.current === caseId) setMessage('') }, 'Đã gửi tin nhắn.') }}>
             <label>Trả lời bệnh nhân<textarea maxLength={5000} disabled={busy || !allowed('message')} required value={message} onChange={e => setMessage(e.target.value)} placeholder="Nhận ca và tiếp quản từ AI để trả lời bệnh nhân." /></label><button className="cw-primary" disabled={busy || !allowed('message') || !message.trim()}>Gửi tin nhắn</button>

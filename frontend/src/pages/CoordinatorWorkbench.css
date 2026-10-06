@@ -47,8 +47,9 @@
 .cw-conversation-card strong,.cw-conversation-card span{display:block}.cw-conversation-card span{font-size:12px;margin:6px 0}
 .coordinator-workbench .cw-conversation-active{background:#eff6ff;border-color:#3b82f6}
 .cw-conversation-thread{min-height:580px}.cw-chat-placeholder{padding:120px 20px;text-align:center}
-.cw-chat-messages{max-height:55vh;min-height:220px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px}
-.cw-chat-messages article{max-width:90%;margin:8px 0;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff}
-.cw-chat-messages .cw-message-coordinator{margin-left:auto;background:#eff6ff;border-color:#bfdbfe}.cw-chat-messages .cw-message-ai{background:#f0fdf4}
+.cw-chat-messages{display:flex;flex-direction:column;gap:10px;max-height:55vh;min-height:220px;padding:18px;background:#f3f6f8;border:1px solid #e2e8f0;border-radius:12px;overflow-y:auto}
+.cw-chat-messages article{align-self:flex-start;width:fit-content;max-width:min(78%,620px);margin:0;padding:10px 14px;border:1px solid #e2e8f0;border-radius:16px 16px 16px 5px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.cw-chat-messages .cw-message-meta{display:flex;align-items:center;gap:12px;margin-bottom:3px}.cw-chat-messages .cw-message-meta strong{font-size:11px;color:#64748b;font-weight:600}.cw-chat-messages time{color:#94a3b8;font-size:10px}.cw-chat-messages p{margin:0;color:#1e293b;white-space:pre-wrap;overflow-wrap:anywhere}
+.cw-chat-messages .cw-message-coordinator,.cw-chat-messages .cw-message-ai{align-self:flex-end;border-radius:16px 16px 5px 16px}.cw-chat-messages .cw-message-coordinator{border-color:#d1fae5;background:#dcf8c6}.cw-chat-messages .cw-message-ai{border-color:#bfdbfe;background:#dbeafe}.cw-chat-messages .cw-message-coordinator .cw-message-meta,.cw-chat-messages .cw-message-ai .cw-message-meta{justify-content:flex-end}.cw-chat-messages .cw-message-system,.cw-chat-messages .cw-message-notice{align-self:center;max-width:95%;border:0;background:#e2e8f0;box-shadow:none;text-align:center}.cw-chat-messages .cw-chat-empty{align-self:center;margin:auto;color:#64748b}
 .cw-chat-resume{border-top:1px solid #e2e8f0;margin-top:20px;padding-top:14px}.cw-chat-workspace a{color:#1d4ed8;text-decoration:underline;align-self:center}
 @media(max-width:900px){.cw-chat-layout{grid-template-columns:1fr}.cw-chat-placeholder{padding:50px 15px}.cw-conversation-thread{min-height:350px}}

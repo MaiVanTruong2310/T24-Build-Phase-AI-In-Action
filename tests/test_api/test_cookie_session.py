@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -7,6 +8,7 @@ import pytest
 from src.api.endpoints import auth
 from src.core.exceptions import AppError
 from src.models.user import User
+from src.services import cookie_session
 from src.services import supabase_auth as gateway
 from src.services.cookie_session import ACCESS_COOKIE, REFRESH_COOKIE, cookie_options
 
@@ -18,6 +20,16 @@ HEADERS = {"Origin": "http://localhost:5173", "X-Auth-Transport": "cookie"}
 def cookie_auth(monkeypatch):
     monkeypatch.setattr(auth, "native_auth_enabled", lambda: True)
     monkeypatch.setattr(gateway, "native_auth_enabled", lambda: True)
+    monkeypatch.setattr(
+        cookie_session,
+        "get_settings",
+        lambda: SimpleNamespace(
+            auth_cookie_secure=False,
+            auth_cookie_samesite="lax",
+            app_env="test",
+            jwt_refresh_token_expire_days=30,
+        ),
+    )
     monkeypatch.setattr(auth, "login_email", AsyncMock(return_value=TOKENS))
     remote = AsyncMock(return_value={**TOKENS, "access_token": "rotated-access", "refresh_token": "s" * 40})
     monkeypatch.setattr(auth, "auth_call", remote)

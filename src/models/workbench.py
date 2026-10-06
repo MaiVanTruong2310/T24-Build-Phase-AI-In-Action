@@ -50,7 +50,9 @@ class CoordinationCase(Base):
     owner_key: Mapped[str | None] = mapped_column(String(100))
     session_id: Mapped[str | None] = mapped_column(String(200))
     patient_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
-    patient_profile_id: Mapped[UUID | None] = mapped_column(ForeignKey("patient_profiles.id", ondelete="RESTRICT"), index=True)
+    patient_profile_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("patient_profiles.id", ondelete="RESTRICT"), index=True
+    )
     requested_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
     patient: Mapped[dict] = mapped_column(DOC, default=dict, nullable=False)
     ai_snapshot: Mapped[dict] = mapped_column(DOC, default=dict, nullable=False)
@@ -65,6 +67,7 @@ class CoordinationCase(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     follow_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     booking_id: Mapped[UUID | None] = mapped_column(ForeignKey("bookings.id", ondelete="RESTRICT"))
+    legacy_takeover_case_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -91,7 +94,7 @@ class CoordinationMessage(Base):
     case_id: Mapped[UUID] = mapped_column(
         ForeignKey("coordination_cases.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    client_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    client_id: Mapped[str] = mapped_column(String(128), nullable=False)
     sender: Mapped[str] = mapped_column(String(20), nullable=False)
     actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     body: Mapped[str] = mapped_column(Text, nullable=False)

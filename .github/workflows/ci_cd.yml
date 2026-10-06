@@ -41,6 +41,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
+      - name: Validate Alembic upgrade chain
+        run: alembic upgrade head
+        env:
+          APP_ENV: test
+          JWT_SECRET_KEY: test-secret-key-with-at-least-32-bytes
+          DATABASE_URL: postgresql+psycopg://ai20k_test:ai20k_test@localhost:${{ job.services.postgres.ports[5432] }}/ai20k_test
+
       - name: Lint with ruff
         run: ruff check src/ tests/
 
@@ -261,6 +268,9 @@ jobs:
             IMAGE_REPO=${{ vars.DOCKERHUB_REPO }}
             IMAGE_TAG=${GITHUB_SHA}
             APP_ENV=${ENV_TAG}
+            VITE_API_BASE_URL=${{ github.ref_name == 'main' && secrets.API_DOMAIN_PROD || secrets.API_DOMAIN_DEV }}
+            AUTH_COOKIE_SAMESITE=none
+            AUTH_COOKIE_SECURE=true
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
             JWT_ALGORITHM=HS256
@@ -297,6 +307,8 @@ jobs:
 
             docker compose "${COMPOSE_FILES[@]}" config >/dev/null
             docker compose "${COMPOSE_FILES[@]}" pull
+            docker compose "${COMPOSE_FILES[@]}" up -d postgres
+            docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps backend alembic upgrade head
             docker compose "${COMPOSE_FILES[@]}" up -d --remove-orphans
 
             sleep 45
