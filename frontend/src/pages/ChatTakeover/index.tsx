@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { resolveTakeoverWebSocketUrl, claimTakeoverCase, fetchTakeoverCase, fetchTakeoverCases, releaseTakeoverCase, resolveTakeoverCase, sendTakeoverMessage, type TakeoverCase, type TakeoverCaseDetail } from './api';
 import { PatientQueueItem, ChatMessage, HITLMetrics } from './types';
@@ -95,6 +95,7 @@ export default function ChatTakeover() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const queueRequestRef = useRef<Promise<TakeoverCase[]> | null>(null);
 
   const showToast = useCallback((message: string) => {
     setNotice(message);
@@ -104,9 +105,17 @@ export default function ChatTakeover() {
   const loadQueue = useCallback(async (signal?: AbortSignal) => {
     setError('');
     try {
-      setCases(await fetchTakeoverCases(undefined, signal));
+      // React StrictMode intentionally mounts effects twice in development.
+      // Share the first in-flight request instead of aborting it during the
+      // first effect cleanup and issuing a second request immediately after.
+      const request = queueRequestRef.current ?? fetchTakeoverCases();
+      queueRequestRef.current = request;
+      const nextCases = await request;
+      if (!signal?.aborted) setCases(nextCases);
+      if (queueRequestRef.current === request) queueRequestRef.current = null;
     } catch (cause) {
       if (!signal?.aborted) setError(cause instanceof Error ? cause.message : 'Không thể tải hàng đợi takeover.');
+      queueRequestRef.current = null;
     } finally {
       if (!signal?.aborted) setLoading(false);
     }

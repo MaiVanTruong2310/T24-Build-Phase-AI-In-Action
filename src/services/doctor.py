@@ -109,14 +109,17 @@ class DoctorServiceMixin:
             actor_id=str(actor_id),
             doctor_code=request.code,
         )
-        async with self.session.begin(), integrity_guard(
-            logger=logger,
-            event="catalog.doctor.create.persistence_conflict",
-            code="DOCTOR_CREATE_CONFLICT",
-            message="Doctor could not be created",
-            log_description="Doctor creation conflicted with a code, license, or assignment constraint",
-            actor_id=str(actor_id),
-            doctor_code=request.code,
+        async with (
+            self.session.begin(),
+            integrity_guard(
+                logger=logger,
+                event="catalog.doctor.create.persistence_conflict",
+                code="DOCTOR_CREATE_CONFLICT",
+                message="Doctor could not be created",
+                log_description="Doctor creation conflicted with a code, license, or assignment constraint",
+                actor_id=str(actor_id),
+                doctor_code=request.code,
+            ),
         ):
             await self._ensure_code_available(Doctor, request.code)
             if request.license_number:
@@ -156,14 +159,17 @@ class DoctorServiceMixin:
             actor_id=str(actor_id),
             changed_fields=list(request.model_dump(exclude_unset=True).keys()),
         )
-        async with self.session.begin(), integrity_guard(
-            logger=logger,
-            event="catalog.doctor.update.persistence_conflict",
-            code="DOCTOR_UPDATE_CONFLICT",
-            message="Doctor could not be updated",
-            log_description="Doctor update conflicted with a license or assignment constraint",
-            actor_id=str(actor_id),
-            doctor_id=str(resource_id),
+        async with (
+            self.session.begin(),
+            integrity_guard(
+                logger=logger,
+                event="catalog.doctor.update.persistence_conflict",
+                code="DOCTOR_UPDATE_CONFLICT",
+                message="Doctor could not be updated",
+                log_description="Doctor update conflicted with a license or assignment constraint",
+                actor_id=str(actor_id),
+                doctor_id=str(resource_id),
+            ),
         ):
             value = await self._required(self.catalog.get_doctor(resource_id), "Doctor not found")
             updates = request.model_dump(exclude_unset=True)
@@ -221,15 +227,18 @@ class DoctorServiceMixin:
             specialty_id=str(request.specialty_id),
             actor_id=str(actor_id),
         )
-        async with self.session.begin(), integrity_guard(
-            logger=logger,
-            event="catalog.doctor.specialty.persistence_conflict",
-            code="ASSIGNMENT_EXISTS",
-            message="Assignment already exists",
-            log_description="Doctor specialty assignment hit a duplicate relationship constraint",
-            actor_id=str(actor_id),
-            doctor_id=str(doctor_id),
-            specialty_id=str(request.specialty_id),
+        async with (
+            self.session.begin(),
+            integrity_guard(
+                logger=logger,
+                event="catalog.doctor.specialty.persistence_conflict",
+                code="ASSIGNMENT_EXISTS",
+                message="Assignment already exists",
+                log_description="Doctor specialty assignment hit a duplicate relationship constraint",
+                actor_id=str(actor_id),
+                doctor_id=str(doctor_id),
+                specialty_id=str(request.specialty_id),
+            ),
         ):
             await self._required(self.catalog.get_doctor(doctor_id), "Doctor not found")
             specialty = await self._required(self.catalog.get_specialty(request.specialty_id), "Specialty not found")
@@ -306,15 +315,18 @@ class DoctorServiceMixin:
             facility_id=str(request.facility_id),
             actor_id=str(actor_id),
         )
-        async with self.session.begin(), integrity_guard(
-            logger=logger,
-            event="catalog.doctor.facility.persistence_conflict",
-            code="ASSIGNMENT_EXISTS",
-            message="Assignment already exists",
-            log_description="Doctor facility assignment hit a duplicate relationship constraint",
-            actor_id=str(actor_id),
-            doctor_id=str(doctor_id),
-            facility_id=str(request.facility_id),
+        async with (
+            self.session.begin(),
+            integrity_guard(
+                logger=logger,
+                event="catalog.doctor.facility.persistence_conflict",
+                code="ASSIGNMENT_EXISTS",
+                message="Assignment already exists",
+                log_description="Doctor facility assignment hit a duplicate relationship constraint",
+                actor_id=str(actor_id),
+                doctor_id=str(doctor_id),
+                facility_id=str(request.facility_id),
+            ),
         ):
             await self._required(self.catalog.get_doctor(doctor_id), "Doctor not found")
             facility = await self._required(self.catalog.get_facility(request.facility_id), "Facility not found")
@@ -355,15 +367,18 @@ class DoctorServiceMixin:
             assignment_id=str(assignment_id),
             actor_id=str(actor_id),
         )
-        async with self.session.begin(), integrity_guard(
-            logger=logger,
-            event="catalog.doctor.facility_update.persistence_conflict",
-            code="FACILITY_ASSIGNMENT_UPDATE_CONFLICT",
-            message="Assignment could not be updated",
-            log_description="Doctor facility assignment update conflicted with another record",
-            actor_id=str(actor_id),
-            doctor_id=str(doctor_id),
-            assignment_id=str(assignment_id),
+        async with (
+            self.session.begin(),
+            integrity_guard(
+                logger=logger,
+                event="catalog.doctor.facility_update.persistence_conflict",
+                code="FACILITY_ASSIGNMENT_UPDATE_CONFLICT",
+                message="Assignment could not be updated",
+                log_description="Doctor facility assignment update conflicted with another record",
+                actor_id=str(actor_id),
+                doctor_id=str(doctor_id),
+                assignment_id=str(assignment_id),
+            ),
         ):
             assignment = await self.session.scalar(
                 select(DoctorFacility).where(
@@ -400,15 +415,18 @@ class DoctorServiceMixin:
             service_id=str(request.service_id),
             actor_id=str(actor_id),
         )
-        async with self.session.begin(), integrity_guard(
-            logger=logger,
-            event="catalog.doctor.service.persistence_conflict",
-            code="ASSIGNMENT_EXISTS",
-            message="Assignment already exists",
-            log_description="Doctor service assignment hit a duplicate relationship constraint",
-            actor_id=str(actor_id),
-            doctor_id=str(doctor_id),
-            service_id=str(request.service_id),
+        async with (
+            self.session.begin(),
+            integrity_guard(
+                logger=logger,
+                event="catalog.doctor.service.persistence_conflict",
+                code="ASSIGNMENT_EXISTS",
+                message="Assignment already exists",
+                log_description="Doctor service assignment hit a duplicate relationship constraint",
+                actor_id=str(actor_id),
+                doctor_id=str(doctor_id),
+                service_id=str(request.service_id),
+            ),
         ):
             doctor = await self._required(self.catalog.get_doctor(doctor_id), "Doctor not found")
             service = await self._required(self.catalog.get_service(request.service_id), "Service not found")
