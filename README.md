@@ -45,6 +45,7 @@
 
 * **Phiếu đăng ký trên chatbot:**
   * Kiểm tra họ tên, số di động Việt Nam, ngày sinh, ngày khám và thông tin người giám hộ khi bệnh nhân dưới 18 tuổi.
+  * Ngày khám phải hợp lệ và nằm từ hôm nay đến tối đa 90 ngày tới (khoảng 3 tháng), theo múi giờ Việt Nam.
   * Yêu cầu xác nhận đồng ý trước khi gửi; kiểm tra lại dữ liệu ở backend.
   * Giữ các trường người dùng đã sửa khi AI cập nhật dữ liệu; lấy ID cơ sở từ catalog.
 
@@ -439,52 +440,94 @@ npm run build
 
 ## 9. Cấu trúc thư mục dự án
 
-```
-├── .env.example                     # Mẫu biến môi trường
-├── requirements.txt                 # Danh mục thư viện Python
-├── scripts/
-│   ├── run_backend.py               # Launcher khởi động backend đa nền tảng
-│   ├── build_vector_store.py        # Tạo chỉ mục ChromaDB từ JSONL
-│   └── setup_hooks.ps1              # Hook ghi nhận lịch sử AI
-├── src/
-│   ├── main.py                      # Điểm vào chính của ứng dụng FastAPI
-│   ├── config.py                    # Quản lý cài đặt cấu hình Pydantic
-│   ├── api/                         # Các router REST API
-│   │   ├── endpoints/
-│   │   │   ├── booking.py           # Quản lý lịch hẹn & Hủy lịch
-│   │   │   ├── workbench.py         # Bàn làm việc điều phối HITL
-│   │   │   ├── auth.py              # Đăng ký, đăng nhập & JWT
-│   │   │   └── notification.py      # Thông báo đẩy
-│   ├── db/                          # Kết nối cơ sở dữ liệu SQLAlchemy & Session
-│   ├── models/                      # Các bảng ORM (User, Booking, Case, Specialty...)
-│   ├── services/                    # Tầng logic nghiệp vụ
-│   └── medical_assistant/           # Gói tác tử y tế LangGraph VMEC-01
-│       ├── config.py                # Cấu hình riêng cho Agent & LLM
-│       ├── agent/
-│       │   ├── graph.py             # Định nghĩa đồ thị trạng thái StateGraph
-│       │   ├── state.py             # Schema TypedDict của AgentState
-│       │   └── nodes/               # Các node xử lý chuyên sâu
-│       │       ├── analyze_node.py  # Phân tích triệu chứng, an toàn & intent
-│       │       ├── critic_node.py   # Phản biện lâm sàng (Reflexion)
-│       │       ├── doctor_node.py   # Truy vấn danh sách bác sĩ & slot
-│       │       └── respond_node.py  # Tạo câu trả lời & Nén bộ nhớ SOAP
-│       ├── domain/                  # Logic nghiệp vụ y khoa
-│       │   ├── disease_triage.py    # Phân tầng cấp cứu ATS
-│       │   ├── booking_lookup_service.py # Xử lý đặt lịch qua hội thoại
-│       │   └── patient_memory_service.py # Bộ nhớ dài hạn bệnh nhân
-│       ├── rag/                    # ChromaDB, Gemini embeddings và Hybrid RAG
-│       └── infrastructure/
-│           └── llm.py               # Failover LLM Gateway (Hedged requests)
-├── frontend/                        # Ứng dụng giao diện người dùng
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── src/
-│       ├── features/
-│       │   ├── chat/                # Khung chat tư vấn AI & Live Coordination
-│       │   └── appointment-progress/# Quản lý & Theo dõi tiến trình lịch hẹn
-│       └── App.tsx
-├── tests/                           # Bộ kiểm thử tự động Pytest
-└── docs/                            # Tài liệu kiến trúc và hướng dẫn kỹ thuật
+Hệ thống được tổ chức theo chuẩn kiến trúc **Production-Grade AI Agent** phục vụ triển khai thực tế và đáp ứng tiêu chuẩn thẩm định của AI20K:
+
+```text
+P-124/
+├── alembic/                                 # Database Schema Migrations (Alembic + SQLAlchemy)
+│   ├── env.py                               # Cấu hình môi trường migration kết nối PostgreSQL
+│   └── versions/                            # 17 migration scripts (Auth, Booking, Workbench, Roles...)
+├── configs/                                 # Cấu hình chính sách & Quy tắc điều hành Agent (Control Plane)
+│   └── control_plane/                       # Dynamic Clinical Policies (CLINICAL_SOUL.md, PROTOCOLS.md...)
+├── src/                                     # Toàn bộ mã nguồn Backend
+│   ├── agents/                              # LangGraph Multi-Agent Core
+│   │   ├── graph.py                         # State graph (nodes, edges, Reflexion loop, checkpointer)
+│   │   ├── state.py                         # AgentState schema trung tâm (TypedDict toàn diện)
+│   │   ├── nodes/                           # Các node chức năng chuyên sâu
+│   │   │   ├── analyze_node.py              # Phân tích triệu chứng, an toàn & intent
+│   │   │   ├── critic_node.py               # Phản biện lâm sàng (Reflexion & Safety verification)
+│   │   │   ├── doctor_node.py               # Truy vấn danh sách bác sĩ & khung giờ khám
+│   │   │   ├── respond_node.py              # Tạo phản hồi, SOAP notes & nén bộ nhớ
+│   │   │   └── helpers.py                   # Tiện ích trích xuất thực thể & địa điểm
+│   │   └── tools/                           # Bộ công cụ Agent (@tool)
+│   │       ├── medical_tools.py             # Tính toán BMI, phát hiện cờ đỏ cấp cứu ATS 1-2
+│   │       └── example_tool.py              # Tra cứu tri thức & tính toán biểu thức an toàn
+│   ├── api/                                 # Lớp FastAPI Routers & Endpoints
+│   │   ├── routes.py                        # Entry point router trung tâm (/chat, /status)
+│   │   ├── endpoints/                       # Các domain REST API chuyên biệt
+│   │   │   ├── auth.py                      # Xác thực Supabase JWT, cookie session & RBAC
+│   │   │   ├── patient_profiles.py          # Hồ sơ y tế bệnh nhân & tài khoản gia đình
+│   │   │   ├── booking.py                   # Tiếp nhận, kiểm tra & hủy lịch hẹn
+│   │   │   ├── coordination.py              # Điều phối phân tầng ca khám & cấp cứu
+│   │   │   ├── workbench.py                 # HITL Coordinator Workbench & tiếp quản ca
+│   │   │   ├── package.py                   # Đăng ký gói khám sức khỏe Vinmec
+│   │   │   ├── catalog.py                   # Danh mục cơ sở y tế, chuyên khoa, dịch vụ
+│   │   │   ├── notification.py              # Thông báo đẩy & lịch hẹn
+│   │   │   └── zalo.py                      # Webhook tích hợp Zalo OA Mini App
+│   │   ├── dependencies.py                  # Dependencies xác thực và kiểm soát quyền
+│   │   └── handlers.py                      # Global exception & error handlers
+│   ├── models/                              # Dữ liệu ORM & Schemas
+│   │   ├── schemas.py                       # Pydantic schemas hub trung tâm (ChatRequest/Response...)
+│   │   └── tables.py                        # SQLAlchemy ORM Models (User, Booking, PatientProfile...)
+│   ├── services/                            # Tầng Business Logic & Dịch vụ ngoài
+│   │   ├── llm.py                           # HA Failover LLM Gateway (Circuit Breaker, Hedged Requests)
+│   │   ├── auth.py & supabase_auth.py       # Quản lý định danh người dùng & RBAC
+│   │   ├── booking.py                       # Xử lý giữ chỗ & giải phóng slot hết hạn
+│   │   ├── patient_profiles.py              # Quản lý hồ sơ y bạ gia đình
+│   │   └── workbench.py                     # Quản lý hàng đợi & bàn trực điều phối
+│   ├── db/                                  # Database connection pool & session factory
+│   ├── schemas/                             # Chi tiết Pydantic validation schemas theo domain
+│   ├── medical_assistant/                   # Domain core & RAG retrieval engine
+│   │   ├── domain/                          # Nghiệp vụ y khoa (ATS Triage, Fact-aware probing)
+│   │   ├── rag/                             # Vector Store ChromaDB & Store Cache
+│   │   └── ingestion/                       # Pipeline crawl dữ liệu Vinmec & xử lý RAG
+│   ├── config.py                            # Pydantic Settings (Quản lý biến môi trường)
+│   └── main.py                              # FastAPI Application Entry Point
+├── frontend/                                # Ứng dụng Web giao diện người dùng (React 19 + Vite)
+│   ├── src/
+│   │   ├── features/                        # Modules tính năng chính (Chat, Booking, Workbench, Profiles)
+│   │   ├── pages/                           # Các trang ứng dụng (Login, Patient, Coordinator, Family)
+│   │   └── App.tsx                          # Router & cấu hình giao diện
+│   └── vite.config.ts
+├── tests/                                   # Pytest test suite toàn diện
+│   ├── test_agents/                         # Kiểm thử LangGraph Agent flow & State structure
+│   ├── test_api/                            # Kiểm thử REST API, auth, cookies & validation
+│   └── test_medical_assistant/              # Kiểm thử kịch bản lâm sàng, cấp cứu, nén SOAP & RAG
+├── scripts/                                 # Hook ghi log AI + Installer tự động
+│   ├── install.py                           # Installer tự động thiết lập môi trường & .env
+│   ├── log_antigravity.py                   # Hook ghi nhận AI telemetry log cho Antigravity
+│   ├── verify_logins.py                     # Kiểm thử đăng nhập Supabase Auth & RBAC
+│   ├── build_vector_store.py                # Xây dựng vector database từ dữ liệu crawled
+│   └── setup_hooks.ps1 / setup_hooks.sh     # Cài đặt Git hooks tự động
+├── docs/                                    # Tài liệu kỹ thuật
+│   ├── guide/                               # Technical Guidebook 10 chương chuyên sâu
+│   └── architecture_diagram.md              # Sơ đồ kiến trúc Mermaid
+├── eval/                                    # Bộ công cụ đánh giá & Benchmark
+│   ├── results/                             # Kết quả benchmark chi tiết (JSON) & report.md
+│   ├── run_realistic_benchmark.py           # Benchmark 10 ca lâm sàng thực tế
+│   ├── run_multi_specialty_pipeline_benchmark.py # Benchmark 20 ca phân luồng chuyên khoa
+│   └── README.md                            # Hướng dẫn và tiêu chí đánh giá KPI
+├── presentation/                            # Tài liệu thuyết trình Demo Day
+│   └── README.md                            # Cấu trúc Pitch Deck 10 slides & Video demo checklist
+├── .github/                                 # Cấu hình GitHub & CI/CD
+│   ├── workflows/ci.yml                     # Pipeline CI tự động (Lint, Pytest, Docker Build)
+│   └── hooks/                               # Hooks đồng bộ mã nguồn
+├── .claude/ .codex/ .cursor/ .gemini/ .agents/ # Cấu hình AI Assistant hooks cho từng công cụ
+├── Dockerfile                               # Multi-stage production container build
+├── docker-compose.yml                       # Docker Compose chạy Backend + PostgreSQL/pgvector
+├── README_boilerplate.md                    # Khung README mẫu tiêu chuẩn của chương trình
+├── .env.example                             # Mẫu biến môi trường
+└── requirements.txt                         # Danh mục thư viện Python
 ```
 
 ---

@@ -9,16 +9,16 @@
 ### ✅ Đã hoàn thành (Production-Ready)
 | Module | Trạng thái | File chính |
 |:---|:---:|:---|
-| Safety Engine v3 (ATS 1-5, 741 bệnh) | ✅ DONE | [triage_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/triage_service.py) |
-| Clinical Guardrails (SAF-01/02) | ✅ DONE | [guardrail_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/guardrail_service.py) |
-| Security Guardrails 4 tầng (De-obfuscation + DLP + Anti-Injection) | ✅ DONE | [security/](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/security) |
-| Adaptive Probing (2 turns max) | ✅ DONE | [probing_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/probing_service.py) |
-| Zero-Token Cache & Token Metrics | ✅ DONE | [cache_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/cache_service.py), [token_counter.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/token_counter.py) |
-| Doctor & Slot Discovery (992 bác sĩ) | ✅ DONE | [doctor_schedule_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/doctor_schedule_service.py) |
-| Bilingual EN-VI Pipeline | ✅ DONE | [language_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/language_service.py) |
-| SSE Streaming | ✅ DONE | [routes.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/api/routes.py) |
-| LangGraph 3-Node StateGraph | ✅ DONE | [graph.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/agent/graph.py) |
-| Specialty Router v2.0 (3 tầng) | ✅ DONE | [specialty_router.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/specialty_router.py) |
+| Safety Engine v3 (ATS 1-5, 741 bệnh) | ✅ DONE | [triage_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/triage_service.py) |
+| Clinical Guardrails (SAF-01/02) | ✅ DONE | [guardrail_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/guardrail_service.py) |
+| Security Guardrails 4 tầng (De-obfuscation + DLP + Anti-Injection) | ✅ DONE | [security/](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/security) |
+| Adaptive Probing (2 turns max) | ✅ DONE | [probing_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/probing_service.py) |
+| Zero-Token Cache & Token Metrics | ✅ DONE | [cache_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/cache_service.py), [token_counter.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/token_counter.py) |
+| Doctor & Slot Discovery (992 bác sĩ) | ✅ DONE | [doctor_schedule_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/doctor_schedule_service.py) |
+| Bilingual EN-VI Pipeline | ✅ DONE | [language_service.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/language_service.py) |
+| SSE Streaming | ✅ DONE | [routes.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/api/routes.py) |
+| LangGraph 3-Node StateGraph | ✅ DONE | [graph.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/agent/graph.py) |
+| Specialty Router v2.0 (3 tầng) | ✅ DONE | [specialty_router.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/specialty_router.py) |
 
 ### ❌ Gaps cần đóng trước Production
 | Gap | Mức độ | Mô tả |
@@ -114,10 +114,10 @@ context_agent/
 #### 1.4 Files cần tạo/sửa:
 | File | Hành động | Vị trí |
 |:---|:---|:---|
-| `Dockerfile` | **Tạo mới** | `truong-doing/Dockerfile` |
-| `docker-compose.yml` | **Tạo mới** | `truong-doing/docker-compose.yml` |
-| `.dockerignore` | **Tạo mới** | `truong-doing/.dockerignore` |
-| `requirements.txt` | **Kiểm tra/cập nhật** | `truong-doing/requirements.txt` |
+| `Dockerfile` | **Tạo mới** | `Dockerfile` |
+| `docker-compose.yml` | **Tạo mới** | `docker-compose.yml` |
+| `.dockerignore` | **Tạo mới** | `.dockerignore` |
+| `requirements.txt` | **Kiểm tra/cập nhật** | `requirements.txt` |
 
 ---
 
@@ -126,7 +126,7 @@ context_agent/
 > **Mục tiêu:** Chuyển từ `MemorySaver` → `PostgresSaver` để session không mất khi container restart.
 
 #### 2.1 Chuyển đổi Checkpointer
-**File cần sửa:** [graph.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/agent/graph.py)
+**File cần sửa:** [graph.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/agent/graph.py)
 
 ```python
 # TRƯỚC (in-memory, mất khi restart)
@@ -150,7 +150,7 @@ checkpointer = get_checkpointer()
 ```
 
 #### 2.2 Chuẩn hóa Environment Variables
-**File cần tạo:** `truong-doing/.env.production.example`
+**File cần tạo:** `.env.production.example`
 
 ```env
 # App
@@ -188,8 +188,8 @@ GRANT CREATE ON SCHEMA public TO postgres;
 #### 2.4 Files cần sửa:
 | File | Hành động |
 |:---|:---|
-| [graph.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/agent/graph.py) | Sửa checkpointer factory |
-| [config.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/config.py) | Thêm `checkpoint_database_url`, `secret_key`, `api_key_header` |
+| [graph.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/agent/graph.py) | Sửa checkpointer factory |
+| [config.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/config.py) | Thêm `checkpoint_database_url`, `secret_key`, `api_key_header` |
 | `.env.production.example` | Tạo mới |
 
 ---
@@ -263,8 +263,8 @@ class ChatRequest(BaseModel):
 | File | Hành động |
 |:---|:---|
 | `api/middleware.py` | **Tạo mới** — API Key + Rate Limiter |
-| [main.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/main.py) | Sửa — thêm middleware |
-| [schemas.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/domain/schemas.py) | Sửa — thêm length validation |
+| [main.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/main.py) | Sửa — thêm middleware |
+| [schemas.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/domain/schemas.py) | Sửa — thêm length validation |
 
 ---
 
@@ -334,9 +334,9 @@ LANGCHAIN_PROJECT=p124-medical-assistant
 | File | Hành động |
 |:---|:---|
 | `infrastructure/logger.py` | **Tạo mới** |
-| [example_node.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/agent/nodes/example_node.py) | Sửa — thêm logging cho Security, Emergency, Cache events |
-| [routes.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/api/routes.py) | Sửa — thêm request/response logging |
-| [main.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/main.py) | Sửa — cấu hình root logger |
+| [example_node.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/agent/nodes/example_node.py) | Sửa — thêm logging cho Security, Emergency, Cache events |
+| [routes.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/api/routes.py) | Sửa — thêm request/response logging |
+| [main.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/main.py) | Sửa — cấu hình root logger |
 
 ---
 
@@ -345,7 +345,7 @@ LANGCHAIN_PROJECT=p124-medical-assistant
 > **Mục tiêu:** Health endpoint kiểm tra đầy đủ dependencies, hỗ trợ container orchestration.
 
 #### 5.1 Nâng cấp Health Endpoint
-**File cần sửa:** [main.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/main.py) hoặc [routes.py](file:///d:/AI%20in%20Action/LogAgent/P-124/truong-doing/src/medical_assistant/api/routes.py)
+**File cần sửa:** [main.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/main.py) hoặc [routes.py](file:///d:/AI%20in%20Action/LogAgent/P-124/src/medical_assistant/api/routes.py)
 
 ```python
 @app.get("/health")
@@ -417,17 +417,17 @@ jobs:
           python-version: "3.10"
           
       - name: Install dependencies
-        working-directory: truong-doing
+        working-directory: 
         run: |
           pip install -r requirements.txt
           pip install pytest
           
       - name: Run full test suite (145 tests)
-        working-directory: truong-doing
+        working-directory: 
         run: python -m pytest tests/ -v --tb=short
         
       - name: Verify 100% pass rate
-        working-directory: truong-doing
+        working-directory: 
         run: |
           RESULT=$(python -m pytest tests/ --tb=no -q 2>&1 | tail -1)
           echo "$RESULT"
@@ -446,7 +446,7 @@ jobs:
       - name: Check for hardcoded secrets
         run: |
           # Scan for common secret patterns
-          if grep -rn "sk-[a-zA-Z0-9]" --include="*.py" truong-doing/src/; then
+          if grep -rn "sk-[a-zA-Z0-9]" --include="*.py" src/; then
             echo "❌ Hardcoded OpenAI key detected!"
             exit 1
           fi
@@ -460,11 +460,11 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Build Docker image
-        working-directory: truong-doing
+        working-directory: 
         run: docker build -t p124-medical-assistant:latest .
         
       - name: Test Docker health
-        working-directory: truong-doing
+        working-directory: 
         run: |
           docker run -d --name test-app \
             -e APP_ENV=test \

@@ -27,6 +27,7 @@ def doctor_request(**overrides):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("changes", [
     {"preferred_date": None},
+    {"preferred_date": date(3000, 1, 1)},
     {"preferred_date": date(2000, 1, 1)},
     {"patient_name": "  "},
     {"date_of_birth": date(2100, 1, 1)},
@@ -58,6 +59,7 @@ class NoDatabaseWrites:
     {"date_of_birth": date.today() - timedelta(days=10 * 365)},
     {"date_of_birth": date.today() - timedelta(days=10 * 365), "guardian_name": " ", "guardian_phone": "0912345678"},
     {"preferred_date": date(2000, 1, 1)},
+    {"preferred_date": date(3000, 1, 1)},
 ])
 async def test_package_intake_rejects_invalid_data_before_persistence(changes):
     from uuid import uuid4

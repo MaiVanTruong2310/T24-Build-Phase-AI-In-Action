@@ -1,6 +1,6 @@
 # BỘ CẨM NANG KỸ NĂNG NGHIỆP VỤ AGENT (SKILLS.MD)
 
-Tài liệu này hướng dẫn cách Agent gọi và kết hợp 6 kỹ năng nghiệp vụ chuyên biệt được đóng gói trong các Domain Services tại `truong-doing/src/medical_assistant/domain/`.
+Tài liệu này hướng dẫn cách Agent gọi và kết hợp 6 kỹ năng nghiệp vụ chuyên biệt được đóng gói trong các Domain Services tại `src/medical_assistant/domain/`.
 
 ---
 

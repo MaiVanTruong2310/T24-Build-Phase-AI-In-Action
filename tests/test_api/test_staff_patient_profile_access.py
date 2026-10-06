@@ -13,7 +13,7 @@ from src.models.user import User
 
 @pytest.mark.asyncio
 async def test_staff_can_restore_session_but_cannot_edit_patient_profile(client):
-    staff = User(id=uuid4(), role="staff", status="active", full_name="Điều phối viên", phone="admin123")
+    staff = User(id=uuid4(), role="staff", status="active", full_name="Điều phối viên", phone="coordinator01")
     service = AsyncMock()
     previous_user = app.dependency_overrides.get(get_current_user)
     previous_service = app.dependency_overrides.get(get_auth_service)

@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-Đã triển khai trong `truong-doing` ngày 2026-09-30. Thiết kế giữ tương thích với các consumer cũ qua `chief_complaint` và `active_probing_category`, đồng thời bổ sung state có cấu trúc cho luồng mới.
+Đã triển khai trong `` ngày 2026-09-30. Thiết kế giữ tương thích với các consumer cũ qua `chief_complaint` và `active_probing_category`, đồng thời bổ sung state có cấu trúc cho luồng mới.
 
 ## Luồng xử lý
 
