@@ -4,13 +4,14 @@ import { deleteConversation, getConversations, type SavedConversation } from './
 
 interface Props {
   activeSessionId: string;
+  patientProfileId?: string;
   onSelect: (id: string) => void;
   onDeleted: (id: string) => void;
   onDeletingChange: (value: boolean) => void;
   busy?: boolean;
 }
 
-export function ChatHistoryPanel({ activeSessionId, onSelect, onDeleted, onDeletingChange, busy = false }: Props) {
+export function ChatHistoryPanel({ patientProfileId, activeSessionId, onSelect, onDeleted, onDeletingChange, busy = false }: Props) {
   const [items, setItems] = useState<SavedConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -21,15 +22,15 @@ export function ChatHistoryPanel({ activeSessionId, onSelect, onDeleted, onDelet
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError('');
-    getConversations(0, controller.signal).then(data => { if (!controller.signal.aborted) { setItems(data.conversations); setMore(data.has_more); } })
+    getConversations(0, controller.signal, patientProfileId).then(data => { if (!controller.signal.aborted) { setItems(data.conversations); setMore(data.has_more); } })
       .catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Không thể tải lịch sử.'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [reload]);
+  }, [reload, patientProfileId]);
   const locked = loading || busy || deleting !== null;
   async function loadMore() {
     setLoading(true); setError('');
-    try { const data = await getConversations(items.length); setItems(current => [...current, ...data.conversations]); setMore(data.has_more); }
+    try { const data = await getConversations(items.length, undefined, patientProfileId); setItems(current => [...current, ...data.conversations]); setMore(data.has_more); }
     catch (e) { setError(e instanceof Error ? e.message : 'Không thể tải lịch sử.'); }
     finally { setLoading(false); }
   }

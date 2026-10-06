@@ -1,3 +1,5 @@
+import { PatientSelector, usePatientSelection } from '../features/patient-profiles/PatientSelector'
+import { appointmentDateError, latestAppointmentDate, vietnamToday } from '../features/appointment-booking/dateValidation'
 import { TypewriterLoader } from '../components/TypewriterLoader';
 import { useEffect, useRef, useState } from 'react'
 
@@ -57,13 +59,7 @@ import type { ConsultationRequest, SessionSummary } from '../features/coordinati
 
 
 
-const today = () => {
-
-  const now = new Date()
-
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-
-}
+const today = vietnamToday
 
 const periodText = (period: string) => (period === 'morning' ? 'Buổi sáng' : 'Buổi chiều')
 
@@ -86,6 +82,7 @@ export default function ConsultationBooking() {
   const navigate = useNavigate()
 
   const user = useSelector((state: RootState) => state.auth.user)
+  const patientSelection = usePatientSelection()
 
 
 
@@ -126,6 +123,8 @@ export default function ConsultationBooking() {
   const pairRef = useRef(`${specialtyId}:${facilityId}`)
 
   const [date, setDate] = useState(today)
+  const [dateInputError, setDateInputError] = useState('')
+  const dateError = dateInputError || appointmentDateError(date)
 
   const [sessions, setSessions] = useState<SessionSummary[]>([])
 
@@ -466,7 +465,8 @@ export default function ConsultationBooking() {
 
     setSelectedSession('')
 
-    if (!doctorId || !facilityId || !date) return
+    setLoading(false)
+    if (!doctorId || !facilityId || dateInputError || appointmentDateError(date)) return
 
     let active = true
 
@@ -498,13 +498,19 @@ export default function ConsultationBooking() {
 
     }
 
-  }, [doctorId, facilityId, date])
+  }, [doctorId, facilityId, date, dateInputError])
 
 
 
   // =================== XỬ LÝ GỬI FORM KHÁM BÁC SĨ ===================
 
   const submitDoctorBooking = async () => {
+    const invalidDate = dateInputError || appointmentDateError(date)
+    if (invalidDate) { setError(invalidDate); return }
+    if (!sessions.some(session => session.id === selectedSession && session.date === date)) {
+      setError('Vui lòng chọn buổi khám thuộc ngày khám hiện tại.'); return
+    }
+
 
     if (!selectedSession || !specialtyId || !reason.trim()) {
 
@@ -590,6 +596,9 @@ export default function ConsultationBooking() {
 
     const payload: Record<string, unknown> = {
 
+      patient_profile_id: patientSelection.profileId || undefined,
+      patient_phone: patientSelection.selectedProfile?.contact_phone || user?.phone || undefined,
+      patient_email: user?.email || undefined,
       consent_to_contact: contactConsent,
       guardian_name: guardianName || undefined,
       guardian_phone: guardianPhone || undefined,
@@ -703,9 +712,9 @@ export default function ConsultationBooking() {
 
     }
 
-    if (!packageDate) {
+    if (appointmentDateError(packageDate)) {
 
-      setError('Vui lòng chọn ngày khám mong muốn.')
+      setError(appointmentDateError(packageDate))
 
       return
 
@@ -764,7 +773,8 @@ export default function ConsultationBooking() {
     try {
 
       const created = await createPackageRequest({
-        consent_to_contact: contactConsent, guardian_name: guardianName || undefined, guardian_phone: guardianPhone || undefined,
+        patient_profile_id: patientSelection.profileId || undefined,
+      consent_to_contact: contactConsent, guardian_name: guardianName || undefined, guardian_phone: guardianPhone || undefined,
 
         service_id: selectedPackage.id,
 
@@ -778,9 +788,9 @@ export default function ConsultationBooking() {
 
         patient_name: !user ? patientName.trim() : undefined,
 
-        patient_phone: !user ? patientPhone.trim() : undefined,
+        patient_phone: !user ? patientPhone.trim() : patientSelection.selectedProfile?.contact_phone || user.phone || undefined,
 
-        patient_email: !user ? patientEmail.trim() || undefined : undefined,
+        patient_email: !user ? patientEmail.trim() || undefined : user.email || undefined,
 
         gender: !user ? gender : undefined,
 
@@ -848,7 +858,7 @@ export default function ConsultationBooking() {
 
       setRequests(await fetchMyRequests())
 
-      if (doctorId && facilityId) setSessions(await fetchSessions(doctorId, date, facilityId))
+      if (doctorId && facilityId && !dateError) setSessions(await fetchSessions(doctorId, date, facilityId))
 
     } catch (cause) {
 
@@ -868,6 +878,7 @@ export default function ConsultationBooking() {
 
     <div className="mx-auto max-w-6xl space-y-6 pb-12">
 
+      <PatientSelector selection={patientSelection} disabled={busy} />
       {/* HEADER BANNER */}
 
       <header className="rounded-3xl bg-gradient-to-r from-blue-950 dark:from-slate-900 light:from-app-primary-strong to-blue-700 dark:to-slate-900 light:to-app-primary-strong p-6 text-white md:p-8 shadow-sm">
@@ -1366,16 +1377,27 @@ export default function ConsultationBooking() {
                     type="date"
 
                     min={today()}
+                    max={latestAppointmentDate()}
 
                     value={date}
 
-                    onChange={(e) => setDate(e.target.value)}
+                    required
+                    aria-invalid={Boolean(dateError)}
+                    aria-describedby="doctor-appointment-date-error"
+                    onChange={(e) => {
+                      const value = e.currentTarget.value
+                      setDate(value)
+                      setDateInputError(e.currentTarget.validity.badInput ? 'Ngày khám không hợp lệ. Vui lòng nhập đầy đủ ngày, tháng và năm.' : '')
+                      setSelectedSession('')
+                      setSessions([])
+                    }}
 
                     className="mt-1.5 block w-full rounded-xl border border-slate-300 dark:border-app-border light:border-app-border p-3 text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary sm:w-64"
 
                   />
 
                 </label>
+                {dateError && <p id="doctor-appointment-date-error" role="alert" className="mt-2 text-sm text-red-600">{dateError}</p>}
 
               </div>
 
@@ -1387,7 +1409,7 @@ export default function ConsultationBooking() {
 
                   <div role="status" className="flex items-center gap-3 text-sm text-slate-500 dark:text-app-secondary light:text-app-secondary"><TypewriterLoader size="md" />Đang tải các buổi khám trống…</div>
 
-                ) : doctorId && sessions.length === 0 ? (
+                ) : doctorId && !dateError && sessions.length === 0 ? (
 
                   <p className="rounded-xl bg-slate-50 dark:bg-app-surface light:bg-app-page p-4 text-sm text-slate-600 dark:text-app-secondary light:text-app-secondary">
 
@@ -1719,7 +1741,7 @@ export default function ConsultationBooking() {
 
                     type="button"
 
-                    disabled={busy || !selectedSession}
+                    disabled={busy || Boolean(dateError) || !selectedSession}
 
                     onClick={() => void submitDoctorBooking()}
 
@@ -2305,6 +2327,7 @@ export default function ConsultationBooking() {
                         type="date"
 
                         min={today()}
+                    max={latestAppointmentDate()}
 
                         value={packageDate}
 

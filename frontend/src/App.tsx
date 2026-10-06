@@ -1,3 +1,4 @@
+import FamilyProfiles from './pages/FamilyProfiles'
 import { StaffAdminGate } from './features/coordinator/StaffAdminGate'
 import { TypewriterLoader } from './components/TypewriterLoader';
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
@@ -77,6 +78,7 @@ const router = createBrowserRouter([
           { path: 'profile', element: <PatientAuthGate><PatientProfile /></PatientAuthGate> },
           { path: 'records', element: <Navigate to="/patient/profile" replace /> },
           { path: 'departments', element: <PatientDepartments /> },
+          { path: 'family', element: <PatientAuthGate><FamilyProfiles /></PatientAuthGate> },
           { path: 'appointments', element: <ConsultationBooking /> },
           { path: 'requests', element: <PatientCoordinationRequests /> },
           { path: 'doctors', element: <DoctorDirectory /> },

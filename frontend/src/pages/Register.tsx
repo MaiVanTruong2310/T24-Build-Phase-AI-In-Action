@@ -20,6 +20,7 @@ export function Register() {
   const [formData, setFormData] = useState({
 
     full_name: '',
+    address: '',
 
     email: '',
 
@@ -286,6 +287,7 @@ export function Register() {
     const payload = {
 
       full_name: formData.full_name,
+      address: formData.address.trim() || undefined,
 
       ...(formData.email.trim() && { email: formData.email.trim() }),
 
@@ -997,7 +999,8 @@ export function Register() {
 
           <div className="space-y-2">
 
-            <label className="flex items-start gap-3 cursor-pointer">
+            <label className="mb-4 block text-sm font-medium">Địa chỉ liên hệ (tùy chọn)<input name="address" maxLength={500} value={formData.address} onChange={e => setFormData(d => ({ ...d, address: e.target.value }))} className="mt-2 block w-full rounded-xl border p-3" /></label>
+              <label className="flex items-start gap-3 cursor-pointer">
 
               <input
 
