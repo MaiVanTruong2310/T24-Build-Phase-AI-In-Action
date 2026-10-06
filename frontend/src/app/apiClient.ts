@@ -78,6 +78,15 @@ export function resolveApiUrl(url: string): string {
   if (url.startsWith('/api/')) return `${API_ORIGIN}${url}`;
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }
+
+export function resolveWebSocketUrl(path: string): string {
+  const url = new URL(resolveApiUrl(path));
+  if (url.protocol === 'https:') url.protocol = 'wss:';
+  else if (url.protocol === 'http:') url.protocol = 'ws:';
+  else throw new TypeError(`Unsupported API protocol for WebSocket: ${url.protocol}`);
+  return url.toString();
+}
+
 export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<Response> {
   const resolved = resolveApiUrl(url);
   const headers = new Headers(options.headers);

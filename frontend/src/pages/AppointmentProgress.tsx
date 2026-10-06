@@ -50,8 +50,37 @@ function toMap<T extends { id: string }>(items: T[]): Map<string, T> {
 
 
 
-function getDisplayData(booking: Booking, catalog: AppointmentCatalog): AppointmentDisplayData {
-  const coord = (booking as any).coordinationCase;
+interface LiveCoordinationCase {
+  id: string;
+  booking_id: string | null;
+  status: string;
+  created_at: string;
+  patient?: {
+    name?: string | null;
+    phone?: string | null;
+    doctor_name?: string | null;
+    notes?: string | null;
+    preferred_date?: string | null;
+    preferred_period?: 'morning' | 'afternoon' | null;
+    facility_preference?: string | null;
+  };
+  plan?: {
+    doctor_id?: string | null;
+    facility_id?: string | null;
+    service_id?: string | null;
+    specialty_id?: string | null;
+    specialty_name?: string | null;
+  };
+  ai_snapshot?: {
+    symptoms?: string | string[] | null;
+    suggested_department_name?: string | null;
+  };
+}
+
+type BookingListItem = Booking & { coordinationCase?: LiveCoordinationCase };
+
+function getDisplayData(booking: BookingListItem, catalog: AppointmentCatalog): AppointmentDisplayData {
+  const coord = booking.coordinationCase;
   if (coord) {
     const p = coord.patient || {};
     const ai = coord.ai_snapshot || {};
@@ -114,13 +143,14 @@ export default function AppointmentProgress() {
 
   const navigate = useNavigate();
 
-  const previousBookings = peekQuery<Booking[]>(SNAPSHOT_KEY);
+  const previousBookings = peekQuery<BookingListItem[]>(SNAPSHOT_KEY);
+  const hadCachedBookings = useRef(previousBookings !== undefined);
 
   const previousView = peekQuery<SavedView>(VIEW_KEY);
 
   const [profile, setProfile] = useState<PatientProfile | null>(() => peekCurrentUser() ?? null);
 
-  const [bookings, setBookings] = useState<Booking[]>(() => previousBookings ?? []);
+  const [bookings, setBookings] = useState<BookingListItem[]>(() => previousBookings ?? []);
 
   const [catalog, setCatalog] = useState<AppointmentCatalog>(cachedCatalog);
 
@@ -167,7 +197,8 @@ export default function AppointmentProgress() {
       fetchWithAuth('/coordination/live/mine').then(async (res) => {
         if (!res.ok) return [];
         const json = await res.json();
-        return (json.data || []) as any[];
+        const result = json.data as unknown;
+        return Array.isArray(result) ? (result as LiveCoordinationCase[]) : [];
       }),
     ]);
 
@@ -187,11 +218,11 @@ export default function AppointmentProgress() {
       }
     }
 
-    const liveCases: any[] = liveCasesResult.status === 'fulfilled' ? liveCasesResult.value : [];
+    const liveCases: LiveCoordinationCase[] = liveCasesResult.status === 'fulfilled' ? liveCasesResult.value : [];
     const existingBookingIds = new Set(directBookings.map((b) => b.id));
 
     // Convert unmerged coordination cases into appointment items
-    const caseBookings: Booking[] = liveCases
+    const caseBookings: BookingListItem[] = liveCases
       .filter((c) => !c.booking_id || !existingBookingIds.has(c.booking_id))
       .map((c) => {
         const prefDate = c.patient?.preferred_date;
@@ -208,23 +239,30 @@ export default function AppointmentProgress() {
           completed: 'confirmed',
           cancelled: 'cancelled',
         };
-        const caseBooking: any = {
+        const symptoms = c.ai_snapshot?.symptoms;
+        const reason = c.patient?.notes || (Array.isArray(symptoms) ? symptoms.join(', ') : symptoms) || 'Khám chuyên khoa theo định hướng AI';
+        const caseBooking: BookingListItem = {
           id: c.id,
           user_id: '',
+          schedule_id: null,
+          hold_id: null,
           doctor_id: c.plan?.doctor_id || 'coordinator',
           facility_id: c.plan?.facility_id || 'riverside',
           starts_at: startsAt,
           ends_at: startsAt,
+          booking_mode: 'doctor_visit',
           service_id: c.plan?.service_id || 'consultation',
           specialty_id: c.plan?.specialty_id || 'ortho',
           encounter_type: 'in_person',
-          reason: c.patient?.notes || c.ai_snapshot?.symptoms || 'Khám chuyên khoa theo định hướng AI',
+          reason,
           patient_note: `Phiếu điều phối AI: ${c.patient?.name || ''} - SĐT: ${c.patient?.phone || ''} - Cơ sở: ${c.patient?.facility_preference || 'Vinmec Riverside'}`,
           status: statusMap[c.status] || 'pending_approval',
+          cancellation_reason: null,
           created_at: c.created_at,
+          updated_at: c.created_at,
           coordinationCase: c,
         };
-        return caseBooking as Booking;
+        return caseBooking;
       });
 
     const combinedBookings = [...caseBookings, ...directBookings].sort((a, b) => {
@@ -266,7 +304,7 @@ export default function AppointmentProgress() {
 
     mounted.current = true;
 
-    void loadData(previousBookings === undefined);
+    void loadData(!hadCachedBookings.current);
 
     return () => { mounted.current = false; loadVersion.current += 1; };
 

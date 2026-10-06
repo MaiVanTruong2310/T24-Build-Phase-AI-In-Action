@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
 
 import requests
 
@@ -40,10 +39,7 @@ class GeminiEmbeddings:
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            requests_body = [
-                {"model": self.model, "content": {"parts": [{"text": text}]}}
-                for text in batch
-            ]
+            requests_body = [{"model": self.model, "content": {"parts": [{"text": text}]}} for text in batch]
 
             # Retry loop with backoff for rate limits (429) and network timeouts
             max_retries = 8
@@ -74,14 +70,17 @@ class GeminiEmbeddings:
                                 break
                     except Exception:
                         pass
-                    logger.info("Rate limit (429) reached. Waiting %.1fs before retry (attempt %d/%d)...", wait_time, attempt + 1, max_retries)
+                    logger.info(
+                        "Rate limit (429) reached. Waiting %.1fs before retry (attempt %d/%d)...",
+                        wait_time,
+                        attempt + 1,
+                        max_retries,
+                    )
                     time.sleep(wait_time)
                     continue
 
                 logger.error("Gemini embedContent failed [%d]: %s", response.status_code, response.text)
-                raise RuntimeError(
-                    f"Gemini embeddings API error ({response.status_code}): {response.text}"
-                )
+                raise RuntimeError(f"Gemini embeddings API error ({response.status_code}): {response.text}")
 
             data = response.json()
             embeddings = data.get("embeddings", [])
@@ -110,7 +109,5 @@ class GeminiEmbeddings:
                 time.sleep(2.0 * (attempt + 1))
                 continue
             logger.error("Gemini query embedding failed [%d]: %s", response.status_code, response.text)
-            raise RuntimeError(
-                f"Gemini query embedding API error ({response.status_code}): {response.text}"
-            )
+            raise RuntimeError(f"Gemini query embedding API error ({response.status_code}): {response.text}")
         return []

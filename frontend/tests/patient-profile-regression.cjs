@@ -27,9 +27,12 @@ async function test() {
   const component=load({
     react:{useState(initial){const index=pointer++; if (!(index in states)) states[index]=initial;return [states[index],value=>states[index]=typeof value==='function'?value(states[index]):value];},useEffect(){}},
     'react/jsx-runtime':{jsx,jsxs:jsx},'react-router-dom':{Link:'Link'},'react-redux':{useDispatch:()=>async()=>{}},'lucide-react':{Pencil:'Pencil'},
+    '../../components/TypewriterLoader':{TypewriterLoader:'TypewriterLoader'},
     '../../features/auth/authSlice':{initializeAuth:()=>({})},'../../features/auth/session':{readPublishedSession:()=>({id:'real-profile-id'})},
+    '../../features/patient/api':{peekCurrentUser:()=>states[0]},
     './api':{fetchPatientProfile:async()=>states[0],updateCurrentUser:async update=>{patch=update;return {...states[0],...update,patient_details:{...states[0].patient_details,...update.patient_details}};}},
     './MedicalHistory':{MedicalHistory:'MedicalHistory'}, './Header':{Header:'Header'}, './MedicalTabs':{MedicalTabs:'MedicalTabs'},
+    './PortraitUploader':{PortraitUploader:'PortraitUploader'},
   });
   let tree=component();
   assert(text(tree).includes('Actual API Name'));

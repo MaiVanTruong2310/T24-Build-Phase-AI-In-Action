@@ -82,9 +82,10 @@ async def test_package_intake_rejects_invalid_data_before_persistence(changes):
 @pytest.mark.asyncio
 async def test_package_request_keeps_edited_patient_contact(monkeypatch):
     from uuid import uuid4
+
+    import src.services.workbench as workbench
     from src.models.facility import Facility
     from src.models.service import Service
-    import src.services.workbench as workbench
 
     service_id, facility_id = uuid4(), uuid4()
 
@@ -110,12 +111,24 @@ async def test_package_request_keeps_edited_patient_contact(monkeypatch):
 
     monkeypatch.setattr(workbench, "create_source_case", fake_source_case)
     db = RecordingDatabase()
-    user = SimpleNamespace(id=uuid4(), full_name="Tên tài khoản", phone="0912345678", email=None,
-                           gender="male", date_of_birth=date(1990, 1, 1))
-    payload = PackageRequestInput(service_id=service_id, facility_id=facility_id,
-                                  preferred_date=date.today() + timedelta(days=1),
-                                  patient_name="Người được khám", patient_phone="0987654321",
-                                  gender="female", date_of_birth=date(1995, 1, 1), consent_to_contact=True)
+    user = SimpleNamespace(
+        id=uuid4(),
+        full_name="Tên tài khoản",
+        phone="0912345678",
+        email=None,
+        gender="male",
+        date_of_birth=date(1990, 1, 1),
+    )
+    payload = PackageRequestInput(
+        service_id=service_id,
+        facility_id=facility_id,
+        preferred_date=date.today() + timedelta(days=1),
+        patient_name="Người được khám",
+        patient_phone="0987654321",
+        gender="female",
+        date_of_birth=date(1995, 1, 1),
+        consent_to_contact=True,
+    )
     request = SimpleNamespace(state=SimpleNamespace(coordination_guest=None))
     await create_package_request(payload, request, user, db)
     assert db.saved.patient_name == "Người được khám"

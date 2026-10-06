@@ -11,7 +11,8 @@ from src.db.dependencies import get_db_session
 from src.models.user import User
 from src.schemas.common import ApiResponse
 from src.schemas.notification import NotificationResponse
-from src.services.notification import NotificationService, notification_response
+from src.services.notification import NotificationService
+from src.utils.response_mappers import notification_response
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 

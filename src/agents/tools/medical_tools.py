@@ -1,6 +1,7 @@
 """Clinical and booking tools for LangGraph Agent."""
 
 from typing import Any
+
 from langchain_core.tools import tool
 
 

@@ -1,8 +1,9 @@
-"""Helpers for the unified API response envelope."""
+"""Helpers for successful API responses and the public error payload."""
 
 from typing import TypeVar
 
-from src.schemas.common import ApiError, ApiResponse
+from src.core.error_response import ErrorResponse
+from src.schemas.common import ApiResponse
 
 DataT = TypeVar("DataT")
 
@@ -13,14 +14,10 @@ def success_response(data: DataT, message: str = "Success", status: int = 200) -
 
 
 def error_response(
-    code: int,
+    error_code: str | int,
     message: str,
-    status: int,
-) -> ApiResponse[None]:
-    """Build an error API response."""
-    return ApiResponse(
-        error=ApiError(code=code),
-        message=message,
-        status=status,
-        data=None,
-    )
+    status: int | None = None,
+) -> ErrorResponse:
+    """Build the stable error payload; status is accepted for migration compatibility."""
+    del status
+    return ErrorResponse(error_code=str(error_code), message=message)

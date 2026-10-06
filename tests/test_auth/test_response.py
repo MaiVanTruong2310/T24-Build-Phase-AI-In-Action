@@ -90,39 +90,36 @@ def test_password_reset_endpoints_use_unified_response_envelope():
     assert service.reset_request == ("user@example.com", None, "123456", "new-password")
 
 
-def test_error_response_has_unified_envelope():
-    response = error_response(401, "Invalid credentials", 401)
+def test_error_response_has_stable_code_and_message():
+    response = error_response("INVALID_CREDENTIALS", "Invalid credentials", 401)
 
-    assert response.status == 401
-    assert response.error is not None
-    assert response.error.code == 401
-    assert "details" not in response.error.model_dump()
-    assert response.data is None
-
-
-@pytest.mark.parametrize("status", [400, 404, 409, 429, 408, 401, 403])
-def test_error_response_supports_public_client_error_codes(status):
-    """Error payloads expose only one of the supported HTTP error codes."""
-    response = error_response(status, "Request failed", status)
-
-    assert response.error is not None
-    assert response.error.model_dump() == {"code": status}
+    assert response.model_dump() == {
+        "error_code": "INVALID_CREDENTIALS",
+        "message": "Invalid credentials",
+    }
 
 
-def test_app_error_handler_exposes_http_code_only():
-    """Application errors expose the HTTP code without internal error details."""
+@pytest.mark.parametrize("error_code", ["VALIDATION_ERROR", "NOT_FOUND", "CONFLICT", "RATE_LIMITED"])
+def test_error_response_supports_stable_client_error_codes(error_code):
+    """Error payloads expose the stable cause code, not an HTTP status number."""
+    response = error_response(error_code, "Request failed")
+
+    assert response.model_dump() == {"error_code": error_code, "message": "Request failed"}
+
+
+def test_app_error_handler_exposes_exception_contract():
+    """Application errors preserve the defined public code and message."""
     response = asyncio.run(app_error_handler(None, AuthenticationError("INVALID_TOKEN", "Invalid token")))
     payload = json.loads(response.body)
 
     assert response.status_code == 401
-    assert payload["error"] == {"code": 401}
-    assert "details" not in payload["error"]
+    assert payload == {"error_code": "INVALID_TOKEN", "message": "Invalid token"}
 
 
-def test_validation_error_handler_returns_bad_request_code():
-    """Validation failures use the public 400 error code."""
+def test_validation_error_handler_returns_generic_validation_error():
+    """Validation failures use one stable message without field details."""
     response = asyncio.run(validation_error_handler(None, RequestValidationError([])))
     payload = json.loads(response.body)
 
     assert response.status_code == 400
-    assert payload["error"] == {"code": 400}
+    assert payload == {"error_code": "VALIDATION_ERROR", "message": "Request validation failed"}

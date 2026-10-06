@@ -48,6 +48,7 @@ export function ChatInputArea({
           <button
             key={idx}
             type="button"
+            disabled={!isTakenOver}
             onClick={() => handleChipClick(chip)}
             className="shrink-0 px-2.5 py-1 bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 border border-slate-200 hover:border-sky-200 rounded-lg text-[11px] font-medium transition-all"
           >
@@ -91,6 +92,7 @@ export function ChatInputArea({
         <textarea
           rows={2}
           value={inputText}
+          disabled={!isTakenOver}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={`Gõ chỉ định lâm sàng cho bệnh nhân ${patientName}...`}
@@ -100,7 +102,7 @@ export function ChatInputArea({
         <button
           type="button"
           onClick={handleSend}
-          disabled={!inputText.trim()}
+          disabled={!inputText.trim() || !isTakenOver}
           className="px-4 py-2 bg-sky-700 hover:bg-sky-800 disabled:opacity-40 disabled:hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 shadow-2xs"
         >
           <span>Gửi</span>

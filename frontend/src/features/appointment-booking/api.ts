@@ -143,7 +143,8 @@ export interface CreateBookingPayload {
   patient_note?: string;
 }
 
-export type BookingStatus = 'pending_approval' | 'confirmed' | 'rejected' | 'cancelled';
+export type BookingStatus = 'pending_approval' | 'confirmed' | 'rejected' | 'cancelled' | 'expired';
+export type BookingListStatus = Exclude<BookingStatus, 'expired'>;
 
 export interface Booking {
   id: string;
@@ -161,6 +162,7 @@ export interface Booking {
   reason: string;
   patient_note: string | null;
   status: BookingStatus;
+  expired_at?: string | null;
   cancellation_reason: string | null;
   created_at: string;
   updated_at: string;
@@ -513,7 +515,7 @@ export async function releaseBookingHold(holdId: string): Promise<void> {
   if (!res.ok) throw await toBookingApiError(res);
 }
 
-export async function fetchBookings(status?: BookingStatus): Promise<Booking[]> {
+export async function fetchBookings(status?: BookingListStatus): Promise<Booking[]> {
   const query = new URLSearchParams({ offset: '0', limit: '50' });
   if (status) query.set('status', status);
   const res = await fetchWithAuth(`/bookings?${query.toString()}`);

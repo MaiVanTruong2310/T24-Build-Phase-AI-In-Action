@@ -11,13 +11,12 @@ Tuân thủ chuẩn thiết kế VinUni AICB cho vòng lặp AI Agent:
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
+from src.medical_assistant.domain.action_validator import validate_action
 from src.medical_assistant.domain.guardrail_service import get_guardrail_service
 from src.medical_assistant.domain.reflection_memory_service import get_reflection_memory_service
-from src.medical_assistant.domain.telemetry_service import get_telemetry_service, USD_TO_VND_RATE
-from src.medical_assistant.domain.action_validator import validate_action, has_clinical_evidence
+from src.medical_assistant.domain.telemetry_service import USD_TO_VND_RATE, get_telemetry_service
 
 
 class AgentMiddlewarePipeline:
@@ -51,7 +50,10 @@ class AgentMiddlewarePipeline:
         # Ghi log an ninh nếu phát hiện tấn công Injection / Jailbreak / Vi phạm an toàn
         if intent_check and str(intent_check.get("intent", "")).startswith("SECURITY_"):
             self.telemetry_service.record_security_event(
-                attack_type=intent_check.get("detected_technique") or intent_check.get("matched_pattern") or intent_check.get("violation_type") or "SECURITY_VIOLATION",
+                attack_type=intent_check.get("detected_technique")
+                or intent_check.get("matched_pattern")
+                or intent_check.get("violation_type")
+                or "SECURITY_VIOLATION",
                 payload=query,
                 blocked_reason=f"Phát hiện vi phạm an ninh: {intent_check.get('violation_type', 'SECURITY_BLOCK')}",
                 session_id=str(state.get("booking_id") or state.get("thread_id") or "session_default"),
@@ -133,7 +135,7 @@ class AgentMiddlewarePipeline:
             pruned_lower = {d.lower() for d in pruned_departments}
             if safe_dept_code.lower() in pruned_lower:
                 fallback_dept = None
-                for rec in (recommended_specialties or []):
+                for rec in recommended_specialties or []:
                     code = getattr(rec, "code", "")
                     name = getattr(rec, "name", "")
                     if code.lower() not in pruned_lower and name.lower() not in pruned_lower:

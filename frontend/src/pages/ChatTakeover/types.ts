@@ -43,7 +43,7 @@ export interface PatientQueueItem {
   code: string; // e.g. "BN-2024-8831"
   name: string;
   age: number;
-  gender: 'Nam' | 'Nữ';
+  gender: string;
   avatar: string;
   riskLevel: 'CAO' | 'TRUNG BÌNH' | 'THẤP';
   status: PatientStatus;

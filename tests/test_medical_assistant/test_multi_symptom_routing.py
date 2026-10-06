@@ -430,12 +430,14 @@ async def test_conversational_booking_confirmation_after_multi_symptom_triage(mo
 
     # Mock the DB auto_commit to return a mock request code without live DB connection
     from src.medical_assistant.domain.booking_lookup_service import BookingLookupService
+
     async def mock_auto_commit(*args, **kwargs):
         return {
             "status": "success",
             "request_id": 9999,
             "request_code": "VNMC-20261006-MV01",
         }
+
     monkeypatch.setattr(BookingLookupService, "auto_commit_conversational_booking", mock_auto_commit)
 
     # 1. Analyze node must resolve to CONFIRM_BOOKING_CONVERSATIONALLY

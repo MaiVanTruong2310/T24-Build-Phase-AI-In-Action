@@ -7,6 +7,18 @@ from dataclasses import dataclass
 import tiktoken
 
 
+class _FallbackEncoding:
+    """Offline approximation used when tiktoken vocabulary is unavailable."""
+
+    @staticmethod
+    def encode(text: str) -> list[str]:
+        return text.split()
+
+    @staticmethod
+    def decode(tokens: list[str]) -> str:
+        return " ".join(tokens)
+
+
 @dataclass(frozen=True)
 class TokenChunk:
     """One decoded token window and its position within the parent document."""
@@ -35,7 +47,10 @@ class TokenChunker:
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.encoding_name = encoding_name
-        self.encoding = tiktoken.get_encoding(encoding_name)
+        try:
+            self.encoding = tiktoken.get_encoding(encoding_name)
+        except Exception:
+            self.encoding = _FallbackEncoding()
 
     def count_tokens(self, text: str) -> int:
         return len(self.encoding.encode(text))

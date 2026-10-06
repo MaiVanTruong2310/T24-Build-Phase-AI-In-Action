@@ -1,29 +1,10 @@
-import { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
 import type { RootState } from '../../app/store'
-import { fetchPatientProfiles, relationshipNames, type PatientProfile } from './api'
+import { relationshipNames } from './api'
+import type { PatientSelection } from './usePatientSelection'
 
-export function usePatientSelection() {
-  const user = useSelector((state: RootState) => state.auth.user)
-  const [profileId, setProfileId] = useState('')
-  const [profiles, setProfiles] = useState<PatientProfile[]>([])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    let active = true
-    setProfileId(''); setProfiles([]); setError('')
-    if (user?.role !== 'patient') return
-    setLoading(true)
-    fetchPatientProfiles().then(items => { if (active) setProfiles(items) })
-      .catch(e => { if (active) setError(e.message) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [user?.id, user?.role])
-  return { profileId, profiles, selectedProfile: profiles.find(p => p.id === profileId), loading, error, choose: setProfileId }
-}
-
-export function PatientSelector({ selection, disabled = false }: { selection: ReturnType<typeof usePatientSelection>; disabled?: boolean }) {
+export function PatientSelector({ selection, disabled = false }: { selection: PatientSelection; disabled?: boolean }) {
   const user = useSelector((state: RootState) => state.auth.user)
   if (user?.role !== 'patient') return null
   const profile = selection.selectedProfile

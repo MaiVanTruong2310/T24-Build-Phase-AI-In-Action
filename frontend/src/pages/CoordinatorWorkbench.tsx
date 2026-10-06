@@ -11,6 +11,30 @@ const sourceNames: Record<string, string> = { chat: 'Hội thoại', consultatio
 const eventNames: Record<string, string> = { claim: 'Nhận ca', handover: 'Bàn giao', takeover: 'Tiếp quản chat', resume: 'Trả về AI', contact: 'Liên hệ', follow_up: 'Hẹn liên hệ', emergency_detected: 'Phát hiện cảnh báo', emergency_ack: 'Tiếp nhận khẩn', emergency_transfer: 'Bàn giao cấp cứu', complete: 'Hoàn tất', cancel: 'Hủy', plan_updated: 'Đổi phương án khám', deposit_requested: 'Yêu cầu cọc', deposit_verified: 'Xác minh cọc', deposit_expired: 'Hết hạn cọc', booking_confirmed: 'Chốt lịch', refund_request: 'Yêu cầu hoàn cọc', refund_confirm: 'Xác nhận hoàn cọc', intake_submitted: 'Nhận phiếu', human_requested: 'Yêu cầu người hỗ trợ' }
 const depositNames: Record<string, string> = { requested: 'Chờ chuyển cọc', verified: 'Đã xác minh', expired: 'Hết hạn', voided: 'Đã thay phương án', refund_pending: 'Chờ hoàn cọc', refunded: 'Đã hoàn cọc' }
 
+interface CarePipelineStep {
+  step_number: number;
+  anatomical_rank?: number;
+  department_name: string;
+  target_symptoms?: string[];
+  clinical_rationale?: string;
+}
+
+function isCarePipelineStep(value: unknown): value is CarePipelineStep {
+  if (!value || typeof value !== 'object') return false;
+  const step = value as Record<string, unknown>;
+  return typeof step.step_number === 'number' &&
+    typeof step.department_name === 'string' &&
+    (step.anatomical_rank === undefined || typeof step.anatomical_rank === 'number') &&
+    (step.target_symptoms === undefined || (Array.isArray(step.target_symptoms) && step.target_symptoms.every((item) => typeof item === 'string'))) &&
+    (step.clinical_rationale === undefined || typeof step.clinical_rationale === 'string');
+}
+
+function readCarePipelineSteps(value: unknown): CarePipelineStep[] {
+  if (!value || typeof value !== 'object') return [];
+  const steps = (value as Record<string, unknown>).pipeline_steps;
+  return Array.isArray(steps) ? steps.filter(isCarePipelineStep) : [];
+}
+
 export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue' | 'dashboard' | 'emergency' | 'chat' | 'settings' }) {
   const [params, setParams] = useSearchParams()
   const selectedId = params.get('case')
@@ -57,6 +81,7 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
   const resourcesReady = useRef(false)
   const admin = canAdminister(me)
   const canReceive = (member: Member) => member.user_id !== me?.user_id && member.on_duty && (!member.facility_ids.length || !selected?.facility_id || member.facility_ids.includes(selected.facility_id))
+  const carePipelineSteps = readCarePipelineSteps(selected?.ai_snapshot.care_pipeline)
 
   const load = useCallback(async () => {
     const query = new URLSearchParams({ offset: String(offset), limit: '30' })
@@ -89,7 +114,7 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
       if (generation === requestGeneration.current && detailRequest === detailGeneration.current) setSelected(current => acceptCaseDetail(current, value, selectedRef.current))
     }
     setLoading(false)
-  }, [offset, status, search, mine, mode])
+  }, [offset, status, search, mine, mode, setMe])
   useEffect(() => {
     let stopped = false
     let timer: ReturnType<typeof setTimeout>
@@ -232,14 +257,14 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
               )}
 
               {/* LỘ TRÌNH KHÁM PHÂN TẦNG ĐA KHOA (STAGED CARE NAVIGATION PIPELINE) */}
-              {(selected.ai_snapshot.care_pipeline as any)?.pipeline_steps?.length ? (
+              {carePipelineSteps.length ? (
                 <div className="cw-pipeline-container">
                   <div className="cw-pipeline-header">
                     <strong>🏥 Lộ trình Khám Ưu tiên Phân tầng (Staged Care Navigation):</strong>
                     <small>Nguyên tắc y khoa: Cơ quan sinh tồn luôn được ưu tiên khám trước mức độ đau đơn thuần.</small>
                   </div>
                   <div className="cw-pipeline-steps">
-                    {((selected.ai_snapshot.care_pipeline as any).pipeline_steps as any[]).map((step: any) => (
+                    {carePipelineSteps.map((step) => (
                       <div key={step.step_number} className={`cw-step-card ${step.step_number === 1 ? 'cw-step-primary' : 'cw-step-secondary'}`}>
                         <div className="cw-step-badge">
                           Bước {step.step_number} {step.anatomical_rank === 1 ? '· Sinh tồn' : step.anatomical_rank === 2 ? '· Nội tạng chính' : '· Ngoại vi'}

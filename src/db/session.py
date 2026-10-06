@@ -1,5 +1,6 @@
 """Async SQLAlchemy engine and session factory for PostgreSQL."""
 
+import logging
 from collections.abc import AsyncIterator
 from functools import lru_cache
 
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import (
 
 from src import models as _models  # noqa: F401
 from src.config import get_settings
-from src.core.logging import get_logger
+from src.core.logging import get_logger, log_event
 from src.db.base import Base
 
 logger = get_logger(__name__)
@@ -113,11 +114,23 @@ async def initialize_database() -> None:
     """Create missing ORM tables during the first application startup."""
     engine = get_engine()
     table_names = sorted(Base.metadata.tables)
-    logger.info("database.initialize_database creating missing tables", extra={"table_count": len(table_names)})
+    log_event(
+        logger,
+        logging.INFO,
+        "database.initialize.start",
+        description="Database bootstrap started creating missing ORM tables",
+        table_count=len(table_names),
+    )
     async with engine.begin() as connection:
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist"))
         await connection.run_sync(Base.metadata.create_all)
-    logger.info("database.initialize_database tables ready", extra={"table_count": len(table_names)})
+    log_event(
+        logger,
+        logging.INFO,
+        "database.initialize.done",
+        description="Database bootstrap completed table creation",
+        table_count=len(table_names),
+    )
 
 
 async def check_database_connection() -> None:

@@ -49,6 +49,8 @@ function statusLabel(status: Booking['status']): string {
 
   if (status === 'rejected') return 'Đã từ chối';
 
+  if (status === 'expired') return 'Đã hết hạn';
+
   return 'Đã huỷ';
 
 }

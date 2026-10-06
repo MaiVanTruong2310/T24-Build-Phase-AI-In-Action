@@ -5,6 +5,7 @@ interface PatientHeaderProps {
   patient: PatientQueueItem;
   isTakenOver: boolean;
   onToggleTakeover: () => void;
+  onResolve: () => void;
   onEscalate: () => void;
   onVideoCall: () => void;
   onQuickAppointment: () => void;
@@ -14,6 +15,7 @@ export function PatientHeader({
   patient,
   isTakenOver,
   onToggleTakeover,
+  onResolve,
   onEscalate,
   onVideoCall,
   onQuickAppointment,
@@ -111,6 +113,15 @@ export function PatientHeader({
             <UserCheck size={16} />
             {isTakenOver ? 'TRẢ VỀ AI TỰ ĐỘNG' : 'TIẾP QUẢN TRÒ CHUYỆN (TAKE OVER)'}
           </button>
+          {isTakenOver && (
+            <button
+              onClick={onResolve}
+              className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold tracking-wider text-white shadow-sm transition-all hover:bg-emerald-700"
+            >
+              <CheckCircle2 size={16} />
+              ĐÁNH DẤU ĐÃ XỬ LÝ
+            </button>
+          )}
         </div>
       </div>
 

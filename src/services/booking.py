@@ -4,20 +4,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.errors import raise_integrity_conflict
 from src.core.exceptions import ConflictError, NotFoundError
-from src.core.logging import get_logger
+from src.core.logging import get_logger, log_event
 from src.models.booking import Booking
 from src.models.booking_hold import BookingHold
+from src.models.catalog import CatalogAuditEvent, DoctorSchedule
 from src.models.coordination import ConsultationRequest, ConsultationRequestEvent, ConsultationSession
-from src.models.catalog import CatalogAuditEvent
+from src.models.user import User
 from src.repositories.booking import BookingRepository
+from src.repositories.user import UserRepository
 from src.schemas.booking import (
     BookingCreate,
     BookingHoldCreate,
@@ -38,17 +42,59 @@ class BookingService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.bookings = BookingRepository(session)
+        self.users = UserRepository(session)
         self.notifications = NotificationService(session)
 
     async def create(self, user_id: UUID, request: BookingCreate) -> Booking:
         """Create a scheduled booking or a requested-time booking awaiting staff review."""
-        async with self.session.begin():
-            booking = await self._create_in_transaction(user_id, request)
-        logger.info("BookingService.create booking pending approval", extra={"booking_id": str(booking.id)})
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.create.start",
+            description="Starting patient booking validation and persistence",
+            user_id=str(user_id),
+            service_id=str(request.service_id),
+            specialty_id=str(request.specialty_id),
+            schedule_id=str(request.schedule_id) if request.schedule_id else None,
+        )
+        try:
+            async with self.session.begin():
+                booking = await self._create_in_transaction(user_id, request)
+        except IntegrityError as exc:
+            raise_integrity_conflict(
+                exc,
+                logger=logger,
+                event="booking.create.persistence_conflict",
+                code="BOOKING_CREATE_CONFLICT",
+                message="Booking could not be created",
+                log_description="Booking creation conflicted with a selected slot or related resource",
+                user_id=str(user_id),
+                service_id=str(request.service_id),
+                specialty_id=str(request.specialty_id),
+            )
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.create.done",
+            description="A patient booking was created and submitted for approval",
+            booking_id=str(booking.id),
+            user_id=str(user_id),
+            status=booking.status,
+        )
         return await self.get(user_id, booking.id)
 
     async def create_idempotent(self, user_id: UUID, request: BookingCreate, key: str) -> tuple[Booking, bool]:
         """Create a booking once and replay the same result for duplicate submits."""
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.create.start",
+            description="Starting idempotent booking lookup or creation",
+            user_id=str(user_id),
+            service_id=str(request.service_id),
+            specialty_id=str(request.specialty_id),
+            mode="idempotent",
+        )
         normalized_key = key.strip()
         if not normalized_key:
             raise ConflictError("IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key must not be blank")
@@ -69,20 +115,124 @@ class BookingService:
                     booking.idempotency_key = normalized_key
                     booking.idempotency_hash = request_hash
                     await self.session.flush()
-        except IntegrityError:
+        except IntegrityError as exc:
             # A concurrent request may win the partial unique index between the
             # lookup and insert. Re-read the committed winner and replay it.
             await self.session.rollback()
             existing = await self.bookings.get_booking_by_idempotency(user_id, normalized_key)
             if existing is None or existing.idempotency_hash != request_hash:
-                raise
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "booking.create.error",
+                    description="Booking creation failed after an idempotency conflict",
+                    user_id=str(user_id),
+                    error_type=type(exc).__name__,
+                    exc_info=True,
+                )
+                raise_integrity_conflict(
+                    exc,
+                    logger=logger,
+                    event="booking.create.persistence_conflict",
+                    code="BOOKING_CREATE_CONFLICT",
+                    message="Booking could not be created",
+                    log_description="Idempotent booking creation conflicted with a selected slot or related resource",
+                    user_id=str(user_id),
+                    idempotency_key=normalized_key,
+                )
             booking = existing
             replay = True
         if replay:
-            logger.info("BookingService.create idempotent replay", extra={"booking_id": str(booking.id)})
+            log_event(
+                logger,
+                logging.INFO,
+                "booking.create.replayed",
+                description="The existing booking was returned for an idempotent request replay",
+                booking_id=str(booking.id),
+                user_id=str(user_id),
+            )
         else:
-            logger.info("BookingService.create booking pending approval", extra={"booking_id": str(booking.id)})
+            log_event(
+                logger,
+                logging.INFO,
+                "booking.create.done",
+                description="A patient booking was created through the idempotent flow",
+                booking_id=str(booking.id),
+                user_id=str(user_id),
+                status=booking.status,
+            )
         return await self.get(user_id, booking.id), replay
+
+    async def create_staff_confirmed_in_transaction(
+        self,
+        schedule: DoctorSchedule,
+        *,
+        actor_id: UUID,
+        service_id: UUID,
+        specialty_id: UUID,
+        patient_id: UUID | None,
+        guest_patient: object | None,
+        encounter_type: str,
+        reason: str,
+        patient_note: str | None,
+    ) -> Booking:
+        """Create a confirmed doctor visit inside a caller-owned transaction."""
+        service = await self.bookings.get_service(service_id)
+        specialty = await self.bookings.get_specialty(specialty_id)
+        if service is None or service.status != "active":
+            raise NotFoundError("Service not found")
+        if service.booking_mode != "doctor_visit":
+            raise ConflictError("GROUP_SERVICE_BOOKING_NOT_ALLOWED", "Group schedules do not create staff bookings")
+        if specialty is None or specialty.status != "active":
+            raise NotFoundError("Specialty not found")
+        await self._validate_catalog_relationships(schedule, service, specialty)
+        if await self.bookings.count_active_for_schedule(schedule.id) >= 1:
+            raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
+        patient = await self._resolve_staff_patient(patient_id, guest_patient)
+        booking = Booking(
+            user_id=patient.id,
+            schedule_id=schedule.id,
+            doctor_id=schedule.doctor_id,
+            facility_id=schedule.facility_id,
+            starts_at=schedule.starts_at,
+            ends_at=schedule.ends_at,
+            service_id=service.id,
+            specialty_id=specialty.id,
+            encounter_type=encounter_type,
+            reason=reason.strip(),
+            patient_note=patient_note.strip() if patient_note else None,
+            status="confirmed",
+            reviewed_by=actor_id,
+            reviewed_at=datetime.now(UTC),
+        )
+        await self.bookings.add(booking)
+        await self.notifications.create_for_booking_review(booking, "confirmed")
+        return booking
+
+    async def _resolve_staff_patient(self, patient_id: UUID | None, guest_patient: object | None) -> User:
+        """Resolve an existing patient or create a guest patient identity."""
+        if patient_id:
+            patient = await self.users.get_by_id(patient_id)
+            if patient is None or patient.role != "patient":
+                raise NotFoundError("Patient not found")
+            return patient
+        if guest_patient is None:
+            raise ConflictError("PATIENT_REQUIRED", "A patient or guest contact is required")
+        patient = await self.users.get_by_identity(guest_patient.email, guest_patient.phone)
+        if patient is not None:
+            if patient.role != "patient":
+                raise ConflictError("PATIENT_IDENTITY_CONFLICT", "Contact belongs to a non-patient account")
+            return patient
+        return await self.users.create(
+            User(
+                full_name=guest_patient.full_name,
+                email=guest_patient.email,
+                phone=guest_patient.phone,
+                password_hash=None,
+                role="patient",
+                status="guest",
+            )
+        )
 
     async def hold(self, user_id: UUID, request: BookingHoldCreate) -> BookingHold:
         """Reserve schedule capacity for five to ten minutes."""
@@ -216,6 +366,7 @@ class BookingService:
             if service.booking_mode == "group" and active_count >= schedule.capacity:
                 raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
 
+        created_at = datetime.now(UTC)
         booking = Booking(
             user_id=user_id,
             hold_id=hold.id if hold else None,
@@ -230,6 +381,8 @@ class BookingService:
             reason=request.reason.strip(),
             patient_note=request.patient_note.strip() if request.patient_note else None,
             status="pending_approval",
+            created_at=created_at,
+            expired_at=created_at + timedelta(hours=24),
         )
         await self.bookings.add(booking)
         if hold:
@@ -258,17 +411,70 @@ class BookingService:
 
     async def list(self, user_id: UUID, status: str | None, offset: int, limit: int) -> list[Booking]:
         """List bookings owned by the authenticated user."""
-        return await self.bookings.list_for_user(user_id, status, offset, limit)
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.list.start",
+            description="Starting patient booking list query",
+            user_id=str(user_id),
+            status=status,
+            offset=offset,
+            limit=limit,
+        )
+        values = await self.bookings.list_for_user(user_id, status, offset, limit)
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.list.done",
+            description="Bookings were listed for the authenticated patient",
+            user_id=str(user_id),
+            count=len(values),
+            status=status,
+        )
+        return values
 
     async def get(self, user_id: UUID, booking_id: UUID) -> Booking:
         """Get one booking owned by a patient."""
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.get.start",
+            description="Starting patient-owned booking lookup",
+            booking_id=str(booking_id),
+            user_id=str(user_id),
+        )
         booking = await self.bookings.get_for_user(booking_id, user_id)
         if booking is None:
+            log_event(
+                logger,
+                logging.WARNING,
+                "booking.get.not_found",
+                description="Patient booking lookup returned no owned booking",
+                booking_id=str(booking_id),
+                user_id=str(user_id),
+            )
             raise NotFoundError("Booking not found")
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.get.done",
+            description="Patient booking was loaded",
+            booking_id=str(booking_id),
+            user_id=str(user_id),
+            status=booking.status,
+        )
         return booking
 
     async def cancel(self, user_id: UUID, booking_id: UUID, reason: str | None) -> Booking:
         """Cancel an owned booking without deleting its history."""
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.cancel.start",
+            description="Starting patient booking cancellation and reminder cleanup",
+            booking_id=str(booking_id),
+            user_id=str(user_id),
+        )
         async with self.session.begin():
             booking = await self.bookings.get_for_user(booking_id, user_id, for_update=True)
             if booking is None:
@@ -279,33 +485,67 @@ class BookingService:
                 raise ConflictError("BOOKING_NOT_CANCELLABLE", "Rejected booking cannot be cancelled")
             booking.status = "cancelled"
             booking.cancellation_reason = reason.strip() if reason else None
-            consultation = (await self.session.execute(select(ConsultationRequest).where(
-                ConsultationRequest.booking_id == booking.id,
-            ).with_for_update())).scalar_one_or_none()
+            consultation = (
+                await self.session.execute(
+                    select(ConsultationRequest)
+                    .where(
+                        ConsultationRequest.booking_id == booking.id,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
             if consultation is not None:
-                await self.session.execute(select(ConsultationSession.id).where(
-                    ConsultationSession.id == consultation.session_id,
-                ).with_for_update())
+                await self.session.execute(
+                    select(ConsultationSession.id)
+                    .where(
+                        ConsultationSession.id == consultation.session_id,
+                    )
+                    .with_for_update()
+                )
                 consultation.status = "cancelled"
-                self.session.add(ConsultationRequestEvent(
-                    request_id=consultation.id, actor_id=user_id,
-                    action="cancelled", note=booking.cancellation_reason,
-                ))
+                self.session.add(
+                    ConsultationRequestEvent(
+                        request_id=consultation.id,
+                        actor_id=user_id,
+                        action="cancelled",
+                        note=booking.cancellation_reason,
+                    )
+                )
             await self.session.flush()
-        logger.info("BookingService.cancel booking cancelled", extra={"booking_id": str(booking_id)})
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.cancel.done",
+            description="Patient booking was cancelled and its reminders were discarded",
+            booking_id=str(booking_id),
+            user_id=str(user_id),
+            status="cancelled",
+        )
         return await self.get(user_id, booking_id)
 
     async def reschedule(self, user_id: UUID, booking_id: UUID, request: BookingRescheduleCreate) -> Booking:
         """Move an owned scheduled booking to a newly held slot for re-approval."""
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.reschedule.start",
+            description="Starting booking schedule validation and rescheduling",
+            booking_id=str(booking_id),
+            user_id=str(user_id),
+            target_schedule_id=str(request.schedule_id),
+        )
         async with self.session.begin():
             booking = await self.bookings.get_for_user(booking_id, user_id, for_update=True)
             if booking is None:
                 raise NotFoundError("Booking not found")
-            is_coordinated = (await self.session.execute(select(ConsultationRequest.id).where(
-                ConsultationRequest.booking_id == booking.id,
-            ))).first()
+            coordination_result = await self.session.execute(
+                select(ConsultationRequest.id).where(ConsultationRequest.booking_id == booking.id)
+            )
+            is_coordinated = coordination_result.first() if hasattr(coordination_result, "first") else None
             if is_coordinated:
-                raise ConflictError("COORDINATED_BOOKING", "Please contact the coordinator to reschedule this appointment")
+                raise ConflictError(
+                    "COORDINATED_BOOKING", "Please contact the coordinator to reschedule this appointment"
+                )
             if booking.status in ("cancelled", "rejected"):
                 raise ConflictError("BOOKING_NOT_RESCHEDULABLE", "This booking cannot be rescheduled")
             if booking.schedule_id is None:
@@ -378,7 +618,14 @@ class BookingService:
                 )
             )
             await self.session.flush()
-        logger.info("BookingService.reschedule booking moved", extra={"booking_id": str(booking_id)})
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.reschedule.done",
+            description="Booking was moved to a new schedule and returned to approval",
+            booking_id=str(booking_id),
+            user_id=str(user_id),
+        )
         return await self.get(user_id, booking_id)
 
     async def list_for_staff(
@@ -389,17 +636,68 @@ class BookingService:
         limit: int,
     ) -> list[Booking]:
         """List booking records for a staff review queue."""
-        return await self.bookings.list_for_staff(status, selected_date, offset, limit)
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.staff_list.start",
+            description="Starting staff booking review queue query",
+            status=status,
+            selected_date=selected_date.isoformat() if selected_date else None,
+            offset=offset,
+            limit=limit,
+        )
+        values = await self.bookings.list_for_staff(status, selected_date, offset, limit)
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.staff_list.done",
+            description="Staff booking review queue was listed",
+            count=len(values),
+            status=status,
+        )
+        return values
 
     async def get_for_staff(self, booking_id: UUID) -> Booking:
         """Fetch one booking for staff review."""
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.staff_get.start",
+            description="Starting staff booking lookup for review",
+            booking_id=str(booking_id),
+        )
         booking = await self.bookings.get_for_staff(booking_id)
         if booking is None:
+            log_event(
+                logger,
+                logging.WARNING,
+                "booking.staff_get.not_found",
+                description="Staff booking lookup returned no matching booking",
+                booking_id=str(booking_id),
+            )
             raise NotFoundError("Booking not found")
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.staff_get.done",
+            description="Staff booking record was loaded for review",
+            booking_id=str(booking_id),
+            status=booking.status,
+        )
         return booking
 
     async def review(self, booking_id: UUID, actor_id: UUID, request: StaffBookingStatusUpdate) -> Booking:
         """Approve or reject a booking exactly once as staff."""
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.review.start",
+            description="Starting staff booking approval or rejection workflow",
+            booking_id=str(booking_id),
+            actor_id=str(actor_id),
+            requested_status=request.status,
+        )
+        expired = False
         async with self.session.begin():
             booking = await self.bookings.get_for_staff(booking_id, for_update=True)
             if booking is None:
@@ -421,17 +719,57 @@ class BookingService:
                     raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
                 if booking.service.booking_mode == "group" and active_count >= schedule.capacity:
                     raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
-            booking.status = request.status
-            booking.staff_note = request.note
-            booking.reviewed_by = actor_id
-            booking.reviewed_at = datetime.now(UTC)
-            await self.notifications.create_for_booking_review(booking, request.status)
-            await self.session.flush()
-        logger.info(
-            "BookingService.review booking reviewed",
-            extra={"booking_id": str(booking_id), "status": request.status, "actor_id": str(actor_id)},
+            if not expired:
+                booking.status = request.status
+                booking.staff_note = request.note
+                booking.reviewed_by = actor_id
+                booking.reviewed_at = datetime.now(UTC)
+                await self.notifications.create_for_booking_review(booking, request.status)
+                await self.session.flush()
+        if expired:
+            log_event(
+                logger,
+                logging.WARNING,
+                "booking.review.expired",
+                description="Booking review was blocked because the approval deadline had passed",
+                booking_id=str(booking_id),
+            )
+            raise ConflictError("BOOKING_EXPIRED", "Booking approval deadline has passed")
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.review.done",
+            description="Staff reviewed a pending booking",
+            booking_id=str(booking_id),
+            status=request.status,
+            actor_id=str(actor_id),
         )
         return await self.get_for_staff(booking_id)
+
+    async def expire_pending_bookings(self, limit: int = 100) -> int:
+        """Expire pending approvals and enqueue patient notifications atomically."""
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.expire.start",
+            description="Starting maintenance scan for expired pending bookings",
+            limit=limit,
+        )
+        async with self.session.begin():
+            bookings = await self.bookings.claim_expired_pending_bookings(datetime.now(UTC), limit)
+            for booking in bookings:
+                booking.status = "expired"
+                await self.notifications.create_for_booking_expired(booking)
+            if bookings:
+                await self.session.flush()
+        log_event(
+            logger,
+            logging.INFO,
+            "booking.expire.done",
+            description="Pending bookings past their approval deadline were expired",
+            expired_count=len(bookings),
+        )
+        return len(bookings)
 
     @staticmethod
     def _validate_schedule(schedule) -> None:
@@ -466,6 +804,7 @@ def booking_response(value: Booking) -> BookingResponse:
         reason=value.reason,
         patient_note=value.patient_note,
         status=value.status,
+        expired_at=value.expired_at,
         cancellation_reason=value.cancellation_reason,
         staff_note=value.staff_note,
         reviewed_by=value.reviewed_by,

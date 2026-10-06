@@ -1,6 +1,9 @@
 import { Search, Filter, Users, Plus, MoreHorizontal } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Specialty, Doctor } from '../../../features/appointment-booking/api';
 import clsx from 'clsx';
+import { filterDoctors } from '../filterDoctors';
 
 interface SidebarProps {
   specialties: Specialty[];
@@ -19,6 +22,8 @@ export const Sidebar = ({
   selectedDoctorId,
   onSelectDoctor
 }: SidebarProps) => {
+  const [search, setSearch] = useState('');
+  const visibleDoctors = useMemo(() => filterDoctors(doctors, search), [doctors, search]);
   const selectedSpecialtyName = specialties.find(s => s.id === selectedSpecialtyId)?.name || "Khoa";
 
   return (
@@ -26,7 +31,7 @@ export const Sidebar = ({
       <div className="bg-white rounded-2xl border border-slate-200 p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-slate-800">Danh Mục Chuyên Khoa</h3>
-          <button className="text-sky-600 text-xs font-semibold flex items-center gap-1">
+          <button type="button" onClick={() => setSearch('')} className="text-sky-600 text-xs font-semibold flex items-center gap-1">
             <Filter size={12} /> Đặt lại
           </button>
         </div>
@@ -35,6 +40,8 @@ export const Sidebar = ({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input 
             type="text" 
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
             placeholder="Tìm theo tên BS, mã bác sĩ, phòng khám..."
             className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
           />
@@ -71,11 +78,11 @@ export const Sidebar = ({
             <Users size={16} className="text-sky-600" />
             Bác Sĩ Thuộc {selectedSpecialtyName}
           </h3>
-          <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">{doctors.length} Đang hiển thị</span>
+          <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">{visibleDoctors.length} Đang hiển thị</span>
         </div>
 
         <div className="space-y-3">
-          {doctors.map(doc => {
+          {visibleDoctors.map(doc => {
             const isActive = doc.id === selectedDoctorId;
             return (
               <div 
@@ -109,9 +116,9 @@ export const Sidebar = ({
         </div>
         
         <div className="flex gap-2 mt-4">
-          <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-sky-50 text-sky-600 text-sm font-bold rounded-xl border border-sky-100 hover:bg-sky-100 transition-colors">
+          <Link to="/staff/doctors/create" className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-sky-50 text-sky-600 text-sm font-bold rounded-xl border border-sky-100 hover:bg-sky-100 transition-colors">
             <Plus size={16} /> Thêm Bác Sĩ
-          </button>
+          </Link>
         </div>
       </div>
     </div>

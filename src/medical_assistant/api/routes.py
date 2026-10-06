@@ -6,6 +6,7 @@ from contextlib import suppress
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user
@@ -13,7 +14,6 @@ from src.db.dependencies import get_auth_db_session
 from src.medical_assistant.agent.graph import agent
 from src.medical_assistant.domain.booking_request_service import (
     BookingPersistenceError,
-    BookingRequestService,
 )
 from src.medical_assistant.domain.schemas import (
     BookingIntakeRequest,
@@ -23,6 +23,7 @@ from src.medical_assistant.domain.schemas import (
 )
 from src.models.user import User
 from src.services.chat_history import STATE_FIELDS, ChatHistoryService, graph_thread, health_record
+from src.services.chat_takeover import ChatTakeoverService, case_payload, message_payload
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -86,11 +87,12 @@ async def prepare_turn(request, user, session):
     started = time.perf_counter()
     subject = user
     selected_profile = None
-    if user:
-        from src.db.session import get_session_factory
-        from src.services.patient_profiles import resolve_patient
-        from src.models.patient_profile import PatientProfile
+    if user and session is not None:
         from sqlalchemy import select
+
+        from src.db.session import get_session_factory
+        from src.models.patient_profile import PatientProfile
+        from src.services.patient_profiles import resolve_patient
         async with get_session_factory()() as profile_db:
             if request.patient_profile_id is None:
                 request.patient_profile_id = (await profile_db.execute(select(PatientProfile.id).where(PatientProfile.linked_user_id == user.id))).scalar_one_or_none()
@@ -145,6 +147,7 @@ async def prepare_turn(request, user, session):
         )
         # Nạp Cross-session Memory (Hồ sơ dài hạn & Open Loops)
         from src.medical_assistant.domain.patient_memory_service import get_patient_memory_service
+
         try:
             mem_svc = get_patient_memory_service()
             payload["patient_memory_profile"] = await mem_svc.get_patient_profile(subject.id)
@@ -165,11 +168,50 @@ async def prepare_turn(request, user, session):
 
 async def run_turn(request, user, payload, turn, service, guest_token=""):
     started = time.perf_counter()
+    # A completed turn is terminal for this request. Return the durable result
+    # before touching the optional history service (retries may not have one).
+    if turn and turn.get("cached"):
+        return turn["cached"]
     from src.db.session import get_session_factory
-    from src.services.coordinator_chat import before_turn, after_turn, waiting_response
+    from src.services.coordinator_chat import after_turn, before_turn, waiting_response
+
     try:
-        async with get_session_factory()() as coordination_db:
-            case_id, control, emergency, state_context = await before_turn(coordination_db, request, user, guest_token)
+        if user:
+            takeover = ChatTakeoverService(service.session)
+            active_case = await takeover.active_case_for_patient(user.id, request.session_id)
+            if active_case is not None:
+                await takeover.record_patient_message(
+                    user.id,
+                    request.session_id,
+                    request.message,
+                    str(request.request_id),
+                )
+                response = public_result(
+                    {
+                        "response": "Tin nhắn của bạn đã được chuyển tới nhân viên y tế đang tiếp nhận ca. Vui lòng chờ phản hồi trực tiếp.",
+                        "workflow_status": "HUMAN_HELP_REQUESTED",
+                    },
+                    request.session_id,
+                )
+                await service.complete(turn, response, turn.get("checkpoint", {}))
+                return response
+        started = time.perf_counter()
+        result = await agent.ainvoke(
+            payload, config={"configurable": {"thread_id": graph_thread(request.session_id, user)}}
+        )
+        agent_finished = time.perf_counter()
+        response = public_result(result, request.session_id)
+        try:
+            async with get_session_factory()() as coordination_db:
+                case_id, control, emergency, state_context = await before_turn(
+                    coordination_db, request, user, guest_token
+                )
+        except SQLAlchemyError as exc:
+            # Coordination is an optional orchestration layer.  A deployment
+            # whose coordination migration is pending must still be able to
+            # serve the medical assistant conversation itself.
+            logger.warning("coordination before_turn unavailable; continuing with AI flow: %s", type(exc).__name__)
+            case_id, control, emergency, state_context = None, "ai", None, {}
         if not user:
             payload = {**(state_context.get("checkpoint") or {}), **payload, "error": None}
         payload["guest_token"] = guest_token
@@ -179,10 +221,16 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
         if turn and turn.get("cached"):
             return turn["cached"]
         if emergency:
-            result = {**payload, "is_emergency": True, "ats_level": emergency.ats_level.value,
-                      "max_booking_days": 0, "urgency_tier": emergency.urgency_tier.value,
-                      "workflow_status": "EMERGENCY", "emergency_warning": emergency.patient_guidance,
-                      "response": emergency.patient_guidance}
+            result = {
+                **payload,
+                "is_emergency": True,
+                "ats_level": emergency.ats_level.value,
+                "max_booking_days": 0,
+                "urgency_tier": emergency.urgency_tier.value,
+                "workflow_status": "EMERGENCY",
+                "emergency_warning": emergency.patient_guidance,
+                "response": emergency.patient_guidance,
+            }
         elif control == "human":
             response = waiting_response(request.session_id)
             if user and turn:
@@ -190,20 +238,42 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
             return response
         else:
             if state_context.get("handover_summary"):
-                payload["metadata"] = {**(payload.get("metadata") or {}), "coordinator_handover_summary": state_context["handover_summary"]}
-            result = await agent.ainvoke(payload, config={"configurable": {"thread_id": graph_thread(request.session_id, user, guest_token)}})
+                payload["metadata"] = {
+                    **(payload.get("metadata") or {}),
+                    "coordinator_handover_summary": state_context["handover_summary"],
+                }
+            result = await agent.ainvoke(
+                payload, config={"configurable": {"thread_id": graph_thread(request.session_id, user, guest_token)}}
+            )
         elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
         result["elapsed_ms"] = elapsed_ms
         response = public_result(result, request.session_id, elapsed_ms=elapsed_ms)
         if not response["response"].strip():
             raise RuntimeError("Empty agent response")
-        async with get_session_factory()() as coordination_db:
-            response = await after_turn(coordination_db, case_id, request, response, result)
+        if case_id is not None:
+            try:
+                async with get_session_factory()() as coordination_db:
+                    response = await after_turn(coordination_db, case_id, request, response, result)
+            except SQLAlchemyError as exc:
+                logger.warning("coordination after_turn unavailable; returning AI response: %s", type(exc).__name__)
         if user:
             await service.complete(turn, response, result)
-            # Tự động đồng bộ hóa Cross-session Memory & Open Loops
+            await ChatTakeoverService(service.session).ensure_case_from_result(
+                user,
+                request.session_id,
+                request.message,
+                response,
+            )
+        logger.info(
+            "chat.completed agent_ms=%.0f archive_ms=%.0f",
+            (agent_finished - started) * 1000,
+            (time.perf_counter() - agent_finished) * 1000,
+        )
+        if user:
+            # Persist cross-session facts only after the turn has been archived.
             try:
                 from src.medical_assistant.domain.patient_memory_service import get_patient_memory_service
+
                 mem_svc = get_patient_memory_service()
                 fac = result.get("facility_preference")
                 if fac:
@@ -234,7 +304,10 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
-    request: ChatRequest, http_request: Request, user=Depends(optional_chat_user), session: AsyncSession = Depends(get_auth_db_session)
+    request: ChatRequest,
+    http_request: Request,
+    user=Depends(optional_chat_user),
+    session: AsyncSession = Depends(get_auth_db_session),
 ):
     payload, turn, service = await prepare_turn(request, user, session)
     try:
@@ -259,7 +332,9 @@ async def chat_stream(
         task = None
         try:
             yield f"data: {json.dumps({'type': 'init', 'session_id': request.session_id})}\n\n"
-            task = asyncio.create_task(run_turn(request, user, payload, turn, service, http_request.state.coordination_guest))
+            task = asyncio.create_task(
+                run_turn(request, user, payload, turn, service, http_request.state.coordination_guest)
+            )
             while not task.done():
                 if await http_request.is_disconnected():
                     task.cancel()
@@ -327,6 +402,21 @@ async def conversation_messages(
     return await ChatHistoryService(session).history(user.id, session_id, limit, offset)
 
 
+@router.get("/chat/conversations/{session_id}/takeover")
+async def takeover_conversation(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_auth_db_session),
+):
+    """Return the authenticated patient's takeover state and staff messages."""
+    service = ChatTakeoverService(session)
+    case = await service.get_case_for_patient(user.id, session_id)
+    if case is None:
+        return {"case": None, "messages": []}
+    messages = await service.repository.list_messages(case.id, 200)
+    return {"case": case_payload(case), "messages": [message_payload(message) for message in messages]}
+
+
 @router.post("/booking-requests", response_model=BookingIntakeResponse, status_code=201)
 async def create_booking_request(
     request: BookingIntakeRequest,
@@ -338,7 +428,9 @@ async def create_booking_request(
     if not request.consent_to_contact:
         raise HTTPException(status_code=422, detail="Cần đồng ý để điều phối viên liên hệ.")
 
-    config = {"configurable": {"thread_id": graph_thread(request.session_id, user, http_request.state.coordination_guest)}}
+    config = {
+        "configurable": {"thread_id": graph_thread(request.session_id, user, http_request.state.coordination_guest)}
+    }
     snapshot = await agent.aget_state(config)
     state = dict(snapshot.values or {})
     if not state and user:
@@ -375,7 +467,7 @@ async def create_booking_request(
                 chosen_doctor, chosen_slot = doctor, slot
                 break
 
-    context = {
+    _context = {
         "user_id": str(user.id) if user else None,
         "specialty_code": request.specialty_code or state.get("suggested_department_code"),
         "specialty_name": request.specialty_name or state.get("suggested_department_name") or "Chuyên khoa phù hợp",
@@ -387,10 +479,15 @@ async def create_booking_request(
     try:
         from src.db.session import get_session_factory
         from src.services.workbench import intake
+
         await session.commit()
         async with get_session_factory()() as coordination_db, coordination_db.begin():
             case = await intake(coordination_db, request, user, http_request.state.coordination_guest, state)
-            result = {"request_id": str(case.id), "request_code": "YC-" + str(case.id).split("-")[0].upper(), "status": "PENDING_CONTACT"}
+            result = {
+                "request_id": str(case.id),
+                "request_code": "YC-" + str(case.id).split("-")[0].upper(),
+                "status": "PENDING_CONTACT",
+            }
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except BookingPersistenceError as exc:

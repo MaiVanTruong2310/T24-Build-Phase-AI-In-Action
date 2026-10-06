@@ -18,6 +18,10 @@ export const REFRESH_TOKEN_KEY = 'refresh_token';
 export const AUTH_SESSION_KEY = 'medicare_auth_session';
 export const AUTH_TOKENS_UPDATED_EVENT = 'auth:tokens-updated';
 
+export function readAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
 export function markCookieSession(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);

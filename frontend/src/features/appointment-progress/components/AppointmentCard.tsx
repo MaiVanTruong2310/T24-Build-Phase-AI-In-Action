@@ -19,6 +19,7 @@ function statusLabel(status: Booking['status']): string {
   if (status === 'pending_approval') return 'Đang chờ nhân viên duyệt';
   if (status === 'confirmed') return 'Đã xác nhận';
   if (status === 'rejected') return 'Đã từ chối';
+  if (status === 'expired') return 'Đã hết hạn';
   return 'Đã hủy';
 }
 

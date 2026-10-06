@@ -177,6 +177,7 @@ def test_group_booking_enters_staff_review_queue():
 
     assert isinstance(booking, Booking)
     assert repository.booking.status == "pending_approval"
+    assert repository.booking.expired_at == repository.booking.created_at + timedelta(hours=24)
 
 
 def test_group_booking_rejects_when_shared_capacity_is_full():

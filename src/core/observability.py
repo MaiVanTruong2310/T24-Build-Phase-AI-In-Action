@@ -43,9 +43,7 @@ def _configure_tracing(app: Any) -> None:
         }
     )
     provider = TracerProvider(resource=resource)
-    provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=insecure))
-    )
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=insecure)))
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)
     logger.info("OpenTelemetry tracing enabled; exporting to %s", endpoint)

@@ -21,7 +21,10 @@ async def test_registration_connection_failure_returns_readable_cors_error(clien
         )
         assert response.status_code == 503
         assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
-        assert "Vui lòng thử lại sau" in response.json()["message"]
+        assert response.json() == {
+            "error_code": "DATABASE_UNAVAILABLE",
+            "message": "Service temporarily unavailable",
+        }
         assert "private internal error" not in response.text
     finally:
         app.dependency_overrides.pop(get_auth_service, None)
