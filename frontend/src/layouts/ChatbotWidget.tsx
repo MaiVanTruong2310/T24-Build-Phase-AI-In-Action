@@ -1,4 +1,5 @@
-import { PatientSelector, usePatientSelection } from '../features/patient-profiles/PatientSelector';
+import { PatientSelector } from '../features/patient-profiles/PatientSelector';
+import { usePatientSelection } from '../features/patient-profiles/usePatientSelection';
 import { PatientUpdates, type PatientUpdatesHandle, type SupportRequestState } from '../features/coordinator/PatientUpdates';
 import '../components/ChatMessageInput.css';
 import '../components/ChatSendButton.css';

@@ -64,6 +64,8 @@ export interface RankedSpecialtyItem {
 
 export interface BookingIntake {
   required?: boolean;
+  confirmed?: boolean;
+  request_code?: string;
   endpoint?: string;
   booking_mode?: 'doctor' | 'package';
   patient_name?: string;

@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -22,6 +23,7 @@ from src.api.endpoints.coordination import staff_router as staff_coordination_ro
 from src.api.endpoints.notification import router as notification_router
 from src.api.endpoints.package import router as package_router
 from src.api.endpoints.package import staff_router as staff_package_router
+from src.api.endpoints.patient_profiles import router as patient_profiles_router
 from src.api.endpoints.workbench import patient_router as live_coordination_router
 from src.api.endpoints.workbench import router as workbench_router
 from src.api.endpoints.zalo import router as zalo_router
@@ -33,6 +35,7 @@ from src.api.handlers import (
     unexpected_error_handler,
     validation_error_handler,
 )
+from src.api.routes import router as agent_core_router
 from src.config import allowed_cors_origins, get_settings
 from src.core.context import session_id_var, trace_id_var
 from src.core.exceptions import AppError
@@ -172,6 +175,12 @@ settings = get_settings()
 async def coordination_capability(request, call_next):
     import secrets
 
+    if request.url.path == "/api/v1/chat" and request.headers.get("X-Session-Expected") == "1":
+        from src.services.cookie_session import request_token
+
+        if not request_token(request):
+            return JSONResponse({"message": "Vui lòng đăng nhập."}, status_code=401)
+
     token = request.cookies.get("coordination_guest")
     valid = token and len(token) == 64 and all(c in "0123456789abcdef" for c in token)
     token = token if valid else secrets.token_hex(32)
@@ -204,11 +213,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from src.api.routes import router as agent_core_router
-from src.api.endpoints.patient_profiles import router as patient_profiles_router
-
-app.include_router(agent_core_router, prefix="/api/v1")
 app.include_router(medical_assistant_router, prefix="/api/v1")
+app.include_router(agent_core_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(patient_profiles_router, prefix="/api/v1")
 app.include_router(workbench_router, prefix="/api/v1")

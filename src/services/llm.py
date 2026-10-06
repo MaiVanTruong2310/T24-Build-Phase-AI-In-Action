@@ -8,14 +8,18 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+
 from langchain_openai import ChatOpenAI
 
 from src.config import get_settings
 from src.medical_assistant.infrastructure.llm import (
     FailoverChatModel,
+)
+from src.medical_assistant.infrastructure.llm import (
     create_chat_model as _create_chat_model,
+)
+from src.medical_assistant.infrastructure.llm import (
     get_failover_chat_model as _get_failover_chat_model,
-    get_llm_chain as _get_llm_chain,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,6 +52,9 @@ def get_failover_llm(temperature: float = 0.2) -> FailoverChatModel:
     - Automatic provider cooldown & retry
     """
     return _get_failover_chat_model(temperature=temperature)
+
+
+create_chat_model = _create_chat_model
 
 
 __all__ = [

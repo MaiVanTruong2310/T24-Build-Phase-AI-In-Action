@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-from fastapi import APIRouter
-=======
 """Production API Routes for VCare System.
 
 Centralized entry point aggregating Agent endpoints and Domain API routers.
@@ -10,8 +7,8 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from fastapi import APIRouter, HTTPException, Depends
->>>>>>> develop
+
+from fastapi import APIRouter, HTTPException
 
 from src.agents.graph import agent
 from src.models.schemas import (
@@ -27,14 +24,6 @@ router = APIRouter(tags=["AI Agent"])
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-<<<<<<< HEAD
-    """Chat với AI agent."""
-    result = await agent.ainvoke({"query": request.message})
-    return ChatResponse(
-        response=result.get("response", ""),
-        analysis=result.get("analysis", ""),
-    )
-=======
     """Tương tác trực tiếp với LangGraph Medical Agent.
 
     Hỗ trợ xử lý thông minh qua các node:
@@ -70,7 +59,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
     except Exception as exc:
         logger.exception("api.chat execution error: %s", exc)
         raise HTTPException(status_code=500, detail=f"Lỗi xử lý hội thoại AI: {exc}") from exc
->>>>>>> develop
 
 
 @router.get("/status", response_model=AgentStatusResponse)
@@ -78,7 +66,8 @@ async def agent_status() -> AgentStatusResponse:
     """Kiểm tra trạng thái hoạt động của LangGraph Agent runtime."""
     return AgentStatusResponse(
         status="ready",
-        agent="VCare LangGraph Medical Agent v2.0",
-        version="2.0.0",
+        agent="LangGraph Clinical Triage Agent v1.0",
+        version="1.0.0",
         nodes=["analyze", "critic", "find_doctors", "respond"],
+        features=["session_memory", "sse_streaming", "ats_triage"],
     )

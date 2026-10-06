@@ -1,10 +1,13 @@
 """Booking route and contract tests."""
 
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
 from src.api.dependencies import get_current_user
+from src.api.endpoints.notification import get_notification_service
 from src.db.dependencies import get_db_session
 from src.main import app
 
@@ -105,3 +108,32 @@ async def test_notification_route_requires_authentication(client):
 
     assert response.status_code == 401
     assert response.json()["error_code"] == "NOT_AUTHENTICATED"
+
+
+@pytest.mark.asyncio
+async def test_notification_route_returns_booking_expired_kind(client):
+    """Delivered expiry notifications serialize through the shared response contract."""
+    notification = SimpleNamespace(
+        id=uuid4(),
+        booking_id=uuid4(),
+        kind="booking_expired",
+        title="Lịch khám đã hết hạn",
+        message="Lịch khám chưa được duyệt trong thời hạn 24 giờ.",
+        available_at=datetime.now(UTC),
+        read_at=None,
+        created_at=datetime.now(UTC),
+    )
+
+    class NotificationServiceStub:
+        async def list_for_user(self, *_args, **_kwargs):
+            return [notification]
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4(), role="patient", status="active")
+    app.dependency_overrides[get_notification_service] = NotificationServiceStub
+    try:
+        response = await client.get("/api/v1/notifications?unread_only=false&offset=0&limit=50")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["data"][0]["kind"] == "booking_expired"

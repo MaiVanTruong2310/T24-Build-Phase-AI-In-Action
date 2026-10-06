@@ -27,28 +27,36 @@ export default function DoctorDirectory() {
     setPage(0)
   }, [name, specialtyId, facilityId, honor, rank, degree, language, professionalRole])
   useEffect(() => {
+    let active = true
     void Promise.all([fetchDoctorFacets(), fetchSpecialties(), fetchFacilities()]).then(([options, s, f]) => {
+      if (!active) return
       setFacets(options); setAllSpecialties(s); setAllFacilities(f); setSpecialties(s); setFacilities(f)
-    }).catch(() => setError('Không thể tải danh mục bác sĩ.'))
+    }).catch(() => { if (active) setError('Không thể tải danh mục bác sĩ.') })
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
+    let active = true
     if (facilityId) {
       void fetchSpecialties({ facilityId }).then(s => {
+        if (!active) return
         setSpecialties(s)
         setSpecialtyId(prev => s.some(x => x.id === prev) ? prev : '')
       }).catch(() => undefined)
     } else {
       setSpecialties(allSpecialties)
     }
+    return () => { active = false }
   }, [facilityId, allSpecialties])
 
   useEffect(() => {
+    let active = true
     if (specialtyId && !facilityId) {
-      void fetchFacilities({ specialtyId }).then(f => setFacilities(f)).catch(() => undefined)
-    } else if (!specialtyId && !facilityId && allFacilities.length > 0) {
+      void fetchFacilities({ specialtyId }).then(f => { if (active) setFacilities(f) }).catch(() => undefined)
+    } else if (!specialtyId && allFacilities.length > 0) {
       setFacilities(allFacilities)
     }
+    return () => { active = false }
   }, [specialtyId, facilityId, allFacilities])
   useEffect(() => {
     let active = true

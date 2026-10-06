@@ -86,6 +86,9 @@ export default function CreateService() {
           </div>
           <button 
             type="button"
+            disabled
+            aria-label="Lưu nháp chưa được hỗ trợ."
+            title="Chức năng lưu nháp chưa được hỗ trợ."
             className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-colors"
           >
             Lưu nháp

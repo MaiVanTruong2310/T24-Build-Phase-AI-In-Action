@@ -7,21 +7,29 @@ function environment(){
   const window={dispatchEvent:e=>events.push(e.type),setTimeout,location:{pathname:'/patient',replace(){throw Error('Unexpected redirect')}}};
   return {values,events,storage,window};
 }
-function load(file,mocks,env,fetch){
-  const source=fs.readFileSync(path.join(root,file),'utf8').replace('import.meta.env.VITE_API_BASE_URL',"'http://localhost:8000'");
+function load(file,mocks,env,fetch,apiBaseUrl='http://localhost:8000'){
+  const source=fs.readFileSync(path.join(root,file),'utf8').replace('import.meta.env.VITE_API_BASE_URL',JSON.stringify(apiBaseUrl));
   const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   const exports={};
   vm.runInNewContext(code,{exports,require:n=>{assert(n in mocks,n);return mocks[n]},localStorage:env.storage,window:env.window,navigator:{locks:{request:async(_,fn)=>fn({})}},Response,Headers,URL,Event,Date,Math,console,fetch,setTimeout,clearTimeout});
   return exports;
 }
 const profile={id:'account-a',full_name:'Test account',role:'patient'};
-function setup(fetch){
+function setup(fetch,apiBaseUrl){
   const env=environment(),session=load('frontend/src/features/auth/session.ts',{},env);
-  const api=load('frontend/src/app/apiClient.ts',{'../features/auth/session':session},env,fetch);
+  const api=load('frontend/src/app/apiClient.ts',{'../features/auth/session':session},env,fetch,apiBaseUrl);
   const slice=load('frontend/src/features/auth/authSlice.ts',{'@reduxjs/toolkit':toolkit,'../../app/apiClient':api,'./session':session},env);
   return {env,session,api,slice,store:toolkit.configureStore({reducer:{auth:slice.default}})};
 }
 async function main(){
+  {
+    const x=setup(async()=>Response.json({data:null}));
+    assert.equal(x.api.resolveWebSocketUrl('/staff/chat-takeover/ws/session%2Fone?channel=staff'),
+      'ws://localhost:8000/api/v1/staff/chat-takeover/ws/session%2Fone?channel=staff');
+    const production=setup(async()=>Response.json({data:null}),'https://api.example.invalid');
+    assert.equal(production.api.resolveWebSocketUrl('/staff/chat-takeover/ws/staff?channel=staff'),
+      'wss://api.example.invalid/api/v1/staff/chat-takeover/ws/staff?channel=staff');
+  }
   {
     let calls=0;
     const x=setup(async(url,options)=>{calls++;assert.equal(options.credentials,'include');assert.equal(new Headers(options.headers).get('authorization'),null);return Response.json({data:profile})});

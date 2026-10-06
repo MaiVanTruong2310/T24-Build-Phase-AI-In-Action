@@ -3,8 +3,6 @@
 import base64
 import binascii
 import re
-from zoneinfo import ZoneInfo
-
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
@@ -30,15 +28,15 @@ class RegisterRequest(BaseModel):
             raise ValueError("email or phone is required")
         if self.date_of_birth and self.date_of_birth >= date.today():
             raise ValueError("date_of_birth must be in the past")
-        if not self.full_name or not 2 <= len(self.full_name.strip()) <= 200:
-            raise ValueError('Họ tên phải có từ 2 đến 200 ký tự.')
-        if not self.date_of_birth or self.date_of_birth < date(1900, 1, 1):
+        if self.full_name is not None:
+            if not 2 <= len(self.full_name.strip()) <= 200:
+                raise ValueError('Họ tên phải có từ 2 đến 200 ký tự.')
+            self.full_name = self.full_name.strip()
+        if self.date_of_birth and self.date_of_birth < date(1900, 1, 1):
             raise ValueError('Cần ngày sinh hợp lệ từ năm 1900.')
-        if not self.gender:
-            raise ValueError('Cần chọn giới tính.')
-        self.full_name = self.full_name.strip()
-        self.phone = re.sub(r'[\s.()-]', '', self.phone or '')
-        if not re.fullmatch(r'^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$', self.phone):
+        if self.phone:
+            self.phone = re.sub(r'[\s.()-]', '', self.phone)
+        if self.phone and not re.fullmatch(r'^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$', self.phone):
             raise ValueError('Cần số điện thoại Việt Nam hợp lệ.')
         if self.email:
             self.email = self.email.strip().lower()

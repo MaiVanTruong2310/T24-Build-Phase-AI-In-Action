@@ -1,6 +1,7 @@
 import { fetchWithAuth } from '../../app/apiClient';
+import type { BookingListStatus, BookingStatus } from '../../features/appointment-booking/api';
 
-export type ApprovalStatus = 'pending_approval' | 'confirmed' | 'rejected';
+export type ApprovalStatus = Extract<BookingStatus, 'pending_approval' | 'confirmed' | 'rejected'>;
 
 export interface TriageResult {
   specialty_match: string;
@@ -31,7 +32,7 @@ export interface PendingBooking {
   encounter_type: 'in_person' | 'telehealth';
   reason: string;
   patient_note: string | null;
-  status: ApprovalStatus;
+  status: BookingStatus;
   staff_note: string | null;
   reviewed_at: string | null;
   triage: TriageResult | null;
@@ -53,7 +54,7 @@ interface StaffBookingResponse {
   encounter_type: 'in_person' | 'telehealth';
   reason: string;
   patient_note: string | null;
-  status: ApprovalStatus;
+  status: BookingStatus;
   cancellation_reason: string | null;
   staff_note: string | null;
   reviewed_at: string | null;
@@ -125,7 +126,7 @@ async function readStaffResponse(response: Response): Promise<StaffBookingRespon
 }
 
 export async function fetchPendingBookings(
-  filters?: { status?: ApprovalStatus; date?: string },
+  filters?: { status?: BookingListStatus; date?: string },
 ): Promise<PendingBooking[]> {
   const query = new URLSearchParams({ offset: '0', limit: '100' });
   if (filters?.status) query.set('status', filters.status);

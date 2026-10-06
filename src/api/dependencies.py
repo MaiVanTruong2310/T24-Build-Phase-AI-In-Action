@@ -39,16 +39,12 @@ async def get_current_user(
             except ValueError as exc:
                 raise AuthenticationError("INVALID_TOKEN", "Invalid access token") from exc
             await session.commit()
-<<<<<<< HEAD
             if (
                 local_user is None
                 or local_user.status != "active"
                 or local_user.role != "staff"
                 or local_user.phone != "admin123"
             ):
-=======
-            if local_user is None or local_user.status != "active" or local_user.role != "staff":
->>>>>>> develop
                 raise AuthenticationError("INVALID_TOKEN", "Invalid staff session")
             return local_user
         return await authenticated_profile(token, session)

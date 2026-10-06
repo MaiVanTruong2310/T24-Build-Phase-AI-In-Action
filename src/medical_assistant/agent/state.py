@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-# Re-export AgentState from centralized src.agents.state
-from src.agents.state import AgentState
-
-__all__ = ["AgentState"]
+# Legacy medical-assistant state schema retained for existing node imports.
 from typing import Any, TypedDict
 
 

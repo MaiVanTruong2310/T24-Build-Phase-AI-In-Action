@@ -309,7 +309,7 @@ class ChatHistoryService:
                 {"cid": row["id"], "uid": user.id},
             )
 
-    async def list_conversations(self, user_id, limit=30, offset=0):
+    async def list_conversations(self, user_id, limit=30, offset=0, patient_profile_id=None):
         log_event(
             logger,
             logging.INFO,

@@ -40,6 +40,10 @@ export function AppointmentDetailPanel({ booking, display, isCancelling, onCance
             <div className="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/50 p-4 text-sm leading-6 text-rose-800 dark:text-rose-300">
               <X className="mr-2 inline h-4 w-4" /> Lịch hẹn này đã được hủy và lưu trong danh mục Đã hủy.
             </div>
+          ) : booking.status === 'expired' ? (
+            <div className="rounded-2xl border border-slate-200 dark:border-app-border bg-slate-100 dark:bg-app-muted p-4 text-sm leading-6 text-slate-700 dark:text-app-secondary"><X className="mr-2 inline h-4 w-4" />Lịch hẹn đã hết hạn và không thể thay đổi.</div>
+          ) : booking.status === 'rejected' ? (
+            <div className="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/50 p-4 text-sm leading-6 text-rose-800 dark:text-rose-300"><X className="mr-2 inline h-4 w-4" />Yêu cầu đặt lịch đã bị từ chối.</div>
           ) : (
             <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/50 p-4 text-sm leading-6 text-amber-800 dark:text-amber-300"><ShieldCheck className="mr-2 inline h-4 w-4" />Lịch hẹn đang chờ hệ thống và nhân viên điều phối xác nhận.</div>
           )}

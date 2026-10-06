@@ -14,7 +14,15 @@ export function PreviewSidebar({ form }: Props) {
           <div className="w-1.5 h-1.5 rounded-full bg-green-400"></div>
           Xem trước hiển thị App
         </span>
-        <button className="text-white/80 hover:text-white"><Eye size={16} /></button>
+        <button
+          type="button"
+          disabled
+          aria-label="Preview mode is unavailable."
+          title="Preview mode is unavailable."
+          className="text-white/80 hover:text-white"
+        >
+          <Eye size={16} />
+        </button>
       </div>
 
       <div className="relative h-24 bg-slate-100">

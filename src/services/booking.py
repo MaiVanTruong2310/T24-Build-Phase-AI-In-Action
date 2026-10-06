@@ -202,7 +202,6 @@ class BookingService:
             reason=reason.strip(),
             patient_note=patient_note.strip() if patient_note else None,
             status="confirmed",
-            expired_at=schedule.starts_at,
             reviewed_by=actor_id,
             reviewed_at=datetime.now(UTC),
         )
@@ -367,6 +366,7 @@ class BookingService:
             if service.booking_mode == "group" and active_count >= schedule.capacity:
                 raise ConflictError("CAPACITY_EXCEEDED", "This schedule has no remaining capacity")
 
+        created_at = datetime.now(UTC)
         booking = Booking(
             user_id=user_id,
             hold_id=hold.id if hold else None,
@@ -381,6 +381,8 @@ class BookingService:
             reason=request.reason.strip(),
             patient_note=request.patient_note.strip() if request.patient_note else None,
             status="pending_approval",
+            created_at=created_at,
+            expired_at=created_at + timedelta(hours=24),
         )
         await self.bookings.add(booking)
         if hold:
@@ -802,6 +804,7 @@ def booking_response(value: Booking) -> BookingResponse:
         reason=value.reason,
         patient_note=value.patient_note,
         status=value.status,
+        expired_at=value.expired_at,
         cancellation_reason=value.cancellation_reason,
         staff_note=value.staff_note,
         reviewed_by=value.reviewed_by,

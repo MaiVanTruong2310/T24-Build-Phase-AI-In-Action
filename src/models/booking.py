@@ -55,6 +55,7 @@ class Booking(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     patient_note: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(24), default="pending_approval", nullable=False, index=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     cancellation_reason: Mapped[str | None] = mapped_column(Text)
     staff_note: Mapped[str | None] = mapped_column(Text)
     idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)

@@ -1,4 +1,5 @@
-import { PatientSelector, usePatientSelection } from '../features/patient-profiles/PatientSelector'
+import { PatientSelector } from '../features/patient-profiles/PatientSelector'
+import { usePatientSelection } from '../features/patient-profiles/usePatientSelection'
 import { appointmentDateError, latestAppointmentDate, vietnamToday } from '../features/appointment-booking/dateValidation'
 import { TypewriterLoader } from '../components/TypewriterLoader';
 import { useEffect, useRef, useState } from 'react'
@@ -166,7 +167,6 @@ export default function ConsultationBooking() {
 
   const [loadingPackages, setLoadingPackages] = useState(false)
 
-  const [packageSubmitted, setPackageSubmitted] = useState<PackageRequest | null>(null)
 
 
 
@@ -799,8 +799,6 @@ export default function ConsultationBooking() {
       })
 
 
-
-      setPackageSubmitted(created)
 
       setSuccess(
 

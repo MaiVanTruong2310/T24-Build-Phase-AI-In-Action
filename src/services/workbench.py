@@ -194,7 +194,6 @@ async def intake(db, request, user, token, state):
     from zoneinfo import ZoneInfo
 
     from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN, _is_minor
-    from zoneinfo import ZoneInfo
     today = datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).date()
     from src.services.patient_profiles import resolve_booking_payload
     target, profile = await resolve_booking_payload(db, user, request)

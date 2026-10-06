@@ -1,12 +1,14 @@
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.api.dependencies import require_patient
 from src.api.response import success_response
 from src.db.dependencies import get_db_session
-from src.models.user import User
 from src.models.patient_profile import PatientProfile, PatientRelationship
+from src.models.user import User
 from src.schemas.patient_profile import RelativeInput
 from src.services.patient_profiles import create_relative, profile_dict
 

@@ -58,10 +58,22 @@ async function widgetTest(mode) {
   const jsx = (type, props) => ({ type, props });
   const widget = load('frontend/src/layouts/ChatbotWidget.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx },
+    '../components/ChatMessageInput.css': {},
+    '../components/ChatSendButton.css': {},
+    '../components/AIIdentity': { AIIdentity: 'AIIdentity' },
+    '../features/chat/BookingDrawer': { BookingDrawer: 'BookingDrawer' },
+    '../features/chat/AssistantTurnMetrics': { AssistantTurnMetrics: 'AssistantTurnMetrics' },
     'lucide-react': {}, 'react-redux': { useDispatch: () => () => {}, useSelector: f => f({ layout: { isChatOpen: true }, auth: { user: mode === 'authenticated' ? { id: 'auth-1', full_name: 'Nguyễn An', phone: '0912345678' } : null } }) },
     '../features/chat/AssistantMessage': {},
     '../features/chat/ChatHistoryPanel': { ChatHistoryPanel: 'ChatHistoryPanel' },
     '../features/chat/ChatAccessGate': { ChatAccessGate: 'ChatAccessGate' },
+    '../features/patient-profiles/PatientSelector': {
+      PatientSelector: 'PatientSelector',
+    },
+    '../features/patient-profiles/usePatientSelection': {
+      usePatientSelection: () => ({ profileId: '', selectedProfile: null, profiles: [], loading: false, error: '' }),
+    },
+    '../features/coordinator/PatientUpdates': { PatientUpdates: 'PatientUpdates' },
     '../features/chat/profile': { readGuestProfile: () => mode === 'locked' || mode === 'authenticated' ? null : { name: 'Nguyễn An', phone: '0912345678' }, saveGuestProfile() {}, GUEST_PROFILE_EVENT: 'guest-profile' },
     '../app/store': {}, '../features/chat/api': {
       checkAgentStatus: async () => true, submitBooking() {},
@@ -99,6 +111,7 @@ async function widgetTest(mode) {
   }
   const last = states[3].at(-1);
   assert.equal(states[4], false);
+  assert.match(states[5], /^web-/);
   if (mode === 'success' || mode === 'authenticated') {
     assert.equal(last.text, 'Xin chào!');
     assert.equal(last.metadata.ats_level, null);
@@ -106,7 +119,6 @@ async function widgetTest(mode) {
   } else {
     assert.equal(last.error, true);
     assert.equal(last.metadata, undefined);
-    assert.equal(states[5], false);
     assert.equal(calls, mode === 'partial' ? 0 : 1);
     assert(!last.text.includes('ATS'));
   }

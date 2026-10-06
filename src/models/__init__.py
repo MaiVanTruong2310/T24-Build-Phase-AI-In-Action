@@ -38,6 +38,8 @@ from src.models.zalo import ZaloUserMapping
 
 __all__ = [
     "PackageRequest",
+    "PatientProfile",
+    "PatientRelationship",
     "CatalogAuditEvent",
     "Booking",
     "ChatTakeoverAuditEvent",

@@ -23,6 +23,8 @@ class AgentState(TypedDict, total=False):
     session_id: str
     response: str
     analysis: str
+    disclaimer: str
+    token_usage: dict[str, Any]
     context: str
     error: str | None
     language: str | None  # 'vi' hoặc 'en'
@@ -71,6 +73,11 @@ class AgentState(TypedDict, total=False):
     preferred_date: str | None
     preferred_period: str | None
     booking_confirmed: bool | None
+    available_slots: list[dict[str, Any]]
+    selected_slot: dict[str, Any] | None
+    booking_id: str | None
+    booking_code: str | None
+    booking_intake: dict[str, Any] | None
 
     # 5. Phản tư lâm sàng (Reflexion loop)
     critic_status: str | None  # 'PASS' | 'REVISE'

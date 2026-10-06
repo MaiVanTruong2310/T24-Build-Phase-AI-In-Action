@@ -87,11 +87,12 @@ async def prepare_turn(request, user, session):
     started = time.perf_counter()
     subject = user
     selected_profile = None
-    if user:
-        from src.db.session import get_session_factory
-        from src.services.patient_profiles import resolve_patient
-        from src.models.patient_profile import PatientProfile
+    if user and session is not None:
         from sqlalchemy import select
+
+        from src.db.session import get_session_factory
+        from src.models.patient_profile import PatientProfile
+        from src.services.patient_profiles import resolve_patient
         async with get_session_factory()() as profile_db:
             if request.patient_profile_id is None:
                 request.patient_profile_id = (await profile_db.execute(select(PatientProfile.id).where(PatientProfile.linked_user_id == user.id))).scalar_one_or_none()

@@ -85,14 +85,9 @@ async def create_package_request(
 ):
     """Register for a health package / pathway."""
     async with db.begin():
-<<<<<<< HEAD
-        from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN, _is_minor
-
-=======
         from src.services.patient_profiles import resolve_booking_payload
         target, profile = await resolve_booking_payload(db, user, payload)
-        from src.medical_assistant.domain.booking_request_service import _is_minor, PHONE_PATTERN
->>>>>>> develop
+        from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN, _is_minor
         if not payload.consent_to_contact:
             raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
         patient_name = (payload.patient_name or (user.full_name if user else "") or "").strip()

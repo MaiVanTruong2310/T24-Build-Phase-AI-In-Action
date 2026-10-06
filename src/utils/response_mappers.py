@@ -23,11 +23,11 @@ def booking_response(value: Booking) -> BookingResponse:
         reason=value.reason,
         patient_note=value.patient_note,
         status=value.status,
+        expired_at=value.expired_at,
         cancellation_reason=value.cancellation_reason,
         staff_note=value.staff_note,
         reviewed_by=value.reviewed_by,
         reviewed_at=value.reviewed_at,
-        expired_at=value.expired_at,
         created_at=value.created_at,
         updated_at=value.updated_at,
     )

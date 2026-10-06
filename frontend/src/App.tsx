@@ -2,7 +2,7 @@ import FamilyProfiles from './pages/FamilyProfiles'
 import { StaffAdminGate } from './features/coordinator/StaffAdminGate'
 import { TypewriterLoader } from './components/TypewriterLoader';
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import type { AppDispatch, RootState } from './app/store'
 import { initializeAuth, logout, sessionChanged } from './features/auth/authSlice'
@@ -25,9 +25,12 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then((module)
 const CoordinatorWorkbench = lazy(() => import('./pages/CoordinatorWorkbench'))
 const PatientCoordinationRequests = lazy(() => import('./pages/PatientCoordinationRequests'))
 const ConsultationBooking = lazy(() => import('./pages/ConsultationBooking'))
+const AppointmentBooking = lazy(() => import('./pages/AppointmentBooking'))
 const DoctorDirectory = lazy(() => import('./pages/DoctorDirectory'))
 const DoctorProfile = lazy(() => import('./pages/DoctorProfile'))
 const CoordinatorSchedule = lazy(() => import('./pages/CoordinatorSchedule'))
+const ScheduleApprove = lazy(() => import('./pages/ScheduleApprove'))
+const AppointmentApproval = lazy(() => import('./pages/AppointmentApproval'))
 const AppointmentHistory = lazy(() => import('./pages/AppointmentHistory'))
 const AppointmentProgress = lazy(() => import('./pages/AppointmentProgress'))
 const AppointmentDetail = lazy(() => import('./pages/AppointmentDetail'))
@@ -52,6 +55,13 @@ function Placeholder({ title, description }: { title: string; description: strin
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 light:text-app-secondary">{description}</p>
     </section>
   )
+}
+
+function PatientAppointmentRoute() {
+  const [searchParams] = useSearchParams()
+  return searchParams.has('reschedule')
+    ? <PatientAuthGate><AppointmentBooking /></PatientAuthGate>
+    : <ConsultationBooking />
 }
 
 const router = createBrowserRouter([
@@ -79,13 +89,13 @@ const router = createBrowserRouter([
           { path: 'records', element: <Navigate to="/patient/profile" replace /> },
           { path: 'departments', element: <PatientDepartments /> },
           { path: 'family', element: <PatientAuthGate><FamilyProfiles /></PatientAuthGate> },
-          { path: 'appointments', element: <ConsultationBooking /> },
+          { path: 'appointments', element: <PatientAppointmentRoute /> },
           { path: 'requests', element: <PatientCoordinationRequests /> },
           { path: 'doctors', element: <DoctorDirectory /> },
           { path: 'doctors/:id', element: <DoctorProfile /> },
-          { path: 'appointments/history', element: <AppointmentHistory /> },
+          { path: 'appointments/history', element: <PatientAuthGate><AppointmentHistory /></PatientAuthGate> },
           { path: 'progress', element: <PatientAuthGate><AppointmentProgress /></PatientAuthGate> },
-          { path: 'appointments/:id', element: <AppointmentDetail /> }
+          { path: 'appointments/:id', element: <PatientAuthGate><AppointmentDetail /></PatientAuthGate> }
         ]
       }
     ]
@@ -96,7 +106,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <CoordinatorWorkbench mode="dashboard" /> },
       { path: 'overview', element: <CoordinatorWorkbench mode="dashboard" /> },
-      { path: 'dieu-phoi', element: <CoordinatorWorkbench /> },
+      { path: 'coordination', element: <CoordinatorWorkbench /> },
+      { path: 'dieu-phoi', element: <Navigate to="/staff/coordination" replace /> },
       { path: 'shifts', element: <StaffAdminGate><CoordinatorSchedule /></StaffAdminGate> },
       { path: 'settings', element: <StaffAdminGate><CoordinatorWorkbench mode="settings" /></StaffAdminGate> },
       { path: 'queue', element: <CoordinatorWorkbench key="queue" /> },
@@ -108,7 +119,8 @@ const router = createBrowserRouter([
       { path: 'services', element: <StaffAdminGate><ServiceManagement /></StaffAdminGate> },
       { path: 'services/create', element: <StaffAdminGate><CreateService /></StaffAdminGate> },
       { path: 'appointments', element: <CoordinatorWorkbench /> },
-      { path: 'appointments/approve/:id', element: <Navigate to="/staff/queue" replace /> },
+      { path: 'booking-approvals', element: <AppointmentApproval /> },
+      { path: 'appointments/approve/:id', element: <ScheduleApprove /> },
       { path: 'doctor-schedule', element: <StaffAdminGate><DoctorSchedule /></StaffAdminGate> },
       { path: 'patients', element: <Placeholder title="Quản lý bệnh nhân" description="Page quản lý bệnh nhân sẽ được bổ sung sau." /> },
       { path: 'monitoring', element: <CoordinatorWorkbench mode="emergency" /> }
@@ -118,7 +130,11 @@ const router = createBrowserRouter([
 
 function PatientAuthGate({ children }: { children: ReactNode }) {
   const user = useSelector((state: RootState) => state.auth.user)
-  if (!user) return <Navigate to="/login" replace />
+  const location = useLocation()
+  if (!user) {
+    const returnTo = encodeURIComponent(`${location.pathname}${location.search}`)
+    return <Navigate to={`/login?returnTo=${returnTo}`} replace />
+  }
   return user.role === 'patient' ? <>{children}</> : <Navigate to="/staff" replace />
 }
 
