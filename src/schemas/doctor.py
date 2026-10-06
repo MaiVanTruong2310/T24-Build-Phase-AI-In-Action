@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.schemas.catalog_types import CatalogStatus, ReviewStatus
 from src.schemas.facility import FacilityResponse
@@ -21,6 +21,8 @@ class DoctorFacilityAssignment(BaseModel):
     room: str | None = Field(default=None, max_length=64)
     active_from: date | None = None
     active_to: date | None = None
+    position: str | None = Field(default=None, max_length=160)
+    is_primary: bool = False
 
     @model_validator(mode="after")
     def validate_date_range(self) -> DoctorFacilityAssignment:
@@ -35,17 +37,22 @@ class DoctorCreate(BaseModel):
 
     code: str = Field(min_length=1, max_length=64)
     full_name: str = Field(min_length=1, max_length=200)
-    license_number: str | None = Field(default=None, max_length=64)
-    email: str | None = Field(default=None, max_length=320)
-    phone: str | None = Field(default=None, max_length=32)
     bio: str | None = None
     status: CatalogStatus = "active"
     review_status: ReviewStatus = "approved"
     booking_enabled: bool = True
     avatar_url: str | None = Field(default=None, max_length=500)
-    gender: str | None = Field(default=None, max_length=16)
     title: str | None = Field(default=None, max_length=64)
-    date_of_birth: date | None = None
+    professional_role: str = Field(default="Bác sĩ", max_length=40)
+    honors: list[str] = Field(default_factory=list)
+    academic_ranks: list[str] = Field(default_factory=list)
+    degrees: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    position: str | None = Field(default=None, max_length=160)
+    experience_years: int | None = Field(default=None, ge=0, le=80)
+    education: list[str] = Field(default_factory=list)
+    work_history: list[str] = Field(default_factory=list)
+    awards: list[str] = Field(default_factory=list)
     specialty_ids: list[UUID] = Field(default_factory=list)
     facilities: list[DoctorFacilityAssignment] = Field(default_factory=list)
     facility_ids: list[UUID] | None = None
@@ -58,24 +65,40 @@ class DoctorCreate(BaseModel):
             if self.facilities:
                 raise ValueError("Provide either facility_ids or facilities, not both")
             self.facilities = [DoctorFacilityAssignment(facility_id=facility_id) for facility_id in self.facility_ids]
+        if sum(item.is_primary for item in self.facilities) > 1:
+            raise ValueError("Only one primary facility is allowed")
         return self
+
+    @field_validator("honors", "academic_ranks", "degrees", "languages", "education", "work_history", "awards")
+    @classmethod
+    def clean_lists(cls, values: list[str], info) -> list[str]:
+        clean = list(dict.fromkeys(value.strip() for value in values if value.strip()))
+        max_length = 80 if info.field_name in {"honors", "academic_ranks", "degrees", "languages"} else 500
+        if len(clean) > 40 or any(len(value) > max_length for value in clean):
+            raise ValueError("Too many or overly long profile entries")
+        return clean
 
 
 class DoctorUpdate(BaseModel):
     """Partially update a doctor profile."""
 
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
-    license_number: str | None = Field(default=None, max_length=64)
-    email: str | None = Field(default=None, max_length=320)
-    phone: str | None = Field(default=None, max_length=32)
     bio: str | None = None
     status: CatalogStatus | None = None
     review_status: ReviewStatus | None = None
     booking_enabled: bool | None = None
     avatar_url: str | None = Field(default=None, max_length=500)
-    gender: str | None = Field(default=None, max_length=16)
     title: str | None = Field(default=None, max_length=64)
-    date_of_birth: date | None = None
+    professional_role: str | None = Field(default=None, max_length=40)
+    honors: list[str] | None = None
+    academic_ranks: list[str] | None = None
+    degrees: list[str] | None = None
+    languages: list[str] | None = None
+    position: str | None = Field(default=None, max_length=160)
+    experience_years: int | None = Field(default=None, ge=0, le=80)
+    education: list[str] | None = None
+    work_history: list[str] | None = None
+    awards: list[str] | None = None
     specialty_ids: list[UUID] | None = None
     facilities: list[DoctorFacilityAssignment] | None = None
     facility_ids: list[UUID] | None = None
@@ -88,6 +111,8 @@ class DoctorUpdate(BaseModel):
             if self.facilities:
                 raise ValueError("Provide either facility_ids or facilities, not both")
             self.facilities = [DoctorFacilityAssignment(facility_id=facility_id) for facility_id in self.facility_ids]
+        if self.facilities and sum(item.is_primary for item in self.facilities) > 1:
+            raise ValueError("Only one primary facility is allowed")
         return self
 
 
@@ -107,6 +132,8 @@ class DoctorFacilityResponse(BaseModel):
     room: str | None
     active_from: date | None
     active_to: date | None
+    position: str | None = None
+    is_primary: bool = False
     facility: FacilityResponse | None = None
 
 
@@ -134,17 +161,22 @@ class DoctorResponse(BaseModel):
     id: UUID
     code: str
     full_name: str
-    license_number: str | None
-    email: str | None
-    phone: str | None
     bio: str | None
     status: str
     review_status: str
     booking_enabled: bool
     avatar_url: str | None
-    gender: str | None
     title: str | None
-    date_of_birth: date | None
+    professional_role: str = "Bác sĩ"
+    honors: list[str] = Field(default_factory=list)
+    academic_ranks: list[str] = Field(default_factory=list)
+    degrees: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    position: str | None = None
+    experience_years: int | None = None
+    education: list[str] = Field(default_factory=list)
+    work_history: list[str] = Field(default_factory=list)
+    awards: list[str] = Field(default_factory=list)
     specialty_ids: list[UUID] = Field(default_factory=list)
     specialties: list[DoctorSpecialtyResponse] = Field(default_factory=list)
     facilities: list[DoctorFacilityResponse] = Field(default_factory=list)

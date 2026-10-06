@@ -1,11 +1,14 @@
 """Doctor catalog and assignment business operations."""
 
+from datetime import date, datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
 from src.core.exceptions import ConflictError, NotFoundError
 from src.models.catalog import Doctor, DoctorFacility, DoctorService, DoctorSpecialty
+from src.models.coordination import ConsultationSession
 from src.schemas.catalog import (
     DoctorCreate,
     DoctorFacilityAssignment,
@@ -29,6 +32,12 @@ class DoctorServiceMixin:
         booking_enabled: bool | None,
         offset: int,
         limit: int,
+        honor: str | None = None,
+        academic_rank: str | None = None,
+        degree: str | None = None,
+        language: str | None = None,
+        on_date: date | None = None,
+        professional_role: str | None = None,
     ) -> list[Doctor]:
         """List doctors with public/staff visibility rules."""
         return await self.catalog.list_doctors(
@@ -40,6 +49,12 @@ class DoctorServiceMixin:
             booking_enabled=booking_enabled,
             offset=offset,
             limit=limit,
+            honor=honor,
+            academic_rank=academic_rank,
+            degree=degree,
+            language=language,
+            on_date=on_date,
+            professional_role=professional_role,
         )
 
     async def get_doctor(self, resource_id: UUID, *, public_only: bool) -> Doctor:
@@ -53,8 +68,6 @@ class DoctorServiceMixin:
         """Create a doctor and optional catalog assignments."""
         async with self.session.begin():
             await self._ensure_code_available(Doctor, request.code)
-            if request.license_number:
-                await self._ensure_license_available(request.license_number)
             await self._validate_assignments(request.specialty_ids, request.facilities, request.service_ids)
             values = request.model_dump(exclude={"specialty_ids", "facilities", "facility_ids", "service_ids"})
             value = Doctor(specialties=[], facilities=[], services=[], **values)
@@ -79,9 +92,20 @@ class DoctorServiceMixin:
             facilities = updates.pop("facilities", None)
             updates.pop("facility_ids", None)
             service_ids = updates.pop("service_ids", None)
-            if "license_number" in updates and updates["license_number"]:
-                await self._ensure_license_available(updates["license_number"], exclude_id=value.id)
             await self._validate_assignments(specialty_ids, facilities, service_ids)
+            if facilities is not None:
+                published = (await self.session.execute(select(
+                    ConsultationSession.facility_id, ConsultationSession.session_date,
+                ).where(ConsultationSession.doctor_id == resource_id,
+                        ConsultationSession.session_date >= datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date(),
+                        ConsultationSession.status == "open"))).all()
+                for facility_id, session_date in published:
+                    valid = any(item.facility_id == facility_id
+                                and (item.active_from is None or item.active_from <= session_date)
+                                and (item.active_to is None or item.active_to >= session_date)
+                                for item in facilities)
+                    if not valid:
+                        raise ConflictError("PUBLISHED_SESSION_FACILITY", "Không thể xóa cơ sở đang có buổi khám được công bố")
             for field, item in updates.items():
                 setattr(value, field, item)
             await self.catalog.replace_doctor_assignments(

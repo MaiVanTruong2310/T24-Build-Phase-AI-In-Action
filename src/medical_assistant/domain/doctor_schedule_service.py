@@ -12,7 +12,12 @@ import json
 import logging
 import re
 import unicodedata
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+
+try:
+    from datetime import UTC
+except ImportError:
+    UTC = timezone.utc
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -63,7 +68,8 @@ def _fold(value: Any) -> str:
 
 
 def _specialty_terms(name: str | None) -> list[str]:
-    folded = _fold(name)
+    raw_name = str(name or "").strip()
+    folded = _fold(raw_name)
     code_aliases = {
         "tieu_hoa": "tieu hoa",
         "than_kinh": "than kinh",
@@ -75,11 +81,34 @@ def _specialty_terms(name: str | None) -> list[str]:
         "da_khoa": "suc khoe tong quat",
     }
     folded = code_aliases.get(folded, folded)
-    terms = {folded} if folded else set()
+    terms: set[str] = set()
+    if raw_name:
+        terms.add(raw_name.lower())
+    if folded:
+        terms.add(folded)
+
     for key, aliases in SPECIALTY_ALIAS_MAP.items():
-        folded_aliases = {_fold(key), *(_fold(alias) for alias in aliases)}
-        if folded in folded_aliases or any(alias in folded for alias in folded_aliases):
+        all_aliases = [key, *aliases]
+        folded_aliases = [_fold(a) for a in all_aliases]
+        matched = False
+        if folded in folded_aliases:
+            matched = True
+        else:
+            for fa in folded_aliases:
+                if len(fa) <= 3:
+                    if re.search(rf"\b{re.escape(fa)}\b", folded):
+                        # Guard against "mat" matching "gan mat" or "tieu hoa"
+                        if fa == "mat" and ("gan" in folded or "tieu hoa" in folded):
+                            continue
+                        matched = True
+                        break
+                elif fa in folded:
+                    matched = True
+                    break
+        if matched:
+            terms.update(all_aliases)
             terms.update(folded_aliases)
+
     return sorted((term for term in terms if len(term) >= 2), key=len, reverse=True)
 
 
@@ -129,19 +158,48 @@ class DoctorScheduleService:
             # sourced doctor profiles; only live availability is disabled.
             self.client = _UnavailableDatabaseClient()
 
-    def find_specialty_by_name(self, query_name: str) -> dict[str, Any] | None:
+    def find_candidate_specialties(self, query_name: str) -> list[dict[str, Any]]:
+        """Find matching specialty rows ranked by the number of approved doctors."""
+        candidate_specialties: list[dict[str, Any]] = []
+        seen_ids = set()
         for term in _specialty_terms(query_name):
             try:
                 rows = self.client.select(
                     "specialties",
-                    params={"select": "id,code,name", "name": f"ilike.*{term}*", "limit": 1},
+                    params={"select": "id,code,name", "name": f"ilike.*{term}*", "limit": 10},
                 )
-                if rows:
-                    return rows[0]
+                for row in rows:
+                    if row["id"] not in seen_ids:
+                        seen_ids.add(row["id"])
+                        candidate_specialties.append(row)
             except Exception as exc:
                 logger.warning("Supabase specialty lookup failed: %s", type(exc).__name__)
-                return None
-        return None
+        if not candidate_specialties:
+            return []
+
+        # Count doctors for each candidate specialty to rank them
+        scored: list[tuple[int, dict[str, Any]]] = []
+        for spec in candidate_specialties[:12]:
+            try:
+                relations = self.client.select(
+                    "doctor_specialties",
+                    params={
+                        "select": "doctor_id",
+                        "specialty_id": f"eq.{spec['id']}",
+                        "review_status": "eq.approved",
+                        "limit": 100,
+                    },
+                )
+                scored.append((len(relations), spec))
+            except Exception:
+                scored.append((0, spec))
+
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        return [pair[1] for pair in scored]
+
+    def find_specialty_by_name(self, query_name: str) -> dict[str, Any] | None:
+        candidates = self.find_candidate_specialties(query_name)
+        return candidates[0] if candidates else None
 
     def find_facility(self, query: str | None) -> dict[str, Any] | None:
         """Resolve a facility UUID, code, or display name to one active row."""
@@ -186,14 +244,16 @@ class DoctorScheduleService:
         preferred_period: str | None,
         facility: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        specialty = self.find_specialty_by_name(specialty_name or "")
-        if not specialty:
+        candidates = self.find_candidate_specialties(specialty_name or "")
+        if not candidates:
             return []
+        primary_specialty = candidates[0]
+        spec_ids = [c["id"] for c in candidates[:3]]
         relations = self.client.select(
             "doctor_specialties",
             params={
                 "select": "doctor_id",
-                "specialty_id": f"eq.{specialty['id']}",
+                "specialty_id": f"in.({','.join(spec_ids)})",
                 "review_status": "eq.approved",
                 "limit": max(20, limit_doctors * 5),
             },
@@ -278,7 +338,7 @@ class DoctorScheduleService:
         return [
             {
                 **doctor,
-                "specialties": [specialty.get("name")],
+                "specialties": [primary_specialty.get("name")],
                 "overview": "",
                 "workplace": facility.get("name", "") if facility else "",
                 "department": facility_departments.get(str(doctor["id"]), ""),

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger
-from src.models.catalog import CatalogAuditEvent, Doctor, DoctorSchedule
+from src.models.catalog import CatalogAuditEvent, DoctorSchedule
 from src.repositories.catalog import CatalogRepository
 from src.schemas.catalog import DoctorFacilityAssignment
 from src.services.doctor import DoctorServiceMixin
@@ -61,14 +61,6 @@ class CatalogService(
         if existing is not None:
             raise ConflictError("CODE_EXISTS", "Catalog code already exists")
 
-    async def _ensure_license_available(self, license_number: str, *, exclude_id: UUID | None = None) -> None:
-        """Reject duplicate doctor license numbers."""
-        statement = select(Doctor).where(Doctor.license_number == license_number)
-        if exclude_id:
-            statement = statement.where(Doctor.id != exclude_id)
-        if (await self.session.execute(statement)).scalar_one_or_none() is not None:
-            raise ConflictError("LICENSE_EXISTS", "Doctor license number already exists")
-
     async def _audit(self, actor_id: UUID, entity_type: str, entity_id: UUID, action: str, payload: dict) -> None:
         """Write a durable audit record and a safe application log."""
         await self.catalog.add_audit_event(
@@ -94,25 +86,13 @@ class CatalogService(
     @staticmethod
     def _schedule_is_public(value: DoctorSchedule) -> bool:
         """Check the non-query public availability rules for one slot."""
-        schedule_type = getattr(value, "type", "consultation") or "consultation"
-        facility = getattr(value, "facility", None)
-        if schedule_type != "consultation":
-            return (
-                value.status != "cancelled"
-                and value.doctor.status == "active"
-                and value.doctor.review_status == "approved"
-                and value.doctor.booking_enabled
-                and (facility is None or facility.status == "active")
-            )
         return (
-            schedule_type == "consultation"
-            and value.status == "available"
-            and (getattr(value, "remaining_capacity", value.capacity) or 0) > 0
+            value.status == "available"
+            and value.capacity > 0
             and value.doctor.status == "active"
             and value.doctor.review_status == "approved"
             and value.doctor.booking_enabled
-            and facility is not None
-            and facility.status == "active"
+            and value.facility.status == "active"
         )
 
 

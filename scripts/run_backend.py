@@ -31,8 +31,9 @@ def main() -> None:
     settings = get_settings()
     parser = argparse.ArgumentParser(description="Run the P-124 API")
     parser.add_argument("--host", default=settings.app_host)
-    parser.add_argument("--port", default=settings.app_port, type=int)
-    parser.add_argument("--reload", action="store_true")
+    parser.add_argument("--port", type=int, default=settings.app_port)
+    reload_default = settings.app_env == "development"
+    parser.add_argument("--reload", action=argparse.BooleanOptionalAction, default=reload_default)
     args = parser.parse_args()
     uvicorn.run(
         "src.main:app",

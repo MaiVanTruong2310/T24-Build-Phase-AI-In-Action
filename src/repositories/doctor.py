@@ -1,9 +1,10 @@
 """Doctor and assignment persistence queries."""
 
+from datetime import date
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import selectinload
 
 from src.models.catalog import Doctor, DoctorFacility, DoctorService, DoctorSpecialty
@@ -28,7 +29,6 @@ class DoctorRepositoryMixin:
             statement = statement.where(
                 Doctor.status == "active",
                 Doctor.review_status == "approved",
-                Doctor.booking_enabled.is_(True),
             )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
@@ -43,6 +43,12 @@ class DoctorRepositoryMixin:
         booking_enabled: bool | None,
         offset: int,
         limit: int,
+        honor: str | None = None,
+        academic_rank: str | None = None,
+        degree: str | None = None,
+        language: str | None = None,
+        on_date: date | None = None,
+        professional_role: str | None = None,
     ) -> list[Doctor]:
         """List doctors with catalog filters and assignment collections."""
         statement = (
@@ -60,16 +66,30 @@ class DoctorRepositoryMixin:
             statement = statement.where(
                 Doctor.status == "active",
                 Doctor.review_status == "approved",
-                Doctor.booking_enabled.is_(True),
             )
         if booking_enabled is not None:
             statement = statement.where(Doctor.booking_enabled.is_(booking_enabled))
+        if professional_role:
+            statement = statement.where(Doctor.professional_role == professional_role)
         if name:
             statement = statement.where(Doctor.full_name.ilike(f"%{name.strip()}%"))
         if specialty_id:
             statement = statement.join(DoctorSpecialty).where(DoctorSpecialty.specialty_id == specialty_id)
         if facility_id:
-            statement = statement.join(DoctorFacility).where(DoctorFacility.facility_id == facility_id)
+            day = on_date or date.today()
+            statement = statement.join(DoctorFacility).where(
+                DoctorFacility.facility_id == facility_id,
+                or_(DoctorFacility.active_from.is_(None), DoctorFacility.active_from <= day),
+                or_(DoctorFacility.active_to.is_(None), DoctorFacility.active_to >= day),
+            )
+        if honor:
+            statement = statement.where(Doctor.honors.contains([honor]))
+        if academic_rank:
+            statement = statement.where(Doctor.academic_ranks.contains([academic_rank]))
+        if degree:
+            statement = statement.where(Doctor.degrees.contains([degree]))
+        if language:
+            statement = statement.where(Doctor.languages.contains([language]))
         if service_id:
             statement = (
                 statement.join(DoctorService)
@@ -115,6 +135,8 @@ class DoctorRepositoryMixin:
                     room=facility.room,
                     active_from=facility.active_from,
                     active_to=facility.active_to,
+                    position=facility.position,
+                    is_primary=facility.is_primary,
                 )
                 for facility in unique_facilities
             ]

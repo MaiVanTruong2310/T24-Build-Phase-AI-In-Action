@@ -138,7 +138,7 @@ class ClinicalTriageService:
             ),
             (
                 "STEMI_ACS_CRUSHING",
-                r"(?:đau\s+)?(?:thắt\s+ngực|ngực|vùng\s+ngực).*?(?:bóp\s+nghẹt|đè\s+nén|đè\s+ép|dữ\s+dội|lan|kéo\s+dài)|(?:ngực|vùng\s+ngực).*?(?:bị\s+)?(?:bóp\s+nghẹt|đè\s+nén|đè\s+ép|dữ\s+dội)|(?:ngực|vùng\s+ngực).*?(?:lan\s+(?:lên|ra)?\s*(?:hàm|vai|tay\s+trái|cánh\s+tay|lưng))|(?:severe|crushing|squeezing|radiating|sharp)\s+chest\s+pain|chest\s+pain.*?(?:sweat|left\s+arm|jaw)|myocardial\s+infarction|heart\s+attack",
+                r"(?:đau\s+)?(?:thắt\s+ngực|that\s+nguc|ngực|nguc|vùng\s+ngực|vung\s+nguc).*?(?:bóp\s+nghẹt|bop\s+nghet|đè\s+nén|đè\s+ép|dữ\s+dội|du\s+doi|lan|kéo\s+dài)|(?:ngực|nguc|vùng\s+ngực|vung\s+nguc).*?(?:bị\s+)?(?:bóp\s+nghẹt|bop\s+nghet|đè\s+nén|đè\s+ép|dữ\s+dội|du\s+doi)|(?:ngực|nguc|vùng\s+ngực|vung\s+nguc).*?(?:lan\s+(?:lên|ra|sang|xuống)?\s*(?:hàm|vai|tay\s+trái|cánh\s+tay|tay|lưng))|(?:severe|crushing|squeezing|radiating|sharp)\s+chest\s+pain|chest\s+pain.*?(?:sweat|left\s+arm|jaw)|myocardial\s+infarction|heart\s+attack",
                 "Trung tâm Tim mạch",
                 "Nghi ngờ Nhồi máu cơ tim / Hội chứng vành cấp",
             ),
@@ -657,10 +657,10 @@ class ClinicalTriageService:
             ),
             (
                 "HEADACHE_WITH_VISUAL_CHANGE",
-                r"(?:đau đầu|nhức đầu|đau nửa đầu|headache|migraine).*?"
+                r"(?:đau đầu(?!\s+gối)|nhức đầu(?!\s+gối)|đau nửa đầu|headache|migraine).*?"
                 r"(?:nhìn mờ|nhìn đôi|mất thị lực|blurred vision|double vision|vision loss)|"
                 r"(?:nhìn mờ|nhìn đôi|mất thị lực|blurred vision|double vision|vision loss).*?"
-                r"(?:đau đầu|nhức đầu|đau nửa đầu|headache|migraine)",
+                r"(?:đau đầu(?!\s+gối)|nhức đầu(?!\s+gối)|đau nửa đầu|headache|migraine)",
                 "Thần kinh",
                 "Đau đầu kèm thay đổi thị giác cần đánh giá trực tiếp trong ngày",
             ),
@@ -749,7 +749,13 @@ class ClinicalTriageService:
             "nang nguc",
             "de ep nguc",
             "dau vung nguc",
+            "dau that nguc",
+            "dau that",
         ]
+
+        # Kiểm tra nhanh: Nếu bệnh nhân khẳng định ngực hoàn toàn bình thường hoặc phủ định đau ngực
+        if re.search(r"\b(?:ngực|nguc|vùng\s*ngực)\s+(?:hoàn\s+toàn\s+)?bình\s+thường\b|\b(?:không|khong|ko|k)\s+(?:bị\s+)?(?:đau|tức|thắt|nặng)\s*(?:vùng\s*)?ngực\b", clean_user_text):
+            return None
 
         has_positive_chest = False
         for cs in chest_signals:
@@ -759,10 +765,11 @@ class ClinicalTriageService:
                     break
 
         if not has_positive_chest:
-            # Kiểm tra thêm mẫu liên kết: ngực ... (bóp nghẹt | đè ép | đè nén | đau)
+            # Kiểm tra thêm mẫu liên kết: ngực ... (bóp nghẹt | đè ép | đè nén | đau | thắt)
+            # Chú ý: Tránh trường hợp "ngực ... không đau"
             chest_match = re.search(
-                r"(?:ngực|vùng ngực|chest).{0,24}?(?:bóp nghẹt|bóp|đè nén|đè ép|đè nặng|thắt|đau)|"
-                r"(?:đau|tức|thắt|nặng|đè).{0,16}?(?:lồng ngực|vùng ngực|ngực)",
+                r"(?:ngực|nguc|vùng\s*ngực|vung\s*nguc|chest).{0,25}?(?<!không\s)(?<!khong\s)(?<!ko\s)(?<!k\s)(?:bóp\s*nghẹt|bop\s*nghet|bóp|bop|đè\s*nén|de\s*nen|đè\s*ép|de\s*ep|đè\s*nặng|de\s*nang|thắt|that|đau|dau)|"
+                r"(?<!không\s)(?<!khong\s)(?<!ko\s)(?<!k\s)(?:đau|dau|tức|tuc|thắt|that|nặng|nang|đè|de).{0,20}?(?:lồng\s*ngực|long\s*nguc|vùng\s*ngực|vung\s*nguc|ngực|nguc)",
                 clean_user_text,
             )
             if chest_match and not negation_svc.is_phrase_negated(chest_match.group(0), user_text):
@@ -776,11 +783,19 @@ class ClinicalTriageService:
             "lan tay trái",
             "lan cánh tay trái",
             "lan vai",
+            "lan ra vai",
+            "lan sang vai",
             "lan bả vai",
             "lan hàm",
             "lan cổ",
             "lan sau lưng",
             "lan lưng",
+            "lan cánh tay",
+            "lan canh tay",
+            "lan ra cánh tay",
+            "lan ra canh tay",
+            "lan ra tay",
+            "lan tay",
             "radiating to left arm",
             "radiating to jaw",
             "radiating to back",
@@ -794,13 +809,15 @@ class ClinicalTriageService:
             "lan co",
             "lan lung",
         ]
-        has_radiation = any(rs in clean_user_text for rs in radiation_signals)
+        has_radiation = any(rs in clean_user_text and not negation_svc.is_phrase_negated(rs, user_text) for rs in radiation_signals)
 
         # 3. Thần kinh thực vật / Vã mồ hôi lạnh
         sweat_signals = [
             "vã mồ hôi",
             "vã mồ hôi lạnh",
+            "vã mồ hôi lanh",
             "mồ hôi lạnh",
+            "mồ hôi lanh",
             "mồ hôi hột",
             "toát mồ hôi",
             "cold sweat",
@@ -811,7 +828,7 @@ class ClinicalTriageService:
             "mo hoi lanh",
             "toat mo hoi",
         ]
-        has_sweat = any(ss in clean_user_text for ss in sweat_signals)
+        has_sweat = any(ss in clean_user_text and not negation_svc.is_phrase_negated(ss, user_text) for ss in sweat_signals)
 
         # 4. Khó thở / Hụt hơi
         dyspnea_signals = [
@@ -825,7 +842,7 @@ class ClinicalTriageService:
             "hut hoi",
             "tho doc",
         ]
-        has_dyspnea = any(ds in clean_user_text for ds in dyspnea_signals)
+        has_dyspnea = any(ds in clean_user_text and not negation_svc.is_phrase_negated(ds, user_text) for ds in dyspnea_signals)
 
         # 5. Choáng váng / Chóng mặt / Tiền ngất
         dizzy_signals = [
@@ -843,7 +860,7 @@ class ClinicalTriageService:
             "ngat",
             "muon xiu",
         ]
-        has_dizzy = any(dz in clean_user_text for dz in dizzy_signals)
+        has_dizzy = any(dz in clean_user_text and not negation_svc.is_phrase_negated(dz, user_text) for dz in dizzy_signals)
 
         # 6. Khởi phát khi gắng sức
         exertion_signals = [
@@ -860,28 +877,39 @@ class ClinicalTriageService:
             "di bo nhanh",
             "mang vac",
         ]
-        has_exertion = any(ex in clean_user_text for ex in exertion_signals)
+        has_exertion = any(ex in clean_user_text and not negation_svc.is_phrase_negated(ex, user_text) for ex in exertion_signals)
 
         # 7. Tính chất đè nén / bóp nghẹt dữ dội
         crushing_signals = [
             "dữ dội",
+            "du doi",
             "bóp nghẹt",
+            "bop nghet",
             "đè nén",
+            "de nen",
             "đè ép",
+            "de ep",
             "như đá đè",
+            "nhu da de",
+            "đau thắt",
+            "dau that",
+            "thắt dữ dội",
+            "that du doi",
             "severe",
             "crushing",
             "squeezing",
-            "du doi",
-            "bop nghet",
-            "de nen",
-            "de ep",
-            "nhu da de",
         ]
-        has_crushing = any(cr in clean_user_text for cr in crushing_signals)
+        has_crushing = any(cr in clean_user_text and not negation_svc.is_phrase_negated(cr, user_text) for cr in crushing_signals)
 
-        # Đau ngực có khả năng do tim cần đánh giá cấp cứu trong 10 phút (ATS 2).
-        # ATS 1 được dành cho ngừng tuần hoàn/hô hấp hoặc bất ổn sinh tồn rõ ràng.
+        # Nếu có đau thắt dữ dội kèm theo triệu chứng lan/vã mồ hôi/khó thở -> ATS 1 Resuscitation
+        # Nếu có đau ngực kèm dấu hiệu nghi ngờ tim mạch -> ATS 2 Emergent
+        if has_crushing and (has_radiation or has_sweat or has_dyspnea):
+            return {
+                "rule_id": "ACS_COMBINED_CARDIAC_RULE_ATS1",
+                "name": "Nghi ngờ Nhồi máu cơ tim cấp tối khẩn (Acute STEMI/ACS Red Flag)",
+                "ats_level": ATSLevel.LEVEL_1_RESUSCITATION,
+            }
+
         if has_crushing or (sum([has_radiation, has_sweat, has_dyspnea, has_dizzy, has_exertion]) >= 1):
             return {
                 "rule_id": "ACS_COMBINED_CARDIAC_RULE",
@@ -981,6 +1009,32 @@ class ClinicalTriageService:
                         default_safety_specialty = rule["default_specialty"]
 
         # =========================================================================
+        # ⚡ SHORT-CIRCUIT TỐI KHẨN: Level 1 Resuscitation & Level 2 Emergent
+        # Ngắt lập tức (<1ms) bảo vệ tính mạng bệnh nhân, tuyệt đối không chờ đợi
+        # =========================================================================
+        if safety_emergency and safety_ats is not None:
+            guidance = get_emergency_guidance(
+                flag_name=safety_flags[0] if safety_flags else "Cấp cứu lâm sàng",
+                specialty=default_safety_specialty,
+                ats_level=safety_ats.value if hasattr(safety_ats, "value") else int(safety_ats),
+                language=lang,
+            )
+            return TriageEvaluationResult(
+                matched_disease_key="EMERGENCY_RED_FLAG",
+                matched_disease_name=safety_flags[0] if safety_flags else "Cấp cứu tối khẩn",
+                ats_level=safety_ats,
+                urgency_tier=UrgencyTier.EMERGENCY_BLOCK,
+                max_booking_days=0,
+                is_emergency=True,
+                care_setting="EMERGENCY_DEPT",
+                triggered_red_flags=safety_flags,
+                triggered_rule_ids=safety_rule_ids,
+                suggested_specialty=default_safety_specialty,
+                clarification_question=None,
+                patient_guidance=guidance,
+            )
+
+        # =========================================================================
         # 3. TẦNG 3: QUÉT WARNING SIGNS (ATS Level 3 Bán khẩn)
         # =========================================================================
         if not safety_emergency:
@@ -1032,10 +1086,50 @@ class ClinicalTriageService:
                     "lưng dưới",
                     "thắt lưng",
                     "cột sống",
+                    "ngón tay",
+                    "ngón tay cái",
+                    "khớp ngón",
+                    "bàn tay",
+                    "cổ tay",
+                    "ngón chân",
+                    "bàn chân",
+                    "cổ chân",
+                    "khớp gối",
+                    "đầu gối",
+                    "khớp háng",
+                    "khuỷu tay",
+                    "khớp",
+                    "xương khớp",
                     "neck pain",
                     "shoulder pain",
                     "back pain",
                     "lower back",
+                    "joint pain",
+                    "finger",
+                    "knee",
+                    "wrist",
+                    "ankle",
+                )
+            )
+            has_explicit_joint = any(
+                term in clean_user_text
+                for term in (
+                    "ngón tay",
+                    "ngón tay cái",
+                    "khớp ngón",
+                    "đau khớp",
+                    "xương khớp",
+                    "khớp gối",
+                    "đầu gối",
+                    "cổ tay",
+                    "bàn tay",
+                    "cổ chân",
+                    "khuỷu tay",
+                    "khớp háng",
+                    "viêm khớp",
+                    "thoái hóa khớp",
+                    "joint pain",
+                    "knee pain",
                 )
             )
             has_msk_context = any(
@@ -1079,7 +1173,7 @@ class ClinicalTriageService:
                     "paralysis",
                 )
             )
-            if has_msk_site and has_msk_context and not has_msk_alarm:
+            if (has_explicit_joint or (has_msk_site and has_msk_context)) and not has_msk_alarm:
                 guidance = get_triage_guidance(
                     specialty="Chấn thương chỉnh hình - Y học thể thao",
                     ats_level=4,

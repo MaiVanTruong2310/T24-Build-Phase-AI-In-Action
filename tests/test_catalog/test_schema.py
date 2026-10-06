@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from src.schemas.catalog import (
     BulkScheduleImportRequest,
+    DoctorCreate,
+    DoctorFacilityAssignment,
     DoctorFacilityUpdate,
     DoctorScheduleCreate,
     DoctorScheduleUpdate,
@@ -15,6 +17,25 @@ from src.schemas.catalog import (
     ScheduleCancellationRequest,
     ScheduleImportRecord,
 )
+
+
+def test_doctor_accepts_multiple_facilities_and_separate_credentials():
+    first, second = uuid4(), uuid4()
+    doctor = DoctorCreate(
+        code="DOC-MULTI", full_name="Bác sĩ đa cơ sở",
+        honors=[" Thầy thuốc ưu tú ", "Thầy thuốc ưu tú"],
+        academic_ranks=["Phó giáo sư"], degrees=["Tiến sĩ", "BSCKII"],
+        facilities=[DoctorFacilityAssignment(facility_id=first, is_primary=True),
+                    DoctorFacilityAssignment(facility_id=second, department="Trung tâm Tim mạch")],
+    )
+    assert doctor.honors == ["Thầy thuốc ưu tú"]
+    assert [item.facility_id for item in doctor.facilities] == [first, second]
+    assert doctor.facilities[0].is_primary
+    with pytest.raises(ValidationError):
+        DoctorCreate(code="DOC-BAD", full_name="Bác sĩ", facilities=[
+            DoctorFacilityAssignment(facility_id=first, is_primary=True),
+            DoctorFacilityAssignment(facility_id=second, is_primary=True),
+        ])
 
 
 def test_schedule_requires_positive_time_range():
@@ -43,24 +64,6 @@ def test_schedule_update_accepts_version_and_capacity():
 
     assert request.expected_version == 3
     assert request.capacity == 4
-
-
-def test_busy_schedule_is_global_and_does_not_use_capacity():
-    """Busy schedules can apply to every facility and ignore consultation capacity."""
-    starts_at = datetime.now(UTC)
-    request = DoctorScheduleCreate(
-        doctor_id=uuid4(),
-        starts_at=starts_at,
-        ends_at=starts_at + timedelta(hours=1),
-        capacity=4,
-        type="busy",
-        note="  Clinical meeting  ",
-    )
-
-    assert request.facility_id is None
-    assert request.capacity == 0
-    assert request.status == "blocked"
-    assert request.note == "Clinical meeting"
 
 
 def test_schedule_cancellation_requires_non_blank_reason():

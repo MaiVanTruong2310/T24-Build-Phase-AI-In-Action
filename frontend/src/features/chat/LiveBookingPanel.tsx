@@ -1,11 +1,13 @@
 import { TypewriterLoader } from '../../components/TypewriterLoader';
-import { memo, useState, useEffect, useMemo, type FormEvent } from 'react';
+import { memo, useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../app/store';
-import { Calendar, CheckCircle2, Clock, Hospital, MapPin, Phone, Sparkles, Stethoscope, User, X, ShieldCheck, AlertCircle, Package, Search, Filter, Check, ChevronRight, Info } from 'lucide-react';
+import { Calendar, CheckCircle2, Clock, Hospital, MapPin, Phone, Sparkles, Stethoscope, User, X, ShieldCheck, AlertCircle, Package, Search, Filter, Check, ChevronRight, Info, GripVertical, ArrowUp, ArrowDown, Plus, Trash2 } from 'lucide-react';
 import { submitBooking, type BookingIntake } from './api';
 import {
   fetchServices,
+  fetchFacilities,
+  type Facility,
   fetchServiceCategories,
   createPackageRequest,
   type MedicalService,
@@ -35,9 +37,52 @@ const VINMEC_FACILITIES = [
   'Bệnh viện ĐKQT Vinmec Cần Thơ',
 ];
 
+const VINMEC_SPECIALTIES = [
+  'Khoa Thần kinh',
+  'Khoa Tiêu hóa - Gan mật',
+  'Trung tâm Tim mạch',
+  'Khoa Nội hô hấp',
+  'Khoa Chấn thương chỉnh hình & Cột sống',
+  'Khoa Cơ xương khớp',
+  'Khoa Tai - Mũi - Họng',
+  'Khoa Thận - Tiết niệu',
+  'Khoa Nội tiết - Đái tháo đường',
+  'Khoa Nhi',
+  'Khoa Sản phụ khoa',
+  'Khoa Mắt',
+  'Khoa Da liễu',
+  'Khoa Răng - Hàm - Mặt',
+  'Trung tâm Ung bướu',
+  'Khoa Miễn dịch - Dị ứng',
+  'Khoa Truyền nhiễm',
+  'Khoa Sức khỏe tổng quát',
+  'Khoa Cấp cứu',
+];
+
+const getSpecialtyOptions = (currentVal: string) => {
+  if (currentVal && !VINMEC_SPECIALTIES.includes(currentVal)) {
+    return [currentVal, ...VINMEC_SPECIALTIES];
+  }
+  return VINMEC_SPECIALTIES;
+};
+
 const formatCurrency = (val?: number | null) => {
   if (val == null || val === 0) return 'Liên hệ tư vấn';
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+};
+
+const normalizePhone = (value: string) => value.replace(/[\s.()-]/g, '');
+const phonePattern = /^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$/;
+const localToday = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+const isMinor = (birthDate: string) => {
+  const today = localToday();
+  const [year, month, day] = birthDate.split('-').map(Number);
+  const [currentYear, currentMonth, currentDay] = today.split('-').map(Number);
+  const age = currentYear - year - (currentMonth < month || (currentMonth === month && currentDay < day) ? 1 : 0);
+  return age < 18;
 };
 
 export const LiveBookingPanel = memo(function LiveBookingPanel({
@@ -85,10 +130,98 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
   const [patientNotes, setPatientNotes] = useState(
     intake?.clinical_summary || intake?.patient_notes || ''
   );
-  const [consent, setConsent] = useState(true);
+  const [guardianName, setGuardianName] = useState('');
+  const [guardianPhone, setGuardianPhone] = useState('');
+  const [consent, setConsent] = useState(false);
+  const editedFields = useRef(new Set<string>());
+  const markEdited = (field: string) => editedFields.current.add(field);
+  useEffect(() => { editedFields.current.clear(); }, [sessionId]);
+
+  // Ranked specialties for multi-symptom triage
+  const [specialties, setSpecialties] = useState<
+    Array<{ id: string; name: string; rationale?: string }>
+  >(() => {
+    if (intake?.ranked_specialties && intake.ranked_specialties.length > 0) {
+      return intake.ranked_specialties.map((item, idx) => ({
+        id: `spec-${idx}-${item.department_name}`,
+        name: item.department_name,
+        rationale: item.rationale,
+      }));
+    }
+    if (intake?.specialty_name) {
+      return [{ id: 'spec-init-0', name: intake.specialty_name }];
+    }
+    return [{ id: 'spec-init-0', name: 'Khám Đa khoa & Chuyên khoa' }];
+  });
+
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  const moveSpecialty = (index: number, direction: 'up' | 'down') => {
+    markEdited('specialties');
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= specialties.length) return;
+    setSpecialties((prev) => {
+      const updated = [...prev];
+      const temp = updated[index];
+      updated[index] = updated[targetIndex];
+      updated[targetIndex] = temp;
+      return updated;
+    });
+  };
+
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    markEdited('specialties');
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    setSpecialties((prev) => {
+      const updated = [...prev];
+      const [draggedItem] = updated.splice(draggedIndex, 1);
+      updated.splice(index, 0, draggedItem);
+      return updated;
+    });
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  const handleUpdateSpecialty = (index: number, newName: string) => {
+    markEdited('specialties');
+    setSpecialties((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], name: newName };
+      return updated;
+    });
+  };
+
+  const handleRemoveSpecialty = (index: number) => {
+    markEdited('specialties');
+    if (specialties.length <= 1) return;
+    setSpecialties((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAddSpecialty = () => {
+    markEdited('specialties');
+    const existingNames = new Set(specialties.map((s) => s.name));
+    const nextSpec = VINMEC_SPECIALTIES.find((s) => !existingNames.has(s)) || 'Khoa Sức khỏe tổng quát';
+    setSpecialties((prev) => [
+      ...prev,
+      {
+        id: `spec-${Date.now()}`,
+        name: nextSpec,
+      },
+    ]);
+  };
 
   // State cho Gói Khám Bệnh (Package Mode)
   const [packages, setPackages] = useState<MedicalService[]>([]);
+  const [packageFacilities, setPackageFacilities] = useState<Facility[]>([]);
+  const [packageFacilityId, setPackageFacilityId] = useState('');
   const [packageCategories, setPackageCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('Tất cả');
   const [packageSearch, setPackageSearch] = useState('');
@@ -108,10 +241,10 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
   useEffect(() => {
     if (!intake) {
       if (authUser) {
-        if (!patientName && authUser.full_name) setPatientName(authUser.full_name);
-        if (!patientPhone && authUser.phone) setPatientPhone(authUser.phone);
-        if (!dateOfBirth && authUser.date_of_birth) setDateOfBirth(authUser.date_of_birth);
-        if (authUser.gender) setGender(authUser.gender);
+        if (!editedFields.current.has('patientName') && !patientName && authUser.full_name) setPatientName(authUser.full_name);
+        if (!editedFields.current.has('patientPhone') && !patientPhone && authUser.phone) setPatientPhone(authUser.phone);
+        if (!editedFields.current.has('dateOfBirth') && !dateOfBirth && authUser.date_of_birth) setDateOfBirth(authUser.date_of_birth);
+        if (!editedFields.current.has('gender') && authUser.gender) setGender(authUser.gender);
       }
       return;
     }
@@ -121,53 +254,71 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
       setActiveTab('package');
     }
 
-    if (intake.patient_name && intake.patient_name !== patientName) {
+    if (!editedFields.current.has('patientName') && intake.patient_name && intake.patient_name !== patientName) {
       setPatientName(intake.patient_name);
       setLastAutoFilledField('name');
-    } else if (!patientName && authUser?.full_name) {
+    } else if (!editedFields.current.has('patientName') && !patientName && authUser?.full_name) {
       setPatientName(authUser.full_name);
     }
 
-    if (intake.patient_phone && intake.patient_phone !== patientPhone) {
+    if (!editedFields.current.has('patientPhone') && intake.patient_phone && intake.patient_phone !== patientPhone) {
       setPatientPhone(intake.patient_phone);
       setLastAutoFilledField('phone');
-    } else if (!patientPhone && authUser?.phone) {
+    } else if (!editedFields.current.has('patientPhone') && !patientPhone && authUser?.phone) {
       setPatientPhone(authUser.phone);
     }
 
     // Task 1: Auto-sync date_of_birth & gender
     const resolvedDob = intake.date_of_birth || authUser?.date_of_birth;
-    if (resolvedDob && resolvedDob !== dateOfBirth) {
+    if (!editedFields.current.has('dateOfBirth') && resolvedDob && resolvedDob !== dateOfBirth) {
       setDateOfBirth(resolvedDob);
       setLastAutoFilledField('dob');
     }
 
     const resolvedGender = intake.gender || authUser?.gender;
-    if (resolvedGender && resolvedGender !== gender) {
+    if (!editedFields.current.has('gender') && resolvedGender && resolvedGender !== gender) {
       setGender(resolvedGender);
     }
 
-    if (intake.facility_preference && intake.facility_preference !== facility) {
+    if (!editedFields.current.has('facility') && intake.facility_preference && intake.facility_preference !== facility) {
       setFacility(intake.facility_preference);
       setLastAutoFilledField('facility');
     }
-    if (intake.preferred_date && intake.preferred_date !== preferredDate) {
+    if (!editedFields.current.has('preferredDate') && intake.preferred_date && intake.preferred_date !== preferredDate) {
       setPreferredDate(intake.preferred_date);
       setLastAutoFilledField('date');
     }
-    if (intake.preferred_period && intake.preferred_period !== preferredPeriod) {
+    if (!editedFields.current.has('preferredPeriod') && intake.preferred_period && intake.preferred_period !== preferredPeriod) {
       setPreferredPeriod(intake.preferred_period);
     }
-    if (intake.selected_doctor_id && intake.selected_doctor_id !== preferredDoctorId) {
+    if (!editedFields.current.has('preferredDoctorId') && intake.selected_doctor_id && intake.selected_doctor_id !== preferredDoctorId) {
       setPreferredDoctorId(intake.selected_doctor_id);
     }
 
     // Sync clinical summary notes
     const newSummary = intake.clinical_summary || intake.patient_notes;
-    if (newSummary && newSummary !== patientNotes) {
+    if (!editedFields.current.has('patientNotes') && newSummary && newSummary !== patientNotes) {
       setPatientNotes(newSummary);
-      setPackageNote(newSummary);
+      if (!editedFields.current.has('packageNote')) setPackageNote(newSummary);
       setLastAutoFilledField('notes');
+    }
+
+    // Sync ranked specialties when intake updates
+    if (!editedFields.current.has('specialties') && intake.ranked_specialties && intake.ranked_specialties.length > 0) {
+      setSpecialties(
+        intake.ranked_specialties.map((item, idx) => ({
+          id: `spec-${idx}-${item.department_name}`,
+          name: item.department_name,
+          rationale: item.rationale,
+        }))
+      );
+    } else if (!editedFields.current.has('specialties') && intake.specialty_name && (!specialties.length || specialties[0].name !== intake.specialty_name)) {
+      setSpecialties([
+        {
+          id: `spec-${Date.now()}`,
+          name: intake.specialty_name,
+        },
+      ]);
     }
 
     if ((intake as any)?.confirmed && (intake as any)?.request_code && !savedCode) {
@@ -175,10 +326,19 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
     }
   }, [intake, authUser, savedCode]);
 
+  // Load only catalog facilities for package requests.
+  useEffect(() => {
+    if (activeTab !== 'package') return;
+    let active = true;
+    void fetchFacilities().then((items) => {
+      if (active) setPackageFacilities(items);
+    }).catch(() => { if (active) setPackageFacilities([]); });
+    return () => { active = false; };
+  }, [activeTab]);
+
   // Load packages catalog when switching to package tab
   useEffect(() => {
     if (activeTab !== 'package') return;
-
     let active = true;
     if (packageCategories.length === 0) {
       void fetchServiceCategories()
@@ -211,6 +371,24 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
     };
   }, [activeTab, selectedCategory, packageSearch]);
 
+  useEffect(() => {
+    if (!packageFacilities.length) return;
+    const current = packageFacilities.find((item) => item.id === packageFacilityId);
+    if (current) return;
+    const matched = packageFacilities.find((item) => item.name === facility);
+    setPackageFacilityId((matched || packageFacilities[0]).id);
+  }, [packageFacilities, packageFacilityId, facility]);
+
+  const patientError = () => {
+    if (patientName.trim().length < 2 || patientName.trim().length > 120) return 'Họ tên người khám cần từ 2 đến 120 ký tự.';
+    if (!phonePattern.test(normalizePhone(patientPhone))) return 'Số điện thoại chưa đúng định dạng Việt Nam.';
+    if (!dateOfBirth || dateOfBirth > localToday()) return 'Ngày sinh không hợp lệ hoặc nằm trong tương lai.';
+    if (isMinor(dateOfBirth) && (guardianName.trim().length < 2 || !phonePattern.test(normalizePhone(guardianPhone)))) {
+      return 'Người dưới 18 tuổi cần họ tên và số điện thoại người giám hộ hợp lệ.';
+    }
+    return '';
+  };
+
   // Calculate completion progress for Doctor Mode
   const requiredFields = [
     Boolean(patientName.trim()),
@@ -229,32 +407,49 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
       setSubmitError('Vui lòng đồng ý để nhân viên y tế liên hệ xác nhận lịch hẹn.');
       return;
     }
-    if (!patientName.trim() || patientPhone.trim().length < 9) {
-      setSubmitError('Vui lòng điền đầy đủ Họ tên và Số điện thoại hợp lệ.');
-      return;
-    }
-    if (!dateOfBirth) {
-      setSubmitError('Vui lòng nhập Ngày sinh của người khám.');
+    const error = patientError();
+    if (error) { setSubmitError(error); return; }
+    if (!preferredDate || preferredDate < localToday()) {
+      setSubmitError('Ngày khám mong muốn không thể bỏ trống hoặc nằm trong quá khứ.');
       return;
     }
 
     setSubmitting(true);
     setSubmitError('');
 
+    const primarySpecialty = specialties[0]?.name || intake?.specialty_name || 'Khám Đa khoa & Chuyên khoa';
+
+    // Build combined notes preserving patient summary and ranked specialty sequence
+    let finalNotes = patientNotes.trim();
+    if (specialties.length > 1) {
+      const pipelineText = `\n[Lộ trình ưu tiên người bệnh chọn]: ${specialties.map((s, i) => `${i + 1}. ${s.name}`).join(' -> ')}`;
+      if (!finalNotes.includes('[Lộ trình ưu tiên')) {
+        finalNotes = finalNotes ? `${finalNotes}\n${pipelineText}` : pipelineText;
+      }
+    }
+
+    if (finalNotes.length > 1000) {
+      setSubmitError('Tóm tắt triệu chứng không được vượt quá 1000 ký tự.');
+      setSubmitting(false);
+      return;
+    }
+
     const payload = {
       session_id: sessionId,
       patient_name: patientName.trim(),
-      patient_phone: patientPhone.replace(/\s+/g, ''),
+      patient_phone: normalizePhone(patientPhone),
       date_of_birth: dateOfBirth,
+      guardian_name: isMinor(dateOfBirth) ? guardianName.trim() : null,
+      guardian_phone: isMinor(dateOfBirth) ? normalizePhone(guardianPhone) : null,
       gender: gender || 'other',
-      specialty_name: intake?.specialty_name || 'Khám Đa khoa & Chuyên khoa',
-      specialty_code: intake?.specialty_code || null,
+      specialty_name: primarySpecialty,
+      specialty_code: primarySpecialty === intake?.specialty_name ? intake?.specialty_code || null : null,
       facility_preference: facility,
       preferred_date: preferredDate || null,
       preferred_period: preferredPeriod || 'any',
       preferred_doctor_id: preferredDoctorId || null,
-      selected_slot_id: intake?.selected_slot_id || null,
-      patient_notes: patientNotes.trim() || null,
+      selected_slot_id: editedFields.current.has('preferredDate') || editedFields.current.has('preferredDoctorId') ? null : intake?.selected_slot_id || null,
+      patient_notes: finalNotes || null,
       consent_to_contact: true,
     };
 
@@ -281,36 +476,36 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
       setSubmitError('Vui lòng chọn một gói khám bệnh hoặc dịch vụ.');
       return;
     }
-    if (!patientName.trim() || patientPhone.trim().length < 9) {
-      setSubmitError('Vui lòng điền đầy đủ Họ tên và Số điện thoại hợp lệ.');
+    if (!consent) { setSubmitError('Vui lòng đồng ý để điều phối viên liên hệ.'); return; }
+    const error = patientError();
+    if (error) { setSubmitError(error); return; }
+    if (!packageDate || packageDate < localToday()) {
+      setSubmitError('Ngày khám mong muốn không thể bỏ trống hoặc nằm trong quá khứ.');
       return;
     }
-    if (!dateOfBirth) {
-      setSubmitError('Vui lòng cung cấp Ngày sinh của người khám.');
+    if (!packageFacilityId || !packageFacilities.some((item) => item.id === packageFacilityId)) {
+      setSubmitError('Vui lòng chọn cơ sở đang tiếp nhận gói khám.');
       return;
     }
-    if (!packageDate) {
-      setSubmitError('Vui lòng chọn ngày khám mong muốn.');
-      return;
-    }
+    if (packageNote.trim().length > 1700) { setSubmitError('Ghi chú quá dài.'); return; }
 
     setSubmitting(true);
     setSubmitError('');
 
-    // Match facility UUID from name if possible or fallback to standard facility
-    const facilityId = '00000000-0000-0000-0000-000000000001'; // Default facility id fallback
-
     try {
       const result = await createPackageRequest({
         service_id: selectedPackage.id,
-        facility_id: facilityId,
+        facility_id: packageFacilityId,
         preferred_date: packageDate,
         preferred_period: packagePeriod,
-        note: `[Tư vấn qua AI Chatbot] ${packageNote.trim()} | Cơ sở: ${facility}`,
+        note: `[Tư vấn qua AI Chatbot] ${packageNote.trim()} | Cơ sở: ${packageFacilities.find((item) => item.id === packageFacilityId)?.name || ''}`,
         patient_name: patientName.trim(),
-        patient_phone: patientPhone.replace(/\s+/g, ''),
+        patient_phone: normalizePhone(patientPhone),
         date_of_birth: dateOfBirth,
-        gender: gender || 'male',
+        gender: gender || 'other',
+        guardian_name: isMinor(dateOfBirth) ? guardianName.trim() : undefined,
+        guardian_phone: isMinor(dateOfBirth) ? normalizePhone(guardianPhone) : undefined,
+        consent_to_contact: consent,
       });
       const code = `PKG-${result.id.slice(0, 8).toUpperCase()}`;
       setSavedCode(code);
@@ -318,32 +513,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
         onSubmitted(code);
       }
     } catch (err) {
-      // Fallback: If facility UUID not matched in packages endpoint, submit via standard booking
-      try {
-        const fallbackRes = await submitBooking('/api/v1/booking-requests', {
-          session_id: sessionId,
-          patient_name: patientName.trim(),
-          patient_phone: patientPhone.replace(/\s+/g, ''),
-          date_of_birth: dateOfBirth,
-          gender: gender || 'other',
-          specialty_name: `Gói khám: ${selectedPackage.name}`,
-          facility_preference: facility,
-          preferred_date: packageDate,
-          preferred_period: packagePeriod,
-          patient_notes: `[Đăng ký gói khám ${selectedPackage.name} - Giá: ${formatCurrency(selectedPackage.price)}] ${packageNote.trim()}`,
-          consent_to_contact: true,
-        });
-        setSavedCode(fallbackRes.request_code);
-        if (onSubmitted) {
-          onSubmitted(fallbackRes.request_code);
-        }
-      } catch (fallbackErr) {
-        setSubmitError(
-          fallbackErr instanceof Error
-            ? fallbackErr.message
-            : 'Không thể gửi đăng ký gói khám. Vui lòng thử lại.'
-        );
-      }
+      setSubmitError(err instanceof Error ? err.message : 'Không thể gửi đăng ký gói khám. Vui lòng thử lại.');
     } finally {
       setSubmitting(false);
     }
@@ -522,7 +692,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 <input
                   type="text"
                   value={patientName}
-                  onChange={(e) => setPatientName(e.target.value)}
+                  maxLength={120}
+                  onChange={(e) => { markEdited('patientName'); setPatientName(e.target.value); }}
                   placeholder="Ví dụ: Nguyễn Văn An"
                   required
                   className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2.5 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
@@ -540,7 +711,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 <input
                   type="tel"
                   value={patientPhone}
-                  onChange={(e) => setPatientPhone(e.target.value)}
+                  maxLength={20}
+                  onChange={(e) => { markEdited('patientPhone'); setPatientPhone(e.target.value); }}
                   placeholder="Ví dụ: 0912345678"
                   required
                   className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2.5 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
@@ -559,7 +731,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                   <input
                     type="date"
                     value={dateOfBirth}
-                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    max={localToday()}
+                    onChange={(e) => { markEdited('dateOfBirth'); setDateOfBirth(e.target.value); }}
                     required
                     className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
                   />
@@ -571,7 +744,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                   </label>
                   <select
                     value={gender}
-                    onChange={(e) => setGender(e.target.value)}
+                    onChange={(e) => { markEdited('gender'); setGender(e.target.value); }}
                     className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
                   >
                     <option value="male">Nam</option>
@@ -589,20 +762,158 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 2. Cơ sở & Thời gian mong muốn
               </span>
 
-              {/* Specialty */}
-              <div>
-                <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
-                  Chuyên khoa thăm khám
-                </label>
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 font-medium">
-                  <span className="flex items-center gap-1.5 truncate">
-                    <Stethoscope className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span className="truncate">{intake?.specialty_name || 'Khám Đa khoa & Chuyên khoa'}</span>
-                  </span>
-                  <span className="text-[9.5px] text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded font-normal shrink-0">
-                    AI Định hướng
-                  </span>
+              {/* Specialty Section with Ranked Multi-Specialty Pipeline */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300">
+                    Chuyên khoa thăm khám
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {specialties.length > 1 ? (
+                      <span className="inline-flex items-center gap-1 text-[9.5px] font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/70 border border-blue-200/60 dark:border-blue-800/60 px-1.5 py-0.5 rounded-full">
+                        <Sparkles className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                        Lộ trình ({specialties.length} khoa)
+                      </span>
+                    ) : (
+                      <span className="text-[9.5px] text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded font-normal shrink-0">
+                        AI Định hướng
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleAddSpecialty}
+                      className="inline-flex items-center gap-1 text-[9.5px] font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/70 dark:border-emerald-800 px-1.5 py-0.5 rounded transition-colors"
+                      title="Thêm chuyên khoa cần phối hợp khám"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Thêm khoa
+                    </button>
+                  </div>
                 </div>
+
+                {/* Ranked Draggable List Cards */}
+                <div className="space-y-1.5">
+                  {specialties.map((item, index) => {
+                    const isFirst = index === 0;
+                    const isLast = index === specialties.length - 1;
+                    return (
+                      <div
+                        key={item.id}
+                        draggable
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={`group relative flex items-center gap-1.5 p-2 rounded-lg border transition-all ${
+                          draggedIndex === index
+                            ? 'opacity-40 border-dashed border-blue-400 bg-blue-50/50 dark:bg-blue-950/20'
+                            : isFirst
+                            ? 'border-emerald-200/90 dark:border-emerald-800/80 bg-gradient-to-r from-emerald-50/60 to-white dark:from-emerald-950/30 dark:to-slate-900 shadow-2xs'
+                            : 'border-slate-200 light:border-app-border dark:border-slate-800 bg-white/90 light:bg-app-surface/90 dark:bg-slate-900/90 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        {/* Drag Handle */}
+                        <div
+                          className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-0.5 rounded touch-none shrink-0"
+                          title="Kéo thả để đổi thứ tự ưu tiên khám"
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </div>
+
+                        {/* Priority Badge */}
+                        <div className="shrink-0 flex items-center">
+                          <span
+                            className={`inline-flex items-center justify-center h-5 w-5 rounded-full text-[10px] font-bold ${
+                              isFirst
+                                ? 'bg-emerald-600 text-white shadow-2xs'
+                                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {index + 1}
+                          </span>
+                        </div>
+
+                        {/* Specialty Selector Dropdown */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={item.name}
+                              onChange={(e) => handleUpdateSpecialty(index, e.target.value)}
+                              className="w-full bg-transparent font-medium text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none cursor-pointer focus:ring-1 focus:ring-emerald-500 rounded py-0.5 pr-1 truncate"
+                            >
+                              {getSpecialtyOptions(item.name).map((opt) => (
+                                <option
+                                  key={opt}
+                                  value={opt}
+                                  className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900"
+                                >
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span
+                              className={`text-[9px] font-medium ${
+                                isFirst
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              {isFirst ? 'Ưu tiên 1 (Khám trước)' : `Khám phối hợp bước ${index + 1}`}
+                            </span>
+                            {item.rationale && (
+                              <span className="text-[9px] text-slate-400 dark:text-slate-500 truncate" title={item.rationale}>
+                                • {item.rationale}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action Controls: Up, Down, Delete */}
+                        <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => moveSpecialty(index, 'up')}
+                            disabled={isFirst}
+                            className={`p-1 rounded text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
+                              isFirst ? 'opacity-20 cursor-not-allowed' : ''
+                            }`}
+                            title="Di chuyển lên trên"
+                          >
+                            <ArrowUp className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveSpecialty(index, 'down')}
+                            disabled={isLast}
+                            className={`p-1 rounded text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
+                              isLast ? 'opacity-20 cursor-not-allowed' : ''
+                            }`}
+                            title="Di chuyển xuống dưới"
+                          >
+                            <ArrowDown className="h-3 w-3" />
+                          </button>
+                          {specialties.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSpecialty(index)}
+                              className="p-1 rounded text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              title="Xóa chuyên khoa này"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Micro-hint for UX */}
+                <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-tight flex items-center gap-1 pt-0.5">
+                  <Info className="h-3 w-3 text-slate-400 shrink-0" />
+                  Kéo thả hoặc bấm mũi tên để đổi thứ tự ưu tiên khám; bấm vào tên khoa để thay đổi.
+                </p>
               </div>
 
               {/* Facility */}
@@ -612,7 +923,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 </label>
                 <select
                   value={facility}
-                  onChange={(e) => setFacility(e.target.value)}
+                  onChange={(e) => { markEdited('facility'); setFacility(e.target.value); }}
                   className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2.5 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
                 >
                   {facilityOptions.map((fac) => (
@@ -632,7 +943,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                   <input
                     type="date"
                     value={preferredDate}
-                    onChange={(e) => setPreferredDate(e.target.value)}
+                    min={localToday()}
+                    onChange={(e) => { markEdited('preferredDate'); setPreferredDate(e.target.value); }}
                     required
                     className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
                   />
@@ -644,7 +956,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                   </label>
                   <select
                     value={preferredPeriod}
-                    onChange={(e) => setPreferredPeriod(e.target.value)}
+                    onChange={(e) => { markEdited('preferredPeriod'); setPreferredPeriod(e.target.value); }}
                     className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
                   >
                     <option value="any">Cả ngày / Bất kỳ</option>
@@ -661,7 +973,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 </label>
                 <select
                   value={preferredDoctorId}
-                  onChange={(e) => setPreferredDoctorId(e.target.value)}
+                  onChange={(e) => { markEdited('preferredDoctorId'); setPreferredDoctorId(e.target.value); }}
                   className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2.5 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs truncate"
                 >
                   <option value="">Để Điều phối viên chỉ định Bác sĩ phù hợp nhất</option>
@@ -720,7 +1032,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
               {/* Textarea lý do khám / tóm tắt triệu chứng */}
               <textarea
                 value={patientNotes}
-                onChange={(e) => setPatientNotes(e.target.value)}
+                onChange={(e) => { markEdited('patientNotes'); setPatientNotes(e.target.value); }}
                 placeholder="Agent đang tổng hợp tóm tắt triệu chứng từ hội thoại..."
                 rows={3}
                 className="w-full rounded-lg border border-blue-200 light:border-app-border dark:border-blue-800/80 bg-white light:bg-app-surface dark:bg-slate-900 p-2 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary outline-none focus:border-blue-500 light:focus:border-app-primary text-xs resize-none leading-relaxed"
@@ -729,6 +1041,17 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 * Bác có thể trực tiếp bổ sung hoặc chỉnh sửa lại tóm tắt triệu chứng ở trên.
               </p>
             </div>
+
+              {dateOfBirth && isMinor(dateOfBirth) && (
+                <div className="grid grid-cols-2 gap-2 rounded-lg border border-amber-200 p-2">
+                  <label className="text-xs">Họ tên người giám hộ *
+                    <input type="text" value={guardianName} onChange={(e) => { markEdited('guardianName'); setGuardianName(e.target.value); }} maxLength={120} required className="mt-1 w-full rounded border p-1.5 text-slate-900" />
+                  </label>
+                  <label className="text-xs">Số điện thoại người giám hộ *
+                    <input type="tel" value={guardianPhone} onChange={(e) => { markEdited('guardianPhone'); setGuardianPhone(e.target.value); }} maxLength={20} required className="mt-1 w-full rounded border p-1.5 text-slate-900" />
+                  </label>
+                </div>
+              )}
 
             {/* Consent & Submit Button */}
             <label className="flex items-start gap-2 pt-0.5 text-[10.5px] leading-relaxed text-slate-600 light:text-app-secondary dark:text-slate-400 cursor-pointer">
@@ -883,13 +1206,13 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                     Cơ sở Vinmec thực hiện
                   </label>
                   <select
-                    value={facility}
-                    onChange={(e) => setFacility(e.target.value)}
+                    value={packageFacilityId}
+                    onChange={(e) => { setPackageFacilityId(e.target.value); setFacility(packageFacilities.find((item) => item.id === e.target.value)?.name || ''); markEdited('facility'); }}
                     className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"
                   >
-                    {VINMEC_FACILITIES.map((fac) => (
-                      <option key={fac} value={fac}>
-                        {fac}
+                    {packageFacilities.map((fac) => (
+                      <option key={fac.id} value={fac.id}>
+                        {fac.name}
                       </option>
                     ))}
                   </select>
@@ -904,6 +1227,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                     <input
                       type="date"
                       value={packageDate}
+                      min={localToday()}
                       onChange={(e) => setPackageDate(e.target.value)}
                       required
                       className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"
@@ -935,7 +1259,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                       <input
                         type="text"
                         value={patientName}
-                        onChange={(e) => setPatientName(e.target.value)}
+                        maxLength={120}
+                        onChange={(e) => { markEdited('patientName'); setPatientName(e.target.value); }}
                         placeholder="Họ và tên"
                         required
                         className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"
@@ -949,7 +1274,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                       <input
                         type="tel"
                         value={patientPhone}
-                        onChange={(e) => setPatientPhone(e.target.value)}
+                        maxLength={20}
+                        onChange={(e) => { markEdited('patientPhone'); setPatientPhone(e.target.value); }}
                         placeholder="Số ĐT"
                         required
                         className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"
@@ -965,7 +1291,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                       <input
                         type="date"
                         value={dateOfBirth}
-                        onChange={(e) => setDateOfBirth(e.target.value)}
+                        max={localToday()}
+                        onChange={(e) => { markEdited('dateOfBirth'); setDateOfBirth(e.target.value); }}
                         required
                         className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"
                       />
@@ -977,7 +1304,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                       </label>
                       <select
                         value={gender}
-                        onChange={(e) => setGender(e.target.value)}
+                        onChange={(e) => { markEdited('gender'); setGender(e.target.value); }}
                         className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"
                       >
                         <option value="male">Nam</option>
@@ -993,7 +1320,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                     </label>
                     <textarea
                       value={packageNote}
-                      onChange={(e) => setPackageNote(e.target.value)}
+                      onChange={(e) => { markEdited('packageNote'); setPackageNote(e.target.value); }}
                       placeholder="Ghi chú thêm về tiền sử bệnh lý hoặc nhu cầu riêng…"
                       rows={2}
                       className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 p-2 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary resize-none"
@@ -1003,6 +1330,20 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
               </div>
             )}
 
+            {dateOfBirth && isMinor(dateOfBirth) && (
+              <div className="grid grid-cols-2 gap-2 rounded-lg border border-amber-200 p-2">
+                <label className="text-xs">Họ tên người giám hộ *
+                  <input type="text" value={guardianName} onChange={(e) => { markEdited('guardianName'); setGuardianName(e.target.value); }} maxLength={120} required className="mt-1 w-full rounded border p-1.5 text-slate-900" />
+                </label>
+                <label className="text-xs">Số điện thoại người giám hộ *
+                  <input type="tel" value={guardianPhone} onChange={(e) => { markEdited('guardianPhone'); setGuardianPhone(e.target.value); }} maxLength={20} required className="mt-1 w-full rounded border p-1.5 text-slate-900" />
+                </label>
+              </div>
+            )}
+            <label className="flex items-start gap-2 text-xs text-slate-600">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />
+              Tôi xác nhận thông tin và đồng ý để Điều phối viên y tế liên hệ.
+            </label>
             <button
               type="submit"
               disabled={submitting || !selectedPackage}

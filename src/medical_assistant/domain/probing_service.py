@@ -241,12 +241,18 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
     ProbingClarificationTree(
         category_key="CO_XUONG_KHOP",
         trigger_keywords=[
+            "đau đầu gối",
+            "đau gối",
+            "khớp gối",
+            "mỏi gối",
+            "sưng đầu gối",
             "đau lưng",
             "mỏi gáy",
             "đau khớp",
             "mỏi vai",
             "tê tay",
             "tê chân",
+            "knee pain",
             "back pain",
             "neck pain",
             "joint pain",
@@ -324,6 +330,9 @@ class DynamicProbingService:
             if tree.category_key in seen:
                 continue
             for keyword in tree.trigger_keywords:
+                # Tránh nhận nhầm "đau đầu" khi câu nói là "đau đầu gối" (khớp gối)
+                if keyword in {"đau đầu", "nhức đầu"} and ("đau đầu gối" in text_lower or "nhức đầu gối" in text_lower):
+                    continue
                 if keyword in text_lower and not negation_svc.is_phrase_negated(keyword, text):
                     matches.append(tree)
                     seen.add(tree.category_key)

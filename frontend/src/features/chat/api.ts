@@ -49,6 +49,15 @@ export interface BookingDoctor {
   title?: string;
 }
 
+export interface RankedSpecialtyItem {
+  priority: number;
+  department_name: string;
+  department_code?: string;
+  rationale?: string;
+  target_symptoms?: string[];
+  is_primary?: boolean;
+}
+
 export interface BookingIntake {
   required?: boolean;
   endpoint?: string;
@@ -60,6 +69,8 @@ export interface BookingIntake {
   gender?: string;
   specialty_name?: string;
   specialty_code?: string;
+  is_multi_specialty?: boolean;
+  ranked_specialties?: RankedSpecialtyItem[];
   facility_preference?: string;
   preferred_date?: string;
   preferred_period?: string;

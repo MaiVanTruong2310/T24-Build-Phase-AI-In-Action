@@ -61,10 +61,12 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
     FAQEntry(
         key="GREETING",
         patterns=[
+            r"^(?:hi|hello|alo)?\s*,?\s*(?:xin\s+)?ch[aà]o(?:\s+(?:b[aạ]n|em|bot|b[aá]c|bsi|b[aá]c s[iĩ]|ad|tro ly))?(?:\s+nh[eé])?\.?$",
+            r"^(?:hi|hello|hey|alo)(?:\s+(?:b[aạ]n|em|bot|b[aá]c|bsi|ad))?(?:\s+nh[eé])?\.?$",
             r"^(xin ch[aà]o|ch[aà]o (b[aạ]n|em|bot|b[aá]c)|b[aắ]t đ[aầ]u|alo)$",
             r"^(t[oô]i mu[oố]n kh[aá]m|mu[oố]n đ[aặ]t l[iị]ch|đ[aặ]t l[iị]ch kh[aá]m|đ[aặ]t h[eẹ]n|dat hen|dat lich|bat dau|alo)$",
             r"^(xin chao|chao ban|chao em|chao bot)$",
-            r"^xin chao(?: tro ly| bot| ban| em)?$",
+            r"^xin chao(?: tro ly| bot| ban| em)?(?:\s+nhe)?$",
             # English
             r"^(hello|hi|good morning|good afternoon|good evening|hey|start)$",
             r"^(?:hello|hi|hey)(?:\s+.*(?:book|appointment|doctor).*)?$",

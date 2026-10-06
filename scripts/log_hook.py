@@ -180,14 +180,8 @@ def main():
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-    # Codex validates hook output against the event schema. In particular,
-    # Stop rejects arbitrary JSON such as {"status": "logged"}; continue is
-    # the supported common output field. Other tools in this shared logger
-    # still receive the historical status response.
-    if tool == "codex":
-        print(json.dumps({"continue": True}))
-    else:
-        print(json.dumps({"status": "logged"}))
+    # Output valid JSON (required by some tools like Gemini)
+    print(json.dumps({"status": "logged"}))
 
 
 if __name__ == "__main__":
