@@ -27,6 +27,7 @@ class ChatPatientProfile(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    patient_profile_id: UUID | None = None
     request_id: UUID = Field(default_factory=uuid4)
     patient_profile: ChatPatientProfile | None = None
     message: str = Field(..., min_length=1, max_length=5000, description="Tin nhắn từ user")
@@ -73,6 +74,7 @@ class ChatResponse(BaseModel):
 
 
 class BookingIntakeRequest(BaseModel):
+    patient_profile_id: UUID | None = None
     session_id: str = Field(..., min_length=8, max_length=200)
     patient_name: str = Field(..., min_length=2, max_length=120)
     patient_phone: str = Field(..., min_length=9, max_length=20)
