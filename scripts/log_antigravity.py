@@ -312,9 +312,9 @@ def build_entry(msg: dict, repo: str, branch: str, commit: str,
 
     return {
         "ts": ts or datetime.now(VN_TZ).isoformat(),
-        "tool": "antigravity",
+        "tool": "gemini",
         "event": "UserPrompt",
-        "entry_id": f"antigravity-{msg['conv_id']}-{msg['step_index']:05d}",
+        "entry_id": f"gemini-{msg['conv_id']}-{msg['step_index']:05d}",
         "session_id": msg["conv_id"],
         "model": model,
         "repo": repo,
@@ -506,9 +506,9 @@ def _legacy_log(summary: str, model: str) -> None:
     ts = datetime.now(VN_TZ).isoformat()
     entry = {
         "ts": ts,
-        "tool": "antigravity",
+        "tool": "gemini",
         "event": "TaskComplete",
-        "entry_id": f"antigravity-{datetime.now(VN_TZ).strftime('%Y%m%d-%H%M%S')}",
+        "entry_id": f"gemini-{datetime.now(VN_TZ).strftime('%Y%m%d-%H%M%S')}",
         "model": model,
         "repo": git("git remote get-url origin").split("/")[-1].replace(".git", ""),
         "branch": git("git rev-parse --abbrev-ref HEAD"),
