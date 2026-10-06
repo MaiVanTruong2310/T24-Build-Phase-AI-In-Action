@@ -142,7 +142,7 @@ class AuthService:
 
     async def login(self, request: LoginRequest) -> tuple[User, str, str, datetime, datetime]:
         """Authenticate with a password or OTP and issue access and refresh tokens."""
-        email, phone = _normalized_identity(request.email, request.phone)
+        email, phone = _normalized_identity(request.email, request.username or request.phone)
         authentication_error: AuthenticationError | None = None
         result: tuple[User, str, str, datetime, datetime] | None = None
         async with self.session.begin():
@@ -240,10 +240,6 @@ class AuthService:
             raise NotFoundError("User not found")
         return user
 
-    async def list_patients(self, search: str | None, offset: int, limit: int) -> list[User]:
-        """Return patient identities for staff booking selection."""
-        return await self.users.list_patients(search, offset=offset, limit=limit)
-
     async def update_profile(self, user: User, request: UpdateProfileRequest) -> User:
         """Apply allowed profile changes and flush them in a transaction."""
         try:
@@ -260,11 +256,22 @@ class AuthService:
                     setattr(user, field, value)
                 await self.session.flush()
         except IntegrityError as exc:
-            raise ConflictError(
-                "PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác."
-            ) from exc
+            raise ConflictError("PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác.") from exc
         logger.info("AuthService.update_profile profile updated")
         return user
+
+    async def update_portrait(self, user: User, image: str | None) -> None:
+        """Keep the bounded portrait private to this user's profile."""
+        async with self.session.begin():
+            await self.session.execute(select(User.id).where(User.id == user.id).with_for_update())
+            await self.session.refresh(user, attribute_names=["patient_details"])
+            details = dict(user.patient_details or {})
+            if image is None:
+                details.pop("portrait_image", None)
+            else:
+                details["portrait_image"] = image
+            user.patient_details = details
+            await self.session.flush()
 
     async def _create_otp(self, user: User, target: str, purpose: str) -> str | None:
         """Create a rate-limited OTP and return its value only for mock delivery."""
@@ -326,6 +333,8 @@ class AuthService:
     async def _issue_tokens(self, user: User) -> tuple[str, datetime, UUID]:
         """Create a refresh session and return its opaque token material."""
         refresh_token, expires_at = create_refresh_token()
+        if user.role == "staff":
+            refresh_token = "staff_" + refresh_token
         session = RefreshSession(
             user_id=user.id,
             token_hash=hash_refresh_token(refresh_token),

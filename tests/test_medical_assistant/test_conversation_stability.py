@@ -63,3 +63,28 @@ def test_specific_department_info_request_is_detected():
     )
     assert intent["intent"] == "DEPARTMENT_INFO"
     assert intent["department_query"] == "tiêu hóa"
+
+
+@pytest.mark.asyncio
+async def test_polite_greeting_has_no_ats_level_and_no_fake_symptom_acknowledgment():
+    result = await agent.ainvoke(
+        {
+            "query": "Chào bạn nhé, chúc bạn 1 ngày vui vẻ",
+            "patient_profile": {"name": "Mai Văn Trường"},
+        },
+        config={"configurable": {"thread_id": "test_polite_greeting_stability"}},
+    )
+
+    # 1. Non-clinical greeting must NOT have an ATS level or urgency tier
+    assert result.get("ats_level") is None, f"Expected None ats_level, got {result.get('ats_level')}"
+    assert result.get("urgency_tier") is None
+
+    # 2. Must NOT claim to have recorded symptoms when no symptoms were reported
+    assert "em đã ghi nhận triệu chứng" not in result["response"]
+
+    # 3. Must NOT redundantly duplicate the patient name
+    assert not result["response"].startswith("Dạ Mai Văn Trường,\n\nDạ")
+
+    # 4. Must NOT append medical disclaimer on a pure polite greeting
+    assert "Khuyến cáo y tế:" not in result["response"]
+

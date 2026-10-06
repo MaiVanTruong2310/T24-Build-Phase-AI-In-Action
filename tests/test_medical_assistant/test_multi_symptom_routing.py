@@ -306,3 +306,154 @@ def test_public_specialty_recommendations_are_capped_at_two() -> None:
     assert len(result.candidate_specialties) == 3
     assert len(result.recommended_specialties) == 2
     assert all(item.publicly_recommended for item in result.recommended_specialties)
+
+
+def test_knee_pain_not_confused_with_headache_in_multi_symptom_pipeline() -> None:
+    """Kiểm tra câu 'đau bụng trái kèm đau đầu gối' không bị nhận nhầm thành Thần kinh (đau đầu)."""
+    from src.medical_assistant.domain.care_pipeline_service import get_care_pipeline_service
+    from src.medical_assistant.domain.clinical_fact_service import ClinicalFactService
+
+    query = "Tôi đang bị đau bụng trái kèm với việc đau đầu gối, tôi nghĩ có thể đây là 2 bệnh khác nhau đúng không? Vậy tôi phải làm gì?"
+
+    # 1. Fact extraction: phải nhận 'abdominal_pain' và 'joint_pain', tuyệt đối KHÔNG có 'headache'
+    facts = ClinicalFactService().extract(query)
+    assert "abdominal_pain" in facts["positive_facts"]
+    assert "joint_pain" in facts["positive_facts"]
+    assert "headache" not in facts["positive_facts"]
+
+    # 2. Care pipeline: Bước 1 Tiêu hóa (nội tạng sinh tồn), Bước 2 Chấn thương chỉnh hình / Xương khớp
+    pipeline = get_care_pipeline_service().evaluate_multi_specialty_pipeline(query, language="vi")
+    assert pipeline.is_multi_specialty is True
+    assert pipeline.primary_department == "Khoa Tiêu hóa - Gan mật"
+    assert "Khoa Chấn thương chỉnh hình & Cột sống" in pipeline.secondary_departments
+    assert "Khoa Thần kinh" not in [s.department_name for s in pipeline.pipeline_steps]
+
+
+@pytest.mark.asyncio
+async def test_multi_task_compound_triage_and_booking_intent() -> None:
+    """Kiểm tra xử lý multi-task trong cùng 1 turn: Đa triệu chứng + Đặt lịch hẹn cơ sở Long Biên sáng mai."""
+    from src.medical_assistant.agent.nodes.respond_node import respond_node
+    from src.medical_assistant.domain.booking_slot_service import generate_clinical_summary
+
+    query = (
+        "Tôi bị đau đầu và có nôn khan đấy cùng với việc đó là tôi có đau bụng ở mức nhẹ nhưng âm ỉ kéo dài. "
+        "Và tôi đang muốn khám ở cơ sở nào đó nằm ở khu vực long biên vào sáng mai. Bạn lên lịch trình cho tôi và làm phiếu hẹn"
+    )
+
+    state = {
+        "query": query,
+        "language": "vi",
+        "patient_name": "Mai Văn Trường",
+        "patient_phone": "0912345678",
+        "facility_preference": "Bệnh viện ĐKQT Vinmec Riverside (Hà Nội)",
+        "preferred_date": "2026-10-06",
+        "preferred_period": "morning",
+        "collected_details": [query],
+        "metadata": {
+            "is_booking_intent": True,
+        },
+    }
+
+    # 1. Clinical summary phải có đủ Đau đầu, Đau bụng, Mức độ nhẹ, Nôn khan
+    summary_res = generate_clinical_summary(state, current_text=query)
+    summary_text = summary_res["summary"]
+    details = summary_res["details"]
+
+    assert "đau đầu" in summary_text.lower()
+    assert "đau bụng" in summary_text.lower()
+    assert "mức độ nhẹ" in summary_text.lower()
+    assert "nôn khan" in summary_text.lower()
+    assert "Nôn khan" in details["associated"]
+    assert "Nôn ói" not in details["associated"]
+
+    # 2. respond_node phải trả lời ĐỦ CẢ 2 PHẦN: Lộ trình phân tầng VÀ Thông tin lịch hẹn
+    res = await respond_node(state)
+    resp_text = res["response"]
+
+    assert "Lộ trình Khám Ưu tiên Phân tầng" in resp_text
+    assert "Khoa Thần kinh" in resp_text
+    assert "Khoa Tiêu hóa - Gan mật" in resp_text
+    assert "Thông tin lịch hẹn" in resp_text
+    assert "Bệnh viện ĐKQT Vinmec Riverside" in resp_text
+    assert "Phiếu Đăng Ký Khám" in resp_text
+    assert "0912345678" in resp_text
+    assert "[REDACTED_PHONE]" not in resp_text
+
+    # 3. Booking intake snapshot
+    intake = res["metadata"]["booking_intake"]
+    assert intake is not None
+    assert intake["is_multi_specialty"] is True
+    assert len(intake["ranked_specialties"]) >= 2
+    assert intake["facility_preference"] == "Bệnh viện ĐKQT Vinmec Riverside (Hà Nội)"
+
+
+@pytest.mark.asyncio
+async def test_conversational_booking_confirmation_after_multi_symptom_triage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that after multi-symptom triage, when patient confirms with 'Xác nhận đặt lịch'
+    or 'Xác nhận bạn hãy đặt lịch cho tôi', the agent automatically commits the booking,
+    issues a booking request code, and returns the reassuring confirmation message."""
+    from src.medical_assistant.agent.nodes.example_node import analyze_node, respond_node
+    from src.medical_assistant.domain.booking_slot_service import detect_booking_confirmation
+
+    # Test phrase detection
+    assert detect_booking_confirmation("Xác nhận đặt lịch") is True
+    assert detect_booking_confirmation("Xác nhận bạn hãy đặt lịch cho tôi") is True
+    assert detect_booking_confirmation("Bạn hãy đặt lịch cho tôi") is True
+    assert detect_booking_confirmation("Chốt lịch giúp tôi") is True
+
+    # State carried over from turn 1
+    state = {
+        "query": "Xác nhận bạn hãy đặt lịch cho tôi",
+        "language": "vi",
+        "patient_name": "Mai Văn Trường",
+        "patient_phone": "0364335411",
+        "facility_preference": "Bệnh viện ĐKQT Vinmec Riverside (Hà Nội)",
+        "preferred_date": "2026-10-06",
+        "preferred_period": "morning",
+        "suggested_department_name": "Khoa Thần kinh",
+        "suggested_department_code": "THAN_KINH",
+        "collected_details": ["đau đầu", "nôn khan", "đau bụng"],
+        "booking_intake": {
+            "required": True,
+            "patient_name": "Mai Văn Trường",
+            "patient_phone": "0364335411",
+            "facility_preference": "Bệnh viện ĐKQT Vinmec Riverside (Hà Nội)",
+            "preferred_date": "2026-10-06",
+            "preferred_period": "morning",
+            "patient_notes": "Bệnh nhân có triệu chứng đau đầu, đau bụng, Mức độ nhẹ. Triệu chứng đi kèm: Nôn khan.",
+        },
+        "messages": [
+            {"role": "user", "content": "Tôi bị đau đầu và có nôn khan..."},
+            {"role": "assistant", "content": "Lộ trình Khám Ưu tiên Phân tầng..."},
+        ],
+    }
+
+    # Mock the DB auto_commit to return a mock request code without live DB connection
+    from src.medical_assistant.domain.booking_lookup_service import BookingLookupService
+    async def mock_auto_commit(*args, **kwargs):
+        return {
+            "status": "success",
+            "request_id": 9999,
+            "request_code": "VNMC-20261006-MV01",
+        }
+    monkeypatch.setattr(BookingLookupService, "auto_commit_conversational_booking", mock_auto_commit)
+
+    # 1. Analyze node must resolve to CONFIRM_BOOKING_CONVERSATIONALLY
+    analyzed_state = await analyze_node(state)
+    assert analyzed_state["workflow_status"] == "CONFIRM_BOOKING_CONVERSATIONALLY"
+
+    # Merge analyzed state into current state
+    merged_state = {**state, **analyzed_state}
+
+    # 2. Respond node must return the booking confirmation and code, NOT the triage pipeline
+    res = await respond_node(merged_state)
+    resp_text = res["response"]
+
+    assert "ĐÃ GIỮ CHỖ THÀNH CÔNG" in resp_text
+    assert "VNMC-20261006-MV01" in resp_text
+    assert "0364335411" in resp_text
+    assert "Mai Văn Trường" in resp_text
+    assert "nhân viên điều phối" in resp_text
+    assert "để ý số điện thoại của mình" in resp_text
+    # Must NOT re-render the triage navigation pipeline prompt asking to click the form button
+    assert "bấm nút 'Xác nhận gửi thông tin đặt khám'" not in resp_text

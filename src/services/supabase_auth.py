@@ -1,6 +1,7 @@
 """Supabase-managed email/password identity, with private application profiles."""
-
+import asyncio
 from datetime import datetime
+from hashlib import sha256
 from uuid import UUID
 
 import httpx
@@ -16,20 +17,58 @@ def native_auth_enabled() -> bool:
     return get_settings().auth_provider == "supabase"
 
 
-async def auth_call(
-    path: str, body: dict | None = None, token: str | None = None, method: str = "POST", params: dict | None = None
-) -> dict:
+# Share only concurrent checks. Completed results are discarded, so each later
+# request still asks Supabase whether the token is valid.
+_pending_user_checks: dict[bytes, asyncio.Task[dict]] = {}
+
+
+async def verified_identity(token: str) -> dict:
+    key = sha256(token.encode()).digest()
+    task = _pending_user_checks.get(key)
+    if task is None:
+        task = asyncio.create_task(auth_call("/user", token=token, method="GET"))
+        _pending_user_checks[key] = task
+        task.add_done_callback(lambda completed: _pending_user_checks.pop(key, None)
+                               if _pending_user_checks.get(key) is completed else None)
+    return await asyncio.shield(task)
+
+
+import ssl
+
+_ssl_context: ssl.SSLContext | None = None
+
+
+def _get_auth_ssl_context() -> ssl.SSLContext:
+    global _ssl_context
+    if _ssl_context is None:
+        _ssl_context = ssl.create_default_context()
+        _ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return _ssl_context
+
+
+async def auth_call(path: str, body: dict | None = None, token: str | None = None, method: str = "POST", params: dict | None = None) -> dict:
     settings = get_settings()
     headers = {"apikey": settings.supabase_key}
     if token:
         headers["Authorization"] = "Bearer " + token
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.request(
-                method, settings.supabase_url.rstrip("/") + "/auth/v1" + path, json=body, headers=headers, params=params
-            )
-    except httpx.HTTPError as exc:
-        raise AppError("AUTH_UNAVAILABLE", "Không thể kết nối dịch vụ xác thực. Vui lòng thử lại sau.", 503) from exc
+    ssl_ctx = _get_auth_ssl_context()
+    response = None
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=20, verify=ssl_ctx) as client:
+                response = await client.request(
+                    method,
+                    settings.supabase_url.rstrip("/") + "/auth/v1" + path,
+                    json=body,
+                    headers=headers,
+                    params=params,
+                )
+            break
+        except (httpx.HTTPError, ssl.SSLError, OSError) as exc:
+            if attempt == 0:
+                await asyncio.sleep(0.2)
+                continue
+            raise AppError("AUTH_UNAVAILABLE", "Không thể kết nối dịch vụ xác thực. Vui lòng thử lại sau.", 503) from exc
     payload = response.json() if response.content else {}
     if response.is_error:
         code = payload.get("error_code") or payload.get("code")
@@ -42,11 +81,7 @@ async def auth_call(
             "user_already_exists": "Email đã được đăng ký.",
             "email_address_invalid": "Địa chỉ email không hợp lệ.",
         }
-        raise AppError(
-            str(code or "AUTH_ERROR"),
-            messages.get(code, "Không thể xử lý yêu cầu xác thực. Vui lòng kiểm tra thông tin hoặc thử lại sau."),
-            response.status_code if response.status_code < 500 else 503,
-        )
+        raise AppError(str(code or "AUTH_ERROR"), messages.get(code, "Không thể xử lý yêu cầu xác thực. Vui lòng kiểm tra thông tin hoặc thử lại sau."), response.status_code if response.status_code < 500 else 503)
     return payload
 
 
@@ -62,37 +97,18 @@ async def register_email(request, session: AsyncSession) -> dict:
     await session.commit()
     settings = get_settings()
     redirect = settings.supabase_auth_redirect_url.rstrip("/") + "/login"
-    result = await auth_call(
-        "/signup",
-        {"email": email, "password": request.password, "data": {"full_name": request.full_name or ""}},
-        params={"redirect_to": redirect},
-    )
+    result = await auth_call("/signup", {"email": email, "password": request.password, "data": {"full_name": request.full_name or ""}}, params={"redirect_to": redirect})
     auth_user = result.get("user") or result
     auth_id = auth_user.get("id")
     if auth_id and auth_user.get("identities") != []:
         # Supabase obfuscates duplicate signups. Verify a real identity exists before linking.
-        real = (
-            await session.execute(
-                text("SELECT id FROM auth.users WHERE id=:id AND lower(email)=:email"),
-                {"id": UUID(auth_id), "email": email},
-            )
-        ).first()
+        real = (await session.execute(text("SELECT id FROM auth.users WHERE id=:id AND lower(email)=:email"), {"id": UUID(auth_id), "email": email})).first()
         if real:
             profile = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
             if profile and profile.auth_user_id and str(profile.auth_user_id) != auth_id:
                 raise ConflictError("PROFILE_BOUND", "Hồ sơ đã liên kết với một tài khoản khác.")
             if not profile:
-                profile = User(
-                    email=email,
-                    phone=request.phone,
-                    full_name=request.full_name,
-                    role="patient",
-                    status="pending_verification",
-                    date_of_birth=request.date_of_birth,
-                    gender=request.gender,
-                    citizen_id=request.citizen_id,
-                    health_insurance_code=request.health_insurance_code,
-                )
+                profile = User(email=email, phone=request.phone, full_name=request.full_name, role="patient", status="pending_verification", date_of_birth=request.date_of_birth, gender=request.gender, citizen_id=request.citizen_id, health_insurance_code=request.health_insurance_code)
                 session.add(profile)
             profile.auth_user_id = UUID(auth_id)
             await session.commit()
@@ -100,7 +116,7 @@ async def register_email(request, session: AsyncSession) -> dict:
 
 
 async def authenticated_profile(token: str, session: AsyncSession) -> User:
-    identity = await auth_call("/user", token=token, method="GET")
+    identity = await verified_identity(token)
     if not identity.get("email_confirmed_at"):
         raise AuthenticationError("EMAIL_NOT_CONFIRMED", "Bạn cần xác nhận email trước khi đăng nhập.")
     auth_id = UUID(identity["id"])
@@ -112,12 +128,7 @@ async def authenticated_profile(token: str, session: AsyncSession) -> User:
         if profile and profile.auth_user_id:
             raise AuthenticationError("PROFILE_BOUND", "Hồ sơ đã liên kết với tài khoản khác.")
         if profile is None:
-            profile = User(
-                email=email,
-                full_name=(identity.get("user_metadata") or {}).get("full_name"),
-                role="patient",
-                status="pending_verification",
-            )
+            profile = User(email=email, full_name=(identity.get("user_metadata") or {}).get("full_name"), role="patient", status="pending_verification")
             session.add(profile)
         profile.auth_user_id = auth_id
     if profile.status not in ("active", "pending_verification"):
@@ -131,10 +142,6 @@ async def authenticated_profile(token: str, session: AsyncSession) -> User:
 async def login_email(request, session: AsyncSession) -> dict:
     if not request.email or not request.password:
         raise AppError("EMAIL_REQUIRED", "Vui lòng đăng nhập bằng email và mật khẩu.", 400)
-    tokens = await auth_call(
-        "/token",
-        {"email": request.email.strip().lower(), "password": request.password},
-        params={"grant_type": "password"},
-    )
+    tokens = await auth_call("/token", {"email": request.email.strip().lower(), "password": request.password}, params={"grant_type": "password"})
     await authenticated_profile(tokens["access_token"], session)
     return {key: tokens[key] for key in ("access_token", "refresh_token", "expires_in")}

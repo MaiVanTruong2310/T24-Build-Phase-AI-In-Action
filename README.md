@@ -1,4 +1,5 @@
-# 🏥 Vinmec Smart Medical Assistant (VMEC-01 / P-124)
+# 🏥 VCare+ — Vinmec Smart Medical Assistant (VMEC-01 / P-124)
+
 > **Trợ lý Tiếp đón Y tế & Điều phối Khám Bệnh Thông minh Đa tác tử (Multi-Agent System)**  
 > *Phân tầng cấp cứu ATS • Tự động phân luồng chuyên khoa • Đặt lịch qua hội thoại tự nhiên • Human-in-the-Loop Workbench*
 
@@ -13,6 +14,7 @@
 ---
 
 ## 📖 Mục lục
+
 - [1. Giới thiệu tổng quan](#1-giới-thiệu-tổng-quan)
 - [2. Các tính năng cốt lõi](#2-các-tính-năng-cốt-lõi)
 - [3. Kiến trúc hệ thống & Luồng xử lý](#3-kiến-trúc-hệ-thống--luồng-xử-lý)
@@ -31,7 +33,8 @@
 **Vinmec Smart Medical Assistant** là giải pháp trợ lý ảo y tế toàn diện được xây dựng nhằm giải quyết bài toán quá tải tiếp đón bệnh nhân tại các bệnh viện và phòng khám đa khoa tiêu chuẩn quốc tế. Hệ thống kết hợp giữa **mô hình đồ thị tác tử (LangGraph)**, **hệ thống quy tắc phân tầng cấp cứu y khoa (Australasian Triage Scale - ATS)** và **bàn làm việc điều phối thực tế cho nhân viên y tế (HITL Workbench)**.
 
 ### Mục tiêu giải quyết:
-1. **An toàn người bệnh là trên hết (Clinical Safety First):** Tự động phát hiện các ca tối khẩn (Acute STEMI, Đột quỵ, Sốc phản vệ, Suy hô hấp cấp) bằng cổng bảo vệ **Zero-Token Emergency Gate** với độ trễ nano-giây, ngăn ngừa chẩn đoán sai và hướng dẫn cấp cứu 115 ngay lập tức.
+
+1. **An toàn người bệnh là trên hết (Clinical Safety First):** Tự động phát hiện các ca tối khẩn (Acute STEMI, Đột quỵ, Sốc phản vệ, Suy hô hấp cấp) qua **Zero-Token Emergency Gate** dựa trên quy tắc trước khi gọi LLM và đưa ra hướng dẫn cấp cứu 115.
 2. **Phân luồng chuyên khoa chính xác:** Định tuyến bệnh nhân đúng cơ sở y tế gần nhất (VD: Vinmec Riverside Long Biên, Vinmec Times City, Vinmec Central Park...) và đúng chuyên khoa phù hợp với triệu chứng.
 3. **Tiếp nhận đặt lịch qua hội thoại (Conversational Booking Intake):** Tự nhiên trích xuất tên, số điện thoại, ngày khám tương đối ("sáng thứ 2 tuần sau"), tạo mã phiếu hẹn `YC-XXXXXX` trực tiếp vào hệ thống quản lý.
 4. **Hỗ trợ điều phối viên can thiệp trực tiếp (Human-in-the-Loop):** Nhân viên y tế có thể theo dõi live phiên chat của bệnh nhân và chủ động tiếp quản (takeover) xử lý các ca phức tạp hoặc ca cần xác nhận lịch đặc biệt.
@@ -40,9 +43,16 @@
 
 ## 2. Các tính năng cốt lõi
 
+* **Phiếu đăng ký trên chatbot:**
+  * Kiểm tra họ tên, số di động Việt Nam, ngày sinh, ngày khám và thông tin người giám hộ khi bệnh nhân dưới 18 tuổi.
+  * Yêu cầu xác nhận đồng ý trước khi gửi; kiểm tra lại dữ liệu ở backend.
+  * Giữ các trường người dùng đã sửa khi AI cập nhật dữ liệu; lấy ID cơ sở từ catalog.
+
+* **Hybrid RAG:** Kết hợp tìm kiếm vector ChromaDB với SQLite FTS5. PostgreSQL/Supabase lưu dữ liệu nghiệp vụ; ChromaDB lưu các đoạn tài liệu và embedding phục vụ truy xuất.
+
 * **🚨 Cổng phân tầng cấp cứu Zero-Token (ATS Level 1-5):**
   * Tách biệt hoàn toàn các triệu chứng đe dọa tính mạng (đau ngực dữ dội, vã mồ hôi, khó thở, hôn mê, co giật, méo miệng...) ra khỏi luồng xử lý LLM thông thường.
-  * Phản hồi khẩn cấp tức thì (0 token tiêu tốn, latency < 10ms) đưa ra lộ trình phân tầng (Care Pipeline) và nút gọi cấp cứu khẩn cấp 115.
+  * Nhánh phản hồi khẩn cấp dựa trên quy tắc đưa ra lộ trình phân tầng (Care Pipeline) và nút gọi cấp cứu khẩn cấp 115.
 
 * **🩺 Hỏi bệnh thích ứng (Adaptive Fact-Aware Probing):**
   * Áp dụng nguyên tắc giao tiếp lâm sàng: Chỉ hỏi từng câu hỏi một, không hỏi dồn dập nhiều câu gây quá tải cho bệnh nhân.
@@ -60,7 +70,7 @@
   * Đồng bộ và truy vấn trực tiếp danh sách bác sĩ, chuyên khoa và khung giờ còn trống từ cơ sở dữ liệu Supabase/PostgreSQL.
 
 * **⚡ Failover LLM Gateway có tính sẵn sàng cao (High Availability):**
-  * Cơ chế Hedged Requests & Circuit Breaker: Tự động chạy đua giữa nhà cung cấp chính (OpenRouter) và các nhà cung cấp dự phòng (Google Gemini 2.5 Flash, OpenAI).
+  * Cơ chế Hedged Requests & Circuit Breaker: Tự động chạy đua giữa nhà cung cấp chính (OpenRouter) và các nhà cung cấp dự phòng (Google Gemini, OpenAI và DeepSeek tùy cấu hình).
   * Tự động cooldown provider gặp sự cố hạn ngạch hoặc lỗi kết nối.
 
 * **📡 Trải nghiệm phản hồi mượt mà qua Server-Sent Events (SSE):**
@@ -99,8 +109,10 @@ flowchart TD
 
     subgraph Data_Services [Tầng dữ liệu & Trí tuệ nhân tạo]
         DocNode -.-> DB[(PostgreSQL / Supabase)]
+        RespondNode -.-> RAG[Hybrid RAG: ChromaDB + SQLite FTS5]
+        RAG -.-> Vector[(ChromaDB cục bộ)]
         RespondNode -.-> MemSvc[Patient Memory & SOAP Service]
-        AnalyzeNode -.-> LLMGateway[Failover LLM Gateway<br/>OpenRouter / Gemini / OpenAI]
+        AnalyzeNode -.-> LLMGateway[Failover LLM Gateway<br/>OpenRouter / Gemini / OpenAI / DeepSeek]
     end
 
     subgraph Coordination_Workbench [Bàn điều phối viên HITL]
@@ -125,21 +137,25 @@ cp .env.example .env
 | `OPENROUTER_API_KEY` | Khuyên dùng | `""` | Khóa API OpenRouter chính (dùng cho mô hình `openai/gpt-4o-mini`). |
 | `OPENROUTER_BACKUP_KEYS` | Tùy chọn | `""` | Danh sách khóa OpenRouter dự phòng, cách nhau bằng dấu phẩy. |
 | `OPENROUTER_MODEL_NAME` | Tùy chọn | `openai/gpt-4o-mini` | Tên mô hình AI trên OpenRouter. |
-| `GOOGLE_AI_API_KEY` | Khuyên dùng | `""` | Khóa Google AI Studio (Gemini) để tự động failover dự phòng. |
-| `GOOGLE_AI_MODEL_NAME` | Tùy chọn | `gemini-2.5-flash` | Mô hình Gemini dự phòng (`gemini-2.5-flash` hoặc `gemini-2.5-pro`). |
+| `GOOGLE_AI_API_KEY` | Có khi dùng vector | `""` | Khóa Google AI Studio cho LLM Gemini và tạo embedding bằng `models/gemini-embedding-001`. |
+| `GOOGLE_AI_MODEL_NAME` | Tùy chọn | `gemini-3.1-flash-lite` | Tên mô hình hội thoại Gemini; độc lập với mô hình embedding. |
+| `DEEPSEEK_API_KEY` | Tùy chọn | `""` | Khóa API khi sử dụng provider DeepSeek. |
+| `DEEPSEEK_MODEL_NAME` | Tùy chọn | `DeepSeek-V4.1-Flash` | Tên model trong cấu hình code; cần phù hợp với model tài khoản API có quyền dùng. |
 | `OPENAI_API_KEY` | Tùy chọn | `""` | Khóa OpenAI chính thức (nếu sử dụng trực tiếp OpenAI). |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | Tùy chọn | `12.0` | Timeout cho từng request LLM đơn lẻ (giây). |
 | `LLM_HEDGE_DELAY_SECONDS` | Tùy chọn | `3.0` | Thời gian trễ trước khi kích hoạt provider thứ 2 đua kết quả. |
 | `LLM_TOTAL_TIMEOUT_SECONDS` | Tùy chọn | `15.0` | Tổng thời gian tối đa cho toàn bộ lượt gọi LLM. |
 | `LLM_FAILURE_COOLDOWN_SECONDS` | Tùy chọn | `30.0` | Thời gian đóng băng tạm thời provider bị lỗi (giây). |
 | **CƠ SỞ DỮ LIỆU & LƯU TRỮ** | | | |
-| `DATABASE_URL` | **Có** | `sqlite:///./data/app.db` | Chuỗi kết nối PostgreSQL (hoặc SQLite cho môi trường local test). |
+| `DATABASE_URL` | **Có** | `""` | Chuỗi kết nối PostgreSQL cho backend, ví dụ `postgresql://user:password@localhost:5432/dbname`. |
+| `CHROMA_PERSIST_DIR` | Tùy chọn | `./data/chroma` | Thư mục lưu Vector DB ChromaDB; cần lưu bền vững khi triển khai. |
 | `DATABASE_AUTO_CREATE` | Tùy chọn | `true` | Tự động tạo bảng ORM khi khởi động ứng dụng nếu chưa có. |
 | `SUPABASE_URL` | Tùy chọn | `""` | URL dự án Supabase (nếu kết nối dữ liệu bác sĩ/dịch vụ). |
 | `SUPABASE_KEY` | Tùy chọn | `""` | Anon/Public API Key của Supabase. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Tùy chọn | `""` | Service Role Key cho quyền truy cập quản trị Supabase. |
 | **XÁC THỰC & BẢO MẬT (AUTH)** | | | |
-| `JWT_SECRET_KEY` | **Có** | `replace-with-a-secret` | Khóa bí mật dùng để ký và giải mã JWT token. |
+| `JWT_SECRET_KEY` | **Có** | `""` | Khóa bí mật ngẫu nhiên dùng để ký và xác minh JWT; thay giá trị mẫu trong `.env.example`. |
+| `AUTH_PROVIDER` | Tùy chọn | `custom` | Cơ chế xác thực: `custom` hoặc `supabase`. |
 | `JWT_ALGORITHM` | Tùy chọn | `HS256` | Thuật toán băm JWT. |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Tùy chọn | `15` | Thời gian hết hạn của Access Token (phút). |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Tùy chọn | `30` | Thời gian hết hạn của Refresh Token (ngày). |
@@ -150,11 +166,20 @@ cp .env.example .env
 ## 5. Hướng dẫn cài đặt & Chạy dự án (Setup Instructions)
 
 ### Yêu cầu tiên quyết
+
 * **Python:** Phiên bản `3.11` trở lên
-* **Node.js:** Phiên bản `v20.x` trở lên & `npm`
+* **Node.js:** `20.19+` hoặc `22.12+` và `npm` để chạy Vite 7.
+* **Database:** PostgreSQL hoặc dự án Supabase đã có dữ liệu bác sĩ, cơ sở và lịch khám.
 * **Hệ điều hành:** Hỗ trợ Windows, macOS, Linux
 
 ---
+
+### Lấy mã nguồn
+
+```bash
+git clone --branch develop https://github.com/MaiVanTruong2310/T24-Build-Phase-AI-In-Action.git
+cd T24-Build-Phase-AI-In-Action
+```
 
 ### Bước 1: Khởi tạo Backend
 
@@ -176,7 +201,10 @@ cp .env.example .env
    ```
 
 3. **Cài đặt cấu hình môi trường:**
-   Tạo file `.env` từ file mẫu `.env.example` và điền khóa API (`OPENROUTER_API_KEY` hoặc `GOOGLE_AI_API_KEY`).
+   Trên PowerShell, chạy `Copy-Item .env.example .env`; trên Linux/macOS dùng `cp .env.example .env`.
+   Cấu hình `DATABASE_URL`, `JWT_SECRET_KEY` và khóa provider LLM bạn sử dụng.
+   `DATABASE_AUTO_CREATE=true` tạo bảng ORM, không tự cung cấp dữ liệu bác sĩ hoặc lịch khám.
+   Biến LLM chưa có trong file mẫu có thể được thêm vào `.env` theo bảng ở trên.
 
 4. **Khởi chạy máy chủ Backend:**
    ```bash
@@ -200,10 +228,10 @@ Mở một cửa sổ Terminal mới:
 
 2. **Khởi chạy Frontend ở chế độ phát triển (Dev Mode):**
    ```bash
-   npm run dev -- --host 127.0.0.1 --port 5173
+   npm run dev -- --host localhost --port 5173
    ```
-   * Mở trình duyệt tại: **<http://127.0.0.1:5173>**
-   * Hệ thống tự động kết nối với backend tại cổng `8000`.
+   * Mở trình duyệt tại: **<http://localhost:5173>**
+   * Mặc định frontend gọi `http://localhost:8000`. Dùng cùng hostname `localhost` cho cả hai phía khi đăng nhập bằng cookie. Nếu đổi backend, cấu hình `VITE_API_BASE_URL` trong `frontend/.env.local` và cập nhật `CORS_ORIGINS` ở backend.
 
 ---
 
@@ -213,7 +241,47 @@ Nếu bạn đã cài đặt Docker và Docker Compose:
 ```bash
 docker compose up --build
 ```
-Hệ thống sẽ tự động đóng gói ứng dụng Backend và kết nối dịch vụ cơ sở dữ liệu.
+Compose chạy backend và PostgreSQL; frontend vẫn chạy riêng theo Bước 2.
+Trước khi chạy, cấu hình `POSTGRES_PASSWORD` và `DATABASE_URL` trong `.env`;
+backend trong container kết nối tới hostname `postgres`, cổng `5432`, với user/database
+khớp `POSTGRES_USER` và `POSTGRES_DB` (mặc định `ai20k_app` và `ai20k`).
+Thư mục `data/` được mount vào backend để giữ dữ liệu ChromaDB qua các lần khởi động.
+
+---
+
+### Bước 4: Tạo Vector DB ChromaDB
+
+Repo chứa code tích hợp ChromaDB và script tạo chỉ mục. `data/chroma/`, file database
+và `.env` được bỏ qua bởi Git; clone hoặc pull không tải Vector DB có sẵn.
+
+Sau khi cài thư viện và cấu hình `GOOGLE_AI_API_KEY`, chạy từ thư mục gốc:
+
+```bash
+python scripts/build_vector_store.py
+```
+
+Script tạo embedding qua Gemini API, có sử dụng hạn ngạch API. Nguồn chuyên khoa
+`data/datalake/rag/specialties.jsonl` có trong Git. Hai nguồn tùy chọn
+`disease_education.jsonl` và `services.jsonl` trong cùng thư mục hiện được Git bỏ qua;
+script sẽ bỏ qua nguồn chưa có. Muốn tạo lại đầy đủ cần bổ sung cùng bộ nguồn.
+Khởi động lại backend sau khi tạo chỉ mục. Nếu vector store chưa sẵn sàng,
+Hybrid RAG dùng nhánh truy xuất SQLite FTS5.
+
+Để chuyển chỉ mục hiện có, dừng backend rồi sao chép **toàn bộ** `data/chroma/`;
+chỉ sao chép `chroma.sqlite3` sẽ thiếu các file chỉ mục. Xem [hướng dẫn Vector DB](docs/vector-db.md).
+
+### Các trang điều phối
+
+| Trang | Chức năng |
+|:---|:---|
+| `/staff/queue` | Nhận và xử lý phiếu, lập phương án khám, xếp lịch, xử lý cọc. |
+| `/staff/chat` | Danh sách hội thoại và khung tin nhắn riêng; nhận ca, tiếp quản từ AI, trả lời bệnh nhân, trả về AI kèm tóm tắt. |
+| `/staff/emergency` | Theo dõi và xử lý các ca có cảnh báo cấp cứu. |
+
+Điều phối viên cần bắt đầu ca trực, nhận ca và tiếp quản trước khi gửi tin nhắn.
+Trang Hội thoại có liên kết mở phiếu tương ứng trong Hàng đợi.
+Tài khoản nhân viên truy cập trang bệnh nhân sẽ được chuyển về khu vực nhân viên;
+cập nhật hồ sơ bệnh nhân được kiểm tra quyền tại API.
 
 ---
 
@@ -222,6 +290,7 @@ Hệ thống sẽ tự động đóng gói ứng dụng Backend và kết nối 
 Trợ lý y tế P-124 được thiết kế đặc thù cho các tình huống tiếp đón và sàng lọc lâm sàng thực tế. Dưới đây là các nhóm câu hỏi thử nghiệm tiêu biểu:
 
 ### Kịch bản 1: Cảnh báo cấp cứu khẩn cấp (Zero-Token Emergency Gate - ATS 1)
+
 * **Câu hỏi bệnh nhân:**
   > *"Bệnh nhân bị đau thắt ngực dữ dội, vã mồ hôi và khó thở cấp tính"*
 * **Hành vi hệ thống:**
@@ -231,6 +300,7 @@ Trợ lý y tế P-124 được thiết kế đặc thù cho các tình huống 
 ---
 
 ### Kịch bản 2: Hỏi bệnh đau khớp & Phân luồng cơ sở Long Biên (ATS 4-5)
+
 * **Câu hỏi bệnh nhân:**
   > *"Chào bạn, tôi đang bị đau khớp ở đầu gối chân phải, hiện tại tôi đang gặp vấn đề về đi lại thì không biết có bệnh viện nào ở gần khu vực Long Biên - Hà Nội để tôi có thể đi khám không?"*
 * **Hành vi hệ thống:**
@@ -241,6 +311,7 @@ Trợ lý y tế P-124 được thiết kế đặc thù cho các tình huống 
 ---
 
 ### Kịch bản 3: Tra cứu bác sĩ & Khung giờ khám thực tế
+
 * **Câu hỏi bệnh nhân:**
   > *"Tôi muốn tìm bác sĩ chuyên khoa Cơ xương khớp hoặc Chấn thương chỉnh hình có lịch khám vào sáng thứ 7 tuần này ở Vinmec Times City"*
 * **Hành vi hệ thống:**
@@ -250,6 +321,7 @@ Trợ lý y tế P-124 được thiết kế đặc thù cho các tình huống 
 ---
 
 ### Kịch bản 4: Đặt lịch khám qua trò chuyện tự nhiên (Conversational Booking)
+
 * **Câu hỏi bệnh nhân:**
   > *"Tôi muốn đăng ký khám khớp gối ở Vinmec Riverside vào sáng thứ 2 tuần sau cho Nguyễn Văn An, số điện thoại 0912345678"*
 * **Hành vi hệ thống:**
@@ -260,6 +332,7 @@ Trợ lý y tế P-124 được thiết kế đặc thù cho các tình huống 
 ---
 
 ### Kịch bản 5: Hủy lịch hẹn khám đã đặt
+
 * **Câu hỏi bệnh nhân:**
   > *"Tôi bận việc đột xuất nên muốn hủy lịch hẹn khám mã YC-2449D668"*
 * **Hành vi hệ thống:**
@@ -268,6 +341,7 @@ Trợ lý y tế P-124 được thiết kế đặc thù cho các tình huống 
 ---
 
 ### Kịch bản 6: Khám bệnh đa ngữ (English Medical Triage)
+
 * **Câu hỏi bệnh nhân:**
   > *"I have had a severe throbbing headache on my right temple for 3 days with nausea and light sensitivity."*
 * **Hành vi hệ thống:**
@@ -279,30 +353,40 @@ Trợ lý y tế P-124 được thiết kế đặc thù cho các tình huống 
 ## 7. Danh mục API Endpoints
 
 ### 1. Trợ lý AI & Hội thoại (`/api/v1/chat`)
+
 | Phương thức | Đường dẫn | Quyền hạn | Mô tả chức năng |
 |:---:|:---|:---:|:---|
 | `POST` | `/api/v1/chat/stream` | Công khai / User | Gửi tin nhắn và nhận phản hồi trực tiếp dạng SSE streaming. |
 | `POST` | `/api/v1/chat` | Công khai / User | Endpoint chat dạng REST truyền thống (dùng khi client không hỗ trợ SSE). |
 | `GET` | `/api/v1/chat/conversations` | Người dùng | Lấy danh sách các phiên trò chuyện của người dùng đăng nhập. |
-| `GET` | `/api/v1/chat/conversations/{session_id}` | Công khai / User | Tải lại toàn bộ lịch sử tin nhắn của một phiên. |
+| `GET` | `/api/v1/chat/conversations/{session_id}` | Người dùng | Tải lại toàn bộ lịch sử tin nhắn của một phiên. |
 | `DELETE` | `/api/v1/chat/conversations/{session_id}` | Người dùng | Xóa lịch sử phiên hội thoại. |
 
 ### 2. Quản lý Đặt lịch khám (`/api/v1/bookings`)
+
 | Phương thức | Đường dẫn | Quyền hạn | Mô tả chức năng |
 |:---:|:---|:---:|:---|
-| `GET` | `/api/v1/bookings/my` | Bệnh nhân | Lấy danh sách lịch hẹn cá nhân (cả đặt lịch trực tiếp & qua AI chat). |
+| `GET` | `/api/v1/bookings` | Bệnh nhân | Lấy danh sách lịch hẹn cá nhân (cả đặt lịch trực tiếp & qua AI chat). |
 | `POST` | `/api/v1/bookings` | Bệnh nhân | Tạo yêu cầu đặt lịch hẹn mới theo khung giờ cụ thể. |
-| `POST` | `/api/v1/bookings/{id}/confirm` | Bệnh nhân | Xác nhận và thanh toán/chốt slot khám đang giữ chỗ. |
+| `POST` | `/api/v1/bookings/hold` | Bệnh nhân | Giữ chỗ tạm thời cho khung giờ khám. |
 | `POST` | `/api/v1/bookings/{id}/cancel` | Bệnh nhân / Staff | Hủy lịch hẹn khám, chuyển trạng thái sang đã hủy kèm lý do. |
 
-### 3. Bàn làm việc Điều phối viên (`/api/v1/workbench`)
-| Phương thức | Đường dẫn | Quyền hạn | Mô tả chức năng |
-|:---:|:---|:---:|:---|
-| `GET` | `/api/v1/workbench/cases` | Nhân viên điều phối | Xem danh sách các ca bệnh cần xử lý, lọc theo mức khẩn cấp ATS. |
-| `POST` | `/api/v1/workbench/cases/{id}/claim` | Nhân viên điều phối | Nhận phụ trách ca bệnh nhân để tiếp quản hỗ trợ. |
-| `POST` | `/api/v1/workbench/cases/{id}/takeover` | Nhân viên điều phối | Bật chế độ can thiệp con người (Human Takeover) tạm dừng phản hồi của AI. |
+### 3. Bàn làm việc Điều phối viên (`/api/v1/staff/workbench`)
+
+| Phương thức | Đường dẫn | Mô tả chức năng |
+|:---:|:---|:---|
+| `GET` | `/api/v1/staff/workbench/cases` | Danh sách ca; `conversations=true` lọc các ca nguồn hội thoại. |
+| `GET` | `/api/v1/staff/workbench/cases/{id}` | Chi tiết ca và tin nhắn. |
+| `POST` | `/api/v1/staff/workbench/cases/{id}/actions` | Nhận ca, tiếp quản, trả về AI và các thao tác điều phối qua trường `action`. |
+| `POST` | `/api/v1/staff/workbench/cases/{id}/messages` | Gửi tin nhắn khi nhân viên có quyền xử lý hội thoại. |
+| `PUT` | `/api/v1/staff/workbench/cases/{id}/plan` | Cập nhật phương án khám. |
+| `POST` | `/api/v1/staff/workbench/duty/start` | Bắt đầu ca trực. |
+
+Các endpoint này yêu cầu xác thực và quyền nhân viên điều phối. Xem `/docs` của backend
+đang chạy để biết đầy đủ schema, thao tác và endpoint.
 
 ### 4. Hệ thống & Giám sát (`/health`)
+
 | Phương thức | Đường dẫn | Quyền hạn | Mô tả chức năng |
 |:---:|:---|:---:|:---|
 | `GET` | `/health` | Công khai | Kiểm tra máy chủ có đang phản hồi (Liveness check). |
@@ -312,26 +396,46 @@ Trợ lý y tế P-124 được thiết kế đặc thù cho các tình huống 
 
 ## 8. Kiểm thử & Đảm bảo chất lượng (Testing)
 
-Dự án trang bị bộ kiểm thử tự động toàn diện với hơn **160+ test cases** bao phủ kiểm định lâm sàng, quy tắc an toàn và kiểm thử tích hợp API:
+Các bộ kiểm thử bao gồm logic trợ lý, validation phiếu, phân quyền API và điều phối. Một số kiểm thử RAG cần dữ liệu hoặc khóa API đã cấu hình:
 
 ```bash
 # 1. Chạy toàn bộ test suite của Medical Assistant
+
 pytest tests/test_medical_assistant/ -v
 
 # 2. Kiểm thử riêng các ca cấp cứu và an toàn lâm sàng
+
 pytest tests/test_medical_assistant/test_emergency_safety_v3.py -v
 
 # 3. Kiểm thử luồng hội thoại đặt lịch tự nhiên
+
 pytest tests/test_medical_assistant/test_relative_date_and_booking_summary.py -v
 
 # 4. Kiểm thử API hủy lịch và đặt chỗ
+
 pytest tests/test_booking/test_api.py -v
 
-# 5. Kiểm tra định dạng code với Ruff
+# 5. Kiểm thử phiếu đăng ký, phân quyền và hồi quy điều phối
+
+python -m pytest tests/test_api/test_chat_booking_validation.py tests/test_api/test_staff_patient_profile_access.py tests/test_coordinator_regressions.py -q
+
+# 6. Kiểm thử logic frontend điều phối (từ thư mục gốc)
+
+node --test tests/coordinator_frontend.test.cjs tests/coordinator_ui.test.cjs
+
+# 7. Kiểm tra định dạng code với Ruff
+
 ruff check .
 ```
 
 ---
+
+Kiểm tra build frontend:
+
+```bash
+cd frontend
+npm run build
+```
 
 ## 9. Cấu trúc thư mục dự án
 
@@ -340,6 +444,7 @@ ruff check .
 ├── requirements.txt                 # Danh mục thư viện Python
 ├── scripts/
 │   ├── run_backend.py               # Launcher khởi động backend đa nền tảng
+│   ├── build_vector_store.py        # Tạo chỉ mục ChromaDB từ JSONL
 │   └── setup_hooks.ps1              # Hook ghi nhận lịch sử AI
 ├── src/
 │   ├── main.py                      # Điểm vào chính của ứng dụng FastAPI
@@ -367,6 +472,7 @@ ruff check .
 │       │   ├── disease_triage.py    # Phân tầng cấp cứu ATS
 │       │   ├── booking_lookup_service.py # Xử lý đặt lịch qua hội thoại
 │       │   └── patient_memory_service.py # Bộ nhớ dài hạn bệnh nhân
+│       ├── rag/                    # ChromaDB, Gemini embeddings và Hybrid RAG
 │       └── infrastructure/
 │           └── llm.py               # Failover LLM Gateway (Hedged requests)
 ├── frontend/                        # Ứng dụng giao diện người dùng

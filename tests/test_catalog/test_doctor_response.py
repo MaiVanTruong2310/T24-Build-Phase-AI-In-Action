@@ -1,6 +1,6 @@
 """Doctor response mapping tests."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -50,17 +50,12 @@ def test_doctor_response_includes_resolved_catalog_resources():
         id=uuid4(),
         code="DOC-001",
         full_name="Doctor One",
-        license_number="LIC-001",
-        email="doctor@example.com",
-        phone="0900000001",
         bio=None,
         status="active",
         review_status="approved",
         booking_enabled=True,
         avatar_url=None,
-        gender=None,
         title="Specialist",
-        date_of_birth=date(1980, 1, 1),
         specialties=[SimpleNamespace(specialty_id=specialty.id, is_primary=True, specialty=specialty)],
         facilities=[
             SimpleNamespace(
@@ -112,17 +107,12 @@ def test_public_doctor_response_excludes_inactive_assignments():
         id=uuid4(),
         code="DOC-002",
         full_name="Doctor Two",
-        license_number=None,
-        email=None,
-        phone=None,
         bio=None,
         status="active",
         review_status="approved",
         booking_enabled=True,
         avatar_url=None,
-        gender=None,
         title=None,
-        date_of_birth=None,
         specialties=[
             SimpleNamespace(specialty_id=active_specialty.id, is_primary=True, specialty=active_specialty),
             SimpleNamespace(specialty_id=inactive_specialty.id, is_primary=False, specialty=inactive_specialty),

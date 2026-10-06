@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException, Query, status
 
-from src.api.dependencies import get_current_user, require_staff
+from src.api.dependencies import require_coordination_admin as require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
 from src.models.user import User
@@ -14,12 +14,11 @@ from src.schemas.catalog import (
     BulkImportResponse,
     BulkScheduleImportRequest,
     CatalogAuditResponse,
+    DoctorScheduleCreate,
     DoctorScheduleResponse,
     DoctorScheduleUpdate,
     ScheduleCancellationRequest,
     ScheduleStatus,
-    StaffScheduleCreate,
-    StaffScheduleCreateResponse,
 )
 from src.schemas.common import ApiResponse
 from src.services.catalog import CatalogService
@@ -37,10 +36,9 @@ async def doctor_availability(
     selected_date: date | None = Query(default=None, alias="date"),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
-    _: User = Depends(get_current_user),
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[DoctorScheduleResponse]]:
-    """Return consultation slots and blocking schedule periods for the selected day."""
+    """Return only available slots with positive capacity."""
     try:
         starts_from, starts_to = _availability_window(from_datetime, to_datetime, selected_date)
     except ValueError as exc:
@@ -114,24 +112,16 @@ async def staff_schedule_activity(
 
 
 @staff_router.post(
-    "/schedules", response_model=ApiResponse[StaffScheduleCreateResponse], status_code=status.HTTP_201_CREATED
+    "/schedules", response_model=ApiResponse[DoctorScheduleResponse], status_code=status.HTTP_201_CREATED
 )
 async def staff_create_schedule(
-    request: StaffScheduleCreate,
+    request: DoctorScheduleCreate,
     current_user: User = Depends(require_staff),
     service: CatalogService = Depends(get_catalog_service),
-) -> ApiResponse[StaffScheduleCreateResponse]:
+) -> ApiResponse[DoctorScheduleResponse]:
     """Create a schedule as staff."""
-    schedule, booking = await service.create_schedule(request, current_user.id)
-    return success_response(
-        StaffScheduleCreateResponse(
-            schedule=DoctorScheduleResponse.model_validate(schedule),
-            booking_id=booking.id if booking else None,
-            booking_status="confirmed" if booking else None,
-        ),
-        "Schedule created",
-        201,
-    )
+    value = await service.create_schedule(request, current_user.id)
+    return success_response(DoctorScheduleResponse.model_validate(value), "Schedule created", 201)
 
 
 @staff_router.put("/schedules/{schedule_id}", response_model=ApiResponse[DoctorScheduleResponse])

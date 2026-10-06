@@ -57,6 +57,22 @@ class ClinicalNegationService:
             re.IGNORECASE,
         )
 
+        self.pseudo_negations = [
+            r"\bkhông\s+rõ\b",
+            r"\bkhong\s+ro\b",
+            r"\bkhông\s+biết\b",
+            r"\bkhong\s+biet\b",
+            r"\bkhông\s+chắc\b",
+            r"\bkhong\s+chac\b",
+            r"\bchưa\s+rõ\b",
+            r"\bchua\s+ro\b",
+            r"\bchưa\s+biết\b",
+            r"\bchua\s+biet\b",
+            r"\bnot\s+sure\b",
+            r"\bnot\s+certain\b",
+        ]
+        self._pseudo_regex = re.compile("|".join(self.pseudo_negations), re.IGNORECASE)
+
         self._all_negation_regex = re.compile(
             r"(" + "|".join(self.negation_patterns_vi + self.negation_patterns_en) + r")", re.IGNORECASE
         )
@@ -80,9 +96,15 @@ class ClinicalNegationService:
         if not text:
             return scopes
 
+        pseudo_spans = [(m.start(), m.end()) for m in self._pseudo_regex.finditer(text)]
+
         for match in self._all_negation_regex.finditer(text):
             neg_start = match.start()
             neg_word_end = match.end()
+
+            # Bỏ qua nếu từ phủ định nằm trong một cụm bất định (pseudo-negation: "không rõ là", "không biết là")
+            if any(p_start <= neg_start < p_end for p_start, p_end in pseudo_spans):
+                continue
 
             # Tìm ranh giới kết thúc mệnh đề phủ định
             boundary_match = self.boundary_pattern.search(text, pos=neg_word_end)

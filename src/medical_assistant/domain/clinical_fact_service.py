@@ -51,7 +51,15 @@ FACT_PATTERNS = {
     ],
     "constipation": [r"tao bon", r"kho di ngoai", r"phan (?:kho|cung)", r"ngay moi di (?:cau|ngoai)"],
     # Thần kinh / Đau đầu
-    "headache": [r"dau dau", r"nhuc dau", r"dau nua dau", r"buot dau", r"nang dau", r"headache", r"migraine"],
+    "headache": [
+        r"dau dau(?!\s+goi)",
+        r"nhuc dau(?!\s+goi)",
+        r"dau nua dau",
+        r"buot dau",
+        r"nang dau",
+        r"headache",
+        r"migraine",
+    ],
     "one_sided_headache": [r"nua dau (?:ben )?(?:trai|phai)", r"dau mot ben"],
     "nausea": [r"buon non", r"mac non", r"nausea"],
     "photophobia": [r"so anh sang", r"choi mat"],
@@ -89,7 +97,18 @@ FACT_PATTERNS = {
     "shortness_of_breath": [r"kho tho", r"hut hoi", r"tho gap", r"shortness of breath", r"dyspnea"],
     "cough": [r"\bho khan\b", r"\bho co dom\b", r"\bbi ho\b", r"\bcon ho\b", r"\bcough\b"],
     # Cơ xương khớp
-    "joint_pain": [r"dau khop", r"dau xuong khop", r"nhuc khop"],
+    "joint_pain": [
+        r"dau khop",
+        r"dau xuong khop",
+        r"nhuc khop",
+        r"dau dau goi",
+        r"dau goi",
+        r"khop goi",
+        r"moi goi",
+        r"sung dau goi",
+        r"sung goi",
+        r"knee pain",
+    ],
     "back_pain": [r"dau lung", r"moi lung", r"dau cot song"],
     "neck_shoulder_pain": [r"dau vai gay", r"moi vai gay", r"moi co", r"cổ vai gáy"],
 }
@@ -234,18 +253,26 @@ class ClinicalFactService:
                     break
 
         duration_days = None
-        if re.search(r"dung (?:mot )?tuan|1 tuan", normalized):
-            duration_days = 7
-        elif re.search(r"(?:hom qua|tu hom qua|duoc 1 ngay|mot ngay)", normalized):
-            duration_days = 1
-        elif re.search(r"(?:hom kia|2 ngay|hai ngay)", normalized):
-            duration_days = 2
-        elif re.search(r"(?:ba ngay|3 ngay)", normalized):
-            duration_days = 3
-        else:
-            match = re.search(r"(\d+)\s+ngay", normalized)
-            if match:
-                duration_days = int(match.group(1))
+        is_greeting_wish = bool(re.search(r"chuc(?:\s+\w+)?\s+\d*\s*ngay\s+(?:vui|tot|an|hanh|dep)", normalized))
+        if not is_greeting_wish:
+            if re.search(r"dung (?:mot )?tuan|1 tuan", normalized):
+                duration_days = 7
+            elif re.search(r"(?:hom qua|tu hom qua|duoc 1 ngay|mot ngay)", normalized):
+                duration_days = 1
+            elif re.search(r"(?:hom kia|2 ngay|hai ngay)", normalized):
+                duration_days = 2
+            elif re.search(r"(?:ba ngay|3 ngay)", normalized):
+                duration_days = 3
+            else:
+                match = re.search(r"(\d+)\s+ngay", normalized)
+                if match:
+                    has_duration_context = bool(
+                        positive
+                        or re.search(r"\b(?:bi|dau|khoang|duoc|suot|tam)\s+\d+\s+ngay\b", normalized)
+                        or re.search(r"\b\d+\s+ngay\s+(?:nay|roi|qua|tro lai|truoc)\b", normalized)
+                    )
+                    if has_duration_context:
+                        duration_days = int(match.group(1))
 
         bowel_interval_days = None
         interval = re.search(r"(\d+)\s*(?:-|den)?\s*(\d+)?\s*ngay moi di (?:cau|ngoai)", normalized)

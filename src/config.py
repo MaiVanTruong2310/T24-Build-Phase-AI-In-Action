@@ -19,39 +19,28 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     cors_origins: str = "http://localhost:5173"
+    public_frontend_origin: str = "https://creative-enjoyment-production-e3d9.up.railway.app"
 
     # LLM
     openai_api_key: str = ""
     model_name: str = "gpt-4o-mini"
     llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model_name: str = "DeepSeek-V4.1-Flash"
 
     # Database
     database_url: str = ""
-    # Schema changes are managed by Alembic. Keep ORM bootstrap opt-in so
-    # multiple API processes cannot race while creating tables.
-    database_auto_create: bool = False
-    booking_maintenance_interval_seconds: int = Field(default=60, ge=5, le=3600)
-    appointment_reminder_lead_days: int = Field(default=2, ge=1, le=30)
     auth_database_url: str = ""
     supabase_auth_redirect_url: str = "http://localhost:5173"
     auth_provider: Literal["custom", "supabase"] = "custom"
-
+    database_auto_create: bool = True
     booking_hold_cleanup_interval_seconds: int = Field(default=60, ge=5, le=3600)
-    database_pool_size: int = Field(default=10, ge=1, le=100)
-    database_max_overflow: int = Field(default=20, ge=0, le=200)
-    database_pool_timeout_seconds: float = Field(default=10.0, gt=0.0, le=120.0)
+    database_pool_size: int = Field(default=15, ge=1, le=100)
+    database_max_overflow: int = Field(default=10, ge=0, le=200)
+    database_pool_timeout_seconds: float = Field(default=30.0, gt=0.0, le=120.0)
     database_pool_recycle_seconds: int = Field(default=900, ge=30, le=86400)
     database_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
-
-    # Redis (cache/session store). Each EC2 environment uses its local
-    # Compose service by default; override with REDIS_URL when needed.
-    redis_url: str = "redis://localhost:6379/0"
-
-    # Direct notification delivery
-    notification_processing_timeout_seconds: int = Field(default=300, ge=30, le=86400)
-    notification_max_attempts: int = Field(default=5, ge=1, le=20)
-    notification_retry_backoff_seconds: int = Field(default=5, ge=1, le=3600)
-    notification_retry_backoff_max_seconds: int = Field(default=3600, ge=1, le=86400)
 
     # Authentication
     auth_cookie_secure: bool | None = None
@@ -71,12 +60,11 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""
 
-    # Gmail SMTP App Password
-    gmail_smtp_host: str = "smtp.gmail.com"
-    gmail_smtp_port: int = Field(default=587, ge=1, le=65535)
-    gmail_smtp_username: str = ""
-    gmail_smtp_app_password: str = ""
-    gmail_from_email: str = ""
+    # Zalo Bot
+    zalo_bot_token: str = ""
+    zalo_bot_secret_token: str = ""
+    zalo_bot_mode: Literal["disabled", "polling", "webhook"] = "disabled"
+    zalo_webhook_url: str = ""
 
 
 def parse_cors_origins(value: str) -> list[str]:
@@ -87,6 +75,12 @@ def parse_cors_origins(value: str) -> list[str]:
         if origin and origin not in origins:
             origins.append(origin)
     return origins
+
+
+def allowed_cors_origins() -> list[str]:
+    """Include the deployed frontend even if CORS_ORIGINS is overridden."""
+    settings = get_settings()
+    return parse_cors_origins(f"{settings.cors_origins},{settings.public_frontend_origin}")
 
 
 @lru_cache

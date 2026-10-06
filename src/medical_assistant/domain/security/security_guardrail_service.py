@@ -77,7 +77,7 @@ class SecurityGuardrailService:
             r"\binsert\s+into\s+.*(admin|users|roles)",
         ]
 
-        # 4. Cross-Patient Privacy Violations (Multi-Tenant Snoop)
+        # 4. Cross-Patient Privacy Violations (Multi-Tenant Snoop & PII/PHI snooping)
         self.cross_patient_patterns = [
             r"(cho\s+xem|ai\s+đã\s+đặt|danh\s+sách|thông\s+tin)\s+(bệnh\s+nhân|khách\s+hàng|người\s+khác)",
             r"(xem|đọc|tìm)\s+hồ\s+sơ\s+(bệnh\s+án\s+)?của\s+(người\s+khác|bệnh\s+nhân\s+khác)",
@@ -85,6 +85,12 @@ class SecurityGuardrailService:
             r"(show|list|get)\s+(other|all)\s+patients?",
             r"(read|view)\s+(medical\s+records?|history)\s+of\s+another\s+patient",
             r"tra\s+cứu\s+(sđt|số\s+điện\s+thoại|cccd|cmnd|bhyt)\s+của\s+(người\s+khác|bệnh\s+nhân)",
+            r"(?:thông\s+tin\s+cá\s+nhân|hồ\s+sơ\s+cá\s+nhân|dữ\s+liệu\s+cá\s+nhân|personal\s+(?:info|information|data))\s+của\s+(?!tôi\b|mình\b|bản\s+thân\b|em\b)",
+            r"(?:thông\s+tin(?:\s+cá\s+nhân)?|sđt|số\s+điện\s+thoại|địa\s+chỉ|hồ\s+sơ|bệnh\s+án)\s+của\s+(?:người\s+tên\s+là|bệnh\s+nhân\s+tên\s+là|khách\s+hàng\s+tên\s+là|ai\s+tên\s+là)\b",
+            r"(?:cho\s+xem|hiển\s+thị|tra\s+cứu|tìm|lấy|show|get|view|check)\s+.*?(?:thông\s+tin\s+cá\s+nhân|sđt|số\s+điện\s+thoại|phone|địa\s+chỉ|address|cccd|cmnd|bhyt|hồ\s+sơ\s+bệnh\s+án|bệnh\s+án)\s+của\s+(?:người\s+tên|bệnh\s+nhân|khách\s+hàng|người\s+khác|ai\s+khác|bệnh\s+nhân\s+khác|ông|bà|anh|chị|chú|bác)(?!\s+(?:sĩ|doctor)\b)",
+            r"(?:thông\s+tin\s+cá\s+nhân|sđt|số\s+điện\s+thoại|hồ\s+sơ\s+bệnh\s+án)\s+của\s+(?:người\s+khác|ai\s+khác|bệnh\s+nhân\s+khác)\b",
+            r"(?:show|get|display|view|find)\s+(?:personal\s+info|phone\s+number|address|medical\s+records?)\s+of\s+(?:patient|person|user|someone\s+named)\b",
+            r"personal\s+(?:info|information|details)\s+of\s+(?!me\b|myself\b)",
         ]
 
         # 5. Out-of-Domain Dangerous / Harmful Content

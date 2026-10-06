@@ -3,7 +3,7 @@ import { fetchWithAuth } from '../../app/apiClient'
 export interface Case {
   id: string; source: string; session_id: string | null; patient_id: string | null
   patient: Record<string, string | null>; ai_snapshot: Record<string, unknown>; plan: Record<string, string | boolean>
-  assigned_to: string | null; status: string; priority: number; control: string; version: number
+  facility_id: string | null; assigned_to: string | null; status: string; priority: number; control: string; version: number
   due_at: string | null; follow_up_at: string | null; booking_id: string | null; created_at: string
 }
 export interface CaseDetail extends Case {
@@ -32,3 +32,7 @@ export const statuses: Record<string, string> = {
 }
 export const priorities = ['Cấp cứu', 'Cần hỗ trợ sớm', 'Ưu tiên', 'Thông thường']
 export const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('vi-VN') : '—'
+
+export function canAdminister(member: Member | null): boolean {
+  return Boolean(member?.is_admin && !member.facility_ids.length)
+}

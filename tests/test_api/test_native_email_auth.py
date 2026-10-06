@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
+import asyncio
 
 import httpx
 import pytest
@@ -7,6 +8,31 @@ import pytest
 from src.core.exceptions import AppError, AuthenticationError
 from src.schemas.auth import LoginRequest, RegisterRequest
 from src.services import supabase_auth as gateway
+
+
+@pytest.mark.asyncio
+async def test_concurrent_user_checks_share_one_provider_request(monkeypatch):
+    started = asyncio.Event()
+    release = asyncio.Event()
+    remote = AsyncMock()
+
+    async def check(*args, **kwargs):
+        started.set()
+        await release.wait()
+        return {"id": "verified"}
+
+    remote.side_effect = check
+    monkeypatch.setattr(gateway, "auth_call", remote)
+    first = asyncio.create_task(gateway.verified_identity("same-token"))
+    await started.wait()
+    second = asyncio.create_task(gateway.verified_identity("same-token"))
+    await asyncio.sleep(0)
+    release.set()
+    assert await asyncio.gather(first, second) == [{"id": "verified"}] * 2
+    assert remote.await_count == 1
+    await asyncio.sleep(0)  # run completion callback; later requests revalidate
+    await gateway.verified_identity("same-token")
+    assert remote.await_count == 2
 
 
 @pytest.mark.asyncio

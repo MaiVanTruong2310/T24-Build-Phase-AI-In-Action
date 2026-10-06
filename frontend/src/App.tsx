@@ -1,3 +1,4 @@
+import { StaffAdminGate } from './features/coordinator/StaffAdminGate'
 import { TypewriterLoader } from './components/TypewriterLoader';
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
@@ -94,19 +95,19 @@ const router = createBrowserRouter([
       { index: true, element: <CoordinatorWorkbench mode="dashboard" /> },
       { path: 'overview', element: <CoordinatorWorkbench mode="dashboard" /> },
       { path: 'dieu-phoi', element: <CoordinatorWorkbench /> },
-      { path: 'shifts', element: <CoordinatorSchedule /> },
-      { path: 'settings', element: <CoordinatorWorkbench mode="settings" /> },
-      { path: 'queue', element: <CoordinatorWorkbench /> },
+      { path: 'shifts', element: <StaffAdminGate><CoordinatorSchedule /></StaffAdminGate> },
+      { path: 'settings', element: <StaffAdminGate><CoordinatorWorkbench mode="settings" /></StaffAdminGate> },
+      { path: 'queue', element: <CoordinatorWorkbench key="queue" /> },
       { path: 'emergency', element: <CoordinatorWorkbench mode="emergency" /> },
-      { path: 'chat', element: <CoordinatorWorkbench mode="chat" /> },
-      { path: 'doctors', element: <DoctorManagement /> },
-      { path: 'doctors/create', element: <CreateDoctor /> },
-      { path: 'doctors/:id/edit', element: <CreateDoctor /> },
-      { path: 'services', element: <ServiceManagement /> },
-      { path: 'services/create', element: <CreateService /> },
+      { path: 'chat', element: <CoordinatorWorkbench key="chat" mode="chat" /> },
+      { path: 'doctors', element: <StaffAdminGate><DoctorManagement /></StaffAdminGate> },
+      { path: 'doctors/create', element: <StaffAdminGate><CreateDoctor /></StaffAdminGate> },
+      { path: 'doctors/:id/edit', element: <StaffAdminGate><CreateDoctor /></StaffAdminGate> },
+      { path: 'services', element: <StaffAdminGate><ServiceManagement /></StaffAdminGate> },
+      { path: 'services/create', element: <StaffAdminGate><CreateService /></StaffAdminGate> },
       { path: 'appointments', element: <CoordinatorWorkbench /> },
       { path: 'appointments/approve/:id', element: <Navigate to="/staff/queue" replace /> },
-      { path: 'doctor-schedule', element: <DoctorSchedule /> },
+      { path: 'doctor-schedule', element: <StaffAdminGate><DoctorSchedule /></StaffAdminGate> },
       { path: 'patients', element: <Placeholder title="Quản lý bệnh nhân" description="Page quản lý bệnh nhân sẽ được bổ sung sau." /> },
       { path: 'monitoring', element: <CoordinatorWorkbench mode="emergency" /> }
     ]
@@ -115,7 +116,8 @@ const router = createBrowserRouter([
 
 function PatientAuthGate({ children }: { children: ReactNode }) {
   const user = useSelector((state: RootState) => state.auth.user)
-  return user ? <>{children}</> : <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace />
+  return user.role === 'patient' ? <>{children}</> : <Navigate to="/staff" replace />
 }
 
 function StaffGate() {

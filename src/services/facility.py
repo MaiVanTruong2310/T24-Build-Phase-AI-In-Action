@@ -10,9 +10,18 @@ from src.schemas.catalog import FacilityCreate, FacilityUpdate
 class FacilityServiceMixin:
     """Facility operations composed into the catalog service."""
 
-    async def list_facilities(self, *, public_only: bool, offset: int, limit: int) -> list[Facility]:
+    async def list_facilities(
+        self,
+        *,
+        public_only: bool,
+        offset: int,
+        limit: int,
+        specialty_id: UUID | None = None,
+    ) -> list[Facility]:
         """List facilities."""
-        return await self.catalog.list_facilities(public_only=public_only, offset=offset, limit=limit)
+        return await self.catalog.list_facilities(
+            public_only=public_only, offset=offset, limit=limit, specialty_id=specialty_id
+        )
 
     async def get_facility(self, resource_id: UUID, *, public_only: bool) -> Facility:
         """Get a facility or raise a safe not-found error."""

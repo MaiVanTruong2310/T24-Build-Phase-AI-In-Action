@@ -1,5 +1,6 @@
+import { schedulesCsv } from '../../features/coordinator/uiLogic';
 import { useEffect, useMemo, useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Download, Plus, Settings, ShieldAlert, Zap } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Download, Plus, Settings, ShieldAlert } from 'lucide-react';
 import { StatCards } from './components/StatCards';
 import { Sidebar } from './components/Sidebar';
 import { ScheduleMatrix, WeekDay } from './components/ScheduleMatrix';
@@ -85,15 +86,19 @@ export default function DoctorSchedule() {
   const defaultModalDate = visibleDays[0]?.iso || localIso(currentDate);
 
   useEffect(() => {
+    let active = true;
     fetchSpecialties()
       .then((data) => {
+        if (!active) return;
         setSpecialties(data);
         setSelectedSpecialtyId(data[0]?.id || null);
       })
-      .catch(() => setPageError('Không thể tải danh sách chuyên khoa.'));
+      .catch(() => { if (active) setPageError('Không thể tải danh sách chuyên khoa.'); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
+    let active = true;
     if (!selectedSpecialtyId) {
       setDoctors([]);
       setSelectedDoctorId(null);
@@ -103,36 +108,44 @@ export default function DoctorSchedule() {
     setSelectedDoctorId(null);
     fetchDoctors(selectedSpecialtyId)
       .then((data) => {
+        if (!active) return;
         setDoctors(data);
         setSelectedDoctorId(data[0]?.id || null);
       })
-      .catch(() => setPageError('Không thể tải danh sách bác sĩ.'));
+      .catch(() => { if (active) setPageError('Không thể tải danh sách bác sĩ.'); });
+    return () => { active = false; };
   }, [selectedSpecialtyId]);
 
   useEffect(() => {
+    let active = true;
     if (!selectedDoctorId) {
       setSchedules([]);
       return;
     }
+    setSchedules([]); setModalDate(null); setSelectedSchedule(null);
     setLoadingSchedules(true);
     setPageError('');
     fetchDoctorSchedules(selectedDoctorId, weekInfo.from, weekInfo.to)
-      .then((data) => setSchedules(sortSchedules(data)))
-      .catch(() => setPageError('Không thể tải lịch của bác sĩ trong khoảng thời gian đã chọn.'))
-      .finally(() => setLoadingSchedules(false));
+      .then((data) => { if (active) setSchedules(sortSchedules(data)); })
+      .catch(() => { if (active) setPageError('Không thể tải lịch của bác sĩ trong khoảng thời gian đã chọn.'); })
+      .finally(() => { if (active) setLoadingSchedules(false); });
+    return () => { active = false; };
   }, [selectedDoctorId, weekInfo.from, weekInfo.to]);
 
   useEffect(() => {
+    let active = true;
     if (!selectedDoctorId) {
       setActivityEvents([]);
       return;
     }
+    setActivityEvents([]);
     setLoadingActivity(true);
     setActivityError('');
     fetchScheduleActivity(selectedDoctorId, weekInfo.from, weekInfo.to)
-      .then((data) => setActivityEvents(data))
-      .catch(() => setActivityError('Không thể tải nhật ký thao tác của bác sĩ.'))
-      .finally(() => setLoadingActivity(false));
+      .then((data) => { if (active) setActivityEvents(data); })
+      .catch(() => { if (active) setActivityError('Không thể tải nhật ký thao tác của bác sĩ.'); })
+      .finally(() => { if (active) setLoadingActivity(false); });
+    return () => { active = false; };
   }, [selectedDoctorId, weekInfo.from, weekInfo.to, activityRefreshKey]);
 
   const moveDate = (days: number) => setCurrentDate((date) => {
@@ -142,6 +155,7 @@ export default function DoctorSchedule() {
   });
 
   const handleCreated = (schedule: Schedule) => {
+    if (schedule.doctor_id !== selectedDoctorId || new Date(schedule.starts_at).getTime() < new Date(weekInfo.from).getTime() || new Date(schedule.starts_at).getTime() >= new Date(weekInfo.to).getTime()) return;
     setSchedules((current) => sortSchedules([...current, schedule]));
     setModalDate(null);
     setActivityRefreshKey((value) => value + 1);
@@ -149,10 +163,17 @@ export default function DoctorSchedule() {
   };
 
   const handleUpdated = (schedule: Schedule) => {
+    if (schedule.doctor_id !== selectedDoctorId) return;
     setSchedules((current) => sortSchedules(current.map((item) => item.id === schedule.id ? schedule : item)));
     setSelectedSchedule(null);
     setActivityRefreshKey((value) => value + 1);
     setNotice({ type: 'success', message: 'Đã cập nhật lịch khám thành công.' });
+  };
+
+  const exportSchedules = () => {
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + schedulesCsv(schedules, selectedDoctor?.full_name || '')], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'lich-bac-si-' + localIso(currentDate) + '.csv'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
@@ -168,8 +189,8 @@ export default function DoctorSchedule() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={() => selectedDoctor && setModalDate(defaultModalDate)} disabled={!selectedDoctor} className="flex items-center gap-2 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={18} /> Thêm lịch khám</button>
-            <button className="flex items-center gap-2 rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-sm font-bold text-teal-600 hover:bg-teal-50"><Zap size={18} /> Phân bổ tự động</button>
-            <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"><Download size={18} /> Xuất báo cáo</button>
+
+            <button disabled={loadingSchedules || !schedules.length} onClick={exportSchedules} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download size={18} /> Xuất báo cáo</button>
           </div>
         </div>
 
@@ -189,7 +210,7 @@ export default function DoctorSchedule() {
           </div>
         </div>
 
-        <StatCards />
+        <StatCards schedules={schedules} loading={loadingSchedules} />
         {pageError && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">{pageError}</div>}
         {notice && <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`} role="status">{notice.message}</div>}
 

@@ -27,29 +27,23 @@ class DoctorSchedule(Base):
         ExcludeConstraint(
             ("doctor_id", "="),
             (text("tstzrange(starts_at, ends_at, '[)')"), "&&"),
-            where=text("status <> 'cancelled' AND type = 'consultation'"),
+            where=text("status <> 'cancelled'"),
             using="gist",
             name="excl_doctor_schedule_time",
         ),
         CheckConstraint("ends_at > starts_at", name="ck_schedule_time_order"),
         CheckConstraint("capacity >= 0", name="ck_schedule_capacity_nonnegative"),
-        CheckConstraint(
-            "type IN ('consultation', 'busy', 'leave', 'other')",
-            name="ck_doctor_schedule_type",
-        ),
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     doctor_id: Mapped[UUID] = mapped_column(ForeignKey("doctors.id", ondelete="RESTRICT"), nullable=False, index=True)
-    facility_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("facilities.id", ondelete="RESTRICT"), nullable=True, index=True
+    facility_id: Mapped[UUID] = mapped_column(
+        ForeignKey("facilities.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     capacity: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="available", nullable=False)
-    type: Mapped[str] = mapped_column(String(16), default="consultation", server_default="consultation", nullable=False)
-    note: Mapped[str | None] = mapped_column(Text)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     source_system: Mapped[str | None] = mapped_column(String(64))
     external_schedule_id: Mapped[str | None] = mapped_column(String(128))
