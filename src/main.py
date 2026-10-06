@@ -5,7 +5,10 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import OperationalError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.endpoints.auth import router as auth_router
 from src.api.endpoints.auth import user_router
@@ -14,12 +17,6 @@ from src.api.endpoints.booking import staff_router as staff_booking_router
 from src.api.endpoints.catalog import router as catalog_router
 from src.api.endpoints.catalog import staff_router as catalog_staff_router
 from src.api.endpoints.chat_takeover import router as chat_takeover_router
-from src.api.endpoints.notification import router as notification_router
-from src.api.exception_handlers import register_exception_handlers
-from src.config import get_settings, parse_cors_origins
-from src.core.context import session_id_var, trace_id_var
-from src.core.logging import get_logger, log_event, setup_logging
-from src.core.observability import setup_observability
 from src.api.endpoints.coordination import router as coordination_router
 from src.api.endpoints.coordination import staff_router as staff_coordination_router
 from src.api.endpoints.notification import router as notification_router
@@ -28,6 +25,7 @@ from src.api.endpoints.package import staff_router as staff_package_router
 from src.api.endpoints.workbench import patient_router as live_coordination_router
 from src.api.endpoints.workbench import router as workbench_router
 from src.api.endpoints.zalo import router as zalo_router
+from src.api.exception_handlers import register_exception_handlers
 from src.api.handlers import (
     app_error_handler,
     database_unavailable_handler,
@@ -36,8 +34,10 @@ from src.api.handlers import (
     validation_error_handler,
 )
 from src.config import allowed_cors_origins, get_settings
+from src.core.context import session_id_var, trace_id_var
 from src.core.exceptions import AppError
-from src.core.logging import get_logger
+from src.core.logging import get_logger, log_event, setup_logging
+from src.core.observability import setup_observability
 from src.db.session import check_database_connection, close_database, get_session_factory, initialize_database
 from src.medical_assistant.api.routes import router as medical_assistant_router
 from src.medical_assistant.db.supabase_client import close_supabase_clients
@@ -68,7 +68,7 @@ async def _booking_hold_cleanup_loop(interval_seconds: int, stop_event: asyncio.
                         count=expired_count,
                     )
                 notification_service = NotificationService(session)
-                reminder_count = await notification_service.create_due_reminders()
+                reminder_count = await notification_service.process_due_reminders()
                 if reminder_count:
                     log_event(
                         logger,
@@ -76,15 +76,6 @@ async def _booking_hold_cleanup_loop(interval_seconds: int, stop_event: asyncio.
                         "notification.maintenance.reminders_queued",
                         description="Maintenance queued due appointment reminders",
                         count=reminder_count,
-                    )
-                delivered_email_count = await notification_service.deliver_pending_emails()
-                if delivered_email_count:
-                    log_event(
-                        logger,
-                        logging.INFO,
-                        "notification.maintenance.emails_delivered",
-                        description="Maintenance delivered pending notification emails",
-                        count=delivered_email_count,
                     )
         except asyncio.CancelledError:
             raise
@@ -97,29 +88,10 @@ async def _booking_hold_cleanup_loop(interval_seconds: int, stop_event: asyncio.
                 error_type=type(exc).__name__,
                 exc_info=True,
             )
-        await asyncio.sleep(interval_seconds)
-                released_count = await BookingService(session).release_expired_holds()
-                if released_count:
-                    logger.info("main.booking_hold_cleanup released holds", extra={"count": released_count})
-                from src.services.workbench import expire_deposits, sync_sources
-                async with session.begin():
-                    await sync_sources(session)
-                    await expire_deposits(session)
-                reminder_count = await NotificationService(session).process_due_reminders()
-                if reminder_count:
-                    logger.info("main.notification_cleanup delivered reminders", extra={"count": reminder_count})
-        except (asyncio.CancelledError, GeneratorExit):
-            break
-        except Exception as exc:
-            task = asyncio.current_task()
-            if event.is_set() or (task and task.cancelling()):
-                break
-            logger.warning("main.booking_hold_cleanup iteration warning: %s", exc)
-
         try:
             await asyncio.wait_for(event.wait(), timeout=min(interval_seconds, 30))
             break
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         except (asyncio.CancelledError, GeneratorExit):
             break
@@ -153,14 +125,16 @@ async def lifespan(app: FastAPI):
     stop_event = asyncio.Event()
     cleanup_task = None
     try:
-        cleanup_task = asyncio.create_task(_booking_hold_cleanup_loop(settings.booking_hold_cleanup_interval_seconds, stop_event))
+        cleanup_task = asyncio.create_task(
+            _booking_hold_cleanup_loop(settings.booking_hold_cleanup_interval_seconds, stop_event)
+        )
         yield
     finally:
         stop_event.set()
         if cleanup_task is not None:
             try:
                 await asyncio.wait_for(asyncio.shield(cleanup_task), timeout=1.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 cleanup_task.cancel()
                 await asyncio.gather(cleanup_task, return_exceptions=True)
 
@@ -193,18 +167,33 @@ async def context_middleware(request: Request, call_next):
 
 settings = get_settings()
 
+
 @app.middleware("http")
 async def coordination_capability(request, call_next):
     import secrets
+
     token = request.cookies.get("coordination_guest")
     valid = token and len(token) == 64 and all(c in "0123456789abcdef" for c in token)
     token = token if valid else secrets.token_hex(32)
     request.state.coordination_guest = token
     response = await call_next(request)
-    if not valid and request.url.path.startswith(("/api/v1/chat", "/api/v1/booking-requests", "/api/v1/coordination/", "/api/v1/packages/")):
-        secure = settings.auth_cookie_secure if settings.auth_cookie_secure is not None else settings.app_env == "production"
-        response.set_cookie("coordination_guest", token, httponly=True, secure=secure, samesite=settings.auth_cookie_samesite, max_age=2592000, path="/")
+    if not valid and request.url.path.startswith(
+        ("/api/v1/chat", "/api/v1/booking-requests", "/api/v1/coordination/", "/api/v1/packages/")
+    ):
+        secure = (
+            settings.auth_cookie_secure if settings.auth_cookie_secure is not None else settings.app_env == "production"
+        )
+        response.set_cookie(
+            "coordination_guest",
+            token,
+            httponly=True,
+            secure=secure,
+            samesite=settings.auth_cookie_samesite,
+            max_age=2592000,
+            path="/",
+        )
     return response
+
 
 app.add_middleware(CookieOriginMiddleware)
 app.add_middleware(
@@ -230,9 +219,8 @@ app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(catalog_staff_router, prefix="/api/v1")
 register_exception_handlers(app)
 setup_observability(app)
+app.include_router(package_router, prefix="/api/v1")
 app.include_router(staff_package_router, prefix="/api/v1")
-app.include_router(catalog_router, prefix="/api/v1")
-app.include_router(catalog_staff_router, prefix="/api/v1")
 app.include_router(zalo_router, prefix="/api/v1")
 app.add_exception_handler(OperationalError, database_unavailable_handler)
 app.add_exception_handler(AppError, app_error_handler)

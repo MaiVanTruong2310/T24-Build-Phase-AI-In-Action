@@ -43,8 +43,11 @@ class FailoverChatModel:
         deadline prevents multiplying latency by the number of backup keys.
         """
         indexes = list(range(len(candidates))) if provider_indexes is None else provider_indexes
-        queue = [(index, candidate) for index, candidate in zip(indexes, candidates, strict=True)
-                 if self._blocked_until.get(index, 0.0) <= time.monotonic()]
+        queue = [
+            (index, candidate)
+            for index, candidate in zip(indexes, candidates, strict=True)
+            if self._blocked_until.get(index, 0.0) <= time.monotonic()
+        ]
         if not queue:
             raise RuntimeError("All LLM providers are temporarily unavailable")
         pending = {}
@@ -52,10 +55,12 @@ class FailoverChatModel:
         started = time.monotonic()
         deadline = started + self.total_timeout_seconds
         hedge_at = started + self.hedge_delay_seconds
+
         def launch():
             index, candidate = queue.pop(0)
             task = asyncio.create_task(candidate.ainvoke(input, **kwargs))
             pending[task] = index
+
         launch()
         try:
             while pending:
@@ -70,13 +75,26 @@ class FailoverChatModel:
                     index = pending.pop(task)
                     try:
                         result = task.result()
-                        logging.getLogger(__name__).info("llm.completed provider_index=%d elapsed_ms=%.0f", index, (time.monotonic()-started)*1000)
+                        logging.getLogger(__name__).info(
+                            "llm.completed provider_index=%d elapsed_ms=%.0f",
+                            index,
+                            (time.monotonic() - started) * 1000,
+                        )
                         return result
                     except Exception as exc:
                         self._mark_failed(index)
-                        logging.getLogger(__name__).warning("llm.failed provider_index=%d error_type=%s status=%s elapsed_ms=%.0f", index, type(exc).__name__, getattr(exc, "status_code", None), (time.monotonic()-started)*1000)
+                        logging.getLogger(__name__).warning(
+                            "llm.failed provider_index=%d error_type=%s status=%s elapsed_ms=%.0f",
+                            index,
+                            type(exc).__name__,
+                            getattr(exc, "status_code", None),
+                            (time.monotonic() - started) * 1000,
+                        )
                         if hasattr(exc, "errors"):
-                            logging.getLogger(__name__).warning("llm.validation_fields=%s", [(item["loc"], item["type"]) for item in exc.errors(include_input=False)][:10])
+                            logging.getLogger(__name__).warning(
+                                "llm.validation_fields=%s",
+                                [(item["loc"], item["type"]) for item in exc.errors(include_input=False)][:10],
+                            )
                         last_error = exc
                 if queue and len(pending) < 2 and (not pending or time.monotonic() >= hedge_at):
                     launch()

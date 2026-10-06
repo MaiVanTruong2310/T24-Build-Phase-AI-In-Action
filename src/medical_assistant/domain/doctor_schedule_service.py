@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 try:
     from datetime import UTC
 except ImportError:
-    UTC = timezone.utc
+    UTC = UTC
 from functools import lru_cache
 from pathlib import Path
 from typing import Any

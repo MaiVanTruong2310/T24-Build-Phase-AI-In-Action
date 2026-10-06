@@ -10,7 +10,6 @@ from sqlalchemy.exc import IntegrityError
 from src.core.errors import raise_integrity_conflict, savepoint
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger, log_event
-from src.models.booking import Booking
 from src.models.catalog import DoctorSchedule
 from src.schemas.catalog import (
     BulkImportItemResult,
@@ -166,7 +165,6 @@ class ScheduleServiceMixin:
             limit=limit,
         )
         values = await self.catalog.list_schedules(
-        return await self.catalog.list_schedules(
             doctor_id=doctor_id,
             facility_id=facility_id,
             service_id=service_id,

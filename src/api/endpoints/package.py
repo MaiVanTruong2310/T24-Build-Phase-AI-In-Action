@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_optional_user, require_patient, require_coordination_admin as require_staff
+from src.api.dependencies import get_optional_user, require_patient
+from src.api.dependencies import require_coordination_admin as require_staff
 from src.api.response import success_response
 from src.core.exceptions import ConflictError, NotFoundError
 from src.db.dependencies import get_db_session
@@ -47,7 +48,9 @@ class StaffPackageStatusUpdate(BaseModel):
     staff_note: str | None = Field(default=None, max_length=2000)
 
 
-def _package_request_dict(item: PackageRequest, service: Service | None = None, facility: Facility | None = None, patient: User | None = None) -> dict:
+def _package_request_dict(
+    item: PackageRequest, service: Service | None = None, facility: Facility | None = None, patient: User | None = None
+) -> dict:
     return {
         "id": str(item.id),
         "service_id": str(item.service_id),
@@ -65,7 +68,9 @@ def _package_request_dict(item: PackageRequest, service: Service | None = None, 
         "patient_phone": item.patient_phone or (patient.phone if patient else None),
         "patient_email": item.patient_email or (patient.email if patient else None),
         "gender": item.gender or (patient.gender if patient else None),
-        "date_of_birth": (item.date_of_birth or (patient.date_of_birth if patient else None)).isoformat() if (item.date_of_birth or (patient and patient.date_of_birth)) else None,
+        "date_of_birth": (item.date_of_birth or (patient.date_of_birth if patient else None)).isoformat()
+        if (item.date_of_birth or (patient and patient.date_of_birth))
+        else None,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
 
@@ -79,7 +84,8 @@ async def create_package_request(
 ):
     """Register for a health package / pathway."""
     async with db.begin():
-        from src.medical_assistant.domain.booking_request_service import _is_minor, PHONE_PATTERN
+        from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN, _is_minor
+
         if not payload.consent_to_contact:
             raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
         patient_name = (payload.patient_name or (user.full_name if user else "") or "").strip()
@@ -97,14 +103,23 @@ async def create_package_request(
             raise ConflictError("DOB_REQUIRED", "Vui lòng chọn ngày sinh")
         if dob > datetime.now(VN_TZ).date():
             raise ConflictError("INVALID_DOB", "Ngày sinh không thể nằm trong tương lai")
-        if _is_minor(dob, datetime.now(VN_TZ).date()) and (len((payload.guardian_name or '').strip()) < 2 or not PHONE_PATTERN.fullmatch(re.sub(r"[\s.()-]", "", payload.guardian_phone or ""))):
+        if _is_minor(dob, datetime.now(VN_TZ).date()) and (
+            len((payload.guardian_name or "").strip()) < 2
+            or not PHONE_PATTERN.fullmatch(re.sub(r"[\s.()-]", "", payload.guardian_phone or ""))
+        ):
             raise ConflictError("GUARDIAN_REQUIRED", "Người dưới 18 tuổi cần họ tên và điện thoại người giám hộ.")
         if payload.preferred_date < datetime.now(VN_TZ).date():
             raise ConflictError("DATE_INVALID", "Ngày khám mong muốn không thể nằm trong quá khứ")
         if user is None:
-            patient = User(full_name=patient_name, phone=None, email=None,
-                           gender=gender, date_of_birth=dob,
-                           role="patient", status="guest")
+            patient = User(
+                full_name=patient_name,
+                phone=None,
+                email=None,
+                gender=gender,
+                date_of_birth=dob,
+                role="patient",
+                status="guest",
+            )
             db.add(patient)
             await db.flush()
         else:
@@ -135,7 +150,10 @@ async def create_package_request(
         await db.flush()
 
         from src.services.workbench import create_source_case
-        receipt = await create_source_case(db, "package", item, patient, user, http_request.state.coordination_guest, payload, facility.id)
+
+        await create_source_case(
+            db, "package", item, patient, user, http_request.state.coordination_guest, payload, facility.id
+        )
 
     return success_response(
         _package_request_dict(item, service, facility, patient),

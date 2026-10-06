@@ -73,6 +73,8 @@ async def http_error_handler(_: Request, exc: StarletteHTTPException) -> JSONRes
         exc.status_code,
         "A framework HTTP exception was converted to an error response",
     )
+    if exc.status_code == 401 and isinstance(exc.detail, dict) and exc.detail.get("legacy_error"):
+        return JSONResponse(status_code=401, content={"error": {"code": 401}})
     if is_server_error:
         return _error_response(ErrorCode.INTERNAL_ERROR, "Đã có lỗi xảy ra. Vui lòng thử lại sau.", exc.status_code)
     return _error_response(_http_error_code(exc.status_code), str(exc.detail), exc.status_code)

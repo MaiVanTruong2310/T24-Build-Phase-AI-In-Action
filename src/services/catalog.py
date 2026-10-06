@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.cache import invalidate_catalog_cache
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger, log_event
-from src.models.catalog import CatalogAuditEvent, Doctor, DoctorSchedule
+from src.models.catalog import CatalogAuditEvent, DoctorSchedule
 from src.repositories.catalog import CatalogRepository
 from src.schemas.catalog import DoctorFacilityAssignment
 from src.services.doctor import DoctorServiceMixin

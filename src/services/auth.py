@@ -260,7 +260,6 @@ class AuthService:
             method="password" if request.password else "otp",
         )
         email, phone = normalize_identity(request.email, request.phone)
-        email, phone = _normalized_identity(request.email, request.username or request.phone)
         authentication_error: AuthenticationError | None = None
         result: tuple[User, str, str, datetime, datetime] | None = None
         async with self.session.begin():
@@ -557,7 +556,6 @@ class AuthService:
             description="Allowed profile fields were updated",
             user_id=str(user.id),
         )
-            raise ConflictError("PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác.") from exc
         return user
 
     async def update_portrait(self, user: User, image: str | None) -> None:

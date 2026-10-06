@@ -1,10 +1,11 @@
 """Specialty catalog endpoints."""
 
+import time
 from uuid import UUID
 
 from fastapi import Depends, Query, Response, status
 
-from src.api.dependencies import require_coordination_admin as require_staff
+from src.api.dependencies import get_current_user, require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
 from src.core.cache import cache_key, get_catalog_cache, set_cache_headers
@@ -12,9 +13,6 @@ from src.models.user import User
 from src.schemas.catalog import SpecialtyCreate, SpecialtyResponse, SpecialtyUpdate
 from src.schemas.common import ApiResponse
 from src.services.catalog import CatalogService
-
-
-import time
 
 _SPECIALTIES_CACHE: dict[str, tuple[float, list[SpecialtyResponse]]] = {}
 _CACHE_TTL = 300.0  # 5 minutes

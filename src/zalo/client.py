@@ -125,4 +125,3 @@ class ZaloBotClient:
         except Exception:
             logger.exception("Exception while sending Zalo message to %s", chat_id)
             return {"ok": False, "description": "HTTP request failed"}
-

@@ -22,20 +22,28 @@ from src.schemas.catalog import (
 def test_doctor_accepts_multiple_facilities_and_separate_credentials():
     first, second = uuid4(), uuid4()
     doctor = DoctorCreate(
-        code="DOC-MULTI", full_name="Bác sĩ đa cơ sở",
+        code="DOC-MULTI",
+        full_name="Bác sĩ đa cơ sở",
         honors=[" Thầy thuốc ưu tú ", "Thầy thuốc ưu tú"],
-        academic_ranks=["Phó giáo sư"], degrees=["Tiến sĩ", "BSCKII"],
-        facilities=[DoctorFacilityAssignment(facility_id=first, is_primary=True),
-                    DoctorFacilityAssignment(facility_id=second, department="Trung tâm Tim mạch")],
+        academic_ranks=["Phó giáo sư"],
+        degrees=["Tiến sĩ", "BSCKII"],
+        facilities=[
+            DoctorFacilityAssignment(facility_id=first, is_primary=True),
+            DoctorFacilityAssignment(facility_id=second, department="Trung tâm Tim mạch"),
+        ],
     )
     assert doctor.honors == ["Thầy thuốc ưu tú"]
     assert [item.facility_id for item in doctor.facilities] == [first, second]
     assert doctor.facilities[0].is_primary
     with pytest.raises(ValidationError):
-        DoctorCreate(code="DOC-BAD", full_name="Bác sĩ", facilities=[
-            DoctorFacilityAssignment(facility_id=first, is_primary=True),
-            DoctorFacilityAssignment(facility_id=second, is_primary=True),
-        ])
+        DoctorCreate(
+            code="DOC-BAD",
+            full_name="Bác sĩ",
+            facilities=[
+                DoctorFacilityAssignment(facility_id=first, is_primary=True),
+                DoctorFacilityAssignment(facility_id=second, is_primary=True),
+            ],
+        )
 
 
 def test_schedule_requires_positive_time_range():

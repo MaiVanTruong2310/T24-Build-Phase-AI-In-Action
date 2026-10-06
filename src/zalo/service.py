@@ -115,6 +115,20 @@ class ZaloBotService:
         if not text:
             return
 
+        # /start is a stateless welcome command.  Handle it before touching
+        # the optional mapping table so a webhook remains healthy while the
+        # Zalo migration is being rolled out.
+        if text.startswith("/start"):
+            await self.client.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"Xin chÃ o **{sender_name}**!\n\n"
+                    "TÃ´i lÃ  Trá»£ lÃ½ Y Táº¿ ThÃ´ng minh. "
+                    "Báº¡n cÃ³ thá»ƒ nháº¯n tin miÃªu táº£ triá»‡u chá»©ng Ä‘á»ƒ báº¯t Ä‘áº§u tÆ° váº¥n."
+                ),
+            )
+            return
+
         async with get_session_factory()() as session:
             mapping, user = await self._get_or_create_mapping(session, chat_id, sender_name)
 
@@ -231,9 +245,7 @@ class ZaloBotService:
         if user_id:
             try:
                 booking_service = BookingService(session)
-                user_bookings = await booking_service.bookings.list_for_user(
-                    user_id, status=None, offset=0, limit=5
-                )
+                user_bookings = await booking_service.bookings.list_for_user(user_id, status=None, offset=0, limit=5)
                 for b in user_bookings:
                     time_str = b.starts_at.strftime("%H:%M ngày %d/%m/%Y") if b.starts_at else "Chưa xếp giờ"
                     st = status_text_map.get(b.status, b.status)
@@ -266,7 +278,9 @@ class ZaloBotService:
                 for c in cases:
                     pref_date = (c.patient or {}).get("preferred_date") or c.created_at.strftime("%d/%m/%Y")
                     st = status_text_map.get(c.status, c.status)
-                    symp = (c.ai_snapshot or {}).get("symptoms") or (c.patient or {}).get("notes") or "Yêu cầu đặt khám AI"
+                    symp = (
+                        (c.ai_snapshot or {}).get("symptoms") or (c.patient or {}).get("notes") or "Yêu cầu đặt khám AI"
+                    )
                     bookings_list.append(
                         f"📋 **Phiếu điều phối #{str(c.id)[:8]}**\n"
                         f"• Ngày dự kiến: {pref_date}\n"
@@ -362,9 +376,7 @@ class ZaloBotService:
         return "\n\n".join(parts)
 
 
-async def send_zalo_notification_to_user(
-    session: AsyncSession, user_id: UUID, title: str, message: str
-) -> bool:
+async def send_zalo_notification_to_user(session: AsyncSession, user_id: UUID, title: str, message: str) -> bool:
     """Send transactional notification message to user via Zalo if linked."""
     stmt = select(ZaloUserMapping).where(ZaloUserMapping.user_id == user_id)
     mapping = (await session.execute(stmt)).scalars().first()

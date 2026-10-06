@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -25,7 +26,7 @@ class ReflectionMemoryItem(BaseModel):
     new_constraint: str = Field(..., description="Ràng buộc mới phát hiện")
     trigger_query: str = Field(default="", description="Mô tả tóm tắt triệu chứng kích hoạt")
     source_evidence: list[dict[str, Any]] = Field(default_factory=list)
-    created_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.UTC).isoformat())
 
 
 class ReflectionMemoryService:
@@ -67,9 +68,7 @@ class ReflectionMemoryService:
         if not resolved:
             return ""
 
-        formatted_lines = [
-            "\n[BỘ NHỚ PHẢN TỈNH - BÀI HỌC CẦN TUÂN THỦ TỪ CÁC LẦN THỬ TRƯỚC]:"
-        ]
+        formatted_lines = ["\n[BỘ NHỚ PHẢN TỈNH - BÀI HỌC CẦN TUÂN THỦ TỪ CÁC LẦN THỬ TRƯỚC]:"]
 
         # Lấy tối đa max_items bài học gần nhất đã được giải quyết xung đột
         recent = resolved[-max_items:]
@@ -223,9 +222,9 @@ class ReflectionMemoryService:
 
         # 2. Cắt tỉa candidate_specialties
         effective_specialties = [
-            spec for spec in candidate_specialties
-            if spec.get("name", "").lower() not in pruned_dept
-            and spec.get("code", "").lower() not in pruned_dept
+            spec
+            for spec in candidate_specialties
+            if spec.get("name", "").lower() not in pruned_dept and spec.get("code", "").lower() not in pruned_dept
         ]
         if not effective_specialties:
             effective_specialties = candidate_specialties  # Safe fallback

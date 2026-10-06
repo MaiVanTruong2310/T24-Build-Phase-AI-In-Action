@@ -1,4 +1,5 @@
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, StateGraph
 
 from src.medical_assistant.agent.nodes.analyze_node import analyze_node
@@ -55,7 +56,6 @@ def should_continue(state: AgentState) -> str:
     return "find_doctors"
 
 
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 # Checkpointer lưu trữ trạng thái phiên theo thread_id
 # Chuẩn bị sẵn để dễ dàng thay thế bằng PostgresSaver khi scale 10.000 users

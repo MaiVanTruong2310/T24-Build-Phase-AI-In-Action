@@ -754,7 +754,10 @@ class ClinicalTriageService:
         ]
 
         # Kiểm tra nhanh: Nếu bệnh nhân khẳng định ngực hoàn toàn bình thường hoặc phủ định đau ngực
-        if re.search(r"\b(?:ngực|nguc|vùng\s*ngực)\s+(?:hoàn\s+toàn\s+)?bình\s+thường\b|\b(?:không|khong|ko|k)\s+(?:bị\s+)?(?:đau|tức|thắt|nặng)\s*(?:vùng\s*)?ngực\b", clean_user_text):
+        if re.search(
+            r"\b(?:ngực|nguc|vùng\s*ngực)\s+(?:hoàn\s+toàn\s+)?bình\s+thường\b|\b(?:không|khong|ko|k)\s+(?:bị\s+)?(?:đau|tức|thắt|nặng)\s*(?:vùng\s*)?ngực\b",
+            clean_user_text,
+        ):
             return None
 
         has_positive_chest = False
@@ -809,7 +812,9 @@ class ClinicalTriageService:
             "lan co",
             "lan lung",
         ]
-        has_radiation = any(rs in clean_user_text and not negation_svc.is_phrase_negated(rs, user_text) for rs in radiation_signals)
+        has_radiation = any(
+            rs in clean_user_text and not negation_svc.is_phrase_negated(rs, user_text) for rs in radiation_signals
+        )
 
         # 3. Thần kinh thực vật / Vã mồ hôi lạnh
         sweat_signals = [
@@ -828,7 +833,9 @@ class ClinicalTriageService:
             "mo hoi lanh",
             "toat mo hoi",
         ]
-        has_sweat = any(ss in clean_user_text and not negation_svc.is_phrase_negated(ss, user_text) for ss in sweat_signals)
+        has_sweat = any(
+            ss in clean_user_text and not negation_svc.is_phrase_negated(ss, user_text) for ss in sweat_signals
+        )
 
         # 4. Khó thở / Hụt hơi
         dyspnea_signals = [
@@ -842,7 +849,9 @@ class ClinicalTriageService:
             "hut hoi",
             "tho doc",
         ]
-        has_dyspnea = any(ds in clean_user_text and not negation_svc.is_phrase_negated(ds, user_text) for ds in dyspnea_signals)
+        has_dyspnea = any(
+            ds in clean_user_text and not negation_svc.is_phrase_negated(ds, user_text) for ds in dyspnea_signals
+        )
 
         # 5. Choáng váng / Chóng mặt / Tiền ngất
         dizzy_signals = [
@@ -860,7 +869,9 @@ class ClinicalTriageService:
             "ngat",
             "muon xiu",
         ]
-        has_dizzy = any(dz in clean_user_text and not negation_svc.is_phrase_negated(dz, user_text) for dz in dizzy_signals)
+        has_dizzy = any(
+            dz in clean_user_text and not negation_svc.is_phrase_negated(dz, user_text) for dz in dizzy_signals
+        )
 
         # 6. Khởi phát khi gắng sức
         exertion_signals = [
@@ -877,7 +888,9 @@ class ClinicalTriageService:
             "di bo nhanh",
             "mang vac",
         ]
-        has_exertion = any(ex in clean_user_text and not negation_svc.is_phrase_negated(ex, user_text) for ex in exertion_signals)
+        has_exertion = any(
+            ex in clean_user_text and not negation_svc.is_phrase_negated(ex, user_text) for ex in exertion_signals
+        )
 
         # 7. Tính chất đè nén / bóp nghẹt dữ dội
         crushing_signals = [
@@ -899,7 +912,9 @@ class ClinicalTriageService:
             "crushing",
             "squeezing",
         ]
-        has_crushing = any(cr in clean_user_text and not negation_svc.is_phrase_negated(cr, user_text) for cr in crushing_signals)
+        has_crushing = any(
+            cr in clean_user_text and not negation_svc.is_phrase_negated(cr, user_text) for cr in crushing_signals
+        )
 
         # Nếu có đau thắt dữ dội kèm theo triệu chứng lan/vã mồ hôi/khó thở -> ATS 1 Resuscitation
         # Nếu có đau ngực kèm dấu hiệu nghi ngờ tim mạch -> ATS 2 Emergent
@@ -907,7 +922,7 @@ class ClinicalTriageService:
             return {
                 "rule_id": "ACS_COMBINED_CARDIAC_RULE_ATS1",
                 "name": "Nghi ngờ Nhồi máu cơ tim cấp tối khẩn (Acute STEMI/ACS Red Flag)",
-                "ats_level": ATSLevel.LEVEL_1_RESUSCITATION,
+                "ats_level": ATSLevel.LEVEL_2_EMERGENT,
             }
 
         if has_crushing or (sum([has_radiation, has_sweat, has_dyspnea, has_dizzy, has_exertion]) >= 1):
@@ -1196,8 +1211,14 @@ class ClinicalTriageService:
             has_mild_abdominal = any(
                 term in clean_user_text for term in ("bụng", "đau bụg", "abdominal", "stomach")
             ) and any(term in clean_user_text for term in ("âm ỉ", "ậm ạch", "buồn nôn", "buòn nôn", "nausea"))
+            has_reflux_complaint = any(
+                term in clean_user_text
+                for term in ("heartburn", "acid reflux", "burning sensation behind sternum", "burning behind sternum")
+            )
             has_abdominal_alarm = any(
-                term in clean_user_text and not negation_svc.is_phrase_negated(term, user_text)
+                term in clean_user_text
+                and not negation_svc.is_phrase_negated(term, user_text)
+                and (term != "severe" or not has_reflux_complaint)
                 for term in (
                     "đau dữ dội",
                     "đau quặn",
@@ -1213,7 +1234,7 @@ class ClinicalTriageService:
                     "melena",
                 )
             )
-            if has_mild_abdominal and not has_abdominal_alarm:
+            if (has_mild_abdominal or has_reflux_complaint) and not has_abdominal_alarm:
                 guidance = get_triage_guidance(
                     specialty="Tiêu hóa - Gan mật",
                     ats_level=4,

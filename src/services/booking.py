@@ -5,12 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import UTC, date, datetime, time, timedelta
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.errors import raise_integrity_conflict
@@ -18,14 +17,18 @@ from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger, log_event
 from src.models.booking import Booking
 from src.models.booking_hold import BookingHold
+from src.models.catalog import CatalogAuditEvent, DoctorSchedule
 from src.models.coordination import ConsultationRequest, ConsultationRequestEvent, ConsultationSession
-from src.models.catalog import CatalogAuditEvent
+from src.models.user import User
 from src.repositories.booking import BookingRepository
+from src.repositories.user import UserRepository
 from src.schemas.booking import (
     BookingCreate,
     BookingHoldCreate,
     BookingHoldResponse,
     BookingRescheduleCreate,
+    BookingResponse,
+    StaffBookingResponse,
     StaffBookingStatusUpdate,
 )
 from src.services.notification import NotificationService
@@ -39,6 +42,7 @@ class BookingService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.bookings = BookingRepository(session)
+        self.users = UserRepository(session)
         self.notifications = NotificationService(session)
 
     async def create(self, user_id: UUID, request: BookingCreate) -> Booking:
@@ -167,23 +171,12 @@ class BookingService:
         service_id: UUID,
         specialty_id: UUID,
         patient_id: UUID | None,
-        guest_patient: GuestPatientCreate | None,
+        guest_patient: object | None,
         encounter_type: str,
         reason: str,
         patient_note: str | None,
     ) -> Booking:
-        """Create a confirmed doctor-visit booking inside a caller transaction."""
-        log_event(
-            logger,
-            logging.INFO,
-            "booking.staff_create.start",
-            description="Starting staff-confirmed booking creation inside an existing transaction",
-            actor_id=str(actor_id),
-            schedule_id=str(schedule.id),
-            service_id=str(service_id),
-            specialty_id=str(specialty_id),
-            patient_id=str(patient_id) if patient_id else None,
-        )
+        """Create a confirmed doctor visit inside a caller-owned transaction."""
         service = await self.bookings.get_service(service_id)
         specialty = await self.bookings.get_specialty(specialty_id)
         if service is None or service.status != "active":
@@ -193,10 +186,55 @@ class BookingService:
         if specialty is None or specialty.status != "active":
             raise NotFoundError("Specialty not found")
         await self._validate_catalog_relationships(schedule, service, specialty)
-
-        active_count = await self.bookings.count_active_for_schedule(schedule.id)
-        if active_count >= 1:
+        if await self.bookings.count_active_for_schedule(schedule.id) >= 1:
             raise ConflictError("SCHEDULE_CONFLICT", "This doctor schedule is already booked")
+        patient = await self._resolve_staff_patient(patient_id, guest_patient)
+        booking = Booking(
+            user_id=patient.id,
+            schedule_id=schedule.id,
+            doctor_id=schedule.doctor_id,
+            facility_id=schedule.facility_id,
+            starts_at=schedule.starts_at,
+            ends_at=schedule.ends_at,
+            service_id=service.id,
+            specialty_id=specialty.id,
+            encounter_type=encounter_type,
+            reason=reason.strip(),
+            patient_note=patient_note.strip() if patient_note else None,
+            status="confirmed",
+            expired_at=schedule.starts_at,
+            reviewed_by=actor_id,
+            reviewed_at=datetime.now(UTC),
+        )
+        await self.bookings.add(booking)
+        await self.notifications.create_for_booking_review(booking, "confirmed")
+        return booking
+
+    async def _resolve_staff_patient(self, patient_id: UUID | None, guest_patient: object | None) -> User:
+        """Resolve an existing patient or create a guest patient identity."""
+        if patient_id:
+            patient = await self.users.get_by_id(patient_id)
+            if patient is None or patient.role != "patient":
+                raise NotFoundError("Patient not found")
+            return patient
+        if guest_patient is None:
+            raise ConflictError("PATIENT_REQUIRED", "A patient or guest contact is required")
+        patient = await self.users.get_by_identity(guest_patient.email, guest_patient.phone)
+        if patient is not None:
+            if patient.role != "patient":
+                raise ConflictError("PATIENT_IDENTITY_CONFLICT", "Contact belongs to a non-patient account")
+            return patient
+        return await self.users.create(
+            User(
+                full_name=guest_patient.full_name,
+                email=guest_patient.email,
+                phone=guest_patient.phone,
+                password_hash=None,
+                role="patient",
+                status="guest",
+            )
+        )
+
     async def hold(self, user_id: UUID, request: BookingHoldCreate) -> BookingHold:
         """Reserve schedule capacity for five to ten minutes."""
         async with self.session.begin():
@@ -239,18 +277,7 @@ class BookingService:
         logger.info(
             "BookingService.hold created", extra={"hold_id": str(hold.id), "schedule_id": str(request.schedule_id)}
         )
-        await self.bookings.add(booking)
-        await self.notifications.create_for_booking_review(booking, "confirmed")
-        log_event(
-            logger,
-            logging.INFO,
-            "booking.staff_create.done",
-            description="Staff created a confirmed booking inside the schedule transaction",
-            booking_id=str(booking.id),
-            actor_id=str(actor_id),
-            status=booking.status,
-        )
-        return booking
+        return hold
 
     async def release_hold(self, user_id: UUID, hold_id: UUID, *, is_staff: bool = False) -> BookingHold:
         """Release an owned hold; repeated release is safe."""
@@ -456,18 +483,32 @@ class BookingService:
                 raise ConflictError("BOOKING_NOT_CANCELLABLE", "Rejected booking cannot be cancelled")
             booking.status = "cancelled"
             booking.cancellation_reason = reason.strip() if reason else None
-            consultation = (await self.session.execute(select(ConsultationRequest).where(
-                ConsultationRequest.booking_id == booking.id,
-            ).with_for_update())).scalar_one_or_none()
+            consultation = (
+                await self.session.execute(
+                    select(ConsultationRequest)
+                    .where(
+                        ConsultationRequest.booking_id == booking.id,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
             if consultation is not None:
-                await self.session.execute(select(ConsultationSession.id).where(
-                    ConsultationSession.id == consultation.session_id,
-                ).with_for_update())
+                await self.session.execute(
+                    select(ConsultationSession.id)
+                    .where(
+                        ConsultationSession.id == consultation.session_id,
+                    )
+                    .with_for_update()
+                )
                 consultation.status = "cancelled"
-                self.session.add(ConsultationRequestEvent(
-                    request_id=consultation.id, actor_id=user_id,
-                    action="cancelled", note=booking.cancellation_reason,
-                ))
+                self.session.add(
+                    ConsultationRequestEvent(
+                        request_id=consultation.id,
+                        actor_id=user_id,
+                        action="cancelled",
+                        note=booking.cancellation_reason,
+                    )
+                )
             await self.session.flush()
         log_event(
             logger,
@@ -495,11 +536,14 @@ class BookingService:
             booking = await self.bookings.get_for_user(booking_id, user_id, for_update=True)
             if booking is None:
                 raise NotFoundError("Booking not found")
-            is_coordinated = (await self.session.execute(select(ConsultationRequest.id).where(
-                ConsultationRequest.booking_id == booking.id,
-            ))).first()
+            coordination_result = await self.session.execute(
+                select(ConsultationRequest.id).where(ConsultationRequest.booking_id == booking.id)
+            )
+            is_coordinated = coordination_result.first() if hasattr(coordination_result, "first") else None
             if is_coordinated:
-                raise ConflictError("COORDINATED_BOOKING", "Please contact the coordinator to reschedule this appointment")
+                raise ConflictError(
+                    "COORDINATED_BOOKING", "Please contact the coordinator to reschedule this appointment"
+                )
             if booking.status in ("cancelled", "rejected"):
                 raise ConflictError("BOOKING_NOT_RESCHEDULABLE", "This booking cannot be rescheduled")
             if booking.schedule_id is None:

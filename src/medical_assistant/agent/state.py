@@ -82,5 +82,3 @@ class AgentState(TypedDict, total=False):
     reflection_memory: list[dict[str, Any]] | None  # Cấu trúc bộ nhớ bài học cô đọng theo slide VinUni
     pruned_departments: list[str] | None  # Danh sách chuyên khoa bị Action Space Pruning cấm chọn lại
     pruned_actions: list[str] | None  # Danh sách hành động bị Action Space Pruning cấm chọn lại
-
-

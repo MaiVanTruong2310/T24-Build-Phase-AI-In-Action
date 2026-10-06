@@ -2,7 +2,6 @@
 
 import base64
 import binascii
-
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
@@ -120,6 +119,7 @@ class MedicalCondition(BaseModel):
 
 class PatientDetails(BaseModel):
     """Patient-reported details; these do not certify a clinical diagnosis."""
+
     model_config = ConfigDict(extra="forbid")
     portrait_image: str | None = Field(default=None, max_length=180000)
     medical_history: list[MedicalCondition] = Field(default_factory=list, max_length=100)
@@ -151,7 +151,7 @@ class PortraitUpdateRequest(BaseModel):
         if not value.startswith(prefix):
             raise ValueError("Ảnh hồ sơ cần ở định dạng JPEG.")
         try:
-            image = base64.b64decode(value[len(prefix):], validate=True)
+            image = base64.b64decode(value[len(prefix) :], validate=True)
         except (ValueError, binascii.Error) as exc:
             raise ValueError("Dữ liệu ảnh không hợp lệ.") from exc
         if not image.startswith(b"\xff\xd8\xff") or not image.endswith(b"\xff\xd9"):

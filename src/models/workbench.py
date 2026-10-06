@@ -1,10 +1,25 @@
 """Durable coordinator workbench; all access is mediated by the backend."""
+
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.db.base import Base
 
 DOC = JSON().with_variant(JSONB, "postgresql")
@@ -49,13 +64,17 @@ class CoordinationCase(Base):
     follow_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     booking_id: Mapped[UUID | None] = mapped_column(ForeignKey("bookings.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
 
 class CoordinationEvent(Base):
     __tablename__ = "coordination_events"
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    case_id: Mapped[UUID] = mapped_column(ForeignKey("coordination_cases.id", ondelete="RESTRICT"), nullable=False, index=True)
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("coordination_cases.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     action: Mapped[str] = mapped_column(String(40), nullable=False)
     note: Mapped[str] = mapped_column(Text, default="", nullable=False)
@@ -67,7 +86,9 @@ class CoordinationMessage(Base):
     __tablename__ = "coordination_messages"
     __table_args__ = (UniqueConstraint("case_id", "client_id", name="uq_case_message_client"),)
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    case_id: Mapped[UUID] = mapped_column(ForeignKey("coordination_cases.id", ondelete="RESTRICT"), nullable=False, index=True)
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("coordination_cases.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     client_id: Mapped[str] = mapped_column(String(100), nullable=False)
     sender: Mapped[str] = mapped_column(String(20), nullable=False)
     actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -82,7 +103,9 @@ class CoordinationDeposit(Base):
         UniqueConstraint("transaction_reference", name="uq_deposit_transaction"),
     )
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    case_id: Mapped[UUID] = mapped_column(ForeignKey("coordination_cases.id", ondelete="RESTRICT"), nullable=False, index=True)
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("coordination_cases.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="VND", nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="requested", nullable=False)
@@ -106,4 +129,11 @@ class CoordinationPolicy(Base):
     refund_policy: Mapped[str] = mapped_column(Text, nullable=False)
 
 
-WORKBENCH_TABLES = [CoordinatorMember.__table__, CoordinationCase.__table__, CoordinationEvent.__table__, CoordinationMessage.__table__, CoordinationDeposit.__table__, CoordinationPolicy.__table__]
+WORKBENCH_TABLES = [
+    CoordinatorMember.__table__,
+    CoordinationCase.__table__,
+    CoordinationEvent.__table__,
+    CoordinationMessage.__table__,
+    CoordinationDeposit.__table__,
+    CoordinationPolicy.__table__,
+]

@@ -192,18 +192,29 @@ class DoctorServiceMixin:
             service_ids = updates.pop("service_ids", None)
             await self._validate_assignments(specialty_ids, facilities, service_ids)
             if facilities is not None:
-                published = (await self.session.execute(select(
-                    ConsultationSession.facility_id, ConsultationSession.session_date,
-                ).where(ConsultationSession.doctor_id == resource_id,
-                        ConsultationSession.session_date >= datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date(),
-                        ConsultationSession.status == "open"))).all()
+                published = (
+                    await self.session.execute(
+                        select(
+                            ConsultationSession.facility_id,
+                            ConsultationSession.session_date,
+                        ).where(
+                            ConsultationSession.doctor_id == resource_id,
+                            ConsultationSession.session_date >= datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date(),
+                            ConsultationSession.status == "open",
+                        )
+                    )
+                ).all()
                 for facility_id, session_date in published:
-                    valid = any(item.facility_id == facility_id
-                                and (item.active_from is None or item.active_from <= session_date)
-                                and (item.active_to is None or item.active_to >= session_date)
-                                for item in facilities)
+                    valid = any(
+                        item.facility_id == facility_id
+                        and (item.active_from is None or item.active_from <= session_date)
+                        and (item.active_to is None or item.active_to >= session_date)
+                        for item in facilities
+                    )
                     if not valid:
-                        raise ConflictError("PUBLISHED_SESSION_FACILITY", "Không thể xóa cơ sở đang có buổi khám được công bố")
+                        raise ConflictError(
+                            "PUBLISHED_SESSION_FACILITY", "Không thể xóa cơ sở đang có buổi khám được công bố"
+                        )
             for field, item in updates.items():
                 setattr(value, field, item)
             await self.catalog.replace_doctor_assignments(

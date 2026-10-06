@@ -23,8 +23,16 @@ def extract_facility_inquiry(query: str) -> tuple[bool, str | None]:
         region = "Hạ Long"
 
     facility_keywords = [
-        "bệnh viện", "cơ sở", "phòng khám", "ở đâu", "chỗ nào", "nơi nào",
-        "khám ở", "viện nào", "địa chỉ", "chi nhánh"
+        "bệnh viện",
+        "cơ sở",
+        "phòng khám",
+        "ở đâu",
+        "chỗ nào",
+        "nơi nào",
+        "khám ở",
+        "viện nào",
+        "địa chỉ",
+        "chi nhánh",
     ]
     # Bỏ qua nếu là câu hỏi về thông tin / địa chỉ cá nhân của người dùng
     if any(p in q for p in ["của tôi", "cua toi", "của mình", "cua minh", "thông tin cá nhân", "thong tin ca nhan"]):

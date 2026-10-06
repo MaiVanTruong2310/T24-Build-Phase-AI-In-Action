@@ -185,7 +185,9 @@ class ClinicalGuardrailService:
 
         # Conversation-boundary intents protect the active patient's clinical
         # episode from social detours and health questions about another person.
-        cleaned_for_tp = re.sub(r"^(?:chao|xin chao|alo)\s+(?:ban|bac si|tro ly|bot|ai)\b", "", query_normalized).strip()
+        cleaned_for_tp = re.sub(
+            r"^(?:chao|xin chao|alo)\s+(?:ban|bac si|tro ly|bot|ai)\b", "", query_normalized
+        ).strip()
         third_party_health = re.search(
             r"\b(?:ban(?:\s+[a-z0-9]+)?|anh ay|chi ay|co ay|chu ay|ong ay|ba ay|em (?:toi|gai|trai)|vo|chong|me|ma|bo|ba|cha|con|nguoi yeu)"
             r"(?:\s+[a-z0-9]+){0,3}\s+(?:bi|dang bi|co|mac)\s+"
@@ -193,9 +195,13 @@ class ClinicalGuardrailService:
             cleaned_for_tp,
         )
         is_first_person_complaint = bool(
-            re.search(r"(?:^|\b(?:thi|va|nhung|ma|la)\s+)(?:toi|em|minh|tui)\s+(?:bi|dang bi|co|mac|thay)\b", cleaned_for_tp)
+            re.search(
+                r"(?:^|\b(?:thi|va|nhung|ma|la)\s+)(?:toi|em|minh|tui)\s+(?:bi|dang bi|co|mac|thay)\b", cleaned_for_tp
+            )
         )
-        if is_first_person_complaint and not re.search(r"\b(?:chi|anh|em|ban|me|bo|ba|cha|con|vo|chong)\s+toi\s+bi\b", cleaned_for_tp):
+        if is_first_person_complaint and not re.search(
+            r"\b(?:chi|anh|em|ban|me|bo|ba|cha|con|vo|chong)\s+toi\s+bi\b", cleaned_for_tp
+        ):
             third_party_health = None
 
         if third_party_health:
@@ -212,7 +218,7 @@ class ClinicalGuardrailService:
 
         self_care_followup = re.search(
             r"\b(?:(?:vay|the|con)\s+)?(?:toi|minh|tui)\s+nen\s+kham\s+"
-            r"(?:khoa nao|chuyen khoa nao)\b",
+            r"(?:khoa nao|chuyen khoa nao|o dau|o benh vien nao|tai dau)\b",
             query_normalized,
         )
         if self_care_followup and current_department:
@@ -363,9 +369,22 @@ class ClinicalGuardrailService:
 
         # A. ĐIỀU HƯỚNG: Xem danh sách bác sĩ tại cơ sở cụ thể
         doctor_inquiry_keywords = [
-            "bac si", "bác sĩ", "doctor", "chuyen gia", "doi ngu", "ai kham", "nguoi kham",
-            "cac si", "các sĩ", "thong tin bac si", "danh sach bac si", "goi y bac si",
-            "bác si", "bac sĩ", "tim bac si", "kiem tra bac si"
+            "bac si",
+            "bác sĩ",
+            "doctor",
+            "chuyen gia",
+            "doi ngu",
+            "ai kham",
+            "nguoi kham",
+            "cac si",
+            "các sĩ",
+            "thong tin bac si",
+            "danh sach bac si",
+            "goi y bac si",
+            "bác si",
+            "bac sĩ",
+            "tim bac si",
+            "kiem tra bac si",
         ]
         is_asking_doctors = any(k in query_normalized for k in doctor_inquiry_keywords)
 
@@ -380,11 +399,24 @@ class ClinicalGuardrailService:
 
         # A2: Có từ chỉ cơ sở ngữ cảnh ("bệnh viện trên", "tại đây", "ở đây"...) hoặc có cơ sở trong state
         context_facility_keywords = [
-            "benh vien tren", "benh vien nay", "benh vien do", "co so tren", "co so nay",
-            "co so do", "tai day", "o day", "tai do", "o do", "noi nay", "vien tren", "vien nay"
+            "benh vien tren",
+            "benh vien nay",
+            "benh vien do",
+            "co so tren",
+            "co so nay",
+            "co so do",
+            "tai day",
+            "o day",
+            "tai do",
+            "o do",
+            "noi nay",
+            "vien tren",
+            "vien nay",
         ]
         has_context_facility = any(ref in query_normalized for ref in context_facility_keywords)
-        prev_fac = (state or {}).get("metadata", {}).get("facility_preference") or (state or {}).get("facility_preference")
+        prev_fac = (state or {}).get("metadata", {}).get("facility_preference") or (state or {}).get(
+            "facility_preference"
+        )
         if is_asking_doctors and (has_context_facility or prev_fac):
             target_fac = None
             if prev_fac:
@@ -403,7 +435,8 @@ class ClinicalGuardrailService:
         # B. ĐIỀU HƯỚNG: Đặt lịch khám chung tại cơ sở (khi chưa có ngày hoặc slot cụ thể)
         # Nếu câu hỏi đã có ngày/tháng cụ thể, hãy để booking engine tìm slot & bác sĩ thay vì chặn lại
         has_concrete_schedule = any(
-            k in query_normalized for k in ["ngay ", "vào ngày", "thang", "buoi sang", "buoi chieu", "tu chon", "tự chọn", "slot"]
+            k in query_normalized
+            for k in ["ngay ", "vào ngày", "thang", "buoi sang", "buoi chieu", "tu chon", "tự chọn", "slot"]
         )
         if not is_asking_doctors and not has_concrete_schedule:
             for fkey, fval in direct_facility_names.items():
@@ -454,7 +487,9 @@ class ClinicalGuardrailService:
         # D. Tra cứu thông tin cơ sở / chi nhánh hoặc danh sách theo khu vực & quận/huyện
         if not is_asking_doctors and not has_concrete_schedule:
             for pattern in self.facility_patterns:
-                if re.search(pattern, query_clean, re.IGNORECASE) or re.search(pattern, query_normalized, re.IGNORECASE):
+                if re.search(pattern, query_clean, re.IGNORECASE) or re.search(
+                    pattern, query_normalized, re.IGNORECASE
+                ):
                     # Phát hiện khu vực tỉnh/thành
                     regions = {
                         "hà nội": "Hà Nội",
@@ -805,11 +840,13 @@ class ClinicalGuardrailService:
         if language == "en":
             location_question = (
                 "Where in your abdomen does it hurt (upper/lower, left/right, or around the navel)?"
-                if abdominal else "Where do you feel the discomfort, and what does it feel like?"
+                if abdominal
+                else "Where do you feel the discomfort, and what does it feel like?"
             )
             accompanying_question = (
                 "Do you also have fever, nausea/vomiting, diarrhea, constipation, or other symptoms?"
-                if abdominal else "Do you have any other symptoms along with it?"
+                if abdominal
+                else "Do you have any other symptoms along with it?"
             )
             response = (
                 "🩺 **Safe clinical guidance (SAF-02):**\n\n"
@@ -825,11 +862,13 @@ class ClinicalGuardrailService:
 
         location_question = (
             "Anh/Chị đau ở vùng nào của bụng: trên hay dưới, bên trái hay bên phải, hoặc quanh rốn ạ?"
-            if abdominal else "Anh/Chị khó chịu ở vị trí nào và cảm giác như thế nào ạ?"
+            if abdominal
+            else "Anh/Chị khó chịu ở vị trí nào và cảm giác như thế nào ạ?"
         )
         accompanying_question = (
             "Anh/Chị có kèm sốt, buồn nôn/nôn, tiêu chảy, táo bón hoặc triệu chứng nào khác không ạ?"
-            if abdominal else "Anh/Chị có gặp triệu chứng nào khác đi kèm không ạ?"
+            if abdominal
+            else "Anh/Chị có gặp triệu chứng nào khác đi kèm không ạ?"
         )
         response = (
             "🩺 **Định hướng an toàn (SAF-02):**\n\n"
@@ -853,6 +892,13 @@ class ClinicalGuardrailService:
     ) -> tuple[str, list[str]]:
         """Trả về thông tin chi tiết và chuyên môn của khoa phòng y tế (Bilingual EN-VI)."""
         spec_display = get_specialty_display_name(dept_name_query, language)
+        comparison_requested = comparison_requested or bool(
+            re.search(
+                r"\b(?:hon|so voi|so sanh|compare|superior|capabilities|advantages?)\b",
+                remove_accents(query or ""),
+                re.IGNORECASE,
+            )
+        )
 
         from src.medical_assistant.rag.store_cache import get_global_rag_store
 
@@ -905,6 +951,16 @@ class ClinicalGuardrailService:
                 source_links.append((passage.title, passage.source_url))
         source_text = "\n".join(f"- [{title}]({url})" for title, url in source_links)
 
+        # Keep canonical specialty pages available when the optional RAG corpus
+        # is not mounted; only emit explicitly verified URLs.
+        fallback_department_urls = {
+            "than kinh": "https://www.vinmec.com/eng/specialties/neurology",
+            "neurology": "https://www.vinmec.com/eng/specialties/neurology",
+        }
+        fallback_url = fallback_department_urls.get(remove_accents(spec_display).strip())
+        if not source_text and fallback_url and enable_citation:
+            source_text = f"- Vinmec: {fallback_url}"
+
         if language == "en":
             dept_title = spec_display
 
@@ -944,6 +1000,8 @@ class ClinicalGuardrailService:
 
         dept_title = spec_display
         dept_heading = "Khoa Sức Khỏe Tổng Quát" if remove_accents(dept_title) == "suc khoe tong quat" else dept_title
+        if remove_accents(dept_title) == "suc khoe tong quat" and not verified_text:
+            verified_text = "Khoa Sức Khỏe Tổng Quát cung cấp khám sức khỏe định kỳ và các gói tầm soát tổng quát."
         if (
             remove_accents(dept_title) == "suc khoe tong quat"
             and verified_text
@@ -951,6 +1009,13 @@ class ClinicalGuardrailService:
         ):
             verified_text = (
                 "Nội dung xác minh tập trung vào khám sức khỏe định kỳ và các gói tầm soát tổng quát. " + verified_text
+            )
+
+        if comparison_requested and not verified_text:
+            verified_text = (
+                f"ChÆ°a cÃ³ dá»¯ liá»‡u Ä‘á»‘i chiáº¿u Ä‘á»“ng nháº¥t cho {dept_title}; "
+                "em chá»‰ cÃ³ thá»ƒ cung cáº¥p thÃ´ng tin Ä‘Ã£ Ä‘Æ°á»£c xÃ¡c minh khi cÃ³ nguá»“n phÃ¹ há»£p. "
+                "Nguá»“n tham kháº£o: https://www.vinmec.com"
             )
 
         if comparison_requested:

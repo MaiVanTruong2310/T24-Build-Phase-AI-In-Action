@@ -78,7 +78,7 @@ out/
 .ai-log/*.jsonl
 .ai-log/archive/
 
-AGENT.md
+AGENTS.md
 CACHE.md
 ExceptionDesign.md
 task/*
@@ -99,3 +99,9 @@ run.sh
 .agent/
 .agents/
 context_agent/
+
+data/
+planning/
+specs/
+docs-spec/
+task/

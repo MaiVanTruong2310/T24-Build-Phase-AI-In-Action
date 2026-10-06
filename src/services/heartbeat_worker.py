@@ -9,11 +9,11 @@ Thực hiện 3 nhiệm vụ bảo trì tự động:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, update
 
 from src.db.session import get_session_factory
 from src.models.patient_memory import PatientMemoryItem, PatientOpenLoop
@@ -27,7 +27,7 @@ class HeartbeatWorker:
 
     async def pulse_once(self) -> dict[str, Any]:
         """Thực hiện một nhịp đập bảo trì (Single pulse)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         metrics = {
             "timestamp": now.isoformat(),
             "expired_loops_reclaimed": 0,
@@ -37,11 +37,15 @@ class HeartbeatWorker:
         async with self.sessionmaker() as session:
             async with session.begin():
                 # 1. Thu hồi slot holds và open loops đã quá hạn
-                loop_stmt = update(PatientOpenLoop).where(
-                    PatientOpenLoop.status == "open",
-                    PatientOpenLoop.due_at.is_not(None),
-                    PatientOpenLoop.due_at < now,
-                ).values(status="expired")
+                loop_stmt = (
+                    update(PatientOpenLoop)
+                    .where(
+                        PatientOpenLoop.status == "open",
+                        PatientOpenLoop.due_at.is_not(None),
+                        PatientOpenLoop.due_at < now,
+                    )
+                    .values(status="expired")
+                )
                 loop_res = await session.execute(loop_stmt)
                 metrics["expired_loops_reclaimed"] = loop_res.rowcount
 

@@ -1,10 +1,11 @@
 """Medical service catalog endpoints."""
 
+import time
 from uuid import UUID
 
 from fastapi import Depends, Query, Response, status
 
-from src.api.dependencies import require_coordination_admin as require_staff
+from src.api.dependencies import get_current_user, require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
 from src.core.cache import cache_key, get_catalog_cache, set_cache_headers
@@ -22,7 +23,7 @@ async def list_public_services(
     specialty_id: UUID | None = None,
     facility_id: UUID | None = None,
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=100, ge=1, le=250),
+    limit: int = Query(default=50, ge=1, le=250),
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[ServiceResponse]]:
     """List active medical services for patient search and booking selection."""
@@ -47,8 +48,6 @@ async def list_public_services(
     return success_response(data, "Services retrieved")
 
 
-import time
-
 _CATEGORIES_CACHE: tuple[float, list[str]] | None = None
 _CACHE_TTL = 300.0  # 5 minutes
 
@@ -64,9 +63,15 @@ async def list_service_categories(
         return success_response(_CATEGORIES_CACHE[1], "Categories retrieved")
 
     from sqlalchemy import select
+
     from src.models.catalog import Service
 
-    stmt = select(Service.category).where(Service.status == "active", Service.category.is_not(None)).distinct().order_by(Service.category)
+    stmt = (
+        select(Service.category)
+        .where(Service.status == "active", Service.category.is_not(None))
+        .distinct()
+        .order_by(Service.category)
+    )
     res = await service.session.execute(stmt)
     categories = [c for c in res.scalars().all() if c and c != "Khám Chuyên Khoa"]
     _CATEGORIES_CACHE = (now, categories)
