@@ -142,7 +142,7 @@ async def login(
     request: LoginRequest, http_request: Request, response: Response, service: AuthService = Depends(get_auth_service)
 ):
     if request.username:
-        if request.email or request.phone or request.username != "admin123" or not request.password:
+        if request.email or request.phone or not request.password:
             raise HTTPException(status_code=401, detail="Tài khoản điều phối không hợp lệ.")
         user, access_token, refresh_token, expires_at, _ = await service.login(request)
         if user.role != "staff":

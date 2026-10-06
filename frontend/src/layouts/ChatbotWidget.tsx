@@ -1,3 +1,4 @@
+import { PatientSelector, usePatientSelection } from '../features/patient-profiles/PatientSelector';
 import { PatientUpdates, type PatientUpdatesHandle, type SupportRequestState } from '../features/coordinator/PatientUpdates';
 import '../components/ChatMessageInput.css';
 import '../components/ChatSendButton.css';
@@ -154,12 +155,13 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const dispatch = useDispatch();
   const floatingChatOpen = useSelector((state: RootState) => state.layout.isChatOpen);
   const authUser = useSelector((state: RootState) => state.auth.user);
+  const patientSelection = usePatientSelection();
   const [guestProfile, setGuestProfile] = useState<ChatProfile | null>(readGuestProfile);
   const profile: ChatProfile | null = authUser
-    ? { name: authUser.full_name, phone: authUser.phone || '' }
+    ? { name: patientSelection.selectedProfile?.full_name || authUser.full_name, phone: patientSelection.selectedProfile?.contact_phone || authUser.phone || '' }
     : guestProfile;
   const chatLocked = !authUser && !guestProfile;
-  const ownerKey = authUser ? `user:${authUser.id}` : guestProfile ? `guest:${guestProfile.name}:${guestProfile.phone}` : '';
+  const ownerKey = authUser ? `user:${authUser.id}:profile:${patientSelection.profileId || "self"}` : guestProfile ? `guest:${guestProfile.name}:${guestProfile.phone}` : '';
   const isChatOpen = embedded || floatingChatOpen;
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputText, setInputText] = useState('');
@@ -433,6 +435,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
       await streamChat({
         message: text,
         requestId,
+        patientProfileId: patientSelection.profileId || undefined,
         profile: profile || undefined,
         sessionId,
         signal: request.signal,
@@ -481,7 +484,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         return;
       }
       try {
-        const result = await sendChat(text, sessionId, request.signal, profile || undefined, requestId);
+        const result = await sendChat(text, sessionId, request.signal, profile || undefined, requestId, patientSelection.profileId || undefined);
         completed = true;
         const finalElapsed = result.elapsed_ms ?? (Date.now() - sendStartTime);
         updateBot(botId, {
@@ -637,8 +640,9 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
           <div className="relative flex min-h-0 flex-1 flex-col">
           <div inert={chatLocked} aria-hidden={chatLocked || undefined} className={`flex min-h-0 flex-1 flex-col ${chatLocked ? 'pointer-events-none select-none blur-sm' : ''}`}>
           {/* Message List */}
-          {authUser && historyOpen && <ChatHistoryPanel key={authUser.id} activeSessionId={sessionId} onSelect={openConversation} busy={isSending || historyLoading} onDeletingChange={setHistoryDeleting} onDeleted={id => { if (id === sessionId) { historyRequest.current?.abort(); setHistoryError(''); setHistoryMore(false); setHistoryOffset(0); resetConversation(); } }} />}
-          {authUser && <p className="border-b border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800">Sử dụng hồ sơ sức khỏe của bạn · Lịch sử được lưu theo tài khoản.</p>}
+          <PatientSelector selection={patientSelection} disabled={isSending || historyLoading} />
+          {authUser && historyOpen && <ChatHistoryPanel patientProfileId={patientSelection.profileId || undefined} key={authUser.id + patientSelection.profileId} activeSessionId={sessionId} onSelect={openConversation} busy={isSending || historyLoading} onDeletingChange={setHistoryDeleting} onDeleted={id => { if (id === sessionId) { historyRequest.current?.abort(); setHistoryError(''); setHistoryMore(false); setHistoryOffset(0); resetConversation(); } }} />}
+          {authUser && <p className="border-b border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800">Hồ sơ người khám đang chọn · Hội thoại được tách riêng theo người khám.</p>}
           {historyError && <p role="alert" className="px-4 py-2 text-xs text-red-600">{historyError} <button type="button" onClick={() => setHistoryReload(value => value + 1)} className="underline">Thử tải lại</button></p>}
           {historyLoading && <p className="px-4 py-2 text-xs text-slate-500">Đang tải cuộc trò chuyện…</p>}
           {historyMore && <button disabled={historyLoading || isSending} type="button" onClick={loadOlderMessages} className="px-4 py-2 text-xs text-blue-600">Tải tin nhắn cũ hơn</button>}
@@ -849,6 +853,8 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         <BookingDrawer
           open={isBookingDrawerOpen}
           onOpenChange={setIsBookingDrawerOpen}
+          patientProfileId={patientSelection.profileId || undefined}
+          selectedPatient={patientSelection.selectedProfile}
           intake={latestBookingIntake}
           sessionId={sessionId}
           onSubmitted={handleBookingSubmitted}

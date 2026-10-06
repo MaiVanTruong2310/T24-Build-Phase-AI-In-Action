@@ -1,3 +1,5 @@
+import type { PatientProfile } from '../patient-profiles/api';
+import { appointmentDateError, latestAppointmentDate } from '../appointment-booking/dateValidation';
 import { TypewriterLoader } from '../../components/TypewriterLoader';
 import { memo, useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { useSelector } from 'react-redux';
@@ -15,6 +17,8 @@ import {
 
 interface LiveBookingPanelProps {
   intake?: BookingIntake | null;
+  patientProfileId?: string;
+  selectedPatient?: PatientProfile;
   sessionId: string;
   isMobileDrawer?: boolean;
   onClose?: () => void;
@@ -87,12 +91,15 @@ const isMinor = (birthDate: string) => {
 
 export const LiveBookingPanel = memo(function LiveBookingPanel({
   intake,
+  patientProfileId,
+  selectedPatient,
   sessionId,
   isMobileDrawer = false,
   onClose,
   onSubmitted,
 }: LiveBookingPanelProps) {
-  const authUser = useSelector((state: RootState) => state.auth.user);
+  const accountUser = useSelector((state: RootState) => state.auth.user);
+  const authUser = useMemo(() => accountUser && selectedPatient ? { ...accountUser, full_name: selectedPatient.full_name, phone: selectedPatient.contact_phone, date_of_birth: selectedPatient.date_of_birth, gender: selectedPatient.gender } : accountUser, [accountUser, selectedPatient]);
 
   // Mode: 'doctor' (Khám Chuyên Khoa / Bác Sĩ) vs 'package' (Gói Khám Bệnh / Dịch Vụ)
   const [activeTab, setActiveTab] = useState<'doctor' | 'package'>('doctor');
@@ -409,8 +416,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
     }
     const error = patientError();
     if (error) { setSubmitError(error); return; }
-    if (!preferredDate || preferredDate < localToday()) {
-      setSubmitError('Ngày khám mong muốn không thể bỏ trống hoặc nằm trong quá khứ.');
+    if (appointmentDateError(preferredDate)) {
+      setSubmitError(appointmentDateError(preferredDate));
       return;
     }
 
@@ -436,6 +443,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
 
     const payload = {
       session_id: sessionId,
+      patient_profile_id: patientProfileId,
       patient_name: patientName.trim(),
       patient_phone: normalizePhone(patientPhone),
       date_of_birth: dateOfBirth,
@@ -479,8 +487,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
     if (!consent) { setSubmitError('Vui lòng đồng ý để điều phối viên liên hệ.'); return; }
     const error = patientError();
     if (error) { setSubmitError(error); return; }
-    if (!packageDate || packageDate < localToday()) {
-      setSubmitError('Ngày khám mong muốn không thể bỏ trống hoặc nằm trong quá khứ.');
+    if (appointmentDateError(packageDate)) {
+      setSubmitError(appointmentDateError(packageDate));
       return;
     }
     if (!packageFacilityId || !packageFacilities.some((item) => item.id === packageFacilityId)) {
@@ -494,6 +502,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
 
     try {
       const result = await createPackageRequest({
+        patient_profile_id: patientProfileId,
         service_id: selectedPackage.id,
         facility_id: packageFacilityId,
         preferred_date: packageDate,
@@ -944,6 +953,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                     type="date"
                     value={preferredDate}
                     min={localToday()}
+                    max={latestAppointmentDate()}
                     onChange={(e) => { markEdited('preferredDate'); setPreferredDate(e.target.value); }}
                     required
                     className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
@@ -1228,6 +1238,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                       type="date"
                       value={packageDate}
                       min={localToday()}
+                    max={latestAppointmentDate()}
                       onChange={(e) => setPackageDate(e.target.value)}
                       required
                       className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"

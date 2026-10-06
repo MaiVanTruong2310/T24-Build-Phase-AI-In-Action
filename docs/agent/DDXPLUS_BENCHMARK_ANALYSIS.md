@@ -84,13 +84,13 @@ Mã thô: E_130_@_V_157      ---> Màu sắc ban: "Red" (Ban đỏ)
 Dataset được chia nhỏ linh hoạt theo 2 chiều kiến trúc:
 
 ### 4.1. Chia nhỏ theo kích thước cố định (Chunks of 50):
-Tập 150 ca bệnh nhân mẫu được chia thành 3 phần độc lập đặt tại `truong-doing/data/ddxplus/subsets/chunks_50/`:
+Tập 150 ca bệnh nhân mẫu được chia thành 3 phần độc lập đặt tại `data/ddxplus/subsets/chunks_50/`:
 * `ddx_part_001.jsonl`: 50 ca bệnh nhân tổng hợp (Ca #1 đến #50).
 * `ddx_part_002.jsonl`: 50 ca bệnh nhân tổng hợp (Ca #51 đến #100).
 * `ddx_part_003.jsonl`: 50 ca bệnh nhân tổng hợp (Ca #101 đến #150).
 
 ### 4.2. Chia nhỏ theo Chuyên khoa lâm sàng (By Specialty):
-Tập dữ liệu được phân loại theo từng chuyên khoa tiếp nhận tại `truong-doing/data/ddxplus/subsets/by_specialty/`:
+Tập dữ liệu được phân loại theo từng chuyên khoa tiếp nhận tại `data/ddxplus/subsets/by_specialty/`:
 * `tim_mach_21_cases.jsonl`: 21 ca tim mạch chuyên sâu (NSTEMI, Đau thắt ngực, Viêm màng ngoài tim...).
 * `ho_hap_19_cases.jsonl`: 19 ca hô hấp (Tràn khí màng phổi, Viêm phổi, Hen cấp, Viêm phế quản...).
 * `tieu_hoa_8_cases.jsonl`: 8 ca tiêu hóa - gan mật (GERD, Viêm tụy cấp, Thủng thực quản...).
@@ -112,7 +112,7 @@ Thông qua script `enrich_knowledge_base.py`, toàn bộ 223 Evidences và 49 Co
 
 ## 6. BƯỚC 5: XÂY DỰNG KỊCH BẢN HUẤN LUYỆN FEW-SHOT ĐA LƯỢT
 
-Thông qua script `build_ddxplus_fewshot.py`, hệ thống đã trích xuất 5 ca bệnh điển hình từ DDXPlus và chuyển đổi thành kịch bản đối thoại Bác sĩ AI - Bệnh nhân đưa trực tiếp vào `truong-doing/context_agent/FEW_SHOT_PROMPTS.md`:
+Thông qua script `build_ddxplus_fewshot.py`, hệ thống đã trích xuất 5 ca bệnh điển hình từ DDXPlus và chuyển đổi thành kịch bản đối thoại Bác sĩ AI - Bệnh nhân đưa trực tiếp vào `context_agent/FEW_SHOT_PROMPTS.md`:
 * **Case Study 1:** Bệnh lý GERD (Tiêu hóa - Gan mật - ATS 4).
 * **Case Study 2:** Bệnh lý Viêm phế quản cấp (Hô hấp - ATS 4).
 * **Case Study 3:** Phản ứng loạn trương lực cơ cấp tính do thuốc (Thần kinh / Đa khoa - ATS 4).
@@ -129,7 +129,7 @@ Script `build_ddxplus_eval_suite.py` kết nối trực tiếp với 692 mặt b
 
 Lệnh thực thi mẫu:
 ```powershell
-python truong-doing/scripts/ddxplus/build_ddxplus_eval_suite.py --chunk truong-doing/data/ddxplus/subsets/by_specialty/tim_mach_21_cases.jsonl
+python scripts/ddxplus/build_ddxplus_eval_suite.py --chunk data/ddxplus/subsets/by_specialty/tim_mach_21_cases.jsonl
 ```
 
 ---

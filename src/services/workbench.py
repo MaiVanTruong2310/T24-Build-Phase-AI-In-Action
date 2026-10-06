@@ -123,6 +123,8 @@ async def locked_case(db, case_id, member):
 
 
 async def ensure_chat_case(db, request, user, token):
+    from src.services.patient_profiles import resolve_patient
+    target, selected_profile = await resolve_patient(db, user, getattr(request, "patient_profile_id", None))
     key = owner_key(user, token)
     case = (
         await db.execute(
@@ -131,31 +133,17 @@ async def ensure_chat_case(db, request, user, token):
     ).scalar_one_or_none()
     if not case:
         profile = request.patient_profile.model_dump(exclude_none=True) if request.patient_profile else {}
-        if user:
-            profile.update(name=user.full_name, phone=user.phone, email=user.email)
-        values = dict(
-            id=uuid4(),
-            source="chat",
-            source_id=hashlib.sha256((key + ":" + request.session_id).encode()).hexdigest(),
-            owner_key=key,
-            session_id=request.session_id,
-            patient_id=user.id if user else None,
-            patient=profile,
-            ai_snapshot={},
-            plan={},
-            status="observing",
-            priority=3,
-            control="ai",
-            version=1,
-        )
-        await db.execute(
-            insert(Case).values(**values).on_conflict_do_nothing(index_elements=["owner_key", "session_id"])
-        )
-        case = (
-            await db.execute(
-                select(Case).where(Case.owner_key == key, Case.session_id == request.session_id).with_for_update()
-            )
-        ).scalar_one()
+        if target:
+            profile.update(name=target.full_name, phone=selected_profile.contact_phone if selected_profile else user.phone, email=user.email,
+                           date_of_birth=str(target.date_of_birth) if target.date_of_birth else None, gender=target.gender)
+        values = dict(id=uuid4(), source='chat', source_id=hashlib.sha256((key + ':' + request.session_id).encode()).hexdigest(),
+                      owner_key=key, session_id=request.session_id, patient_id=target.id if target else None,
+                      patient_profile_id=selected_profile.id if selected_profile else None, requested_by_user_id=user.id if user else None,
+                      patient=profile, ai_snapshot={}, plan={}, status='observing', priority=3, control='ai', version=1)
+        await db.execute(insert(Case).values(**values).on_conflict_do_nothing(index_elements=['owner_key', 'session_id']))
+        case = (await db.execute(select(Case).where(Case.owner_key == key, Case.session_id == request.session_id).with_for_update())).scalar_one()
+    if case.patient_id and target and case.patient_id != target.id:
+        raise HTTPException(409, "Hội thoại đã thuộc người khám khác. Hãy mở hội thoại mới.")
     return case
 
 
@@ -206,54 +194,43 @@ async def intake(db, request, user, token, state):
     from zoneinfo import ZoneInfo
 
     from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN, _is_minor
-
-    today = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
-    phone = re.sub(r"[\s.()-]", "", request.patient_phone)
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).date()
+    from src.services.patient_profiles import resolve_booking_payload
+    target, profile = await resolve_booking_payload(db, user, request)
+    phone = re.sub(r'[\s.()-]', '', request.patient_phone)
     if len(request.patient_name.strip()) < 2:
         raise HTTPException(422, "Họ tên người khám cần ít nhất 2 ký tự.")
     if not PHONE_PATTERN.fullmatch(phone) or request.date_of_birth > today:
         raise HTTPException(422, "Thông tin điện thoại hoặc ngày sinh không hợp lệ.")
     if request.preferred_date is None or request.preferred_date < today:
-        raise HTTPException(422, "Ngày khám mong muốn không thể bỏ trống hoặc nằm trong quá khứ.")
-    if _is_minor(request.date_of_birth, today) and (
-        len((request.guardian_name or "").strip()) < 2
-        or not PHONE_PATTERN.fullmatch(re.sub(r"[\s.()-]", "", request.guardian_phone or ""))
-    ):
-        raise HTTPException(422, "Người dưới 18 tuổi cần thông tin người giám hộ hợp lệ.")
-    if state.get("is_emergency"):
-        raise HTTPException(409, "Ca cấp cứu không được chuyển sang đặt lịch thường.")
-    case = (
-        await db.execute(
-            select(Case)
-            .where(Case.owner_key == owner_key(user, token), Case.session_id == request.session_id)
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
+        raise HTTPException(422, 'Ngày khám mong muốn không thể bỏ trống hoặc nằm trong quá khứ.')
+    if request.preferred_date > today + timedelta(days=90):
+        raise HTTPException(422, 'Chỉ được đặt ngày khám trong 90 ngày tới.')
+    if _is_minor(request.date_of_birth, today) and (len((request.guardian_name or '').strip()) < 2 or not PHONE_PATTERN.fullmatch(re.sub(r'[\s.()-]', '', request.guardian_phone or ''))):
+        raise HTTPException(422, 'Người dưới 18 tuổi cần thông tin người giám hộ hợp lệ.')
+    if state.get('is_emergency'):
+        raise HTTPException(409, 'Ca cấp cứu không được chuyển sang đặt lịch thường.')
+    case = (await db.execute(select(Case).where(Case.owner_key == owner_key(user, token), Case.session_id == request.session_id).with_for_update())).scalar_one_or_none()
     if not case:
         from types import SimpleNamespace
-
-        case = await ensure_chat_case(
-            db, SimpleNamespace(session_id=request.session_id, patient_profile=None), user, token
-        )
-    if case.priority == 0 or case.ai_snapshot.get("is_emergency"):
-        raise HTTPException(409, "Ca có cảnh báo cấp cứu chưa được chuyển sang đăng ký khám thường.")
-    if case.status in {"confirmed", "completed", "cancelled"}:
-        raise HTTPException(409, "Ca đã đóng hoặc chốt lịch. Vui lòng mở hội thoại mới.")
-    case.patient = {
-        "name": request.patient_name.strip(),
-        "phone": phone,
-        "email": request.patient_email,
-        "date_of_birth": request.date_of_birth.isoformat(),
-        "gender": request.gender,
-        "guardian_name": request.guardian_name,
-        "guardian_phone": request.guardian_phone,
-        "consent_to_contact": True,
-        "preferred_date": str(request.preferred_date) if request.preferred_date else None,
-        "preferred_period": request.preferred_period,
-        "facility_preference": request.facility_preference,
-        "contact_time_preference": request.contact_time_preference,
-        "notes": request.patient_notes,
-    }
+        case = await ensure_chat_case(db, SimpleNamespace(session_id=request.session_id, patient_profile=None, patient_profile_id=profile.id if profile else None), user, token)
+    if case.priority == 0 or case.ai_snapshot.get('is_emergency'):
+        raise HTTPException(409, 'Ca có cảnh báo cấp cứu chưa được chuyển sang đăng ký khám thường.')
+    if case.status in {'confirmed', 'completed', 'cancelled'}:
+        raise HTTPException(409, 'Ca đã đóng hoặc chốt lịch. Vui lòng mở hội thoại mới.')
+    if target and case.patient_id and case.patient_id != target.id:
+        raise HTTPException(409, 'Phiếu không khớp người khám của hội thoại.')
+    if target:
+        case.patient_id = target.id
+        case.patient_profile_id = profile.id if profile else case.patient_profile_id
+        case.requested_by_user_id = user.id
+    case.patient = {'name': request.patient_name.strip(), 'phone': phone, 'email': request.patient_email,
+                    'date_of_birth': request.date_of_birth.isoformat(), 'gender': request.gender,
+                    'guardian_name': request.guardian_name, 'guardian_phone': request.guardian_phone,
+                    'consent_to_contact': True, 'preferred_date': str(request.preferred_date) if request.preferred_date else None,
+                    'preferred_period': request.preferred_period, 'facility_preference': request.facility_preference,
+                    'contact_time_preference': request.contact_time_preference, 'notes': request.patient_notes}
     case.ai_snapshot = snapshot(state)
     case.status = "contacting" if case.assigned_to else "new"
     policy = await db.get(Policy, 1)
@@ -403,23 +380,7 @@ async def create_source_case(db, source, item, patient, user, guest_token, paylo
         plan["specialty_id"] = str(item.specialty_id)
     policy = await db.get(Policy, 1)
     emergency = bool(evaluation and evaluation.is_emergency)
-    case = Case(
-        id=uuid4(),
-        source=source,
-        source_id=str(item.id),
-        owner_key=owner_key(user, guest_token),
-        session_id="request-" + str(item.id),
-        patient_id=patient.id,
-        patient=profile,
-        ai_snapshot=ai,
-        plan=plan,
-        facility_id=facility_id,
-        status="new",
-        priority=0 if emergency else 3,
-        due_at=now() + timedelta(minutes=policy.emergency_response_minutes if emergency else policy.response_minutes)
-        if policy
-        else None,
-    )
+    case = Case(id=uuid4(), source=source, source_id=str(item.id), owner_key=owner_key(user, guest_token), session_id='request-' + str(item.id), patient_id=patient.id, patient_profile_id=getattr(item, 'patient_profile_id', None), requested_by_user_id=user.id if user else None, patient=profile, ai_snapshot=ai, plan=plan, facility_id=facility_id, status='new', priority=0 if emergency else 3, due_at=now() + timedelta(minutes=policy.emergency_response_minutes if emergency else policy.response_minutes) if policy else None)
     db.add(case)
     await db.flush()
     event(db, case, user, "intake_submitted", text)
@@ -431,31 +392,7 @@ async def create_source_case(db, source, item, patient, user, guest_token, paylo
 
 
 def case_dict(case):
-    return {
-        k: (str(v) if isinstance(v, UUID) else v.isoformat() if isinstance(v, datetime) else v)
-        for k in (
-            "id",
-            "source",
-            "source_id",
-            "session_id",
-            "patient_id",
-            "patient",
-            "ai_snapshot",
-            "plan",
-            "facility_id",
-            "assigned_to",
-            "status",
-            "priority",
-            "control",
-            "version",
-            "due_at",
-            "follow_up_at",
-            "booking_id",
-            "created_at",
-            "updated_at",
-        )
-        for v in [getattr(case, k)]
-    }
+    return {k: (str(v) if isinstance(v, UUID) else v.isoformat() if isinstance(v, datetime) else v) for k in ('id', 'source', 'source_id', 'session_id', 'patient_id', 'patient_profile_id', 'requested_by_user_id', 'patient', 'ai_snapshot', 'plan', 'facility_id', 'assigned_to', 'status', 'priority', 'control', 'version', 'due_at', 'follow_up_at', 'booking_id', 'created_at', 'updated_at') for v in [getattr(case, k)]}
 
 
 async def detail(db, case):
@@ -758,14 +695,7 @@ async def request_deposit(db, case, actor, member, payload):
         await db.flush()
         case.patient_id = patient.id
     expires = min(now() + timedelta(minutes=policy.hold_minutes), aware(schedule.starts_at))
-    hold = BookingHold(
-        user_id=case.patient_id,
-        schedule_id=schedule.id,
-        service_id=UUID(case.plan["service_id"]),
-        specialty_id=UUID(case.plan["specialty_id"]),
-        status="active",
-        expires_at=expires,
-    )
+    hold = BookingHold(user_id=case.patient_id, requested_by_user_id=case.requested_by_user_id, patient_profile_id=case.patient_profile_id, schedule_id=schedule.id, service_id=UUID(case.plan['service_id']), specialty_id=UUID(case.plan['specialty_id']), status='active', expires_at=expires)
     db.add(hold)
     await db.flush()
     case.plan = {**case.plan, "hold_id": str(hold.id)}
@@ -796,19 +726,7 @@ async def request_deposit(db, case, actor, member, payload):
         else f"Yêu cầu cọc: {payload.amount:,} VND. Hạn: {expires.isoformat()}. {policy.payment_instructions}\nĐiều kiện hoàn cọc: {policy.refund_policy}",
     )
     from src.models.notification import Notification
-
-    db.add(
-        Notification(
-            user_id=case.patient_id,
-            kind="deposit_requested",
-            status="delivered",
-            title="Phương án khám và cọc",
-            message=f"Kiểm tra phiếu điều phối và điều khoản tại /patient/requests. Hạn giữ chỗ: {expires.isoformat()}.",
-            dedupe_key=f"coordination:{case.id}:{case.version}:deposit",
-            available_at=now(),
-            delivered_at=now(),
-        )
-    )
+    db.add(Notification(user_id=case.requested_by_user_id or case.patient_id, kind='deposit_requested', status='delivered', title='Phương án khám và cọc', message=f'Kiểm tra phiếu điều phối và điều khoản tại /patient/requests. Hạn giữ chỗ: {expires.isoformat()}.', dedupe_key=f'coordination:{case.id}:{case.version}:deposit', available_at=now(), delivered_at=now()))
 
 
 async def verify_deposit(db, case, actor, payload):
@@ -935,12 +853,8 @@ async def confirm(db, case, actor, member, version):
         )
     ).scalar_one()
     if other_bookings + other_holds >= schedule.capacity:
-        raise HTTPException(409, "Lịch không còn đủ công suất.")
-    booking = (
-        await db.get(Booking, case.booking_id, with_for_update=True)
-        if case.booking_id
-        else Booking(user_id=case.patient_id)
-    )
+        raise HTTPException(409, 'Lịch không còn đủ công suất.')
+    booking = await db.get(Booking, case.booking_id, with_for_update=True) if case.booking_id else Booking(user_id=case.patient_id, requested_by_user_id=case.requested_by_user_id, patient_profile_id=case.patient_profile_id)
     if case.booking_id:
         await NotificationService(db).discard_reminders_for_booking(booking.id)
     booking.schedule_id = schedule.id
@@ -957,39 +871,9 @@ async def confirm(db, case, actor, member, version):
     case.follow_up_at = None
     await update_source(db, case, "confirmed", actor, case.plan["reason"])
     from src.models.notification import Notification
-
-    db.add(
-        Notification(
-            user_id=booking.user_id,
-            booking_id=booking.id,
-            kind="booking_confirmed",
-            status="delivered",
-            title="Lịch khám đã xác nhận",
-            message=f"Lịch khám: {booking.starts_at.isoformat()}.",
-            dedupe_key=f"coordination:{case.id}:{case.version}:confirmed",
-            available_at=now(),
-            delivered_at=now(),
-        )
-    )
-    db.add(
-        Notification(
-            user_id=booking.user_id,
-            booking_id=booking.id,
-            kind="appointment_reminder",
-            status="pending",
-            title="Nhắc lịch khám",
-            message=f"Lịch khám: {booking.starts_at.isoformat()}.",
-            dedupe_key=f"coordination:{case.id}:{case.version}:reminder",
-            available_at=max(now(), booking.starts_at - timedelta(hours=24)),
-        )
-    )
-    await add_message(
-        db,
-        case,
-        str(uuid4()),
-        "system",
-        f"Lịch khám đã xác nhận. Mã: {booking.id}. Giờ: {booking.starts_at.isoformat()}.",
-    )
+    db.add(Notification(user_id=booking.requested_by_user_id or booking.user_id, booking_id=booking.id, kind='booking_confirmed', status='delivered', title='Lịch khám đã xác nhận', message=f'Lịch khám: {booking.starts_at.isoformat()}.', dedupe_key=f'coordination:{case.id}:{case.version}:confirmed', available_at=now(), delivered_at=now()))
+    db.add(Notification(user_id=booking.requested_by_user_id or booking.user_id, booking_id=booking.id, kind='appointment_reminder', status='pending', title='Nhắc lịch khám', message=f'Lịch khám: {booking.starts_at.isoformat()}.', dedupe_key=f'coordination:{case.id}:{case.version}:reminder', available_at=max(now(), booking.starts_at - timedelta(hours=24))))
+    await add_message(db, case, str(uuid4()), 'system', f'Lịch khám đã xác nhận. Mã: {booking.id}. Giờ: {booking.starts_at.isoformat()}.')
     bump(case)
     event(db, case, actor, "booking_confirmed", details={"booking_id": str(booking.id)})
 

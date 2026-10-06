@@ -16,7 +16,7 @@ async function historyJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   if (!response.ok) { const error = new Error(data.message || data.detail || 'Không thể tải lịch sử trò chuyện.') as Error & { status?: number }; error.status = response.status; throw error; }
   return data;
 }
-export const getConversations = (offset = 0, signal?: AbortSignal) => historyJson<{ conversations: SavedConversation[]; has_more: boolean }>(`/chat/conversations?offset=${offset}`, signal);
+export const getConversations = (offset = 0, signal?: AbortSignal, patientProfileId?: string) => historyJson<{ conversations: SavedConversation[]; has_more: boolean }>(`/chat/conversations?offset=${offset}${patientProfileId ? "&patient_profile_id=" + encodeURIComponent(patientProfileId) : ""}`, signal);
 export const getConversation = (id: string, offset = 0, signal?: AbortSignal) => historyJson<ConversationHistory>(`/chat/conversations/${encodeURIComponent(id)}?offset=${offset}`, signal);
 export const getTakeoverConversation = (id: string, signal?: AbortSignal) => historyJson<PatientTakeoverHistory>(`/chat/conversations/${encodeURIComponent(id)}/takeover`, signal);
 
@@ -118,6 +118,7 @@ interface ChatResponse extends ChatMetadata {
 interface StreamChatOptions {
   message: string;
   sessionId: string;
+  patientProfileId?: string;
   requestId?: string;
   signal?: AbortSignal;
   profile?: ChatProfile;
@@ -142,11 +143,12 @@ export async function streamChat({
   onToken,
   onMetadata,
   profile,
+  patientProfileId,
 }: StreamChatOptions): Promise<void> {
   const response = await fetchChatApi('/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, request_id: requestId, patient_profile: profile }),
+    body: JSON.stringify({ message, session_id: sessionId, request_id: requestId, patient_profile: profile, patient_profile_id: patientProfileId }),
     signal,
   });
 
@@ -201,11 +203,11 @@ export async function streamChat({
   }
 }
 
-export async function sendChat(message: string, sessionId: string, signal?: AbortSignal, profile?: ChatProfile, requestId?: string): Promise<ChatResponse> {
+export async function sendChat(message: string, sessionId: string, signal?: AbortSignal, profile?: ChatProfile, requestId?: string, patientProfileId?: string): Promise<ChatResponse> {
   const response = await fetchChatApi('/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, request_id: requestId, patient_profile: profile }),
+    body: JSON.stringify({ message, session_id: sessionId, request_id: requestId, patient_profile: profile, patient_profile_id: patientProfileId }),
     signal,
   });
   const payload = await response.json().catch(() => ({}));

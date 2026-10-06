@@ -85,6 +85,19 @@ def public_result(result, session_id, elapsed_ms: float | None = None):
 
 async def prepare_turn(request, user, session):
     started = time.perf_counter()
+    subject = user
+    selected_profile = None
+    if user:
+        from src.db.session import get_session_factory
+        from src.services.patient_profiles import resolve_patient
+        from src.models.patient_profile import PatientProfile
+        from sqlalchemy import select
+        async with get_session_factory()() as profile_db:
+            if request.patient_profile_id is None:
+                request.patient_profile_id = (await profile_db.execute(select(PatientProfile.id).where(PatientProfile.linked_user_id == user.id))).scalar_one_or_none()
+            subject, selected_profile = await resolve_patient(profile_db, user, request.patient_profile_id)
+    elif request.patient_profile_id:
+        raise HTTPException(403, "Cần đăng nhập để chọn hồ sơ người thân.")
     service = ChatHistoryService(session)
     turn = await service.begin_turn(user, request) if user else None
     payload = chat_agent_input(request)
@@ -110,32 +123,34 @@ async def prepare_turn(request, user, session):
             workflow_status="IDLE",
         )
         payload = {**defaults, **checkpoint, **payload, "error": None}
-        dob_str = str(user.date_of_birth) if user.date_of_birth else None
+        dob_str = str(subject.date_of_birth) if subject.date_of_birth else None
         profile_dict = {
-            "name": user.full_name or "",
+            "name": subject.full_name or "",
             "phone": user.phone or "",
         }
         if dob_str:
             profile_dict["date_of_birth"] = dob_str
-        if getattr(user, "gender", None):
-            profile_dict["gender"] = user.gender
+        if selected_profile:
+            profile_dict["phone"] = selected_profile.contact_phone or user.phone or ""
+        if getattr(subject, "gender", None):
+            profile_dict["gender"] = subject.gender
         payload.update(
             patient_profile=profile_dict,
-            patient_name=user.full_name,
-            patient_phone=user.phone,
+            patient_name=subject.full_name,
+            patient_phone=profile_dict["phone"],
             patient_dob=dob_str,
-            patient_gender=user.gender,
+            patient_gender=subject.gender,
             patient_email=getattr(user, "email", None),
             is_authenticated=True,
-            patient_health_record=health_record(user),
+            patient_health_record=health_record(subject),
         )
         # Nạp Cross-session Memory (Hồ sơ dài hạn & Open Loops)
         from src.medical_assistant.domain.patient_memory_service import get_patient_memory_service
 
         try:
             mem_svc = get_patient_memory_service()
-            payload["patient_memory_profile"] = await mem_svc.get_patient_profile(user.id)
-            payload["active_open_loops"] = await mem_svc.get_active_open_loops(user.id)
+            payload["patient_memory_profile"] = await mem_svc.get_patient_profile(subject.id)
+            payload["active_open_loops"] = await mem_svc.get_active_open_loops(subject.id)
         except Exception as exc:
             logger.warning("Could not load cross-session memory: %s", exc)
             payload["patient_memory_profile"] = []
@@ -145,6 +160,7 @@ async def prepare_turn(request, user, session):
         payload["is_authenticated"] = False
         payload["patient_memory_profile"] = []
         payload["active_open_loops"] = []
+    payload["clinical_subject_id"] = str(subject.id) if subject else None
     logger.info("chat.prepare elapsed_ms=%.0f", (time.perf_counter() - started) * 1000)
     return payload, turn, service
 
@@ -200,7 +216,9 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
         payload["guest_token"] = guest_token
         payload["session_id"] = request.session_id
         if user:
-            payload["user_id"] = str(user.id)
+            payload["user_id"] = payload.get("clinical_subject_id") or str(user.id)
+        if turn and turn.get("cached"):
+            return turn["cached"]
         if emergency:
             result = {
                 **payload,
@@ -259,7 +277,7 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
                 fac = result.get("facility_preference")
                 if fac:
                     await mem_svc.save_patient_fact(
-                        user_id=user.id,
+                        user_id=__import__("uuid").UUID(payload.get("clinical_subject_id") or str(user.id)),
                         category="facility_preference",
                         fact_key="preferred_facility",
                         fact_value={"name": fac},
@@ -268,7 +286,7 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
                     )
                 if result.get("workflow_status") == "HOLD_BOOKING" and result.get("selected_slot"):
                     await mem_svc.create_open_loop(
-                        user_id=user.id,
+                        user_id=__import__("uuid").UUID(payload.get("clinical_subject_id") or str(user.id)),
                         loop_type="slot_hold_unconfirmed",
                         payload=result.get("selected_slot") or {},
                         due_minutes=15,
@@ -357,8 +375,9 @@ async def conversations(
     session: AsyncSession = Depends(get_auth_db_session),
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    patient_profile_id: __import__("uuid").UUID | None = None,
 ):
-    return await ChatHistoryService(session).list_conversations(user.id, limit, offset)
+    return await ChatHistoryService(session).list_conversations(user.id, limit, offset, patient_profile_id)
 
 
 @router.delete("/chat/conversations/{session_id}")

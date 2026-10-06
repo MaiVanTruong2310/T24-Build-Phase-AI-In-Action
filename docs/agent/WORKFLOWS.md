@@ -1,6 +1,6 @@
 # QUY TRÌNH VẬN HÀNH & SƠ ĐỒ QUYẾT ĐỊNH (WORKFLOWS.MD)
 
-Tài liệu này mô tả chi tiết logic điều phối luồng hội thoại của Agent qua đồ thị trạng thái **LangGraph StateGraph** trong `truong-doing/src/medical_assistant/agent/graph.py`.
+Tài liệu này mô tả chi tiết logic điều phối luồng hội thoại của Agent qua đồ thị trạng thái **LangGraph StateGraph** trong `src/medical_assistant/agent/graph.py`.
 
 ---
 
@@ -94,7 +94,7 @@ Quy trình này hướng dẫn cách trích xuất, chia nhỏ dataset quốc t�
 ### Bước 1: Thu thập & Chia nhỏ Dataset (Chunking)
 - **Lệnh thực thi:**
   ```powershell
-  python truong-doing/scripts/ddxplus/download_and_chunk_ddxplus.py --sample-size 150 --chunk-size 50
+  python scripts/ddxplus/download_and_chunk_ddxplus.py --sample-size 150 --chunk-size 50
   ```
 - **Kết quả đầu ra:**
   - `data/ddxplus/subsets/chunks_50/`: Chứa các part độc lập (`ddx_part_001.jsonl`, `ddx_part_002.jsonl`, ...).
@@ -103,14 +103,14 @@ Quy trình này hướng dẫn cách trích xuất, chia nhỏ dataset quốc t�
 ### Bước 2: Làm giàu RAG & Tri thức Lâm sàng
 - **Lệnh thực thi:**
   ```powershell
-  python truong-doing/scripts/ddxplus/enrich_knowledge_base.py
+  python scripts/ddxplus/enrich_knowledge_base.py
   ```
 - **Kết quả đầu ra:** Tạo đồ thị liên kết triệu chứng 223 evidences tại `data/ddxplus/ddxplus_symptom_knowledge_graph.json` và bổ sung tài liệu RAG vào Datalake.
 
 ### Bước 2.5: Trích xuất, Chuẩn hóa 49 Bệnh DDXPlus & Nạp Database Supabase
 - **Lệnh thực thi:**
   ```powershell
-  python truong-doing/scripts/ddxplus/extract_and_merge_ddxplus_diseases.py
+  python scripts/ddxplus/extract_and_merge_ddxplus_diseases.py
   ```
 - **Kết quả đầu ra:**
   - Sáp nhập 49 hồ sơ bệnh học lâm sàng DDXPlus chuẩn tiếng Việt (ICD-10, ATS 1-5, Red Flags, typical symptoms) vào `data/datalake/normalized/diseases_triaged.jsonl` (tăng từ 692 lên **741 mặt bệnh**).
@@ -119,7 +119,7 @@ Quy trình này hướng dẫn cách trích xuất, chia nhỏ dataset quốc t�
 ### Bước 3: Chạy Benchmark Tự động trên Chunk
 - **Lệnh thực thi:**
   ```powershell
-  python truong-doing/scripts/ddxplus/build_ddxplus_eval_suite.py --chunk truong-doing/data/ddxplus/subsets/chunks_50/ddx_part_001.jsonl
+  python scripts/ddxplus/build_ddxplus_eval_suite.py --chunk data/ddxplus/subsets/chunks_50/ddx_part_001.jsonl
   ```
 - **Kết quả đầu ra:** Xuất báo cáo JSON đo lường độ nhạy an toàn cấp cứu (*Safety Recall*) và tỷ lệ điều phối chuyên khoa tại `eval_output/`.
 

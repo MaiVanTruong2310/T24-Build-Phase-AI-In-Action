@@ -18,24 +18,31 @@ from src.db.session import get_auth_session_factory
 from src.models.user import User
 
 
-async def provision(password: str) -> None:
+import argparse
+
+async def provision(username: str, password: str, full_name: str = "Điều phối viên") -> None:
     async with get_auth_session_factory()() as db:
         async with db.begin():
-            user = (await db.execute(select(User).where(User.phone == "admin123").with_for_update())).scalar_one_or_none()
+            user = (await db.execute(select(User).where(User.phone == username).with_for_update())).scalar_one_or_none()
             if user is not None and user.role != "staff":
-                raise RuntimeError("The username admin123 is already assigned to a non-staff account")
+                raise RuntimeError(f"The username {username} is already assigned to a non-staff account")
             if user is None:
-                user = User(phone="admin123", full_name="Điều phối viên", role="staff", status="active")
+                user = User(phone=username, full_name=full_name, role="staff", status="active")
                 db.add(user)
             user.password_hash = hash_password(password)
             user.status = "active"
-    print("Coordinator account admin123 is ready")
+    print(f"Coordinator account {username} is ready")
 
 
 if __name__ == "__main__":
-    value = getpass("Password for admin123: ")
+    parser = argparse.ArgumentParser(description="Provision local coordinator account")
+    parser.add_argument("--username", "-u", default="admin123", help="Coordinator username (default: admin123)")
+    parser.add_argument("--name", "-n", default="Điều phối viên", help="Full name for coordinator")
+    args = parser.parse_args()
+
+    value = getpass(f"Password for {args.username}: ")
     if len(value) < 8:
         raise SystemExit("Password must contain at least 8 characters")
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(provision(value))
+    asyncio.run(provision(args.username, value, args.name))

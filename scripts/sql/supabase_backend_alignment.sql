@@ -1,4 +1,4 @@
--- Align the legacy crawled Supabase schema with P124-Dev without discarding source data.
+-- Align the legacy crawled Supabase schema with P-124 without discarding source data.
 
 -- Run this one-off bootstrap against the intended Supabase DATABASE_URL, not the old EC2 database.
 

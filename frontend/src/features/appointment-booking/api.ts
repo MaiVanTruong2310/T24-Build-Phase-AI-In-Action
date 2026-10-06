@@ -318,6 +318,7 @@ export interface CreatePackageRequestPayload {
   consent_to_contact?: boolean;
   guardian_name?: string;
   guardian_phone?: string;
+  patient_profile_id?: string;
   service_id: string;
   facility_id: string;
   preferred_date: string;

@@ -24,6 +24,7 @@ from src.models.coordination import (
 )
 from src.models.notification import Notification
 from src.models.package_request import PackageRequest
+from src.models.patient_profile import PatientProfile, PatientRelationship
 from src.models.user import User
 from src.models.workbench import (
     CoordinationCase,

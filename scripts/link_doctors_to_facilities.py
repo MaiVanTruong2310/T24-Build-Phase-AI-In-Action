@@ -32,9 +32,7 @@ from src.medical_assistant.domain.facility_linking import (
     workplace_department,
 )
 
-CRAWL_PATH = Path(r"D:\AI in Action\LogAgent\P-124\truong-doing\data\crawled\doctors\processed\jsonl\vinmec_professionals_vi.jsonl")
-if not CRAWL_PATH.exists():
-    CRAWL_PATH = ROOT / "data" / "crawled" / "doctors" / "processed" / "jsonl" / "vinmec_professionals_vi.jsonl"
+CRAWL_PATH = ROOT / "data" / "crawled" / "doctors" / "processed" / "jsonl" / "vinmec_professionals_vi.jsonl"
 
 DEFAULT_REPORT = ROOT / "data" / "generated" / "doctor_facility_link_plan.json"
 DEFAULT_SQL = ROOT / "scripts" / "supabase" / "migrations" / "20261003000000_link_all_doctors_to_facilities.sql"

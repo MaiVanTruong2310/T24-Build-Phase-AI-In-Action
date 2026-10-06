@@ -54,34 +54,34 @@ source .venv/bin/activate  # Trên Linux/macOS
 .venv\Scripts\activate     # Trên Windows PowerShell
 
 # Chạy toàn bộ 162 bài kiểm thử tự động toàn dự án (100% Pass)
-python -m pytest truong-doing/tests/ -v
+python -m pytest tests/ -v
 
 # 1. Chạy bài kiểm thử hồi quy 12 ca cấp cứu chuyên biệt (Safety Engine v3)
-python -m pytest truong-doing/tests/test_emergency_safety_v3.py -v
+python -m pytest tests/test_emergency_safety_v3.py -v
 
 # 2. Chạy bộ kiểm thử song ngữ Anh - Việt toàn diện (17 bài)
-python -m pytest truong-doing/tests/test_bilingual_en_vi.py -v
+python -m pytest tests/test_bilingual_en_vi.py -v
 
 # 3. Chạy bài kiểm thử luồng Guardrails y tế thực tế
-python -m pytest truong-doing/tests/test_clinical_guardrails_flow.py -v
+python -m pytest tests/test_clinical_guardrails_flow.py -v
 
 # 4. Chạy kiểm thử đo lường Token và Zero-Token Cache
-python -m pytest truong-doing/tests/test_token_cost_optimization.py -v
+python -m pytest tests/test_token_cost_optimization.py -v
 
 # 5. Chạy bộ kiểm thử Tường lửa Bảo mật & De-obfuscation Đa Tầng
-python -m pytest truong-doing/tests/test_security_deobfuscator.py -v
-python -m pytest truong-doing/tests/test_security_guardrail_injection.py -v
-python -m pytest truong-doing/tests/test_security_dlp_and_isolation.py -v
-python -m pytest truong-doing/tests/test_security_end_to_end_flow.py -v
+python -m pytest tests/test_security_deobfuscator.py -v
+python -m pytest tests/test_security_guardrail_injection.py -v
+python -m pytest tests/test_security_dlp_and_isolation.py -v
+python -m pytest tests/test_security_end_to_end_flow.py -v
 
 # 6. Chạy bộ kiểm thử Cấp cứu ACS & Phân loại Phủ định Lâm sàng (Hybrid Safety Gate)
-python -m pytest truong-doing/tests/test_hybrid_safety_and_negation.py -v
+python -m pytest tests/test_hybrid_safety_and_negation.py -v
 
 # 7. Chạy bộ kiểm thử Trích xuất Dữ kiện Hybrid LLM & Fact-Aware Probing
-python -m pytest truong-doing/tests/test_hybrid_llm_extractor_and_probing.py -v
+python -m pytest tests/test_hybrid_llm_extractor_and_probing.py -v
 
 # 8. Chạy Strict Blind Benchmark v3.0 trên 150 ca bệnh DDXPlus
-python truong-doing/scripts/ddxplus/build_ddxplus_eval_suite.py --chunk truong-doing/data/ddxplus/subsets/ddxplus_subset_150.jsonl
+python scripts/ddxplus/build_ddxplus_eval_suite.py --chunk data/ddxplus/subsets/ddxplus_subset_150.jsonl
 ```
 
 > **Nguyên tắc vàng:** Mọi code commit chỉ được coi là hợp lệ khi toàn bộ test suite passed (100%). Mốc xác minh gần nhất: **176/176 tests passed (Pass rate: 100%)**.

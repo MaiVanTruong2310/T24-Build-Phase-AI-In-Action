@@ -50,6 +50,8 @@ class CoordinationCase(Base):
     owner_key: Mapped[str | None] = mapped_column(String(100))
     session_id: Mapped[str | None] = mapped_column(String(200))
     patient_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    patient_profile_id: Mapped[UUID | None] = mapped_column(ForeignKey("patient_profiles.id", ondelete="RESTRICT"), index=True)
+    requested_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
     patient: Mapped[dict] = mapped_column(DOC, default=dict, nullable=False)
     ai_snapshot: Mapped[dict] = mapped_column(DOC, default=dict, nullable=False)
     checkpoint: Mapped[dict] = mapped_column(DOC, default=dict, nullable=False)
