@@ -84,9 +84,9 @@ class ChatHistoryService:
         lease = uuid4()
         async with self.session.begin():
             await self.session.execute(
-                text("""INSERT INTO public.chat_conversations(id,user_id,session_id,title)
-              VALUES(:id,:uid,:sid,:title) ON CONFLICT(user_id,session_id) DO NOTHING"""),
-                {"id": uuid4(), "uid": user.id, "sid": request.session_id, "title": request.message[:80]},
+                text("""INSERT INTO public.chat_conversations(id,user_id,session_id,title,patient_profile_id)
+              VALUES(:id,:uid,:sid,:title,:pid) ON CONFLICT(user_id,session_id) DO NOTHING"""),
+                {"id": uuid4(), "uid": user.id, "sid": request.session_id, "title": request.message[:80], "pid": getattr(request, "patient_profile_id", None)},
             )
             conv = (
                 (
@@ -99,6 +99,8 @@ class ChatHistoryService:
                 .mappings()
                 .one()
             )
+            if conv.get("patient_profile_id") != getattr(request, "patient_profile_id", None):
+                raise HTTPException(409, "Hội thoại đã thuộc hồ sơ khác. Hãy mở hội thoại mới.")
             previous = (
                 (
                     await self.session.execute(
@@ -199,13 +201,17 @@ class ChatHistoryService:
                 {"cid": row["id"], "uid": user.id},
             )
 
-    async def list_conversations(self, user_id, limit=30, offset=0):
+    async def list_conversations(self, user_id, limit=30, offset=0, patient_profile_id=None):
         rows = (
             (
                 await self.session.execute(
                     text("""SELECT session_id,title,created_at,updated_at FROM public.chat_conversations
-          WHERE user_id=:uid ORDER BY updated_at DESC,id DESC LIMIT :limit OFFSET :offset"""),
-                    {"uid": user_id, "limit": limit + 1, "offset": offset},
+          WHERE user_id=:uid AND (
+            (CAST(:pid AS uuid) IS NOT NULL AND patient_profile_id=CAST(:pid AS uuid)) OR
+            (CAST(:pid AS uuid) IS NULL AND (patient_profile_id IS NULL OR patient_profile_id IN
+              (SELECT id FROM public.patient_profiles WHERE linked_user_id=:uid))))
+          ORDER BY updated_at DESC,id DESC LIMIT :limit OFFSET :offset"""),
+                    {"uid": user_id, "limit": limit + 1, "offset": offset, "pid": patient_profile_id},
                 )
             )
             .mappings()

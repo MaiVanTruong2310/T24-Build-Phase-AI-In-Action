@@ -55,6 +55,7 @@ class StandardWeekInput(BaseModel):
 
 
 class RequestInput(BaseModel):
+    patient_profile_id: UUID | None = None
     session_id: UUID
     service_id: UUID
     specialty_id: UUID
@@ -89,6 +90,8 @@ def _request_dict(value: ConsultationRequest, session: ConsultationSession, pati
                   slot: DoctorSchedule | None = None) -> dict:
     return {
         "id": str(value.id), "patient_id": str(value.patient_id),
+        "patient_profile_id": str(value.patient_profile_id) if value.patient_profile_id else None,
+        "requested_by_user_id": str(value.requested_by_user_id) if value.requested_by_user_id else None,
         "patient_name": patient.full_name if patient else None,
         "patient_phone": patient.phone if patient else None,
         "patient_email": patient.email if patient else None,
@@ -125,6 +128,10 @@ async def list_sessions(
     doctor_id: UUID, selected_date: date = Query(alias="date"), facility_id: UUID | None = None,
     db: AsyncSession = Depends(get_db_session),
 ):
+    if selected_date < datetime.now(VN_TZ).date():
+        raise ConflictError("INVALID_APPOINTMENT_DATE", "Ngày khám không được nằm trong quá khứ.")
+    if selected_date > datetime.now(VN_TZ).date() + timedelta(days=90):
+        raise ConflictError("INVALID_APPOINTMENT_DATE", "Chỉ được đặt ngày khám trong 90 ngày tới.")
     sessions = (await db.execute(select(ConsultationSession).where(
         ConsultationSession.doctor_id == doctor_id,
         ConsultationSession.session_date == selected_date,
@@ -144,6 +151,8 @@ async def list_sessions(
 async def create_request(payload: RequestInput, http_request: Request, user: User | None = Depends(get_optional_user),
                          db: AsyncSession = Depends(get_db_session)):
     async with db.begin():
+        from src.services.patient_profiles import resolve_booking_payload
+        target, profile = await resolve_booking_payload(db, user, payload)
         if user is None:
             if not payload.patient_name or len(payload.patient_name.strip()) < 2:
                 raise ConflictError("NAME_REQUIRED", "Vui lòng nhập họ và tên bệnh nhân (tối thiểu 2 ký tự)")
@@ -165,7 +174,7 @@ async def create_request(payload: RequestInput, http_request: Request, user: Use
             db.add(patient)
             await db.flush()
         else:
-            patient = user
+            patient = target
 
         if not payload.consent_to_contact:
             raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
@@ -177,7 +186,7 @@ async def create_request(payload: RequestInput, http_request: Request, user: Use
         session = (await db.execute(select(ConsultationSession).where(
             ConsultationSession.id == payload.session_id).with_for_update()
         )).scalar_one_or_none()
-        if session is None or session.status != "open" or session.session_date < datetime.now(VN_TZ).date():
+        if session is None or session.status != "open" or not datetime.now(VN_TZ).date() <= session.session_date <= datetime.now(VN_TZ).date() + timedelta(days=90):
             raise ConflictError("SESSION_UNAVAILABLE", "Buổi khám không còn nhận yêu cầu")
         doctor = await db.get(Doctor, session.doctor_id)
         facility = await db.get(Facility, session.facility_id)
@@ -198,7 +207,7 @@ async def create_request(payload: RequestInput, http_request: Request, user: Use
         if not all((has_specialty, has_facility)):
             raise ConflictError("DOCTOR_CATALOG_MISMATCH", "Bác sĩ không thuộc chuyên khoa hoặc cơ sở đã chọn")
         existing = (await db.execute(select(ConsultationRequest.id).where(
-            ConsultationRequest.patient_id == patient.id, ConsultationRequest.session_id == session.id,
+            (ConsultationRequest.patient_id == patient.id) | (ConsultationRequest.requested_by_user_id == patient.id), ConsultationRequest.session_id == session.id,
             ConsultationRequest.status.in_(("pending", "confirmed")),
         ))).first()
         if existing:
@@ -206,13 +215,14 @@ async def create_request(payload: RequestInput, http_request: Request, user: Use
         _, remaining = await _session_capacity(db, session.id)
         if remaining < 1:
             raise ConflictError("SESSION_FULL", "Buổi khám đã đủ số yêu cầu")
-        item = ConsultationRequest(patient_id=patient.id, session_id=session.id,
+        item = ConsultationRequest(patient_id=patient.id, requested_by_user_id=user.id if user else None,
+                                   patient_profile_id=profile.id if profile else None, session_id=session.id,
                                    service_id=service.id, specialty_id=specialty.id,
                                    encounter_type=payload.encounter_type,
                                    reason=payload.reason.strip(), patient_note=payload.patient_note)
         db.add(item)
         await db.flush()
-        db.add(ConsultationRequestEvent(request_id=item.id, actor_id=patient.id, action="requested"))
+        db.add(ConsultationRequestEvent(request_id=item.id, actor_id=user.id if user else patient.id, action="requested"))
         from src.services.workbench import create_source_case
         receipt = await create_source_case(db, "consultation", item, patient, user, http_request.state.coordination_guest, payload, session.facility_id)
 
@@ -227,7 +237,7 @@ async def my_requests(patient: User = Depends(require_patient), db: AsyncSession
         ConsultationSession, ConsultationSession.id == ConsultationRequest.session_id,
     ).outerjoin(ConsultationSlot, ConsultationSlot.id == ConsultationRequest.assigned_slot_id)
         .outerjoin(DoctorSchedule, DoctorSchedule.id == ConsultationSlot.schedule_id)
-        .where(ConsultationRequest.patient_id == patient.id)
+        .where((ConsultationRequest.patient_id == patient.id) | (ConsultationRequest.requested_by_user_id == patient.id))
         .order_by(ConsultationRequest.created_at.desc()).limit(100))).all()
     return success_response([_request_dict(item, session, slot=slot) for item, session, slot in rows], "Your requests")
 
@@ -238,7 +248,7 @@ async def cancel_request(request_id: UUID, patient: User = Depends(require_patie
     async with db.begin():
         item = (await db.execute(select(ConsultationRequest).where(
             ConsultationRequest.id == request_id,
-            ConsultationRequest.patient_id == patient.id,
+            (ConsultationRequest.patient_id == patient.id) | (ConsultationRequest.requested_by_user_id == patient.id),
         ).with_for_update())).scalar_one_or_none()
         if item is None:
             raise NotFoundError("Request not found")

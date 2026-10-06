@@ -139,8 +139,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from src.api.routes import router as agent_core_router
+from src.api.endpoints.patient_profiles import router as patient_profiles_router
+
+app.include_router(agent_core_router, prefix="/api/v1")
 app.include_router(medical_assistant_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(patient_profiles_router, prefix="/api/v1")
 app.include_router(workbench_router, prefix="/api/v1")
 app.include_router(live_coordination_router, prefix="/api/v1")
 app.include_router(user_router, prefix="/api/v1")

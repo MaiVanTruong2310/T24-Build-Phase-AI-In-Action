@@ -1,7 +1,7 @@
 """Package booking endpoints for health packages and pathways."""
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,7 @@ staff_router = APIRouter(prefix="/staff/packages", tags=["staff-packages"])
 
 
 class PackageRequestInput(BaseModel):
+    patient_profile_id: UUID | None = None
     service_id: UUID
     facility_id: UUID
     preferred_date: date
@@ -79,6 +80,8 @@ async def create_package_request(
 ):
     """Register for a health package / pathway."""
     async with db.begin():
+        from src.services.patient_profiles import resolve_booking_payload
+        target, profile = await resolve_booking_payload(db, user, payload)
         from src.medical_assistant.domain.booking_request_service import _is_minor, PHONE_PATTERN
         if not payload.consent_to_contact:
             raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
@@ -101,6 +104,8 @@ async def create_package_request(
             raise ConflictError("GUARDIAN_REQUIRED", "Người dưới 18 tuổi cần họ tên và điện thoại người giám hộ.")
         if payload.preferred_date < datetime.now(VN_TZ).date():
             raise ConflictError("DATE_INVALID", "Ngày khám mong muốn không thể nằm trong quá khứ")
+        if payload.preferred_date > datetime.now(VN_TZ).date() + timedelta(days=90):
+            raise ConflictError("DATE_INVALID", "Chỉ được đặt ngày khám trong 90 ngày tới.")
         if user is None:
             patient = User(full_name=patient_name, phone=None, email=None,
                            gender=gender, date_of_birth=dob,
@@ -108,7 +113,7 @@ async def create_package_request(
             db.add(patient)
             await db.flush()
         else:
-            patient = user
+            patient = target
 
         service = await db.get(Service, payload.service_id)
         if not service or service.status != "active":
@@ -119,7 +124,8 @@ async def create_package_request(
             raise NotFoundError("Cơ sở bệnh viện không tồn tại hoặc tạm ngưng tiếp nhận")
 
         item = PackageRequest(
-            patient_id=patient.id,
+            patient_id=patient.id, patient_profile_id=profile.id if profile else None,
+            requested_by_user_id=user.id if user else None,
             service_id=service.id,
             facility_id=facility.id,
             preferred_date=payload.preferred_date,
@@ -154,7 +160,7 @@ async def list_my_package_requests(
         select(PackageRequest, Service, Facility)
         .join(Service, Service.id == PackageRequest.service_id)
         .join(Facility, Facility.id == PackageRequest.facility_id)
-        .where(PackageRequest.patient_id == patient.id)
+        .where((PackageRequest.patient_id == patient.id) | (PackageRequest.requested_by_user_id == patient.id))
         .order_by(desc(PackageRequest.created_at))
     )
     res = await db.execute(stmt)

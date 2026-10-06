@@ -57,6 +57,7 @@ class AuthService:
                 phone=phone,
                 password_hash=hash_password(request.password) if request.password else None,
                 full_name=request.full_name,
+                patient_details={"address": request.address} if request.address else {},
                 role="patient",
                 status="pending_verification",
                 date_of_birth=request.date_of_birth,
