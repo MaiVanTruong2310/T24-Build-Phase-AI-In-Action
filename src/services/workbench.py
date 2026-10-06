@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import String, cast, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
+from src.core.exceptions import ConflictError
 from src.models.booking import Booking
 from src.models.booking_hold import BookingHold
 from src.models.coordination import ConsultationRequest, ConsultationRequestEvent, ConsultationSession, ConsultationSlot
@@ -124,7 +125,10 @@ async def locked_case(db, case_id, member):
 
 async def ensure_chat_case(db, request, user, token):
     from src.services.patient_profiles import resolve_patient
+
     target, selected_profile = await resolve_patient(db, user, getattr(request, "patient_profile_id", None))
+    local_patient = await db.get(User, target.id) if target else None
+    local_requester = await db.get(User, user.id) if user else None
     key = owner_key(user, token)
     case = (
         await db.execute(
@@ -137,8 +141,8 @@ async def ensure_chat_case(db, request, user, token):
             profile.update(name=target.full_name, phone=selected_profile.contact_phone if selected_profile else user.phone, email=user.email,
                            date_of_birth=str(target.date_of_birth) if target.date_of_birth else None, gender=target.gender)
         values = dict(id=uuid4(), source='chat', source_id=hashlib.sha256((key + ':' + request.session_id).encode()).hexdigest(),
-                      owner_key=key, session_id=request.session_id, patient_id=target.id if target else None,
-                      patient_profile_id=selected_profile.id if selected_profile else None, requested_by_user_id=user.id if user else None,
+                      owner_key=key, session_id=request.session_id, patient_id=local_patient.id if local_patient else None,
+                      patient_profile_id=selected_profile.id if selected_profile else None, requested_by_user_id=local_requester.id if local_requester else None,
                       patient=profile, ai_snapshot={}, plan={}, status='observing', priority=3, control='ai', version=1)
         await db.execute(insert(Case).values(**values).on_conflict_do_nothing(index_elements=['owner_key', 'session_id']))
         case = (await db.execute(select(Case).where(Case.owner_key == key, Case.session_id == request.session_id).with_for_update())).scalar_one()
@@ -340,6 +344,94 @@ async def sync_sources(db, limit_per_source: int = 50, days_back: int = 14):
             case.follow_up_at = None
             bump(case)
             event(db, case, None, "source_cancelled")
+
+
+async def record_booking_review(db, booking, actor_id, status, note=""):
+    """Keep the workbench receipt aligned with an atomic staff booking review."""
+    source_id = str(booking.id)
+    cases = (
+        await db.execute(
+            select(Case)
+            .where(
+                or_(Case.booking_id == booking.id, (Case.source == "booking") & (Case.source_id == source_id))
+            )
+            .with_for_update()
+        )
+    ).scalars().all()
+    if len(cases) > 1:
+        raise ConflictError(
+            "BOOKING_CASE_MAPPING_CONFLICT",
+            "Booking is linked to multiple coordination cases; resolve the duplicate mapping before review.",
+        )
+    case = cases[0] if cases else None
+    if case is None:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        patient = booking.user
+        values = {
+            "id": uuid4(),
+            "source": "booking",
+            "source_id": source_id,
+            "owner_key": "user:" + str(booking.user_id),
+            "patient_id": booking.user_id,
+            "requested_by_user_id": booking.requested_by_user_id or booking.user_id,
+            "patient": {
+                "name": patient.full_name if patient else None,
+                "phone": patient.phone if patient else None,
+                "email": patient.email if patient else None,
+                "notes": booking.reason,
+            },
+            "ai_snapshot": {},
+            "plan": {
+                "service_id": str(booking.service_id),
+                "specialty_id": str(booking.specialty_id),
+                "schedule_id": str(booking.schedule_id) if booking.schedule_id else None,
+                "reason": booking.reason,
+            },
+            "facility_id": booking.facility_id,
+            "status": "new",
+            "priority": 3,
+            "control": "ai",
+            "version": 1,
+            "booking_id": booking.id,
+        }
+        await db.execute(
+            pg_insert(Case)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=["source", "source_id"])
+        )
+        case = (
+            await db.execute(
+                select(Case).where(Case.source == "booking", Case.source_id == source_id).with_for_update()
+            )
+        ).scalar_one()
+
+    case.booking_id = booking.id
+    case.status = "confirmed" if status == "confirmed" else "cancelled"
+    case.control = "ai"
+    case.follow_up_at = None
+    case.updated_at = now()
+    case.version += 1
+    if status == "rejected":
+        await release_hold(db, case)
+        deposits = (
+            await db.execute(
+                select(Deposit)
+                .where(Deposit.case_id == case.id, Deposit.status.in_(["requested", "verified"]))
+                .with_for_update()
+            )
+        ).scalars()
+        for deposit in deposits:
+            deposit.status = "refund_pending" if deposit.status == "verified" else "voided"
+    db.add(
+        Event(
+            case_id=case.id,
+            actor_id=actor_id,
+            action="booking_reviewed",
+            note=note,
+            details={"booking_id": source_id, "status": status},
+        )
+    )
 
 
 async def create_source_case(db, source, item, patient, user, guest_token, payload, facility_id):

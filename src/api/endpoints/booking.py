@@ -383,6 +383,5 @@ async def staff_update_booking_status(
     service: BookingService = Depends(get_booking_service),
 ) -> ApiResponse[StaffBookingResponse]:
     """Approve or reject one pending booking as staff."""
-    from src.core.exceptions import ConflictError
-
-    raise ConflictError("USE_WORKBENCH", "Duyệt hoặc hủy lịch qua bàn điều phối để đồng bộ cọc và lịch sử.")
+    value = await service.review(booking_id, current_user.id, request)
+    return success_response(staff_booking_response(value), "Staff booking reviewed")

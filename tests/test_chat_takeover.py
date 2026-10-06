@@ -1,8 +1,9 @@
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
-from src.models.chat_takeover import ChatTakeoverCase
 from src.realtime.chat_takeover import ChatTakeoverConnectionManager
 from src.services.chat_takeover import case_payload, priority_for_result
 
@@ -15,19 +16,31 @@ def test_priority_is_derived_from_safety_result():
 
 
 def test_case_payload_does_not_expose_raw_message_fields():
-    case = ChatTakeoverCase(
+    case = SimpleNamespace(
         id=uuid4(),
-        patient_user_id=uuid4(),
+        legacy_takeover_case_id=None,
+        patient_id=uuid4(),
+        owner_key=None,
         session_id="web-session",
-        status="queued",
-        priority="normal",
-        workflow_status="HUMAN_HELP_REQUESTED",
-        summary={"patient_message": "need support"},
+        status="new",
+        control="human",
+        priority=2,
+        assigned_to=None,
+        checkpoint={},
+        ai_snapshot={
+            "workflow_status": "HUMAN_HELP_REQUESTED",
+            "takeover_summary": {"patient_message": "need support"},
+        },
+        patient={},
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     payload = case_payload(case)
     assert payload["session_id"] == "web-session"
     assert payload["summary"]["patient_message"] == "need support"
     assert "password" not in payload
+    case.control = "ai"
+    assert case_payload(case)["status"] == "released"
 
 
 class FakeWebSocket:

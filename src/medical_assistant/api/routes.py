@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user
-from src.db.dependencies import get_auth_db_session
+from src.db.dependencies import get_auth_db_session, get_db_session
 from src.medical_assistant.agent.graph import agent
 from src.medical_assistant.domain.booking_request_service import (
     BookingPersistenceError,
@@ -23,7 +23,7 @@ from src.medical_assistant.domain.schemas import (
 )
 from src.models.user import User
 from src.services.chat_history import STATE_FIELDS, ChatHistoryService, graph_thread, health_record
-from src.services.chat_takeover import ChatTakeoverService, case_payload, message_payload
+from src.services.chat_takeover import ChatTakeoverService, case_payload
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -93,9 +93,12 @@ async def prepare_turn(request, user, session):
         from src.db.session import get_session_factory
         from src.models.patient_profile import PatientProfile
         from src.services.patient_profiles import resolve_patient
+
         async with get_session_factory()() as profile_db:
             if request.patient_profile_id is None:
-                request.patient_profile_id = (await profile_db.execute(select(PatientProfile.id).where(PatientProfile.linked_user_id == user.id))).scalar_one_or_none()
+                request.patient_profile_id = (
+                    await profile_db.execute(select(PatientProfile.id).where(PatientProfile.linked_user_id == user.id))
+                ).scalar_one_or_none()
             subject, selected_profile = await resolve_patient(profile_db, user, request.patient_profile_id)
     elif request.patient_profile_id:
         raise HTTPException(403, "Cần đăng nhập để chọn hồ sơ người thân.")
@@ -177,24 +180,25 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
 
     try:
         if user:
-            takeover = ChatTakeoverService(service.session)
-            active_case = await takeover.active_case_for_patient(user.id, request.session_id)
-            if active_case is not None:
-                await takeover.record_patient_message(
-                    user.id,
-                    request.session_id,
-                    request.message,
-                    str(request.request_id),
-                )
-                response = public_result(
-                    {
-                        "response": "Tin nhắn của bạn đã được chuyển tới nhân viên y tế đang tiếp nhận ca. Vui lòng chờ phản hồi trực tiếp.",
-                        "workflow_status": "HUMAN_HELP_REQUESTED",
-                    },
-                    request.session_id,
-                )
-                await service.complete(turn, response, turn.get("checkpoint", {}))
-                return response
+            async with get_session_factory()() as coordination_db:
+                takeover = ChatTakeoverService(coordination_db)
+                active_case = await takeover.active_case_for_patient(user.id, request.session_id)
+                if active_case is not None:
+                    await takeover.record_patient_message(
+                        user.id,
+                        request.session_id,
+                        request.message,
+                        str(request.request_id),
+                    )
+                    response = public_result(
+                        {
+                            "response": "Tin nhắn của bạn đã được chuyển tới nhân viên y tế đang tiếp nhận ca. Vui lòng chờ phản hồi trực tiếp.",
+                            "workflow_status": "HUMAN_HELP_REQUESTED",
+                        },
+                        request.session_id,
+                    )
+                    await service.complete(turn, response, turn.get("checkpoint", {}))
+                    return response
         started = time.perf_counter()
         result = await agent.ainvoke(
             payload, config={"configurable": {"thread_id": graph_thread(request.session_id, user)}}
@@ -258,12 +262,13 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
                 logger.warning("coordination after_turn unavailable; returning AI response: %s", type(exc).__name__)
         if user:
             await service.complete(turn, response, result)
-            await ChatTakeoverService(service.session).ensure_case_from_result(
-                user,
-                request.session_id,
-                request.message,
-                response,
-            )
+            async with get_session_factory()() as coordination_db:
+                await ChatTakeoverService(coordination_db).ensure_case_from_result(
+                    user,
+                    request.session_id,
+                    request.message,
+                    response,
+                )
         logger.info(
             "chat.completed agent_ms=%.0f archive_ms=%.0f",
             (agent_finished - started) * 1000,
@@ -406,15 +411,14 @@ async def conversation_messages(
 async def takeover_conversation(
     session_id: str,
     user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_auth_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
     """Return the authenticated patient's takeover state and staff messages."""
     service = ChatTakeoverService(session)
     case = await service.get_case_for_patient(user.id, session_id)
     if case is None:
         return {"case": None, "messages": []}
-    messages = await service.repository.list_messages(case.id, 200)
-    return {"case": case_payload(case), "messages": [message_payload(message) for message in messages]}
+    return {"case": case_payload(case), "messages": await service.history(case)}
 
 
 @router.post("/booking-requests", response_model=BookingIntakeResponse, status_code=201)

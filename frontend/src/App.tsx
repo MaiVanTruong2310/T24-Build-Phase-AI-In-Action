@@ -154,16 +154,19 @@ export function App() {
       }
     }
     const handleTokensUpdated = () => dispatch(sessionChanged(readPublishedSession()))
+    const handleTokenRefreshed = () => { void dispatch(initializeAuth()) }
     const handleUnauthorized = () => dispatch(logout())
 
     window.addEventListener('storage', handleStorageChange)
     window.addEventListener(AUTH_TOKENS_UPDATED_EVENT, handleTokensUpdated)
+    window.addEventListener('auth:refreshed', handleTokenRefreshed)
     window.addEventListener('auth:unauthorized', handleUnauthorized)
     void dispatch(initializeAuth())
 
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener(AUTH_TOKENS_UPDATED_EVENT, handleTokensUpdated)
+      window.removeEventListener('auth:refreshed', handleTokenRefreshed)
       window.removeEventListener('auth:unauthorized', handleUnauthorized)
     }
   }, [dispatch])
