@@ -12,6 +12,20 @@ env:
 jobs:
   lint-and-test:
     runs-on: self-hosted
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: ai20k_test
+          POSTGRES_USER: ai20k_test
+          POSTGRES_PASSWORD: ai20k_test
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U ai20k_test -d ai20k_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -30,12 +44,19 @@ jobs:
       - name: Lint with ruff
         run: ruff check src/ tests/
 
+      - name: Apply test database migrations
+        run: python -m alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://ai20k_test:ai20k_test@localhost:${{ job.services.postgres.ports[5432] }}/ai20k_test
+
       - name: Run tests
         run: pytest tests/ -v --tb=short
         env:
           APP_ENV: test
           OPENAI_API_KEY: test-key
           JWT_SECRET_KEY: test-secret-key-with-at-least-32-bytes
+          DATABASE_URL: postgresql+psycopg://ai20k_test:ai20k_test@localhost:${{ job.services.postgres.ports[5432] }}/ai20k_test
+          DATABASE_AUTO_CREATE: "false"
 
       - name: Build Docker image
         run: docker build --tag ai20k-agent:ci .
