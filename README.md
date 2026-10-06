@@ -178,88 +178,145 @@ cp .env.example .env
 ### Lấy mã nguồn
 
 ```bash
-git clone --branch develop https://github.com/MaiVanTruong2310/T24-Build-Phase-AI-In-Action.git
-cd T24-Build-Phase-AI-In-Action
+git clone --branch develop https://github.com/AI20K-Build-Phase-Cohort-4/P-124.git
+cd P-124
 ```
+
+---
 
 ### Bước 1: Khởi tạo Backend
 
-1. **Tạo và kích hoạt môi trường ảo Python:**
-   ```bash
-   # Trên Windows (PowerShell)
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
+#### Cách 1: Cài đặt tự động bằng Installer (Khuyên dùng)
+Dự án cung cấp sẵn script thiết lập tự động môi trường, cấu hình file `.env` và kích hoạt Git Hooks:
 
-   # Trên Linux / macOS
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
+* **Trên Windows (CMD hoặc PowerShell):**
+  ```cmd
+  python scripts\install.py
+  ```
+* **Trên Linux / macOS:**
+  ```bash
+  python3 scripts/install.py
+  ```
 
-2. **Cài đặt các thư viện phụ thuộc:**
+---
+
+#### Cách 2: Thiết lập thủ công từng bước
+
+1. **Tạo và kích hoạt môi trường ảo (Virtual Environment):**
+
+   * **Windows (Command Prompt - CMD):**
+     ```cmd
+     python -m venv .venv
+     .venv\Scripts\activate.bat
+     ```
+
+   * **Windows (PowerShell):**
+     ```powershell
+     python -m venv .venv
+     .\.venv\Scripts\Activate.ps1
+     ```
+
+   * **macOS / Linux (Bash / Zsh):**
+     ```bash
+     python3 -m venv .venv
+     source .venv/bin/activate
+     ```
+
+2. **Cài đặt các gói phụ thuộc:**
    ```bash
-   pip install --upgrade pip
+   python -m pip install --upgrade pip
    pip install -r requirements.txt
    ```
 
-3. **Cài đặt cấu hình môi trường:**
-   Trên PowerShell, chạy `Copy-Item .env.example .env`; trên Linux/macOS dùng `cp .env.example .env`.
-   Cấu hình `DATABASE_URL`, `JWT_SECRET_KEY` và khóa provider LLM bạn sử dụng.
-   `DATABASE_AUTO_CREATE=true` tạo bảng ORM, không tự cung cấp dữ liệu bác sĩ hoặc lịch khám.
-   Biến LLM chưa có trong file mẫu có thể được thêm vào `.env` theo bảng ở trên.
+3. **Thiết lập file biến môi trường (`.env`):**
+   * **Windows (CMD):**
+     ```cmd
+     copy .env.example .env
+     ```
+   * **Windows (PowerShell):**
+     ```powershell
+     Copy-Item .env.example .env
+     ```
+   * **macOS / Linux:**
+     ```bash
+     cp .env.example .env
+     ```
+   * *Mở file `.env` vừa tạo và điền các khóa cấu hình: `DATABASE_URL`, `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY` và `AI_LOG_API_KEY` (từ Phoenix dashboard của BTC).*
 
-4. **Khởi chạy máy chủ Backend:**
-   ```bash
-   python scripts/run_backend.py --host 127.0.0.1 --port 8000
-   ```
-   * Launcher sử dụng selector loop tối ưu tương thích với `asyncio` trên Windows.
-   * Swagger UI tương tác trực tiếp tại: **<http://127.0.0.1:8000/docs>**
+4. **Kích hoạt AI Log Git Hooks:**
+   * **Windows (PowerShell):**
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File scripts\setup_hooks.ps1
+     ```
+   * **macOS / Linux:**
+     ```bash
+     bash scripts/setup_hooks.sh
+     ```
+
+5. **Khởi chạy máy chủ Backend FastAPI:**
+   * **Windows (CMD / PowerShell):**
+     ```cmd
+     python scripts\run_backend.py --host 127.0.0.1 --port 8000
+     # Hoặc khởi chạy trực tiếp qua uvicorn:
+     python -m uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
+     ```
+   * **macOS / Linux:**
+     ```bash
+     python3 scripts/run_backend.py --host 127.0.0.1 --port 8000
+     # Hoặc:
+     python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
+     ```
+   * Swagger UI kiểm thử API trực tiếp: **<http://127.0.0.1:8000/docs>**
    * Kiểm tra tình trạng sẵn sàng: **<http://127.0.0.1:8000/health/ready>**
 
 ---
 
-### Bước 2: Khởi tạo Frontend
+### Bước 2: Khởi tạo Frontend (React 19 + Vite)
 
-Mở một cửa sổ Terminal mới:
+Mở một cửa sổ Terminal mới tại thư mục gốc `P-124`:
 
 1. **Di chuyển vào thư mục frontend & cài đặt thư viện:**
-   ```bash
-   cd frontend
-   npm ci
-   ```
+   * **Windows (CMD / PowerShell):**
+     ```cmd
+     cd frontend
+     npm install
+     ```
+   * **macOS / Linux:**
+     ```bash
+     cd frontend
+     npm install
+     ```
 
 2. **Khởi chạy Frontend ở chế độ phát triển (Dev Mode):**
    ```bash
-   npm run dev -- --host localhost --port 5173
+   npm run dev
    ```
-   * Mở trình duyệt tại: **<http://localhost:5173>**
-   * Mặc định frontend gọi `http://localhost:8000`. Dùng cùng hostname `localhost` cho cả hai phía khi đăng nhập bằng cookie. Nếu đổi backend, cấu hình `VITE_API_BASE_URL` trong `frontend/.env.local` và cập nhật `CORS_ORIGINS` ở backend.
+   * Giao diện người dùng sẽ chạy tại: **<http://localhost:5173>**
+   * Mặc định frontend sẽ kết nối tới backend tại `http://localhost:8000`.
 
 ---
 
-### Bước 3: Chạy nhanh qua Docker (Tùy chọn)
+### Bước 3: Khởi chạy nhanh toàn bộ qua Docker (Tùy chọn)
 
-Nếu bạn đã cài đặt Docker và Docker Compose:
+Nếu bạn đã cài đặt Docker và Docker Compose trên máy:
 ```bash
 docker compose up --build
 ```
-Compose chạy backend và PostgreSQL; frontend vẫn chạy riêng theo Bước 2.
-Trước khi chạy, cấu hình `POSTGRES_PASSWORD` và `DATABASE_URL` trong `.env`;
-backend trong container kết nối tới hostname `postgres`, cổng `5432`, với user/database
-khớp `POSTGRES_USER` và `POSTGRES_DB` (mặc định `ai20k_app` và `ai20k`).
-Thư mục `data/` được mount vào backend để giữ dữ liệu ChromaDB qua các lần khởi động.
+Compose sẽ tự động xây dựng container cho Backend FastAPI và container PostgreSQL hỗ trợ pgvector.
 
 ---
 
-### Bước 4: Tạo Vector DB ChromaDB
+### Bước 4: Tạo cơ sở dữ liệu Vector DB ChromaDB (Tùy chọn)
 
-Repo chứa code tích hợp ChromaDB và script tạo chỉ mục. `data/chroma/`, file database
-và `.env` được bỏ qua bởi Git; clone hoặc pull không tải Vector DB có sẵn.
-
-Sau khi cài thư viện và cấu hình `GOOGLE_AI_API_KEY`, chạy từ thư mục gốc:
-
-```bash
-python scripts/build_vector_store.py
-```
+Nếu bạn muốn tạo lại chỉ mục vector embedding từ nguồn dữ liệu JSONL của Vinmec:
+* **Windows (CMD / PowerShell):**
+  ```cmd
+  python scripts\build_vector_store.py
+  ```
+* **macOS / Linux:**
+  ```bash
+  python3 scripts/build_vector_store.py
+  ```
 
 Script tạo embedding qua Gemini API, có sử dụng hạn ngạch API. Nguồn chuyên khoa
 `data/datalake/rag/specialties.jsonl` có trong Git. Hai nguồn tùy chọn
