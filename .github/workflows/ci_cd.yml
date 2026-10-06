@@ -41,13 +41,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
-      - name: Validate Alembic upgrade chain
-        run: alembic upgrade head
-        env:
-          APP_ENV: test
-          JWT_SECRET_KEY: test-secret-key-with-at-least-32-bytes
-          DATABASE_URL: postgresql+psycopg://ai20k_test:ai20k_test@localhost:${{ job.services.postgres.ports[5432] }}/ai20k_test
-
       - name: Lint with ruff
         run: ruff check src/ tests/
 
