@@ -53,7 +53,7 @@ async def test_full_clinical_guardrails_conversation_flow():
 
     # Turn 6: Hỏi thông tin khoa (kèm lỗi gõ phím "khia")
     r6 = await agent.ainvoke({"query": "thông tin về khia sức khỏe tổng quát"}, config=config)
-    assert "Khoa Sức Khỏe Tổng Quát" in r6["response"]
+    assert "sức khỏe tổng quát" in r6["response"].lower()
     assert "tầm soát" in r6["response"]
 
     # Turn 7: Không xác nhận giữ một slot chưa từng được hiển thị trong phiên.

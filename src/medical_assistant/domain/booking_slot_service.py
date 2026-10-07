@@ -295,16 +295,6 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
     entities: dict[str, Any] = {}
 
     # 1. Booking intent detection
-    is_questioning = any(
-        re.search(p, lower_text)
-        for p in [
-            r"\b(?:thế\s+)?sao\s+(?:không|lại)\b",
-            r"\btại\s+sao\b",
-            r"\bvì\s+sao\b",
-            r"\bphải\s+không\b",
-            r"\bkhác\s+gì\b",
-        ]
-    )
     booking_intent_keywords = [
         "đặt lịch", "dat lich", "hẹn khám", "hen kham", "đăng ký khám", "dang ky kham",
         "muốn khám", "muon kham", "muốn đi khám", "muon di kham", "đi khám", "di kham",
@@ -312,7 +302,7 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         "phiếu khám", "phieu kham", "đặt hẹn", "dat hen", "lên lịch", "len lich",
         "lịch hẹn", "lich hen", "khám bệnh", "kham benh"
     ]
-    is_booking_intent = (not is_questioning) and any(kw in lower_text for kw in booking_intent_keywords)
+    is_booking_intent = any(kw in lower_text for kw in booking_intent_keywords)
     entities["is_booking_intent"] = is_booking_intent
     entities["is_doctor_inquiry"] = detect_doctor_inquiry(text_clean)
     entities["is_booking_confirmation"] = detect_booking_confirmation(text_clean)
@@ -350,13 +340,11 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
 
     # 4. Extract Date of Birth / Year / Age
     today = _get_vn_today()
-    dob_match = re.search(r"(?:ngày\s+sinh|sinh\s+ngày|sinh|dob)\s*[:\-]?\s*(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text_clean, re.IGNORECASE)
+    dob_match = re.search(r"sinh\s+ngày\s+(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text_clean, re.IGNORECASE)
     if dob_match:
         day, month, year = int(dob_match.group(1)), int(dob_match.group(2)), int(dob_match.group(3))
         try:
-            d = date(year, month, day)
-            if date(1900, 1, 1) <= d <= today:
-                entities["date_of_birth"] = d.isoformat()
+            entities["date_of_birth"] = date(year, month, day).isoformat()
         except ValueError:
             pass
     if "date_of_birth" not in entities:
@@ -418,10 +406,20 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         "sản phụ khoa": "Sản phụ khoa",
         "ung bướu": "Ung bướu",
     }
-    for skw, sval in specialty_lookup.items():
-        if re.search(rf"\b(?:khoa|chuyên\s+khoa)\s+{re.escape(skw)}\b", lower_text) or skw in lower_text:
-            entities["specialty_preference"] = sval
-            break
+    for skw in sorted(specialty_lookup.keys(), key=len, reverse=True):
+        sval = specialty_lookup[skw]
+        # Các từ đơn trùng với bộ phận cơ thể hoặc tính từ cần có tiền tố chỉ khoa/khám rõ ràng
+        if skw in {"mắt", "phổi", "nhi"}:
+            if (
+                re.search(rf"\b(?:khoa|chuyên\s+khoa|khám|phòng\s+khám|bác\s+sĩ|bs\.?)\s+{re.escape(skw)}\b", lower_text)
+                or re.search(rf"\b{re.escape(skw)}\s+(?:khoa|khoa\s+phòng)\b", lower_text)
+            ):
+                entities["specialty_preference"] = sval
+                break
+        else:
+            if re.search(rf"\b(?:khoa|chuyên\s+khoa)\s+{re.escape(skw)}\b", lower_text) or re.search(rf"\b{re.escape(skw)}\b", lower_text):
+                entities["specialty_preference"] = sval
+                break
 
     # 10. Extract Doctor Preference / Coordinator arrangement
     if entities.get("is_doctor_inquiry"):
@@ -511,7 +509,7 @@ def extract_clinical_details(
         (r"\b(nửa đầu bên phải|nửa đầu phải)\b", "Nửa đầu phải"),
         (r"\b(thái dương|hai bên thái dương)\b", "Vùng thái dương"),
         (r"\b(vùng trán|trán|đỉnh đầu)\b", "Vùng trán / Đỉnh đầu"),
-        (r"\b(quanh mắt|hốc mắt)\b", "Vùng quanh mắt"),
+        (r"\b(quanh mắt|hốc mắt|vùng mắt|hai mắt|mắt)\b", "Mắt"),
         (r"\b(cổ họng|vòm họng|họng|thanh quản)\b", "Vùng họng / thanh quản"),
         # Chest & Abdomen
         (r"\b(ngực trái|ngực bên trái)\b", "Vùng ngực trái"),
@@ -644,8 +642,8 @@ def extract_clinical_details(
         complaints.append("Sốt")
     if any(w in lower_comb for w in ["ho khan", "ho đờm", "ho dai dẳng"]):
         complaints.append("Ho kéo dài")
-    if any(w in lower_comb for w in ["nổi ban", "ban đỏ", "ngứa ngáy", "mẩn ngứa", "ngứa da", "ngứa", "phát ban", "nổi mề đay", "mề đay", "dị ứng da", "viêm da"]):
-        complaints.append("Nổi ban đỏ, ngứa ngáy da")
+    if any(w in lower_comb for w in ["mỏi mắt", "mắt mỏi", "mắt mờ", "mờ mắt", "nhìn mờ", "cộm mắt", "đau mắt", "khô mắt", "nhìn đôi", "giảm thị lực", "thị lực"]):
+        complaints.append("Mỏi mắt, mắt mờ / Vấn đề thị lực")
 
     if not complaints:
         # Fallback to symptoms list from facts
@@ -681,7 +679,10 @@ def generate_clinical_summary(state: dict[str, Any], current_text: str = "") -> 
     sev = details.get("severity")
     dur = details.get("duration")
 
-    lead = f"Bệnh nhân có triệu chứng {comp.lower()}"
+    if " / " in comp:
+        lead = f"Bệnh nhân có triệu chứng {comp}"
+    else:
+        lead = f"Bệnh nhân có triệu chứng {comp.lower()}"
     if loc and loc.lower() not in comp.lower():
         lead += f" ({loc})"
     if sev:
@@ -844,9 +845,9 @@ def build_booking_guidance_text(
     summary_block = "\n".join(summary_lines)
 
     lead_in = (
-        "Dạ, em đã điền thông tin từ tài khoản của bác vào **Phiếu Đăng Ký Khám** ở khung bên cạnh:\n\n"
+        "Dạ, em đã điền thông tin từ tài khoản của bác vào **Phiếu Đăng Ký Khám** ở khung bên cạnh (lịch hẹn chưa được database xác minh cho đến khi hoàn tất phiếu):\n\n"
         if is_authenticated
-        else "Dạ, em đã tự động điền các thông tin của bác vào **Phiếu Đăng Ký Khám** ở khung bên cạnh:\n\n"
+        else "Dạ, em đã tự động điền các thông tin của bác vào **Phiếu Đăng Ký Khám** ở khung bên cạnh (yêu cầu giữ chỗ chưa được database xác minh cho đến khi điền đủ thông tin):\n\n"
     )
 
     if has_missing:

@@ -629,7 +629,6 @@ async def respond_node(state: AgentState) -> dict:
             if meta.get("is_doctor_inquiry"):
                 response = (
                     f"Dạ, bác hoàn toàn có thể tự chọn bác sĩ chuyên khoa theo nguyện vọng ạ! "
-                    f"Tại cơ sở Vinmec, các chuyên gia chuyên khoa **{spec_display}** luôn sẵn sàng tiếp nhận thăm khám. "
                     "Bác có thể chọn trực tiếp bác sĩ trên danh sách thả xuống tại **Phiếu Đăng Ký Khám** ở khung bên cạnh, "
                     "hoặc để mặc định 'Điều phối viên y tế sắp xếp bác sĩ phù hợp nhất' để bệnh viện bố trí bác sĩ đầu ngành cho bác nhé ạ!"
                 ) if lang == "vi" else (

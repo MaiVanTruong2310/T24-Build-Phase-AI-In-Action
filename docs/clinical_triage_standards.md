@@ -82,4 +82,4 @@ class TriageAnalysisResult(BaseModel):
     user_advice: str
 ```
 
-File này đã được lưu vào workspace tại: [`docs/clinical_triage_standards.md`](file:///d:/AI%20in%20Action/LogAgent/P-124/docs/clinical_triage_standards.md).
+File này đã được lưu vào workspace tại: [`docs/clinical_triage_standards.md`](docs/clinical_triage_standards.md).

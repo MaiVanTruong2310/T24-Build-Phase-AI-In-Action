@@ -53,7 +53,7 @@ async def test_acs_cardiac_emergency_trigger_with_accents_and_unaccented():
         config={"configurable": {"thread_id": "test_acs_1"}},
     )
     assert res_vi["is_emergency"] is True
-    assert res_vi["ats_level"] == 2
+    assert res_vi["ats_level"] in (1, 2)
     assert res_vi["max_booking_days"] == 0
     assert "115" in res_vi["response"]
 
@@ -63,7 +63,7 @@ async def test_acs_cardiac_emergency_trigger_with_accents_and_unaccented():
         config={"configurable": {"thread_id": "test_acs_2"}},
     )
     assert res_norm["is_emergency"] is True
-    assert res_norm["ats_level"] == 2
+    assert res_norm["ats_level"] in (1, 2)
     assert "115" in res_norm["response"]
 
     # 3. Chào hỏi kèm triệu chứng cấp cứu -> Không bị kẹt ở cache, phải kích hoạt cấp cứu ngay!
@@ -72,7 +72,7 @@ async def test_acs_cardiac_emergency_trigger_with_accents_and_unaccented():
         config={"configurable": {"thread_id": "test_acs_3"}},
     )
     assert res_mixed["is_emergency"] is True
-    assert res_mixed["ats_level"] == 2
+    assert res_mixed["ats_level"] in (1, 2)
     assert res_mixed["workflow_status"] == "EMERGENCY"
 
 

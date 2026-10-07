@@ -77,7 +77,7 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
             "Em có thể hỗ trợ bác:\n"
             "1. 🩺 **Định hướng chuyên khoa:** Phân tích triệu chứng và đề xuất khoa khám phù hợp.\n"
             "2. 👨‍⚕️ **Tra cứu bác sĩ & Khung giờ:** Tìm bác sĩ chuyên khoa giỏi và ca khám còn trống.\n"
-            "3. 📅 **Giữ chỗ đặt lịch hẹn (Hold 15 phút):** Giữ slot khám và gửi Lễ tân phê duyệt.\n\n"
+            "3. 📅 **Hỗ trợ đặt hẹn khám:** Gửi yêu cầu đặt lịch để điều phối viên y tế liên hệ xác nhận.\n\n"
             "Bác vui lòng chia sẻ: **Hiện tại bác đang cảm thấy khó chịu hoặc có triệu chứng gì ở đâu ạ?**"
         ),
         response_en=(
@@ -85,7 +85,7 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
             "I can assist you with:\n"
             "1. 🩺 **Specialty Guidance:** Analyze your symptoms and recommend the appropriate clinical department.\n"
             "2. 👨‍⚕️ **Doctor & Schedule Lookup:** Search available appointment slots with experienced specialists.\n"
-            "3. 📅 **Slot Reservation (15-min Hold):** Temporarily reserve your preferred slot and notify reception.\n\n"
+            "3. 📅 **Appointment Request Assistance:** Submit booking requests for coordinator verification.\n\n"
             "Please share: **What symptoms or health concerns are you experiencing today?**"
         ),
         quick_replies_vi=[

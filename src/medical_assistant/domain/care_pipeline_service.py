@@ -50,7 +50,7 @@ ANATOMICAL_SYSTEMS = {
         "name": "Khoa Thần kinh",
         "organ_name": "Não bộ & Hệ thần kinh trung ương",
         "patterns": [
-            r"\b(?:dau\s+dau(?!\s+goi)|nhuc\s+dau(?!\s+goi)|nua\s+dau|chong\s+mat|choang\s+ngat|choang\s+vang|tien\s+ngat|ngat\s+thoang\s+qua|yeu\s+tay|yeu\s+chan|tay.*yeu|yeu.*tay|cam\s+dua.*roi|yeu\s+chi|yeu\s+nua\s+nguoi|nhin\s+mo|mo\s+mat|sup\s+mi|meo\s+mieng|noi\s+do|co\s+giat|day\s+than\s+kinh|quay\s+cuong|dien\s+giat|nua\s+mat)\b"
+            r"\b(?:dau\s+dau(?!\s+goi)|nhuc\s+dau(?!\s+goi)|nua\s+dau|chong\s+mat|choang\s+ngat|choang\s+vang|tien\s+ngat|ngat\s+thoang\s+qua|yeu\s+tay|yeu\s+chan|tay.*yeu|yeu.*tay|cam\s+dua.*roi|yeu\s+chi|yeu\s+nua\s+nguoi|sup\s+mi|meo\s+mieng|noi\s+do|co\s+giat|day\s+than\s+kinh|quay\s+cuong|dien\s+giat|nua\s+mat)\b"
         ],
         "rationale": "Não bộ và hệ thần kinh trung ương kiểm soát toàn bộ cơ thể; cần ưu tiên đánh giá sớm để loại trừ đột quỵ, cơn thiếu máu não thoáng qua hoặc tổn thương nội sọ.",
     },
@@ -133,7 +133,7 @@ ANATOMICAL_SYSTEMS = {
         "name": "Khoa Mắt",
         "organ_name": "Thị giác & Mắt",
         "patterns": [
-            r"\b(?:mat\s+bi\s+(?:com|ngua|do)|com\s+mat|mat\s+do|ngua\s+mat|chay\s+nuoc\s+mat|dau\s+mat|nhan\s+khoa|thi\s+luc)\b"
+            r"\b(?:moi\s+mat|mat\s+moi|mat\s+mo|mo\s+mat|nhin\s+mo|nhin\s+doi|com\s+mat|mat\s+do|ngua\s+mat|chay\s+nuoc\s+mat|dau\s+mat|kho\s+mat|nhan\s+khoa|thi\s+luc|can\s+thi|loan\s+thi|vien\s+thi|giam\s+thi\s+luc)\b"
         ],
         "rationale": "Cơ quan thị giác bề mặt; kiểm tra bảo tồn chức năng nhìn.",
     },
@@ -142,7 +142,7 @@ ANATOMICAL_SYSTEMS = {
         "name": "Khoa Da liễu",
         "organ_name": "Bề mặt da & Phần phụ",
         "patterns": [
-            r"\b(?:man\s+ngua|ngua\s+da|noi\s+me\s+day|me\s+day|mun\s+boc|mun\s+viem|da\s+lieu|vay\s+nen|viem\s+da|ngua\s+khap\s+nguoi|ngua\s+do|vung\s+da.*ngua|ban\s+do|noi\s+ban|ngua\s+ngay|phat\s+ban|noi\s+man|man\s+do|di\s+ung\s+da|san\s+ngua)\b"
+            r"\b(?:man\s+ngua|ngua\s+da|noi\s+me\s+day|mun\s+boc|mun\s+viem|da\s+lieu|vay\s+nen|viem\s+da|ngua\s+khap\s+nguoi|ngua\s+do|vung\s+da.*ngua)\b"
         ],
         "rationale": "Tổn thương da liễu bề mặt; điều trị giảm triệu chứng ngứa và bảo vệ hàng rào bảo vệ cơ thể.",
     },

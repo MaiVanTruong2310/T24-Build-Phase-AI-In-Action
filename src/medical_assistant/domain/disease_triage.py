@@ -1,4 +1,12 @@
-from enum import Enum, StrEnum
+from enum import Enum
+
+try:
+    from enum import StrEnum
+except ImportError:
+    class StrEnum(str, Enum):
+        """Python 3.10 fallback for StrEnum."""
+        pass
+
 
 from pydantic import BaseModel, Field, model_validator
 

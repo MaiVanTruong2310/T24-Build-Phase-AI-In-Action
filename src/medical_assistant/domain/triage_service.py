@@ -70,6 +70,7 @@ class ClinicalTriageService:
             ["severity", "trauma", "numbness_weakness"],
         ),
         "fever": ("TONG_QUAT", "Nội tổng quát", ["duration", "temperature", "rash", "shortness_of_breath"]),
+        "eye_symptoms": ("MAT", "Mắt (Nhãn khoa)", ["duration", "severity", "vision_changes"]),
     }
 
     def __init__(self):
@@ -1318,55 +1319,6 @@ class ClinicalTriageService:
                     patient_guidance=guidance,
                 )
 
-            # Da liễu / Ban đỏ ngoài da / Ngứa ngáy (không có suy hô hấp, không sốc)
-            has_dermatology = any(
-                term in clean_user_text
-                for term in (
-                    "nổi ban đỏ",
-                    "ban đỏ",
-                    "nổi ban",
-                    "ngứa ngáy",
-                    "nổi mẩn",
-                    "mẩn đỏ",
-                    "phát ban",
-                    "ngứa da",
-                    "dị ứng da",
-                    "mề đay",
-                    "nổi mề đay",
-                    "da liễu",
-                    "viêm da",
-                    "nổi sẩn",
-                    "sẩn ngứa",
-                )
-            )
-            if has_dermatology and not safety_emergency:
-                guidance = get_triage_guidance(
-                    specialty="Da liễu",
-                    ats_level=4,
-                    max_days=7,
-                    language=lang,
-                )
-                return TriageEvaluationResult(
-                    ats_level=ATSLevel.LEVEL_4_STANDARD,
-                    urgency_tier=UrgencyTier.WITHIN_WEEK,
-                    max_booking_days=7,
-                    is_emergency=False,
-                    care_setting="OUTPATIENT_CLINIC",
-                    triggered_red_flags=[],
-                    triggered_rule_ids=[],
-                    suggested_specialty="Da liễu",
-                    recommended_specialties=[
-                        SpecialtyRecommendation(
-                            code="DA_LIEU",
-                            name="Da liễu",
-                            priority=1,
-                            rationale="Triệu chứng ngoài da (nổi ban đỏ, ngứa ngáy)",
-                        )
-                    ],
-                    clarification_question=None,
-                    patient_guidance=guidance,
-                )
-
             # Dị ứng nhẹ / Da liễu (không có suy hô hấp, không sốc)
             has_mild_allergy = any(
                 term in clean_user_text
@@ -1669,6 +1621,26 @@ class ClinicalTriageService:
                 "dizziness",
             ]
         )
+        has_eye = any(
+            kw in clean_user_text
+            for kw in [
+                "mắt",
+                "thị lực",
+                "mỏi mắt",
+                "mắt mờ",
+                "mờ mắt",
+                "nhìn mờ",
+                "cộm mắt",
+                "đau mắt",
+                "nhãn khoa",
+                "cận thị",
+                "loạn thị",
+                "viễn thị",
+                "eye",
+                "vision",
+                "blur",
+            ]
+        )
         has_resp = any(
             kw in clean_user_text
             for kw in [
@@ -1899,6 +1871,8 @@ class ClinicalTriageService:
             elif rec_spec_code in ["THAN_KINH"]:
                 if has_neuro:
                     score += 15
+                if has_eye and not any(w in clean_user_text for w in ["đầu", "trán", "thái dương", "headache", "liệt", "co giật", "mất ý thức", "nói khó"]):
+                    score -= 30  # Phạt nặng gán nhầm bệnh thần kinh khi chỉ có triệu chứng mắt đơn thuần
 
             if score >= 10:
                 candidates.append({"record": record, "score": score, "flags": rec_matched_flags[:3]})
@@ -2031,7 +2005,9 @@ class ClinicalTriageService:
         # BƯỚC 4: Fallback — dùng Specialty Router thay vì luôn trả "Sức khỏe tổng quát"
         router_result = specialty_router.route(query=user_text)
         fallback_spec = (
-            router_result.get("specialty_name") if router_result.get("confidence", 0.0) >= 0.1 else "Sức khỏe tổng quát"
+            router_result.get("specialty_name")
+            if router_result.get("confidence", 0.0) >= 0.1
+            else ("Mắt (Nhãn khoa)" if has_eye else "Sức khỏe tổng quát")
         )
 
         if safety_emergency and safety_ats is not None:
@@ -2162,7 +2138,7 @@ class ClinicalTriageService:
                     else ATSLevel.LEVEL_4_STANDARD
                 )
             )
-            has_deterministic_evidence = "deterministic" in value["sources"]
+            has_deterministic_evidence = any(s in ("deterministic", "rule_fallback") for s in value["sources"])
             has_independent_evidence = bool(
                 has_deterministic_evidence
                 and value["complaint_codes"]

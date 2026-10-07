@@ -1,9 +1,9 @@
 # BÁO CÁO TOÀN DIỆN: TÍCH HỢP, CHIA NHỎ DATASET & PHÂN TÍCH BENCHMARK DDXPLUS (MILA / NEURIPS 2022)
 
 > **Dự án:** Trợ lý Y tế Thông minh & Điều phối Đặt khám Vinmec (P-124 / AI20K)  
-> **Thực hiện:** Truong-doing  
+> **Thực hiện:**   
 > **Dự án:** Trợ lý Y tế Thông minh & Điều phối Đặt khám Vinmec (P-124 / AI20K)  
-> **Thực hiện:** Truong-doing  
+> **Thực hiện:**   
 > **Phiên bản:** v3.0.0 (Cập nhật 28/09/2026 - Nghiệm thu Safety Engine v3 & Chuẩn hóa Strict Blind Benchmark)  
 > **Dữ liệu nguồn:** Viện Trí tuệ Nhân tạo Mila (Quebec AI Institute) — *NeurIPS 2022 Datasets and Benchmarks Track*
 

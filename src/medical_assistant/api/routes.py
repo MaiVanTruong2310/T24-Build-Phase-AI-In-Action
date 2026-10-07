@@ -165,6 +165,8 @@ async def prepare_turn(request, user, session):
 
 async def run_turn(request, user, payload, turn, service, guest_token=""):
     started = time.perf_counter()
+    if turn and turn.get("cached"):
+        return turn["cached"]
     from src.db.session import get_session_factory
     from src.services.coordinator_chat import before_turn, after_turn, waiting_response
     try:
@@ -176,8 +178,6 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
         payload["session_id"] = request.session_id
         if user:
             payload["user_id"] = payload.get("clinical_subject_id") or str(user.id)
-        if turn and turn.get("cached"):
-            return turn["cached"]
         if emergency:
             result = {**payload, "is_emergency": True, "ats_level": emergency.ats_level.value,
                       "max_booking_days": 0, "urgency_tier": emergency.urgency_tier.value,
@@ -410,10 +410,28 @@ async def create_booking_request(
 
 
 @router.get("/status")
-async def agent_status():
-    """Kiểm tra trạng thái agent."""
+async def agent_status(request: Request):
+    """Kiểm tra trạng thái agent và sức khỏe các LLM providers."""
+    llm_health = getattr(request.app.state, "llm_health", None)
+    if llm_health is None:
+        try:
+            from src.medical_assistant.infrastructure.llm import get_llm
+            llm_inst = get_llm()
+            if hasattr(llm_inst, "acheck_health"):
+                llm_health = await llm_inst.acheck_health()
+        except Exception as exc:
+            llm_health = {"error": str(exc)}
     return {
         "status": "ready",
         "agent": "LangGraph Clinical Triage Agent v1.0",
         "features": ["session_memory", "sse_streaming", "ats_triage"],
+        "llm_health": llm_health,
     }
+
+
+@router.get("/admin/metrics/daily")
+async def daily_metrics(date: str | None = Query(None, description="Ngày cần xem thống kê (YYYY-MM-DD)")):
+    """Thống kê tỷ lệ fallback/clarify/data_unavailable theo ngày từ structured telemetry log."""
+    from src.medical_assistant.infrastructure.telemetry_logger import get_daily_telemetry_metrics
+
+    return get_daily_telemetry_metrics(target_date=date)

@@ -461,3 +461,113 @@ def get_doctor_schedule_service() -> DoctorScheduleService:
     if _doctor_schedule_service is None:
         _doctor_schedule_service = DoctorScheduleService()
     return _doctor_schedule_service
+
+
+async def fetch_available_doctors_slots(
+    specialty_name: str | None,
+    requested_days: int | None = None,
+    preferred_period: str | None = None,
+    facility_id: str | None = None,
+    limit_doctors: int = 3,
+    slots_per_doctor: int = 2,
+) -> tuple[list[dict[str, Any]], bool, str | None]:
+    """Truy vấn danh sách bác sĩ và slot rảnh từ Supabase/service một cách an toàn.
+
+    Returns:
+        tuple (available_slots, data_unavailable, data_unavailable_reason)
+    """
+    import asyncio
+
+    try:
+        doctor_service = get_doctor_schedule_service()
+    except ValueError as exc:
+        logger.warning("Supabase schedule service not configured: %s", exc)
+        return [], True, "DATABASE_NOT_CONFIGURED"
+    except Exception as exc:
+        logger.warning("Supabase schedule service initialization failed: %s (%s)", type(exc).__name__, exc)
+        return [], True, f"INIT_ERROR: {type(exc).__name__}"
+
+    try:
+        doctors_with_slots = await asyncio.to_thread(
+            doctor_service.get_available_doctors_and_slots,
+            specialty_name=specialty_name,
+            limit_doctors=limit_doctors,
+            slots_per_doctor=slots_per_doctor,
+            requested_days=requested_days,
+            preferred_period=preferred_period,
+            facility_id=facility_id,
+        )
+        return doctors_with_slots, False, None
+    except Exception as exc:
+        logger.error(
+            "Querying doctor slots failed for specialty '%s': %s (%s)",
+            specialty_name,
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
+        return [], True, f"QUERY_ERROR: {type(exc).__name__}"
+
+
+_TURN_SLOT_CACHE: dict[tuple[str, int, str | None, str | None], tuple[list[dict[str, Any]], bool, str | None]] = {}
+
+
+def clear_turn_slot_cache() -> None:
+    """Xóa cache slot lượt hội thoại (phục vụ test)."""
+    _TURN_SLOT_CACHE.clear()
+
+
+async def fetch_available_doctors_slots_cached(
+    state: dict[str, Any] | None = None,
+    specialty_name: str | None = None,
+    requested_days: int | None = None,
+    preferred_period: str | None = None,
+    facility_id: str | None = None,
+    limit_doctors: int = 3,
+    slots_per_doctor: int = 2,
+) -> tuple[list[dict[str, Any]], bool, str | None]:
+    """Truy vấn slot có cache theo thread_id + lượt trong state.
+
+    Đảm bảo trong 1 lượt hội thoại, analyze_node, find_doctors_node và respond_node
+    chỉ gọi truy vấn DB duy nhất một lần.
+    """
+    state_dict = state or {}
+    meta = state_dict.get("metadata") or {}
+
+    # 1. Nếu state đã có kết quả trong cùng lượt -> trả về ngay
+    if meta.get("slots_fetched_in_turn") and state_dict.get("available_slots") is not None:
+        return (
+            state_dict.get("available_slots") or [],
+            bool(meta.get("data_unavailable")),
+            meta.get("data_unavailable_reason"),
+        )
+
+    # 2. Kiểm tra bộ nhớ cache theo thread_id và turn
+    thread_id = (
+        state_dict.get("session_id")
+        or state_dict.get("thread_id")
+        or meta.get("session_id")
+        or meta.get("thread_id")
+        or "default_session"
+    )
+    turn = (
+        state_dict.get("probing_turn")
+        or len([m for m in (state_dict.get("messages") or []) if isinstance(m, dict) and m.get("role") == "user"])
+        or 0
+    )
+    cache_key = (str(thread_id), int(turn), specialty_name, facility_id)
+    if cache_key in _TURN_SLOT_CACHE:
+        return _TURN_SLOT_CACHE[cache_key]
+
+    # 3. Thực hiện truy vấn thực tế
+    res = await fetch_available_doctors_slots(
+        specialty_name=specialty_name,
+        requested_days=requested_days,
+        preferred_period=preferred_period,
+        facility_id=facility_id,
+        limit_doctors=limit_doctors,
+        slots_per_doctor=slots_per_doctor,
+    )
+    _TURN_SLOT_CACHE[cache_key] = res
+    return res
+

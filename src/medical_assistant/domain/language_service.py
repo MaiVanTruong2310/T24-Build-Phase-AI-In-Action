@@ -29,6 +29,8 @@ SPECIALTY_BILINGUAL_MAP: dict[str, dict[str, str]] = {
     "NHI_KHOA": {"vi": "Nhi khoa", "en": "Pediatrics"},
     "SAN_PHU_KHOA": {"vi": "Sản phụ khoa", "en": "Obstetrics & Gynecology"},
     "UNG_BUOU": {"vi": "Ung bướu", "en": "Oncology"},
+    "MAT": {"vi": "Mắt (Nhãn khoa)", "en": "Ophthalmology"},
+    "NHAN_KHOA": {"vi": "Mắt (Nhãn khoa)", "en": "Ophthalmology"},
     "DA_KHOA": {"vi": "Sức khỏe tổng quát", "en": "General Internal Medicine"},
     "TONG_QUAT": {"vi": "Sức khỏe tổng quát", "en": "General Internal Medicine"},
     "CAP_CUU": {"vi": "Cấp cứu", "en": "Emergency Department"},
@@ -222,14 +224,59 @@ def get_specialty_display_name(specialty_input: str, language: str = "vi") -> st
     """
     clean_input = specialty_input.strip()
     clean_lower = clean_input.lower()
+    clean_normalized = clean_lower.replace("_", " ").replace("-", " ")
+
+    # Thử chuẩn hóa loại bỏ tiền tố thường gặp
+    prefix_stripped = re.sub(r"^(khám|khoa|phòng khám|trung tâm)\s+", "", clean_normalized).strip()
 
     # Tìm mã chuyên khoa
-    code = _VI_NAME_TO_CODE.get(clean_lower)
+    code = (
+        _VI_NAME_TO_CODE.get(clean_lower)
+        or _VI_NAME_TO_CODE.get(clean_normalized)
+        or _VI_NAME_TO_CODE.get(prefix_stripped)
+    )
     if not code:
         for k, names in SPECIALTY_BILINGUAL_MAP.items():
-            if clean_lower in names["vi"].lower() or clean_lower in names["en"].lower():
+            vi_name = names["vi"].lower()
+            en_name = names["en"].lower()
+            if (
+                clean_lower == vi_name
+                or clean_normalized == vi_name
+                or prefix_stripped == vi_name
+                or vi_name in clean_normalized
+                or clean_normalized in vi_name
+                or clean_normalized in en_name
+            ):
                 code = k
                 break
+
+    if not code:
+        if any(w in clean_normalized for w in ["tổng quát", "tong quat", "đa khoa", "da khoa", "general internal"]):
+            code = "TONG_QUAT"
+        elif any(w in clean_normalized for w in ["thần kinh", "than kinh", "neurology"]):
+            code = "THAN_KINH"
+        elif any(w in clean_normalized for w in ["tiêu hóa", "tieu hoa", "gan mật", "gastroenterology"]):
+            code = "TIEU_HOA"
+        elif any(w in clean_normalized for w in ["hô hấp", "ho hap", "phổi", "pulmonology"]):
+            code = "HO_HAP"
+        elif any(w in clean_normalized for w in ["tim mạch", "tim mach", "cardiology"]):
+            code = "TIM_MACH"
+        elif any(w in clean_normalized for w in ["tai mũi họng", "tai mui hong", "ent"]):
+            code = "TAI_MUI_HONG"
+        elif any(w in clean_normalized for w in ["xương khớp", "xuong khop", "chấn thương", "cột sống", "orthopedics"]):
+            code = "XUONG_KHOP"
+        elif any(w in clean_normalized for w in ["nhi", "trẻ em", "pediatric"]):
+            code = "NHI_KHOA"
+        elif any(w in clean_normalized for w in ["sản", "phụ khoa", "obstetrics", "gynecology"]):
+            code = "SAN_PHU_KHOA"
+        elif any(w in clean_normalized for w in ["ung bướu", "ung buou", "ung thư", "oncology"]):
+            code = "UNG_BUOU"
+        elif any(w in clean_normalized for w in ["da liễu", "da lieu", "dermatology"]):
+            code = "DA_LIEU"
+        elif any(w in clean_normalized for w in ["mắt", "mat", "nhãn khoa", "nhan khoa", "ophthalmology", "eye"]):
+            code = "MAT"
+        elif any(w in clean_normalized for w in ["cấp cứu", "cap cuu", "emergency"]):
+            code = "CAP_CUU"
 
     if code and code in SPECIALTY_BILINGUAL_MAP:
         return SPECIALTY_BILINGUAL_MAP[code].get(language, SPECIALTY_BILINGUAL_MAP[code]["vi"])
@@ -380,18 +427,17 @@ def get_triage_guidance(
 
 
 def get_hold_booking_response(slot_id: str, specialty: str, language: str = "vi") -> tuple[str, list[str]]:
-    """Trả về thông báo giữ chỗ slot 15 phút song ngữ."""
+    """Trả về thông báo tiếp nhận yêu cầu đặt khám song ngữ."""
     spec_display = get_specialty_display_name(specialty, language)
-    booking_code = f"BK-{slot_id[:6].upper()}"
+    req_code = f"REQ-{slot_id[:8].upper()}"
     if language == "en":
         response = (
-            f"✅ **Appointment Reserved Successfully! (Reservation Code: `{booking_code}`)**\n\n"
-            f"📋 **Temporary Reservation Details:**\n"
+            f"✅ **Appointment Request Submitted! (Reference Code: `{req_code}`)**\n\n"
+            f"📋 **Request Details:**\n"
             f"• **Department:** {spec_display}\n"
             f"• **Slot ID:** `{slot_id}`\n"
-            f"• **Hold Duration:** **15 minutes** (Slot is temporarily locked for you)\n"
-            f"• **Status:** Forwarded to Vinmec Reception Desk for confirmation\n\n"
-            f"📞 Our medical receptionist will contact you shortly to verify your personal details and finalize the appointment. "
+            f"• **Status:** Forwarded to Vinmec Medical Coordinator for review\n\n"
+            f"📞 Our medical coordinator will contact you shortly to verify your details and finalize the appointment. "
             f"Please keep your phone accessible.\n\n"
             f"💡 *Would you like preparation instructions or pricing details before your visit?*"
         )
@@ -402,13 +448,12 @@ def get_hold_booking_response(slot_id: str, specialty: str, language: str = "vi"
         ]
     else:
         response = (
-            f"✅ **Giữ chỗ thành công! (Mã giữ chỗ: `{booking_code}`)**\n\n"
-            f"📋 **Thông tin ca khám tạm giữ:**\n"
+            f"✅ **Yêu cầu đặt hẹn đã được ghi nhận! (Mã yêu cầu: `{req_code}`)**\n\n"
+            f"📋 **Thông tin yêu cầu khám:**\n"
             f"• **Chuyên khoa:** {spec_display}\n"
             f"• **Mã slot:** `{slot_id}`\n"
-            f"• **Thời hạn giữ chỗ:** **15 phút** (Slot đã được khóa tạm thời trên hệ thống)\n"
-            f"• **Trạng thái:** Đang gửi thông báo đến Lễ tân phòng khám\n\n"
-            f"📞 Nhân viên y tế sẽ gọi điện thoại cho bác trong ít phút để kiểm tra và xác nhận lịch hẹn chính thức. Bác vui lòng để ý chuông điện thoại nhé!\n\n"
+            f"• **Trạng thái:** Đang chuyển thông tin đến Điều phối viên y tế phòng khám\n\n"
+            f"📞 Điều phối viên y tế sẽ gọi điện thoại cho bác trong thời gian sớm nhất để kiểm tra và xác nhận lịch hẹn chính thức. Bác vui lòng để ý chuông điện thoại nhé!\n\n"
             f"💡 *Bác có cần chuẩn bị hay hỏi thêm thông tin gì trước buổi khám không ạ?*"
         )
         quick_replies = [

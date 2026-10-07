@@ -24,7 +24,7 @@ Xây dựng một **Conversational AI Agent (Trợ lý Y tế Thông minh)** đ�
 2. **Clinical Triage & Guardrails nghiêm ngặt (Chuẩn ATS):** Phát hiện lập tức cờ đỏ (Red Flags/Emergency < 1ms) để ngắt luồng và hướng dẫn cấp cứu 115; áp dụng Guardrails SAF-02 chặn tuyệt đối việc chẩn đoán bệnh ("Bác bị bệnh X") hoặc kê đơn thuốc, chỉ định hướng chuyên khoa và cửa sổ thời gian khám an toàn (`max_booking_days`).
 3. **Zero-Token Cache & Tiết kiệm Chi phí LLM:** Cơ chế Cache FAQ thông minh và In-Process Triage Engine giúp tiết kiệm tới 100% token cho các câu hỏi hành chính, bảng giá, cấp cứu và vi phạm an toàn y tế.
 4. **Grounded Search (RAG):** Truy xuất thông tin bác sĩ, bảng giá, cơ sở dựa trên dữ liệu chuẩn hóa của bệnh viện (Supabase PostgreSQL + pgvector + Datalake chuẩn hóa gồm 692 mặt bệnh và 992 hồ sơ bác sĩ), loại bỏ hoàn toàn hiện tượng ảo giác (hallucination).
-5. **Stateful Booking Automation & HITL:** Tự động tra lịch trống theo chuyên khoa, thực hiện **Optimistic Slot Locking (Hold 15 phút)**, hỗ trợ cơ chế Human-in-the-Loop để điều phối viên/lễ tân phê duyệt và điều chỉnh lịch hẹn.
+5. **Stateful Booking Automation & HITL:** Tự động tra lịch trống theo chuyên khoa, thực hiện **Tiếp nhận yêu cầu đặt khám linh hoạt (HITL PENDING_CONTACT)**, hỗ trợ cơ chế Human-in-the-Loop để điều phối viên/lễ tân phê duyệt và điều chỉnh lịch hẹn.
 
 ---
 
@@ -267,11 +267,12 @@ erDiagram
     }
 ```
 
-### 5.3. Vòng đời Trạng thái Lịch hẹn (Booking State Machine):
-1. **`HOLD`**: Tạo ra ngay khi Bệnh nhân chọn 1 slot từ gợi ý của Agent (nhắn mã slot 8 ký tự). Slot trong `doctor_schedules` chuyển từ `available` -> `held`. Giữ tối đa 15 phút.
-2. **`PENDING_APPROVAL`**: Bệnh nhân xác nhận thông tin liên hệ. Slot vẫn được giữ, ticket được đưa vào hàng đợi của Lễ tân.
-3. **`APPROVED`**: Lễ tân bấm duyệt. Hệ thống gửi thông báo/SMS xác nhận mã hẹn `BK-XXXXXX`. Slot chuyển thành `booked`.
-4. **`REJECTED` / `CANCELLED`**: Bệnh nhân hủy hoặc Lễ tân từ chối (có ghi chú lý do). Slot trong `doctor_schedules` tự động hoàn trả về `available`.
+### 5.3. Vòng đời Trạng thái Lịch hẹn (Booking State Machine - HITL Intake):
+1. **PENDING_CONTACT**: Tạo ra ngay khi Bệnh nhân xác nhận nhu cầu hẹn khám hoặc chọn slot mong muốn. Hệ thống ghi nhận yêu cầu tiếp nhận (Intake Ticket) với mã tham chiếu REQ-XXXXXX, lưu đầy đủ triệu chứng và số điện thoại liên hệ.
+2. **COORDINATING**: Nhân viên điều phối/lễ tân liên hệ đối soát thông tin, thẩm định tình trạng khẩn cấp và khớp lịch thực tế của cơ sở y tế.
+3. **APPROVED**: Sau khi xác nhận thành công với người bệnh và chốt ca khám thực tế trên hệ thống, điều phối viên bấm duyệt. Hệ thống cập nhật lịch hẹn chính thức BK-... và chuyển slot sang ooked.
+4. **REJECTED / CANCELLED**: Bệnh nhân hủy hoặc nhân viên từ chối tiếp nhận (có ghi chú lý do).
+
 
 ---
 
@@ -321,7 +322,7 @@ Thay vì phụ thuộc vào các tool gọi qua mạng làm tăng độ trễ v�
    - **Đầu ra:** `TriageEvaluationResult` gồm `ats_level` (1-5), `urgency_tier`, `max_booking_days`, `suggested_specialty`, và `patient_guidance`.
 2. **`ClinicalGuardrailService` (`guardrail_service.py`):**
    - **Chức năng:** Thực thi SAF-02: Chặn hỏi đơn thuốc (`MEDICATION_GUARDRAIL`), chặn chẩn đoán bệnh trực tiếp (`DIAGNOSIS_GUARDRAIL`), xử lý tra cứu thông tin khoa, và nhận diện lệnh giữ chỗ slot (`HOLD_BOOKING`).
-   - **Đầu ra:** Cảnh báo an toàn, gợi ý chuyên khoa liên quan, hoặc mã giữ chỗ `BK-XXXXXX` với thời hạn 15 phút.
+   - **Đầu ra:** Cảnh báo an toàn, gợi ý chuyên khoa liên quan, hoặc mã tiếp nhận yêu cầu `REQ-XXXXXX` (HITL PENDING_CONTACT).
 3. **`ProbingService` (`probing_service.py`):**
    - **Chức năng:** Kiểm soát vòng lặp hỏi làm rõ tối đa 2 câu (thời gian bắt đầu, tính chất đau, triệu chứng kèm theo) theo từng nhóm triệu chứng lớn (thần kinh, tiêu hóa, xương khớp, hô hấp).
    - **Đầu ra:** Câu hỏi làm rõ tiếp theo kèm danh sách nút bấm trả lời nhanh (`quick_replies`).
@@ -341,7 +342,7 @@ Hệ thống đã xây dựng bộ kiểm thử tự động toàn diện và đ
 - **Tổng số test cases:** **65 / 65 PASSED (100%)**
 - **Thời gian chạy test:** ~33.9 giây trên môi trường local Windows.
 - **Phạm vi kiểm thử:**
-  - `tests/test_clinical_guardrails_flow.py`: Kiểm thử chuỗi hội thoại thực tế 7 lượt (Triệu chứng -> Probing -> Gợi ý Bác sĩ -> Chặn chẩn đoán bệnh -> Chặn kê đơn thuốc -> Tra cứu khoa -> Đặt slot 15 phút).
+  - `tests/test_clinical_guardrails_flow.py`: Kiểm thử chuỗi hội thoại thực tế 7 lượt (Triệu chứng -> Probing -> Gợi ý Bác sĩ -> Chặn chẩn đoán bệnh -> Chặn kê đơn thuốc -> Tra cứu khoa -> Tiếp nhận yêu cầu đặt khám (HITL)).
   - `tests/test_clinical_triage.py`: Kiểm thử phân loại cờ đỏ cấp cứu ATS 1/2 và phân tầng bệnh học.
   - `tests/test_token_cost_optimization.py`: Kiểm thử cơ chế tiết kiệm token và Zero-Token Cache.
   - `tests/test_streaming.py`: Kiểm thử SSE streaming token và metadata event.
@@ -361,7 +362,7 @@ gantt
     section Sprint 2: Core LangGraph & Streaming (HOÀN THÀNH)
     Xây dựng 3-Node StateGraph (MemorySaver)    :done, s2_1, 2026-09-22, 4d
     FastAPI SSE Streaming & Metadata Events     :done, s2_2, 2026-09-25, 3d
-    Cơ chế Slot Locking (Hold 15 phút)          :done, s2_3, 2026-09-26, 3d
+    Cơ chế Đặt khám & Phê duyệt HITL (PENDING_CONTACT)          :done, s2_3, 2026-09-26, 3d
     section Sprint 3: HITL & Enterprise Portals (TIẾP THEO)
     Dispatcher Dashboard cho Lễ tân (Realtime)  :active, s3_1, 2026-10-01, 7d
     Chuyển đổi Checkpointer sang PostgresSaver  :s3_2, 2026-10-08, 4d

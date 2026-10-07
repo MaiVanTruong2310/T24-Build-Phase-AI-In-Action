@@ -13,6 +13,8 @@ from src.medical_assistant.config import get_settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    from src.medical_assistant.infrastructure.telemetry_logger import configure_telemetry_rotating_logger
+    configure_telemetry_rotating_logger()
     print(f"Starting {settings.app_name} in {settings.app_env} mode")
     yield
     print("Shutting down...")

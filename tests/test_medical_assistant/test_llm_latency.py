@@ -54,8 +54,8 @@ async def test_invalid_structured_backup_cannot_win():
     model = FailoverChatModel(primary, [backup], hedge_delay_seconds=0.005, total_timeout_seconds=0.2)
     mark_failed = model._mark_failed
 
-    def release_after_failure(index):
-        mark_failed(index)
+    def release_after_failure(index, *args, **kwargs):
+        mark_failed(index, *args, **kwargs)
         released.set()
 
     model._mark_failed = release_after_failure

@@ -99,16 +99,30 @@ async def respond_node(state: AgentState) -> dict:
             }
         ]
 
-    if not available_docs and spec_display:
-        try:
-            from src.medical_assistant.domain.doctor_schedule_service import get_doctor_schedule_service
-            available_docs = get_doctor_schedule_service().get_available_doctors_and_slots(
-                specialty_name=spec_display,
-                limit_doctors=5,
-                facility_id=fac_pref,
-            )
-        except Exception:
-            available_docs = []
+    should_fetch_slots = bool(
+        not available_docs
+        and spec_display
+        and not meta.get("slots_fetched_in_turn")
+        and workflow_status in {
+            "TRIAGED_READY_FOR_BOOKING",
+            "TRIAGED_AWAITING_SCHEDULE",
+            "FACILITY_DOCTORS",
+            "CONFIRM_BOOKING_CONVERSATIONALLY",
+            "BOOKING_CONTACT_REQUIRED",
+        }
+    )
+    if should_fetch_slots:
+        from src.medical_assistant.domain.doctor_schedule_service import fetch_available_doctors_slots_cached
+        available_docs, slot_unavail, slot_reason = await fetch_available_doctors_slots_cached(
+            state=state,
+            specialty_name=spec_display,
+            limit_doctors=5,
+            facility_id=fac_pref,
+        )
+        if slot_unavail:
+            meta["data_unavailable"] = True
+            meta["data_unavailable_reason"] = slot_reason
+        meta["slots_fetched_in_turn"] = True
 
     # Task 2: Sinh tóm tắt lâm sàng chuẩn từ triệu chứng, vị trí, mức độ, thời gian
     clinical_summary_result = generate_clinical_summary(state, current_text=query)
@@ -309,6 +323,28 @@ async def respond_node(state: AgentState) -> dict:
                 )
     elif is_emergency:
         response = patient_guidance
+    elif workflow_status == "HITL_AWAITING_CONFIRMATION":
+        response = (
+            "Dạ, cái này nằm ngoài phạm vi của em, em có thể giúp bác liên hệ với các bác sĩ có chuyên môn để tư vấn nhé."
+            if lang == "vi"
+            else "This procedure is beyond my scope. I can help connect you with our medical specialists for consultation."
+        )
+        quick_replies = ["Yêu cầu hỗ trợ", "Không"] if lang == "vi" else ["Request assistance", "No"]
+    elif workflow_status == "HITL_ESCALATED_COORDINATOR":
+        response = (
+            "Dạ, em đã chuyển thông tin yêu cầu của bác tới role Điều phối viên y tế. "
+            "Điều phối viên sẽ liên hệ với bác để kết nối các bác sĩ có chuyên môn tư vấn chi tiết về thủ thuật/phẫu thuật này nhé ạ!"
+            if lang == "vi"
+            else "I have forwarded your request to our Medical Coordinator. The coordinator will contact you shortly to connect with our specialists!"
+        )
+        quick_replies = ["Để lại thông tin liên hệ", "Hỏi câu hỏi khác"] if lang == "vi" else ["Leave contact info", "Ask another question"]
+    elif workflow_status == "HITL_DECLINED_CONVERSATIONAL":
+        response = (
+            "Thế bác còn câu hỏi nào khác không? Ví dụ: triệu chứng, tìm bệnh viện,..."
+            if lang == "vi"
+            else "Do you have any other questions? For example: symptoms, find hospital, look up doctors,..."
+        )
+        quick_replies = ["Mô tả triệu chứng", "Tìm bệnh viện", "Tra cứu bác sĩ"] if lang == "vi" else ["Describe symptoms", "Find hospital", "Look up doctors"]
     elif workflow_status == "FAQ_ANSWERED" and meta.get("cached_response"):
         response = meta["cached_response"]
     elif workflow_status == "GUARDRAIL_MEDICATION":
@@ -479,7 +515,7 @@ async def respond_node(state: AgentState) -> dict:
     elif (
         (meta.get("is_booking_intent") or meta.get("booking_entities_found"))
         and not is_emergency
-        and workflow_status not in {"VISIT_PURPOSE_CLARIFICATION", "OUT_OF_SCOPE", "SOCIAL_REDIRECT"}
+        and workflow_status not in {"VISIT_PURPOSE_CLARIFICATION", "OUT_OF_SCOPE", "SOCIAL_REDIRECT", "TRIAGED_READY_FOR_BOOKING"}
     ):
         has_specific_booking = bool(
             booking_intake.get("facility_preference")
@@ -555,7 +591,9 @@ async def respond_node(state: AgentState) -> dict:
                 for idx, doc in enumerate(available_docs, 1):
                     exp = doc.get("years_of_experience", 0)
                     exp_text = f" - {exp} years of experience" if exp else ""
-                    doctors_text += f"\n**{idx}. Dr. {doc['full_name']}** ({doc['title']}{exp_text})\n"
+                    title = doc.get("title") or ""
+                    title_text = f" ({title}{exp_text})" if (title or exp_text) else ""
+                    doctors_text += f"\n**{idx}. Dr. {doc['full_name']}**{title_text}\n"
                     if doc.get("workplace"):
                         doctors_text += f"   • Workplace: {doc['workplace']}\n"
                     for slot in doc.get("available_slots", []):
@@ -570,7 +608,9 @@ async def respond_node(state: AgentState) -> dict:
                 for idx, doc in enumerate(available_docs, 1):
                     exp = doc.get("years_of_experience", 0)
                     exp_text = f" - {exp} năm kinh nghiệm" if exp else ""
-                    doctors_text += f"\n**{idx}. {doc['full_name']}** ({doc['title']}{exp_text})\n"
+                    title = doc.get("title") or ""
+                    title_text = f" ({title}{exp_text})" if (title or exp_text) else ""
+                    doctors_text += f"\n**{idx}. {doc['full_name']}**{title_text}\n"
                     specialties = ", ".join(doc.get("specialties") or [])
                     if specialties:
                         doctors_text += f"   • Chuyên môn: {specialties}\n"
@@ -626,16 +666,47 @@ async def respond_node(state: AgentState) -> dict:
                 )
             response = f"{prefix}{doctors_text}{form_hint}"
         else:
-            if meta.get("is_doctor_inquiry"):
-                response = (
-                    f"Dạ, bác hoàn toàn có thể tự chọn bác sĩ chuyên khoa theo nguyện vọng ạ! "
-                    f"Tại cơ sở Vinmec, các chuyên gia chuyên khoa **{spec_display}** luôn sẵn sàng tiếp nhận thăm khám. "
-                    "Bác có thể chọn trực tiếp bác sĩ trên danh sách thả xuống tại **Phiếu Đăng Ký Khám** ở khung bên cạnh, "
-                    "hoặc để mặc định 'Điều phối viên y tế sắp xếp bác sĩ phù hợp nhất' để bệnh viện bố trí bác sĩ đầu ngành cho bác nhé ạ!"
-                ) if lang == "vi" else (
-                    f"You can choose your preferred specialist for **{spec_display}**. Please select a doctor from the form on the right panel!"
-                )
-                quick_replies = ["Để điều phối viên xếp", "Chọn cơ sở khác"] if lang == "vi" else ["Coordinator arrangement", "Other facility"]
+            if meta.get("data_unavailable"):
+                from src.medical_assistant.config import get_settings
+                hotline_num = getattr(get_settings(), "hospital_hotline", "1900 232 389")
+                if lang == "vi":
+                    response = (
+                        f"Dạ, hệ thống tra cứu lịch trực tuyến của bệnh viện hiện đang tạm thời gián đoạn kết nối "
+                        f"nên em chưa thể tra cứu thông tin lịch khám trực tiếp lúc này. "
+                        f"Để kiểm tra lịch hẹn nhanh nhất, bác có thể liên hệ trực tiếp Tổng đài {hotline_num} "
+                        "hoặc điền thông tin vào Phiếu Đăng Ký Khám bên cạnh để điều phối viên y tế liên hệ hỗ trợ bác nhé ạ!"
+                    )
+                    quick_replies = ["Để lại thông tin tư vấn", f"Gọi hotline {hotline_num}"]
+                else:
+                    response = (
+                        f"Our online schedule system is temporarily unavailable. "
+                        f"Please contact our hotline at {hotline_num} or complete the Appointment Form on the side "
+                        "for our medical coordinator to assist you directly!"
+                    )
+                    quick_replies = ["Leave contact info", f"Call hotline {hotline_num}"]
+            elif meta.get("is_doctor_inquiry"):
+                from src.medical_assistant.config import get_settings
+                hotline_num = getattr(get_settings(), "hospital_hotline", "1900 232 389")
+                if available_docs:
+                    doc_names = ", ".join(f"**{d.get('full_name')}**" for d in available_docs[:3] if d.get("full_name"))
+                    response = (
+                        f"Dạ, tại chuyên khoa **{spec_display}**, hiện có các bác sĩ: {doc_names}. "
+                        "Bác có thể chọn trực tiếp bác sĩ mong muốn tại **Phiếu Đăng Ký Khám** ở khung bên cạnh, "
+                        "hoặc để điều phối viên y tế sắp xếp lịch hẹn phù hợp nhất nhé ạ!"
+                    ) if lang == "vi" else (
+                        f"We currently have doctors available for **{spec_display}**: {doc_names}. "
+                        "Please select your doctor on the Appointment Form or let our coordinator assist you!"
+                    )
+                else:
+                    response = (
+                        f"Dạ, hiện tại hệ thống chưa tìm thấy thông tin bác sĩ còn lịch trống trực tiếp cho chuyên khoa **{spec_display}** tại cơ sở đã chọn. "
+                        f"Bác có thể để lại thông tin tại **Phiếu Đăng Ký Khám** bên cạnh để điều phối viên y tế kiểm tra và bố trí bác sĩ cho bác, "
+                        f"hoặc liên hệ Tổng đài {hotline_num} để được hỗ trợ trực tiếp nhé ạ!"
+                    ) if lang == "vi" else (
+                        f"Currently, no open slots or available doctors were found for **{spec_display}** at the selected facility. "
+                        f"Please submit the Appointment Form or contact hotline {hotline_num} for direct support!"
+                    )
+                quick_replies = ["Để điều phối viên xếp", "Chọn cơ sở khác", f"Gọi hotline {hotline_num}"] if lang == "vi" else ["Coordinator arrangement", "Other facility", f"Call {hotline_num}"]
             else:
                 response = (
                     "Xin lỗi bác, hiện tại em chưa tìm thấy lịch khám phù hợp. Bác có muốn chọn ngày khác hoặc để em hỗ trợ thêm không ạ?"
@@ -877,6 +948,31 @@ async def respond_node(state: AgentState) -> dict:
     )
     meta["telemetry"] = telemetry_summary
 
+    import json
+
+    llm_was_invoked = bool(meta.get("llm_invoked"))
+    actual_llm_succeeded = meta.get("llm_succeeded") if llm_was_invoked else None
+    actual_fallback_used = bool(meta.get("fallback_used") or llm_fallback) if llm_was_invoked else False
+
+    structured_telemetry = {
+        "route": meta.get("intent_route") or meta.get("route") or ("chitchat" if workflow_status == "SOCIAL_REDIRECT" else "clinical"),
+        "workflow_status": workflow_status,
+        "action": meta.get("action") or meta.get("proposed_action"),
+        "tools_called": meta.get("tools_called") or [],
+        "llm_succeeded": actual_llm_succeeded,
+        "fallback_used": actual_fallback_used,
+        "data_unavailable": bool(meta.get("data_unavailable", False)),
+        "data_unavailable_reason": meta.get("data_unavailable_reason"),
+        "latency_ms": latency_val,
+        "tokens": {
+            "prompt": prompt_tok,
+            "completion": compl_tok,
+            "total": prompt_tok + compl_tok,
+        },
+    }
+    logger.info("TURN_TELEMETRY: %s", json.dumps(structured_telemetry, ensure_ascii=False))
+    meta["structured_telemetry"] = structured_telemetry
+
     # Cập nhật và lưu giữ lịch sử hội thoại với cơ chế Compaction + SOAP Notes
     from src.medical_assistant.domain.compaction_service import get_compaction_service
     history = list(state.get("messages") or [])
@@ -891,8 +987,11 @@ async def respond_node(state: AgentState) -> dict:
     compacted_history = compaction_res["recent_messages"]
     durable_soap_note = compaction_res["durable_soap_note"]
 
+    meta["quick_replies"] = quick_replies
+
     return {
         "response": full_response,
+        "quick_replies": quick_replies,
         "disclaimer": disclaimer,
         "token_usage": token_metrics,
         "metadata": meta,

@@ -156,7 +156,7 @@ Tài liệu này hướng dẫn cách Agent gọi và kết hợp 6 kỹ năng n
   3. **Bộ Mẫu Phản hồi Y khoa Song ngữ Chuẩn mực:**
      - Hướng dẫn Cấp cứu Quốc tế (`get_emergency_guidance`): Cảnh báo tính mạng, gọi 115 hoặc Hotline Vinmec 24/7.
      - Hướng dẫn Điều phối Khám (`get_triage_guidance`): Giải thích lý do gợi ý chuyên khoa, khuyến nghị thời gian khám an toàn (`max_booking_days`).
-     - Thông báo Giữ chỗ Slot (`get_hold_booking_response`): Giữ chỗ 15 phút, mã đặt chỗ `BK-XXXXXX`.
+     - Tiếp nhận Yêu cầu Đặt hẹn (get_hold_booking_response): Ghi nhận thông tin yêu cầu đặt hẹn, mã tham chiếu REQ-XXXXXX chuyển Điều phối viên y tế liên hệ xác nhận.
      - Tuyên bố Miễn trừ Y tế (`get_medical_disclaimer`): Khẳng định AI chỉ mang tính định hướng, không thay thế chẩn đoán bác sĩ.
   4. **Tích hợp Toàn diện Toàn Pipeline:**
      - `triage_service.py`: Quét cờ đỏ tiếng Anh trực tiếp mà không cần qua dịch máy.
