@@ -57,7 +57,7 @@ async def test_patient_cannot_lookup_user_by_id(client):
         app.dependency_overrides.clear()
 
     assert response.status_code == 403
-    assert response.json()["error"] == {"code": 403}
+    assert response.json()["error_code"] == "FORBIDDEN"
 
 
 @pytest.mark.asyncio
@@ -71,4 +71,4 @@ async def test_staff_lookup_returns_not_found_for_unknown_user(client):
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
-    assert response.json()["error"] == {"code": 404}
+    assert response.json()["error_code"] == "NOT_FOUND"

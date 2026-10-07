@@ -61,7 +61,8 @@ async def get_zalo_bot_status():
     }
 
 
-@router.api_route("/setup-webhook", methods=["GET", "POST"])
+@router.get("/setup-webhook", operation_id="setup_zalo_webhook_get")
+@router.post("/setup-webhook", operation_id="setup_zalo_webhook_post")
 async def setup_zalo_webhook():
     """Trigger registration of the configured Webhook URL with Zalo Bot Platform."""
     settings = get_settings()

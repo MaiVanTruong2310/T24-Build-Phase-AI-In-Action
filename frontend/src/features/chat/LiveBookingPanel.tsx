@@ -5,7 +5,7 @@ import { TypewriterLoader } from '../../components/TypewriterLoader';
 import { memo, useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../app/store';
-import { Calendar, CheckCircle2, Clock, Hospital, MapPin, Phone, Sparkles, Stethoscope, User, X, ShieldCheck, AlertCircle, Package, Search, Filter, Check, ChevronRight, Info, GripVertical, ArrowUp, ArrowDown, Plus, Trash2 } from 'lucide-react';
+import { Calendar, CheckCircle2, Hospital, Sparkles, Stethoscope, User, X, ShieldCheck, AlertCircle, Package, Search, Check, Info, GripVertical, ArrowUp, ArrowDown, Plus, Trash2 } from 'lucide-react';
 import { submitBooking, type BookingIntake } from './api';
 import {
   fetchServices,
@@ -313,13 +313,17 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
 
     // Sync ranked specialties when intake updates
     if (!editedFields.current.has('specialties') && intake.ranked_specialties && intake.ranked_specialties.length > 0) {
-      setSpecialties(
-        intake.ranked_specialties.map((item, idx) => ({
-          id: `spec-${idx}-${item.department_name}`,
-          name: item.department_name,
-          rationale: item.rationale,
-        }))
+      const rankedSpecialties = intake.ranked_specialties.map((item, idx) => ({
+        id: `spec-${idx}-${item.department_name}`,
+        name: item.department_name,
+        rationale: item.rationale,
+      }));
+      const unchanged = specialties.length === rankedSpecialties.length && specialties.every((item, index) =>
+        item.id === rankedSpecialties[index].id &&
+        item.name === rankedSpecialties[index].name &&
+        item.rationale === rankedSpecialties[index].rationale,
       );
+      if (!unchanged) setSpecialties(rankedSpecialties);
     } else if (!editedFields.current.has('specialties') && intake.specialty_name && (!specialties.length || specialties[0].name !== intake.specialty_name)) {
       setSpecialties([
         {
@@ -329,10 +333,24 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
       ]);
     }
 
-    if ((intake as any)?.confirmed && (intake as any)?.request_code && !savedCode) {
-      setSavedCode((intake as any).request_code);
+    if (intake.confirmed && intake.request_code && !savedCode) {
+      setSavedCode(intake.request_code);
     }
-  }, [intake, authUser, savedCode]);
+  }, [
+    intake,
+    authUser,
+    dateOfBirth,
+    facility,
+    gender,
+    patientName,
+    patientNotes,
+    patientPhone,
+    preferredDate,
+    preferredDoctorId,
+    preferredPeriod,
+    savedCode,
+    specialties,
+  ]);
 
   // Load only catalog facilities for package requests.
   useEffect(() => {
@@ -344,18 +362,24 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
     return () => { active = false; };
   }, [activeTab]);
 
-  // Load packages catalog when switching to package tab
+  // Load package categories when the package tab is first opened.
+  useEffect(() => {
+    if (activeTab !== 'package' || packageCategories.length > 0) return;
+    let active = true;
+    void fetchServiceCategories()
+      .then((cats) => {
+        if (active) setPackageCategories(cats);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [activeTab, packageCategories.length]);
+
+  // Load packages when the selected catalog filters change.
   useEffect(() => {
     if (activeTab !== 'package') return;
     let active = true;
-    if (packageCategories.length === 0) {
-      void fetchServiceCategories()
-        .then((cats) => {
-          if (active) setPackageCategories(cats);
-        })
-        .catch(() => undefined);
-    }
-
     setLoadingPackages(true);
     const cat = selectedCategory !== 'Tất cả' ? selectedCategory : undefined;
     void fetchServices({ category: cat, name: packageSearch.trim() || undefined, limit: 100 })
@@ -364,9 +388,7 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
           // Filter out single doctor consultation service to keep health packages
           const pkgs = items.filter((x) => x.code !== 'DV-KHAN-CHUYEN-KHOA');
           setPackages(pkgs);
-          if (!selectedPackage && pkgs.length > 0) {
-            setSelectedPackage(pkgs[0]);
-          }
+          setSelectedPackage((current) => current || pkgs[0] || null);
         }
       })
       .catch(() => undefined)

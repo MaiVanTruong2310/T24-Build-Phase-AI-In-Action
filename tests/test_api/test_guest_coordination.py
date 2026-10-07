@@ -1,24 +1,31 @@
 import uuid
-from datetime import date
-import pytest
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from src.main import app
+
+import pytest
+
+from src.api.endpoints.coordination import VN_TZ
 from src.db.dependencies import get_db_session
+from src.main import app
 
 
 @pytest.mark.asyncio
 async def test_guest_list_sessions_unauthenticated(client, monkeypatch):
     """Unauthenticated visitors can query doctor sessions without 401/403 error."""
     # This is an authentication contract test; never connect to a real DB.
-    db = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: []))))
+    db = SimpleNamespace(
+        execute=AsyncMock(return_value=SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [])))
+    )
+
     async def database():
         yield db
+
     monkeypatch.setitem(app.dependency_overrides, get_db_session, database)
     fake_doctor_id = str(uuid.uuid4())
     response = await client.get(
         "/api/v1/coordination/sessions",
-        params={"doctor_id": fake_doctor_id, "date": date.today().isoformat()},
+        params={"doctor_id": fake_doctor_id, "date": datetime.now(VN_TZ).date().isoformat()},
     )
     assert response.status_code == 200
     payload = response.json()

@@ -1,4 +1,5 @@
 import { clearSession, markCookieSession, readPublishedSession } from '../features/auth/session';
+// const LOCAL_API_ORIGIN = 'https://c4-app-t124-dev.duckdns.org';
 const LOCAL_API_ORIGIN = 'http://localhost:8000';
 function normalizeApiOrigin(value: string): string {
   const trimmed = value.trim().replace(/\/$/, '');
@@ -78,12 +79,20 @@ export function resolveApiUrl(url: string): string {
   if (url.startsWith('/api/')) return `${API_ORIGIN}${url}`;
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }
+
+export function resolveWebSocketUrl(path: string): string {
+  const url = new URL(resolveApiUrl(path));
+  if (url.protocol === 'https:') url.protocol = 'wss:';
+  else if (url.protocol === 'http:') url.protocol = 'ws:';
+  else throw new TypeError(`Unsupported API protocol for WebSocket: ${url.protocol}`);
+  return url.toString();
+}
+
 export function fetchPublicApi(url: string, options: RequestInit = {}): Promise<Response> {
   const resolved = resolveApiUrl(url);
   const headers = new Headers(options.headers);
   headers.set('X-Auth-Transport', 'cookie');
   if (readPublishedSession()) headers.set('X-Session-Expected', '1');
-  if (/\.ngrok(?:-free\.(?:dev|app)|\.io)$/.test(new URL(resolved).hostname)) headers.set('ngrok-skip-browser-warning', 'true');
   const send = () => fetch(resolved, {...options, headers, credentials: 'include'});
   if (/\/auth\/(login|logout)$/.test(resolved)) return withSessionLock(send);
   return send();
@@ -112,7 +121,9 @@ async function refreshCookieSession(): Promise<boolean> {
     return performRefresh();
   };
   refreshPromise = withSessionLock(run).finally(() => { refreshPromise = null; });
-  return refreshPromise;
+  const refreshed = await refreshPromise;
+  if (refreshed) window.dispatchEvent(new Event('auth:refreshed'));
+  return refreshed;
 }
 async function migrateLegacyUnlocked(): Promise<void> {
   const legacyRefresh = localStorage.getItem('refresh_token');

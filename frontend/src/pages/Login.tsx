@@ -65,7 +65,7 @@ export function Login() {
 
       if (user.role === 'staff') {
 
-        navigate('/staff/dieu-phoi')
+        navigate('/staff/coordination')
 
       } else {
 

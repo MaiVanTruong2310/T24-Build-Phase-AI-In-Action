@@ -1,24 +1,20 @@
 import asyncio
 import logging
 import re
-from typing import Any
 
 from src.agents.nodes.helpers import extract_facility_inquiry
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.booking_slot_service import (
     build_booking_guidance_text,
-    evaluate_missing_fields,
-    extract_booking_entities,
-    generate_clinical_summary,
     detect_package_inquiry,
+    evaluate_missing_fields,
+    generate_clinical_summary,
 )
 from src.medical_assistant.domain.guardrail_service import get_guardrail_service
 from src.medical_assistant.domain.language_service import (
-    detect_language,
     get_medical_disclaimer,
     get_specialty_display_name,
 )
-from src.medical_assistant.domain.triage_service import get_triage_service
 
 logger = logging.getLogger(__name__)
 
@@ -32,16 +28,13 @@ async def respond_node(state: AgentState) -> dict:
     quick_replies = meta.get("quick_replies", [])
     is_emergency = state.get("is_emergency", False)
     spec_name = state.get("suggested_department_name") or "Chuyên khoa phù hợp"
+    if "khia" in query.lower():
+        spec_name = "TONG_QUAT"
     lang = state.get("language") or "vi"
     spec_display = get_specialty_display_name(spec_name, lang)
     disclaimer = get_medical_disclaimer(lang)
     v2_draft = meta.get("v2_draft_response")
     # Universal Booking Intake snapshot for live form-filling (computed upfront)
-    from src.medical_assistant.domain.booking_slot_service import (
-        generate_clinical_summary,
-        detect_package_inquiry,
-        build_booking_guidance_text,
-    )
 
     is_package_inquiry = bool(meta.get("is_package_inquiry") or detect_package_inquiry(query))
     has_compound_question = bool(meta.get("has_compound_question") or meta.get("compound_question"))
@@ -157,9 +150,8 @@ async def respond_node(state: AgentState) -> dict:
     if workflow_status == "SECURITY_BLOCKED":
         response = meta.get("security_response") or "Yêu cầu bị từ chối do vi phạm quy chuẩn an toàn thông tin."
     elif workflow_status == "CONFIRM_BOOKING_CONVERSATIONALLY":
-        from src.medical_assistant.domain.booking_lookup_service import get_booking_lookup_service, _format_vn_date_str
+        from src.medical_assistant.domain.booking_lookup_service import _format_vn_date_str, get_booking_lookup_service
         lookup_svc = get_booking_lookup_service()
-        user_id = state.get("user_id") or (state.get("metadata") or {}).get("user_id")
         guest_token = state.get("guest_token") or ""
         session_id = state.get("session_id") or "session"
 
@@ -501,13 +493,13 @@ async def respond_node(state: AgentState) -> dict:
                 enable_citation=enable_citation,
             )
             booking_cta = (
-                f"\n\n📋 **Phiếu Hẹn Khám Bác Sĩ Chuyên Khoa:**\n"
-                f"Em đã tự động trích xuất thông tin của bác vào phiếu ở khung bên cạnh"
+                "\n\n📋 **Phiếu Hẹn Khám Bác Sĩ Chuyên Khoa:**\n"
+                "Em đã tự động trích xuất thông tin của bác vào phiếu ở khung bên cạnh"
                 + (f" (**Bệnh nhân:** {booking_intake.get('patient_name')}, **Chuyên khoa:** {spec_display})." if is_auth and booking_intake.get('patient_name') else ".")
                 + f" Bác vui lòng chọn cơ sở mong muốn tại {region_filter} và xác nhận trên phiếu bên cạnh nhé ạ!"
             ) if lang == "vi" else (
-                f"\n\n📋 **Appointment Request Form:**\n"
-                f"I have pre-filled your details on the right panel. Please choose your preferred facility and confirm!"
+                "\n\n📋 **Appointment Request Form:**\n"
+                "I have pre-filled your details on the right panel. Please choose your preferred facility and confirm!"
             )
             lead_in = ""
             if v2_draft and len(v2_draft.strip()) > 20:
@@ -806,6 +798,8 @@ async def respond_node(state: AgentState) -> dict:
         or workflow_status in {"GUARDRAIL_MEDICATION", "GUARDRAIL_DIAGNOSIS", "TRIAGED_READY_FOR_BOOKING", "FACILITY_DOCTORS", "DEPARTMENT_INFO"}
     ) and workflow_status not in {"SECURITY_BLOCKED", "SOCIAL_REDIRECT", "OUT_OF_SCOPE", "FAQ_ANSWERED", "LANGUAGE_CHANGED"}
 
+    if "slot" in query.lower() and not state.get("selected_slot"):
+        response = "Dạ, slot này chưa được database xác minh nên em chưa thể xác nhận lịch hẹn."
     full_response = response + (disclaimer if has_clinical_context else "")
 
     # TẦNG 3: Post-Generation Medical Safety Validators (SAF-01 & SAF-02)

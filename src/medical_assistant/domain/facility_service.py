@@ -306,7 +306,13 @@ class FacilityService:
                     matched_docs = [
                         {
                             "name": doctor.get("full_name"),
-                            "specialties": [department_context] if (is_dept_filtered and department_context) else ([relation_by_doctor[str(doctor["id"])].get("department")] if relation_by_doctor[str(doctor["id"])].get("department") else []),
+                            "specialties": [department_context]
+                            if (is_dept_filtered and department_context)
+                            else (
+                                [relation_by_doctor[str(doctor["id"])].get("department")]
+                                if relation_by_doctor[str(doctor["id"])].get("department")
+                                else []
+                            ),
                             "source_url": doctor.get("source_url"),
                             "sections": {
                                 "Chức vụ": [doctor.get("title")] if doctor.get("title") else [],
@@ -389,10 +395,14 @@ class FacilityService:
                     f"🏥 **Khám Khoa {department_context} & Đội ngũ Bác sĩ tại {fac_display}:**\n",
                     f"Dạ có ạ! **{fac_display}** tiếp nhận khám và chẩn đoán ban đầu cho các bệnh lý thuộc **Khoa {department_context}** (thực hiện chụp X-quang kỹ thuật số, siêu âm khớp, kê đơn và điều trị ngoại trú).\n",
                     f"• 👨‍⚕️ **Đội ngũ Bác sĩ:** Các bác sĩ chuyên khoa {department_context} từ hệ thống Bệnh viện ĐKQT Vinmec (trực tiếp từ cơ sở Vinmec Times City) phụ trách chuyên môn và có lịch khám luân chuyển định kỳ tại {fac_display}.",
-                    f"• 🏨 **Trường hợp chuyên sâu:** Nếu cần can thiệp ngoại khoa phức tạp hoặc điều trị nội trú, cơ sở sẽ hội chẩn và chuyển tiếp thuận tiện sang Bệnh viện ĐKQT Vinmec Times City (chỉ cách ~15 phút di chuyển).\n",
+                    "• 🏨 **Trường hợp chuyên sâu:** Nếu cần can thiệp ngoại khoa phức tạp hoặc điều trị nội trú, cơ sở sẽ hội chẩn và chuyển tiếp thuận tiện sang Bệnh viện ĐKQT Vinmec Times City (chỉ cách ~15 phút di chuyển).\n",
                 ]
                 if booking_intake:
-                    p_info = f" (**Bệnh nhân:** {booking_intake.get('patient_name')}, **Chuyên khoa:** {department_context})" if is_authenticated and booking_intake.get("patient_name") else f" (**Chuyên khoa:** {department_context})"
+                    p_info = (
+                        f" (**Bệnh nhân:** {booking_intake.get('patient_name')}, **Chuyên khoa:** {department_context})"
+                        if is_authenticated and booking_intake.get("patient_name")
+                        else f" (**Chuyên khoa:** {department_context})"
+                    )
                     lines.append(
                         f"📋 **Phiếu Đăng Ký Khám:**\n"
                         f"Em đã tự động cập nhật cơ sở mong muốn là **{fac_display}** vào Phiếu Hẹn Khám ở khung bên cạnh{p_info}. "
@@ -403,7 +413,7 @@ class FacilityService:
                     f"🏥 **Department of {department_context} & Doctors at {fac_display}:**\n",
                     f"Yes! **{fac_display}** provides outpatient consultations and diagnostic services for **{department_context}**.",
                     f"• 👨‍⚕️ **Specialists:** Specialists from Vinmec International Hospital (Times City) directly consult on scheduled rotating days at {fac_display}.",
-                    f"• 🏨 **Advanced Inpatient Care:** Cases requiring surgery or inpatient care are seamlessly connected to Vinmec Times City Hospital.\n",
+                    "• 🏨 **Advanced Inpatient Care:** Cases requiring surgery or inpatient care are seamlessly connected to Vinmec Times City Hospital.\n",
                 ]
             quick_replies = [
                 f"Đặt lịch tại {fac_display}",
@@ -654,7 +664,9 @@ class FacilityService:
                     lines.append(f"### 🏨 Specialized Hospitals for {department_context} (Inpatient & Surgery):")
                     for h in spec_hospitals:
                         phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
-                        lines.append(f"• **{h['name']}**\n  📍 Address: {h.get('address', 'Updating')}{phone_str}\n  ✨ *Comprehensive inpatient care, specialized diagnostics, and 24/7 emergency services.*\n")
+                        lines.append(
+                            f"• **{h['name']}**\n  📍 Address: {h.get('address', 'Updating')}{phone_str}\n  ✨ *Comprehensive inpatient care, specialized diagnostics, and 24/7 emergency services.*\n"
+                        )
                 elif hospitals:
                     lines.append("### 🏨 International General Hospitals:")
                     for h in hospitals:
@@ -671,9 +683,11 @@ class FacilityService:
                         seen_names.add(c["name"])
                         phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
                         lines.append(f"• **{c['name']}**\n  📍 Address: {c.get('address', 'Updating')}{phone_str}\n")
-                    lines.append("💡 *Satellite clinics provide initial examination, ultrasound, and outpatient treatment, referring complex cases to the specialized hospital.*")
+                    lines.append(
+                        "💡 *Satellite clinics provide initial examination, ultrasound, and outpatient treatment, referring complex cases to the specialized hospital.*"
+                    )
 
-                quick_replies = [f"Book appointment", f"Doctors for {department_context}", "General Health Checkup"]
+                quick_replies = ["Book appointment", f"Doctors for {department_context}", "General Health Checkup"]
             else:
                 lines.append("🏥 **Vinmec International Healthcare System**\n")
                 lines.append("Vinmec operates modern international hospitals and specialized clinics across Vietnam:\n")
@@ -703,12 +717,16 @@ class FacilityService:
                     lines.append(f"### 🏨 Bệnh viện ĐKQT tiếp nhận điều trị chuyên sâu Khoa {department_context}:")
                     for h in spec_hospitals:
                         phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
-                        lines.append(f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n  ✨ *Trung tâm chuyên sâu trang bị đầy đủ máy móc hiện đại, phòng mổ vô khuẩn và điều trị nội trú 24/7.*\n")
+                        lines.append(
+                            f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n  ✨ *Trung tâm chuyên sâu trang bị đầy đủ máy móc hiện đại, phòng mổ vô khuẩn và điều trị nội trú 24/7.*\n"
+                        )
                 elif hospitals:
                     lines.append("### 🏨 Bệnh viện Đa khoa Quốc tế:")
                     for h in hospitals:
                         phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
-                        lines.append(f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n")
+                        lines.append(
+                            f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n"
+                        )
 
                 secondary_facilities = clinics + (other_hospitals if spec_hospitals else [])
                 if secondary_facilities:
@@ -719,8 +737,12 @@ class FacilityService:
                             continue
                         seen_names.add(c["name"])
                         phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
-                        lines.append(f"• **{c['name']}**\n  📍 Địa chỉ: {c.get('address', 'Đang cập nhật')}{phone_str}\n")
-                    lines.append("💡 *Các phòng khám vệ tinh tiếp nhận khám sàng lọc ban đầu, siêu âm, xét nghiệm và điều trị ngoại trú; trường hợp cần can thiệp ngoại khoa hay nội trú chuyên sâu sẽ được hội chẩn chuyển viện nhanh chóng sang bệnh viện trung tâm.*\n")
+                        lines.append(
+                            f"• **{c['name']}**\n  📍 Địa chỉ: {c.get('address', 'Đang cập nhật')}{phone_str}\n"
+                        )
+                    lines.append(
+                        "💡 *Các phòng khám vệ tinh tiếp nhận khám sàng lọc ban đầu, siêu âm, xét nghiệm và điều trị ngoại trú; trường hợp cần can thiệp ngoại khoa hay nội trú chuyên sâu sẽ được hội chẩn chuyển viện nhanh chóng sang bệnh viện trung tâm.*\n"
+                    )
 
                 quick_replies = ["Đặt lịch khám ngay", f"Bác sĩ Khoa {department_context}", "Xem các cơ sở khác"]
             else:
@@ -731,13 +753,17 @@ class FacilityService:
                     lines.append("### 🏨 Bệnh viện Đa khoa Quốc tế:")
                     for h in hospitals:
                         phone_str = f" | 📞 Hotline: `{h['phone']}`" if h.get("phone") else ""
-                        lines.append(f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n")
+                        lines.append(
+                            f"• **{h['name']}**\n  📍 Địa chỉ: {h.get('address', 'Đang cập nhật')}{phone_str}\n"
+                        )
 
                 if clinics:
                     lines.append("### 🩺 Phòng khám Đa khoa Quốc tế:")
                     for c in clinics:
                         phone_str = f" | 📞 Hotline: `{c['phone']}`" if c.get("phone") else ""
-                        lines.append(f"• **{c['name']}**\n  📍 Địa chỉ: {c.get('address', 'Đang cập nhật')}{phone_str}\n")
+                        lines.append(
+                            f"• **{c['name']}**\n  📍 Địa chỉ: {c.get('address', 'Đang cập nhật')}{phone_str}\n"
+                        )
 
                 lines.append("💡 *Khoa Cấp cứu & Phòng Lưu bệnh làm việc **24/7** tại tất cả các bệnh viện.*")
                 quick_replies = ["Đặt lịch khám ngay", "Xem danh sách bác sĩ", "Giờ làm việc & Khám Thứ 7"]

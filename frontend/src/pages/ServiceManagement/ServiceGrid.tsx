@@ -1,6 +1,6 @@
 import React from 'react';
 import { Service } from './api';
-import { Clock, CheckCircle2, Copy, FileEdit, ArrowRight, UserCircle, Star } from 'lucide-react';
+import { Clock, CheckCircle2, Copy, FileEdit, UserCircle, Star } from 'lucide-react';
 
 interface Props {
   services: Service[];
@@ -41,12 +41,12 @@ export function ServiceGrid({ services }: Props) {
           <div className="p-5 flex-1 flex flex-col">
             <div className="flex justify-between items-end mb-4 border-b border-slate-100 pb-4">
               <div>
-                <p className="text-xs text-slate-400 line-through decoration-slate-300">{service.original_price ? service.original_price.toLocaleString('vi-VN') : (service.price ? (service.price * 1.2).toLocaleString('vi-VN') : '0')} VNĐ</p>
-                <p className="text-2xl font-bold text-sky-700">{service.price ? service.price.toLocaleString('vi-VN') : '0'} <span className="text-sm font-semibold text-slate-500">VNĐ</span></p>
+                <p className="text-xs text-slate-400 line-through decoration-slate-300">{service.original_price != null ? `${service.original_price.toLocaleString('vi-VN')} VNĐ` : '—'}</p>
+                <p className="text-2xl font-bold text-sky-700">{service.price != null ? service.price.toLocaleString('vi-VN') : '—'} <span className="text-sm font-semibold text-slate-500">{service.price != null ? 'VNĐ' : ''}</span></p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-slate-500 flex items-center gap-1 justify-end"><Clock size={12} /> Dự kiến: {service.duration_minutes} phút</p>
-                <p className="text-xs font-semibold text-teal-600 mt-1">{service.features?.length || 5} Danh mục kỹ thuật</p>
+                <p className="text-xs text-slate-500 flex items-center gap-1 justify-end"><Clock size={12} /> Dự kiến: {service.duration_minutes ?? '—'}{service.duration_minutes != null ? ' phút' : ''}</p>
+                <p className="text-xs font-semibold text-teal-600 mt-1">{service.features?.length ?? 0} Danh mục kỹ thuật</p>
               </div>
             </div>
             
@@ -61,26 +61,26 @@ export function ServiceGrid({ services }: Props) {
                 ))}
               </ul>
               <p className="text-xs font-semibold text-sky-600 mt-3 cursor-pointer hover:underline flex items-center gap-1">
-                Xem thêm 14 hạng mục <ArrowRight size={12} />
+                {service.features?.length ? `${service.features.length} hạng mục được cung cấp` : 'Chưa có danh mục'}
               </p>
             </div>
             
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg mb-5 text-xs font-semibold">
               <div className="flex items-center gap-1 text-slate-700">
                 <UserCircle size={16} className="text-slate-400" />
-                Lượt đã khám: <span className="text-slate-900">{service.patient_count?.toLocaleString() || 0} bệnh nhân</span>
+                Lượt đã khám: <span className="text-slate-900">{service.patient_count?.toLocaleString() ?? '—'} bệnh nhân</span>
               </div>
               <div className="flex items-center gap-1 text-sky-600">
                 <Star size={14} className="fill-sky-600" />
-                {service.satisfaction_rate || 100}% hài lòng
+                {service.satisfaction_rate != null ? `${service.satisfaction_rate}% hài lòng` : 'Chưa có đánh giá'}
               </div>
             </div>
             
             <div className="grid grid-cols-2 gap-3 mt-auto">
-              <button className="flex items-center justify-center gap-2 px-3 py-2 text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-lg text-sm font-semibold transition-colors">
-                <Copy size={16} /> Cấu hình (18)
+              <button disabled className="flex items-center justify-center gap-2 px-3 py-2 text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-lg text-sm font-semibold transition-colors">
+                <Copy size={16} /> Cấu hình
               </button>
-              <button className="flex items-center justify-center gap-2 px-3 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold transition-colors">
+              <button disabled className="flex items-center justify-center gap-2 px-3 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold transition-colors">
                 <FileEdit size={16} /> Sửa chi tiết
               </button>
             </div>
@@ -89,7 +89,7 @@ export function ServiceGrid({ services }: Props) {
           <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-between items-center text-xs text-slate-500">
             <div className="flex items-center gap-2">
               <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked={service.status === 'active'} />
+                <input type="checkbox" className="sr-only peer" checked={service.status === 'active'} readOnly />
                 <div className="w-8 h-4 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
               </label>
               <span className="font-medium">Hiển thị App/Web</span>

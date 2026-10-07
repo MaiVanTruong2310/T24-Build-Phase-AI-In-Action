@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-BookingStatus = Literal["pending_approval", "confirmed", "rejected", "cancelled"]
+BookingStatus = Literal["pending_approval", "confirmed", "rejected", "cancelled", "expired"]
 BookingHoldStatus = Literal["active", "released", "expired", "consumed"]
 EncounterType = Literal["in_person", "telehealth"]
 
@@ -124,6 +124,7 @@ class BookingResponse(BaseModel):
     reason: str | None = None
     patient_note: str | None = None
     status: BookingStatus
+    expired_at: datetime | None = None
     cancellation_reason: str | None = None
     staff_note: str | None = None
     reviewed_by: UUID | None = None

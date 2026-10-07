@@ -1,6 +1,5 @@
 """Unit tests for ChromaDB Vector Store and HybridRagStore."""
 
-import pytest
 from src.medical_assistant.rag.store_cache import get_global_rag_store
 
 

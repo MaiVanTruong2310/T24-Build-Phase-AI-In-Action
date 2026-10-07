@@ -1,6 +1,6 @@
 import { Booking, Doctor, Facility, MedicalService, Specialty } from '../appointment-booking/api';
 
-export type AppointmentFilter = 'all' | Booking['status'];
+export type AppointmentFilter = 'all' | Exclude<Booking['status'], 'expired'>;
 
 export interface AppointmentCatalog {
   doctors: Map<string, Doctor>;

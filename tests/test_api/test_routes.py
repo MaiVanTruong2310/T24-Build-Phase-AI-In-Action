@@ -14,8 +14,8 @@ async def test_chat_empty_message(client):
     response = await client.post("/api/v1/chat", json={"message": ""})
     assert response.status_code == 400  # Validation error
     payload = response.json()
-    assert payload["error"] == {"code": 400}
-    assert "details" not in payload["error"]
+    assert payload == {"error_code": "VALIDATION_ERROR", "message": "Request validation failed"}
+    assert "details" not in payload
 
 
 @pytest.mark.asyncio

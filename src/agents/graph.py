@@ -7,6 +7,7 @@ This module is maintained solely for backward compatibility with baseline scaffo
 from __future__ import annotations
 
 from typing import Any
+
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, StateGraph
@@ -105,8 +106,7 @@ class AutoThreadAgentWrapper:
 
     def stream(self, input: Any, config: dict[str, Any] | None = None, **kwargs: Any):
         config = self._ensure_thread_id(input, config)
-        for chunk in self._graph.stream(input, config=config, **kwargs):
-            yield chunk
+        yield from self._graph.stream(input, config=config, **kwargs)
 
     @staticmethod
     def _ensure_thread_id(input: Any, config: dict[str, Any] | None) -> dict[str, Any]:

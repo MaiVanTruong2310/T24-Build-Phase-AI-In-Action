@@ -178,4 +178,3 @@ def extract_workplaces_from_record(record: dict[str, Any]) -> list[str]:
                 break
 
     return workplaces
-

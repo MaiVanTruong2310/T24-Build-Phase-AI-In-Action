@@ -73,7 +73,7 @@ async def test_staff_catalog_requires_authentication(client):
     response = await client.get("/api/v1/staff/services")
 
     assert response.status_code == 401
-    assert response.json()["error"] == {"code": 401}
+    assert response.json()["error_code"] == "NOT_AUTHENTICATED"
 
 
 @pytest.mark.asyncio
@@ -86,7 +86,7 @@ async def test_patient_cannot_access_staff_catalog(client):
         app.dependency_overrides.clear()
 
     assert response.status_code == 403
-    assert response.json()["error"] == {"code": 403}
+    assert response.json()["error_code"] == "FORBIDDEN"
 
 
 @pytest.mark.asyncio

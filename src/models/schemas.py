@@ -6,7 +6,9 @@ Combines agent chat contracts with application domain schemas.
 from __future__ import annotations
 
 from typing import Any
+
 from pydantic import BaseModel, Field
+
 
 # 1. Base Agent & Chat Schemas
 class ChatRequest(BaseModel):
@@ -41,11 +43,12 @@ class AgentStatusResponse(BaseModel):
     """Trạng thái hoạt động của hệ thống Agent."""
 
     status: str = Field(default="ready", description="Trạng thái dịch vụ")
-    agent: str = Field(default="VCare LangGraph Medical Agent v2.0")
-    version: str = Field(default="2.0.0")
+    agent: str = Field(default="LangGraph Clinical Triage Agent v1.0")
+    version: str = Field(default="1.0.0")
     nodes: list[str] = Field(
         default_factory=lambda: ["analyze", "critic", "find_doctors", "respond"]
     )
+    features: list[str] = Field(default_factory=lambda: ["session_memory", "sse_streaming", "ats_triage"])
 
 
 # 2. Re-export Application Domain Schemas

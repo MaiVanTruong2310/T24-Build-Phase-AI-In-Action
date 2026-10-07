@@ -1,8 +1,9 @@
 """Resolve the clinical subject using server-checked delegated access."""
 from datetime import UTC, datetime
-from uuid import UUID
+
 from fastapi import HTTPException
 from sqlalchemy import select
+
 from src.models.patient_profile import PatientProfile, PatientRelationship
 from src.models.user import User
 
@@ -26,7 +27,7 @@ async def resolve_patient(db, user, profile_id=None):
 
 
 async def resolve_booking_payload(db, user, payload):
-    if user is not None and user.role != 'patient':
+    if user is not None and getattr(user, 'role', 'patient') != 'patient':
         raise HTTPException(403, 'Chỉ tài khoản bệnh nhân được gửi phiếu đặt khám.')
     patient, profile = await resolve_patient(db, user, getattr(payload, 'patient_profile_id', None))
     if profile:
@@ -36,9 +37,10 @@ async def resolve_booking_payload(db, user, payload):
         payload.patient_phone = payload.patient_phone or profile.contact_phone or user.phone
         payload.patient_email = payload.patient_email or user.email
     if user is not None:
-        from zoneinfo import ZoneInfo
-        from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN
         import re
+        from zoneinfo import ZoneInfo
+
+        from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN
         today = datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).date()
         phone = payload.patient_phone or (profile.contact_phone if profile else None) or user.phone or ''
         dob = payload.date_of_birth or patient.date_of_birth
@@ -88,6 +90,7 @@ async def create_relative(db, user, payload):
 
 async def ensure_self_profile(db, user):
     from uuid import uuid4
+
     from sqlalchemy.dialects.postgresql import insert
     await db.execute(insert(PatientProfile).values(id=uuid4(), patient_user_id=user.id, linked_user_id=user.id,
         full_name=(user.full_name or '')[:120], date_of_birth=user.date_of_birth, gender=user.gender,

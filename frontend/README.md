@@ -42,7 +42,7 @@ npm run dev
 Sau đó mở URL Vite hiển thị trong terminal, thường là `http://localhost:5173`.
 
 Frontend gọi trực tiếp backend theo môi trường. Khi chạy local, frontend mặc định
-gọi backend dev qua `https://reclining-unlit-unused.ngrok-free.dev`. CI/CD lấy URL từ secret
+gọi backend dev qua `https://c4-app-t124-dev.duckdns.org`. CI/CD lấy URL từ secret
 `API_DOMAIN_DEV` khi build branch `develop` và `API_DOMAIN_PROD` khi build branch
 `main`.
 

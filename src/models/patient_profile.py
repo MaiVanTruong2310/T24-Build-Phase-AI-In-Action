@@ -1,9 +1,11 @@
 """Patient identity and delegated booking access, separate from login credentials."""
 from datetime import date, datetime
 from uuid import UUID, uuid4
+
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.db.base import Base
 
 

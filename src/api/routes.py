@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, HTTPException
 
 from src.agents.graph import agent
 from src.models.schemas import (
@@ -65,7 +66,8 @@ async def agent_status() -> AgentStatusResponse:
     """Kiểm tra trạng thái hoạt động của LangGraph Agent runtime."""
     return AgentStatusResponse(
         status="ready",
-        agent="VCare LangGraph Medical Agent v2.0",
-        version="2.0.0",
+        agent="LangGraph Clinical Triage Agent v1.0",
+        version="1.0.0",
         nodes=["analyze", "critic", "find_doctors", "respond"],
+        features=["session_memory", "sse_streaming", "ats_triage"],
     )

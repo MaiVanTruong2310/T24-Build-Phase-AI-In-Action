@@ -25,6 +25,7 @@ export function BookingDrawer({ open, onOpenChange, ...panelProps }: BookingDraw
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const triggerElement = triggerRef.current;
     const previousOverflow = document.body.style.overflow;
     if (mobile) document.body.style.overflow = 'hidden';
     panelRef.current?.focus();
@@ -52,7 +53,7 @@ export function BookingDrawer({ open, onOpenChange, ...panelProps }: BookingDraw
       if (mobile) document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
       if (previousFocus?.isConnected) previousFocus.focus();
-      else triggerRef.current?.focus();
+      else triggerElement?.focus();
     };
   }, [open, mobile, onOpenChange]);
 

@@ -1,10 +1,11 @@
 import { AlertTriangle, ShieldCheck, Flame } from 'lucide-react';
+import type { BookingStatus } from '../../../features/appointment-booking/api';
 import type { ApprovalStatus } from '../api';
 
 /* ───────────────── Status config ────────────────── */
 
 export const STATUS_CONFIG: Record<
-  ApprovalStatus,
+  BookingStatus,
   { label: string; dot: string; bg: string; text: string; border: string }
 > = {
   pending_approval: {
@@ -27,6 +28,20 @@ export const STATUS_CONFIG: Record<
     bg: 'bg-rose-50',
     text: 'text-rose-700',
     border: 'border-rose-200',
+  },
+  cancelled: {
+    label: 'Đã hủy',
+    dot: 'bg-slate-400',
+    bg: 'bg-slate-100',
+    text: 'text-slate-600',
+    border: 'border-slate-200',
+  },
+  expired: {
+    label: 'Đã hết hạn',
+    dot: 'bg-slate-400',
+    bg: 'bg-slate-100',
+    text: 'text-slate-600',
+    border: 'border-slate-200',
   },
 };
 

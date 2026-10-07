@@ -183,6 +183,22 @@ class BookingRepository:
         )
         return int(result.rowcount or 0)
 
+    async def claim_expired_pending_bookings(self, now: datetime, limit: int) -> list[Booking]:
+        """Lock a bounded batch of pending bookings past the 24-hour approval deadline."""
+        statement = (
+            self._with_context(
+                select(Booking).where(
+                    Booking.status == "pending_approval",
+                    Booking.expired_at.is_not(None),
+                    Booking.expired_at <= now,
+                )
+            )
+            .order_by(Booking.expired_at, Booking.id)
+            .limit(max(0, limit))
+            .with_for_update(skip_locked=True)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
     async def list_for_user(self, user_id: UUID, status: str | None, offset: int, limit: int) -> list[Booking]:
         """List only bookings owned by the authenticated user."""
         statement = self._with_context(select(Booking).where((Booking.user_id == user_id) | (Booking.requested_by_user_id == user_id)))

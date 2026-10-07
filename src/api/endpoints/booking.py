@@ -1,22 +1,23 @@
 """Authenticated booking endpoints and staff review endpoints."""
 
-from datetime import date, datetime
 import hashlib
+from datetime import date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_current_user, require_patient, require_coordination_admin as require_staff
+from src.api.dependencies import get_current_user, oauth2_scheme, require_patient, require_staff
 from src.api.response import success_response
-from src.core.exceptions import ConflictError, NotFoundError
+from src.core.exceptions import AuthenticationError, AuthorizationError, ConflictError, NotFoundError
 from src.core.logging import get_logger
-from src.db.dependencies import get_db_session
+from src.db.dependencies import get_auth_db_session, get_db_session
 from src.models.booking import Booking
 from src.models.coordination import ConsultationRequest, ConsultationRequestEvent, ConsultationSession
 from src.models.user import User
-from src.models.workbench import CoordinationCase, CoordinationDeposit as Deposit, CoordinationEvent
+from src.models.workbench import CoordinationCase, CoordinationEvent
+from src.models.workbench import CoordinationDeposit as Deposit
 from src.schemas.booking import (
     BookingCancelRequest,
     BookingCreate,
@@ -28,13 +29,35 @@ from src.schemas.booking import (
     StaffBookingStatusUpdate,
 )
 from src.schemas.common import ApiResponse
-from src.services.booking import BookingService, booking_hold_response, booking_response, staff_booking_response
-from src.services.workbench import bump, event, release_hold
+from src.services.booking import BookingService, booking_hold_response
+from src.services.workbench import release_hold
+from src.utils.response_mappers import booking_response, staff_booking_response
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 staff_router = APIRouter(prefix="/staff/bookings", tags=["staff-bookings"])
+
+
+async def require_patient_for_hold(
+    request: Request,
+    session: AsyncSession = Depends(get_auth_db_session),
+) -> User:
+    """Authenticate hold requests while preserving the legacy hold error shape.
+
+    The booking hold endpoint predates the unified error envelope and is still
+    consumed by clients that read ``error.code``.  Keep that compatibility
+    only for this endpoint; all other APIs continue using the stable
+    ``error_code`` contract.
+    """
+    try:
+        token = await oauth2_scheme(request)
+        user = await get_current_user(token, session)
+    except AuthenticationError as exc:
+        raise HTTPException(status_code=401, detail={"legacy_error": {"code": 401}}) from exc
+    if user.role != "patient":
+        raise AuthorizationError()
+    return user
 
 
 def get_booking_service(session: AsyncSession = Depends(get_db_session)) -> BookingService:
@@ -98,9 +121,7 @@ def _case_to_booking_response(
     }
     booking_status = status_map.get(case.status, "pending_approval")
     reason = (
-        case.patient.get("notes")
-        or (case.ai_snapshot or {}).get("symptoms")
-        or "Khám chuyên khoa theo định hướng AI"
+        case.patient.get("notes") or (case.ai_snapshot or {}).get("symptoms") or "Khám chuyên khoa theo định hướng AI"
     )
     patient_note = f"Phiếu điều phối AI: {case.patient.get('name', '')} - SĐT: {case.patient.get('phone', '')} - Cơ sở: {case.patient.get('facility_preference', 'Vinmec Riverside')}"
 
@@ -147,7 +168,7 @@ async def create_booking(
 @router.post("/hold", response_model=ApiResponse[BookingHoldResponse], status_code=status.HTTP_201_CREATED)
 async def create_booking_hold(
     request: BookingHoldCreate,
-    current_user: User = Depends(require_patient),
+    current_user: User = Depends(require_patient_for_hold),
     service: BookingService = Depends(get_booking_service),
 ) -> ApiResponse[BookingHoldResponse]:
     """Reserve one available schedule before the patient confirms a booking."""
@@ -228,18 +249,32 @@ async def cancel_booking(
             raise ConflictError("BOOKING_NOT_CANCELLABLE", "Rejected booking cannot be cancelled")
         booking.status = "cancelled"
         booking.cancellation_reason = reason.strip() if reason else None
-        consultation = (await service.session.execute(select(ConsultationRequest).where(
-            ConsultationRequest.booking_id == booking.id,
-        ).with_for_update())).scalar_one_or_none()
+        consultation = (
+            await service.session.execute(
+                select(ConsultationRequest)
+                .where(
+                    ConsultationRequest.booking_id == booking.id,
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
         if consultation is not None:
-            await service.session.execute(select(ConsultationSession.id).where(
-                ConsultationSession.id == consultation.session_id,
-            ).with_for_update())
+            await service.session.execute(
+                select(ConsultationSession.id)
+                .where(
+                    ConsultationSession.id == consultation.session_id,
+                )
+                .with_for_update()
+            )
             consultation.status = "cancelled"
-            service.session.add(ConsultationRequestEvent(
-                request_id=consultation.id, actor_id=user_id,
-                action="cancelled", note=booking.cancellation_reason,
-            ))
+            service.session.add(
+                ConsultationRequestEvent(
+                    request_id=consultation.id,
+                    actor_id=user_id,
+                    action="cancelled",
+                    note=booking.cancellation_reason,
+                )
+            )
         resp = booking_response(booking)
         await service.session.commit()
         logger.info("cancel_booking: booking cancelled", extra={"booking_id": str(booking_id)})
@@ -256,9 +291,15 @@ async def cancel_booking(
         raise ConflictError("BOOKING_NOT_CANCELLABLE", "Lịch hẹn đã hoàn tất, không thể hủy")
 
     await release_hold(service.session, case)
-    deposits = (await service.session.execute(
-        select(Deposit).where(Deposit.case_id == case.id, Deposit.status.in_(["requested", "verified"]))
-    )).scalars().all()
+    deposits = (
+        (
+            await service.session.execute(
+                select(Deposit).where(Deposit.case_id == case.id, Deposit.status.in_(["requested", "verified"]))
+            )
+        )
+        .scalars()
+        .all()
+    )
     for deposit in deposits:
         deposit.status = "refund_pending" if deposit.status == "verified" else "voided"
 
@@ -277,13 +318,15 @@ async def cancel_booking(
         patient_data["cancellation_reason"] = reason.strip()
     case.patient = patient_data
     case.version += 1
-    service.session.add(CoordinationEvent(
-        case_id=case.id,
-        actor_id=user_id,
-        action="patient_cancelled",
-        note=reason or "",
-        details={},
-    ))
+    service.session.add(
+        CoordinationEvent(
+            case_id=case.id,
+            actor_id=user_id,
+            action="patient_cancelled",
+            note=reason or "",
+            details={},
+        )
+    )
     response_data = _case_to_booking_response(case, user_id, reason)
     await service.session.commit()
 
@@ -340,5 +383,5 @@ async def staff_update_booking_status(
     service: BookingService = Depends(get_booking_service),
 ) -> ApiResponse[StaffBookingResponse]:
     """Approve or reject one pending booking as staff."""
-    from src.core.exceptions import ConflictError
-    raise ConflictError("USE_WORKBENCH", "Duyệt hoặc hủy lịch qua bàn điều phối để đồng bộ cọc và lịch sử.")
+    value = await service.review(booking_id, current_user.id, request)
+    return success_response(staff_booking_response(value), "Staff booking reviewed")

@@ -14,6 +14,7 @@ from src.models.catalog import (
     Service,
     Specialty,
 )
+from src.models.chat_takeover import ChatTakeoverAuditEvent, ChatTakeoverCase, ChatTakeoverMessage
 from src.models.coordination import (
     ConsultationRequest,
     ConsultationRequestEvent,
@@ -37,8 +38,13 @@ from src.models.zalo import ZaloUserMapping
 
 __all__ = [
     "PackageRequest",
+    "PatientProfile",
+    "PatientRelationship",
     "CatalogAuditEvent",
     "Booking",
+    "ChatTakeoverAuditEvent",
+    "ChatTakeoverCase",
+    "ChatTakeoverMessage",
     "BookingHold",
     "Notification",
     "Doctor",

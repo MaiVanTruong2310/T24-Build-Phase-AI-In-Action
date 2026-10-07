@@ -1,14 +1,15 @@
 """Compatibility facade composing the catalog domain service modules."""
 
 import inspect
-from datetime import date, datetime
+import logging
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.cache import invalidate_catalog_cache
 from src.core.exceptions import ConflictError, NotFoundError
-from src.core.logging import get_logger
+from src.core.logging import get_logger, log_event
 from src.models.catalog import CatalogAuditEvent, DoctorSchedule
 from src.repositories.catalog import CatalogRepository
 from src.schemas.catalog import DoctorFacilityAssignment
@@ -17,6 +18,7 @@ from src.services.facility import FacilityServiceMixin
 from src.services.schedule import ScheduleServiceMixin
 from src.services.service import MedicalServiceMixin
 from src.services.specialty import SpecialtyServiceMixin
+from src.utils.serialization import json_safe
 
 logger = get_logger(__name__)
 
@@ -34,6 +36,11 @@ class CatalogService(
         """Initialize the service with one request-scoped session."""
         self.session = session
         self.catalog = CatalogRepository(session)
+
+    @staticmethod
+    def _invalidate_catalog_cache() -> None:
+        """Invalidate public catalog reads after a committed catalog mutation."""
+        invalidate_catalog_cache()
 
     async def _validate_assignments(
         self,
@@ -69,10 +76,18 @@ class CatalogService(
                 entity_type=entity_type,
                 entity_id=entity_id,
                 action=action,
-                payload=_json_safe(payload),
+                payload=json_safe(payload),
             )
         )
-        logger.info("CatalogService.audit", extra={"entity_type": entity_type, "action": action})
+        log_event(
+            logger,
+            logging.INFO,
+            "catalog.audit.recorded",
+            description="A catalog business change was recorded in the audit trail",
+            entity_type=entity_type,
+            entity_id=str(entity_id),
+            action=action,
+        )
 
     @staticmethod
     async def _required(value, message: str):
@@ -94,10 +109,3 @@ class CatalogService(
             and value.doctor.booking_enabled
             and value.facility.status == "active"
         )
-
-
-def _json_safe(values: dict) -> dict:
-    """Convert UUID/date values to JSON-safe audit payloads."""
-    return {
-        key: value.isoformat() if isinstance(value, (UUID, date, datetime)) else value for key, value in values.items()
-    }

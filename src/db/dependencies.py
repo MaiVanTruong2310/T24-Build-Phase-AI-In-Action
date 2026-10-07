@@ -1,10 +1,14 @@
 """FastAPI dependencies related to persistence."""
 
 from collections.abc import AsyncIterator
+
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.db.session import (
     get_auth_db_session as _get_auth_db_session,
+)
+from src.db.session import (
     get_db_session,
 )
 

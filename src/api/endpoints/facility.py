@@ -1,19 +1,18 @@
 """Facility catalog endpoints."""
 
+import time
 from uuid import UUID
 
-from fastapi import Depends, Query, status
+from fastapi import Depends, Query, Response, status
 
-from src.api.dependencies import require_coordination_admin as require_staff
+from src.api.dependencies import get_current_user, require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
+from src.core.cache import cache_key, get_catalog_cache, set_cache_headers
 from src.models.user import User
 from src.schemas.catalog import FacilityCreate, FacilityResponse, FacilityUpdate
 from src.schemas.common import ApiResponse
 from src.services.catalog import CatalogService
-
-
-import time
 
 _FACILITIES_CACHE: dict[str, tuple[float, list[FacilityResponse]]] = {}
 _CACHE_TTL = 300.0  # 5 minutes
@@ -21,6 +20,7 @@ _CACHE_TTL = 300.0  # 5 minutes
 
 @router.get("/facilities", response_model=ApiResponse[list[FacilityResponse]])
 async def list_facilities(
+    response: Response,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
     specialty_id: UUID | None = Query(default=None, description="Filter facilities by specialty"),
@@ -41,11 +41,22 @@ async def list_facilities(
 @router.get("/facilities/{facility_id}", response_model=ApiResponse[FacilityResponse])
 async def get_facility(
     facility_id: UUID,
+    response: Response,
+    _: User = Depends(get_current_user),
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[FacilityResponse]:
     """Get one active facility."""
+    cache = get_catalog_cache()
+    key = cache_key("facilities:detail", facility_id)
+    hit, cached = cache.get(key)
+    if hit:
+        set_cache_headers(response, hit=True)
+        return success_response(FacilityResponse.model_validate(cached), "Facility retrieved")
     value = await service.get_facility(facility_id, public_only=True)
-    return success_response(FacilityResponse.model_validate(value), "Facility retrieved")
+    data = FacilityResponse.model_validate(value)
+    cache.set(key, data.model_dump(mode="json"))
+    set_cache_headers(response, hit=False)
+    return success_response(data, "Facility retrieved")
 
 
 @staff_router.post("/facilities", response_model=ApiResponse[FacilityResponse], status_code=status.HTTP_201_CREATED)

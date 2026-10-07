@@ -15,11 +15,13 @@ function formatDateTime(value: string): string {
   });
 }
 
-function statusLabel(status: Booking['status']): string {
-  if (status === 'pending_approval') return 'Chờ duyệt';
-  if (status === 'confirmed') return 'Đã duyệt';
-  return 'Đã từ chối';
-}
+function statusLabel(status: Booking['status']): string {
+  if (status === 'pending_approval') return 'Chờ duyệt';
+  if (status === 'confirmed') return 'Đã duyệt';
+  if (status === 'expired') return 'Đã hết hạn';
+  if (status === 'cancelled') return 'Đã hủy';
+  return 'Đã từ chối';
+}
 
 export default function ScheduleApprove() {
   const { id } = useParams<{ id: string }>();
@@ -57,7 +59,7 @@ export default function ScheduleApprove() {
     setAction(nextStatus);
     try {
       await updateBookingReview(id, nextStatus, note || undefined);
-      navigate('/staff/appointments');
+      navigate('/staff/booking-approvals');
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Không thể cập nhật trạng thái lịch hẹn.');
       setAction(null);
@@ -73,7 +75,7 @@ export default function ScheduleApprove() {
       <section className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-red-50 p-8">
         <h1 className="text-xl font-bold text-red-900">Không thể tải lịch hẹn</h1>
         <p className="mt-2 text-sm text-red-700">{error}</p>
-        <button onClick={() => navigate('/staff/appointments')} className="mt-5 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white">
+        <button onClick={() => navigate('/staff/booking-approvals')} className="mt-5 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white">
           Quay lại hàng đợi
         </button>
       </section>
@@ -84,7 +86,7 @@ export default function ScheduleApprove() {
 
   return (
     <section className="mx-auto max-w-7xl space-y-6 p-6">
-      <button onClick={() => navigate('/staff/appointments')} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-sky-700">
+      <button onClick={() => navigate('/staff/booking-approvals')} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-sky-700">
         <ArrowLeft className="h-4 w-4" /> Quay lại hàng đợi duyệt lịch
       </button>
 

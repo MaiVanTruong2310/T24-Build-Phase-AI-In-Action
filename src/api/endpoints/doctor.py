@@ -3,15 +3,16 @@
 from datetime import date
 from uuid import UUID
 
-from fastapi import Depends, Query, status
-from sqlalchemy import select, text
+from fastapi import Depends, Query, Response, status
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import require_coordination_admin as require_staff
+from src.api.dependencies import get_current_user, require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
-from src.models.catalog import Doctor
+from src.core.cache import cache_key, get_catalog_cache, set_cache_headers
 from src.db.dependencies import get_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
+from src.models.catalog import Doctor
 from src.models.user import User
 from src.schemas.catalog import (
     DoctorCreate,
@@ -30,6 +31,7 @@ from src.services.catalog import CatalogService
 
 @router.get("/doctors", response_model=ApiResponse[list[DoctorResponse]])
 async def list_doctors(
+    response: Response,
     specialty_id: UUID | None = None,
     facility_id: UUID | None = None,
     service_id: UUID | None = None,
@@ -46,6 +48,21 @@ async def list_doctors(
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[DoctorResponse]]:
     """Search public doctors by catalog filters."""
+    cache = get_catalog_cache()
+    key = cache_key(
+        "doctors:list",
+        specialty_id,
+        facility_id,
+        service_id,
+        name,
+        booking_enabled,
+        offset,
+        limit,
+    )
+    hit, cached = cache.get(key)
+    if hit:
+        set_cache_headers(response, hit=True)
+        return success_response([DoctorResponse.model_validate(item) for item in cached], "Doctors retrieved")
     values = await service.list_doctors(
         public_only=True,
         specialty_id=specialty_id,
@@ -62,7 +79,12 @@ async def list_doctors(
         offset=offset,
         limit=limit,
     )
-    return success_response([_doctor_response(value, public_only=True, on_date=on_date) for value in values], "Doctors retrieved")
+    data = [_doctor_response(value, public_only=True) for value in values]
+    cache.set(key, [item.model_dump(mode="json") for item in data])
+    set_cache_headers(response, hit=False)
+    return success_response(
+        [_doctor_response(value, public_only=True, on_date=on_date) for value in values], "Doctors retrieved"
+    )
 
 
 @staff_router.get("/doctors", response_model=ApiResponse[list[DoctorResponse]])
@@ -75,9 +97,16 @@ async def staff_list_doctors(
     _: User = Depends(require_staff),
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[list[DoctorResponse]]:
-    values = await service.list_doctors(public_only=False, specialty_id=specialty_id,
-        facility_id=facility_id, service_id=None, name=name, booking_enabled=None,
-        offset=offset, limit=limit)
+    values = await service.list_doctors(
+        public_only=False,
+        specialty_id=specialty_id,
+        facility_id=facility_id,
+        service_id=None,
+        name=name,
+        booking_enabled=None,
+        offset=offset,
+        limit=limit,
+    )
     return success_response([_doctor_response(value) for value in values], "Doctors retrieved")
 
 
@@ -86,28 +115,55 @@ async def doctor_facets(db: AsyncSession = Depends(get_db_session)):
     columns = {"honors": "honors", "academic_ranks": "academic_ranks", "degrees": "degrees", "languages": "languages"}
     result = {}
     for key, column in columns.items():
-        values = (await db.execute(text(f"""
+        values = (
+            (
+                await db.execute(
+                    text(f"""
             SELECT DISTINCT value FROM doctors, unnest({column}) AS value
             WHERE status = 'active' AND review_status = 'approved'
             ORDER BY value
-        """))).scalars().all()
+        """)
+                )
+            )
+            .scalars()
+            .all()
+        )
         result[key] = values
-    result["professional_roles"] = (await db.execute(text("""
+    result["professional_roles"] = (
+        (
+            await db.execute(
+                text("""
         SELECT DISTINCT professional_role FROM doctors
         WHERE status = 'active' AND review_status = 'approved'
         ORDER BY professional_role
-    """))).scalars().all()
+    """)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return success_response(result, "Doctor filter options")
 
 
 @router.get("/doctors/{doctor_id}", response_model=ApiResponse[DoctorResponse])
 async def get_doctor(
     doctor_id: UUID,
+    response: Response,
+    _: User = Depends(get_current_user),
     service: CatalogService = Depends(get_catalog_service),
 ) -> ApiResponse[DoctorResponse]:
     """Get one public doctor."""
+    cache = get_catalog_cache()
+    key = cache_key("doctors:detail", doctor_id)
+    hit, cached = cache.get(key)
+    if hit:
+        set_cache_headers(response, hit=True)
+        return success_response(DoctorResponse.model_validate(cached), "Doctor retrieved")
     value = await service.get_doctor(doctor_id, public_only=True)
-    return success_response(_doctor_response(value, public_only=True), "Doctor retrieved")
+    data = _doctor_response(value, public_only=True)
+    cache.set(key, data.model_dump(mode="json"))
+    set_cache_headers(response, hit=False)
+    return success_response(data, "Doctor retrieved")
 
 
 @staff_router.post("/doctors", response_model=ApiResponse[DoctorResponse], status_code=status.HTTP_201_CREATED)
@@ -122,8 +178,9 @@ async def staff_create_doctor(
 
 
 @staff_router.get("/doctors/{doctor_id}", response_model=ApiResponse[DoctorResponse])
-async def staff_get_doctor(doctor_id: UUID, _: User = Depends(require_staff),
-                           service: CatalogService = Depends(get_catalog_service)) -> ApiResponse[DoctorResponse]:
+async def staff_get_doctor(
+    doctor_id: UUID, _: User = Depends(require_staff), service: CatalogService = Depends(get_catalog_service)
+) -> ApiResponse[DoctorResponse]:
     value = await service.get_doctor(doctor_id, public_only=False)
     return success_response(_doctor_response(value), "Doctor retrieved")
 
@@ -163,7 +220,8 @@ def _doctor_response(value: Doctor, *, public_only: bool = False, on_date: date 
     facilities = [
         item
         for item in value.facilities
-        if not public_only or (
+        if not public_only
+        or (
             (item.facility is None or item.facility.status == "active")
             and (item.active_from is None or item.active_from <= day)
             and (item.active_to is None or item.active_to >= day)

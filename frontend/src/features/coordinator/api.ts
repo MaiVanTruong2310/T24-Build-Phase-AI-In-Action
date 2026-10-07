@@ -1,4 +1,5 @@
-import { fetchWithAuth } from '../../app/apiClient'
+import { fetchWithAuth, resolveWebSocketUrl } from '../../app/apiClient'
+import { readAccessToken } from '../auth/session'
 
 export interface Case {
   id: string; source: string; session_id: string | null; patient_id: string | null
@@ -25,6 +26,12 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
   const data = await response.json()
   if (!response.ok) throw new Error(data.message || data.detail || 'Không thể xử lý yêu cầu.')
   return data.data as T
+}
+
+export function resolveStaffWorkbenchWebSocketUrl(): string {
+  const token = readAccessToken()
+  const query = token ? `?${new URLSearchParams({ token }).toString()}` : ''
+  return resolveWebSocketUrl(`/staff/chat-takeover/ws/staff${query}`)
 }
 
 export const statuses: Record<string, string> = {

@@ -4,9 +4,10 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from src.main import app
-from src.db.dependencies import get_db_session
+
 from src.api.endpoints.coordination import VN_TZ
+from src.db.dependencies import get_db_session
+from src.main import app
 
 
 @pytest.mark.asyncio

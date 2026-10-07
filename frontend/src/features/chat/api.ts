@@ -1,5 +1,6 @@
 import type { ChatProfile } from './profile';
-import { fetchPublicApi, fetchWithAuth } from '../../app/apiClient';
+import { fetchPublicApi, fetchWithAuth, resolveWebSocketUrl } from '../../app/apiClient';
+import { readAccessToken } from '../auth/session';
 
 function fetchChatApi(url: string, options: RequestInit = {}) {
   return fetchWithAuth(url, options);
@@ -7,6 +8,8 @@ function fetchChatApi(url: string, options: RequestInit = {}) {
 export interface SavedConversation { session_id: string; title: string; created_at: string; updated_at: string }
 export interface SavedChatTurn { id: string; request_id: string; user_text: string; assistant_text: string | null; result: ChatMetadata | null; status: 'completed' | 'processing' | 'failed'; created_at: string }
 export interface ConversationHistory { title: string; turns: SavedChatTurn[]; has_more: boolean }
+export interface PatientTakeoverMessage { id: string; author_type: 'patient' | 'assistant' | 'staff' | 'system'; content: string; created_at: string }
+export interface PatientTakeoverHistory { case: { id: string; status: string; session_id: string } | null; messages: PatientTakeoverMessage[] }
 async function historyJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetchWithAuth(url, { signal });
   const data = await response.json();
@@ -15,6 +18,7 @@ async function historyJson<T>(url: string, signal?: AbortSignal): Promise<T> {
 }
 export const getConversations = (offset = 0, signal?: AbortSignal, patientProfileId?: string) => historyJson<{ conversations: SavedConversation[]; has_more: boolean }>(`/chat/conversations?offset=${offset}${patientProfileId ? "&patient_profile_id=" + encodeURIComponent(patientProfileId) : ""}`, signal);
 export const getConversation = (id: string, offset = 0, signal?: AbortSignal) => historyJson<ConversationHistory>(`/chat/conversations/${encodeURIComponent(id)}?offset=${offset}`, signal);
+export const getTakeoverConversation = (id: string, signal?: AbortSignal) => historyJson<PatientTakeoverHistory>(`/chat/conversations/${encodeURIComponent(id)}/takeover`, signal);
 
 
 export async function deleteConversation(id: string): Promise<void> {
@@ -60,6 +64,8 @@ export interface RankedSpecialtyItem {
 
 export interface BookingIntake {
   required?: boolean;
+  confirmed?: boolean;
+  request_code?: string;
   endpoint?: string;
   booking_mode?: 'doctor' | 'package';
   patient_name?: string;
@@ -225,6 +231,12 @@ export async function checkAgentStatus(signal?: AbortSignal): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export function resolveChatTakeoverWebSocketUrl(sessionId: string): string {
+  const token = readAccessToken();
+  const query = token ? `?${new URLSearchParams({ token }).toString()}` : '';
+  return resolveWebSocketUrl(`/staff/chat-takeover/ws/${encodeURIComponent(sessionId)}${query}`);
 }
 
 export async function submitBooking(

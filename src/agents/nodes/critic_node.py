@@ -7,6 +7,7 @@ cho ClinicalCriticService độc lập (Domain Layer) và áp dụng EvaluatorVe
 from __future__ import annotations
 
 from typing import Any
+
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.clinical_critic_service import get_clinical_critic_service
 

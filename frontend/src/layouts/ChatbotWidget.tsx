@@ -1,4 +1,5 @@
-import { PatientSelector, usePatientSelection } from '../features/patient-profiles/PatientSelector';
+import { PatientSelector } from '../features/patient-profiles/PatientSelector';
+import { usePatientSelection } from '../features/patient-profiles/usePatientSelection';
 import { PatientUpdates, type PatientUpdatesHandle, type SupportRequestState } from '../features/coordinator/PatientUpdates';
 import '../components/ChatMessageInput.css';
 import '../components/ChatSendButton.css';
@@ -30,11 +31,13 @@ import { useDispatch, useSelector } from 'react-redux';
 import { closeChat, toggleChat, type RootState } from '../app/store';
 import {
   getConversation,
+  getTakeoverConversation,
   type SavedChatTurn,
   sendChat,
   streamChat,
   type BookingIntake,
   type ChatMetadata,
+  resolveChatTakeoverWebSocketUrl,
 } from '../features/chat/api';
 
 interface ChatbotWidgetProps {
@@ -49,6 +52,7 @@ interface Message {
   pending?: boolean;
   error?: boolean;
   metadata?: ChatMetadata;
+  staff?: boolean;
   elapsedMs?: number | null;
 }
 
@@ -279,9 +283,21 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     const controller = new AbortController();
     historyRequest.current?.abort(); historyRequest.current = controller;
     setHistoryLoading(true); setHistoryError('');
-    getConversation(sessionId, 0, controller.signal).then(data => {
+    getConversation(sessionId, 0, controller.signal).then(async data => {
       if (controller.signal.aborted) return;
-      setMessages(data.turns.length ? savedMessages(data.turns) : [WELCOME_MESSAGE]);
+      const takeover = await getTakeoverConversation(sessionId, controller.signal).catch(() => null);
+      if (controller.signal.aborted) return;
+      const archived = savedMessages(data.turns);
+      const staffMessages = (takeover?.messages || [])
+        .filter(message => message.author_type === 'staff')
+        .map(message => ({
+          id: `takeover-${message.id}`,
+          sender: 'bot' as const,
+          staff: true,
+          text: message.content,
+          time: new Date(message.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+        }));
+      setMessages([...archived, ...staffMessages].length ? [...archived, ...staffMessages] : [WELCOME_MESSAGE]);
       setHistoryMore(data.has_more); setHistoryOffset(data.turns.length);
     }).catch((error: Error & { status?: number }) => {
       if (controller.signal.aborted) return;
@@ -290,6 +306,52 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     }).finally(() => { if (!controller.signal.aborted) setHistoryLoading(false); });
     return () => controller.abort();
   }, [sessionId, ownerKey, authUser?.id, isChatOpen, historyReload]);
+
+  useEffect(() => {
+    if (!authUser?.id || !isChatOpen) return undefined;
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+
+    const connect = () => {
+      if (stopped) return;
+      socket = new WebSocket(resolveChatTakeoverWebSocketUrl(sessionId));
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as {
+            type?: string;
+            message?: { id?: string; content?: string; created_at?: string; author_type?: string };
+          };
+          const message = payload.message;
+          const content = message?.content;
+          if (payload.type !== 'takeover.message_created' || !message?.id || typeof content !== 'string' || message.author_type !== 'staff') return;
+          setMessages((current) => {
+            if (current.some((item) => item.id === `takeover-${message.id}`)) return current;
+            return [...current, {
+              id: `takeover-${message.id}`,
+              sender: 'bot',
+              staff: true,
+              text: content,
+              time: message.created_at ? new Date(message.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : displayTime(),
+            }];
+          });
+        } catch {
+          // Ignore malformed realtime events; durable history remains authoritative.
+        }
+      };
+      socket.onclose = () => {
+        if (!stopped) reconnectTimer = window.setTimeout(connect, 5000);
+      };
+      socket.onerror = () => socket?.close();
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [authUser?.id, isChatOpen, sessionId]);
 
   const loadOlderMessages = async () => {
     const controller = new AbortController(); historyRequest.current?.abort(); historyRequest.current = controller;
@@ -617,6 +679,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                       <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-1.5">
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                           <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                          {message.staff ? 'Nhân viên y tế' : 'Trợ lý AI'}
                           VgreenAI
                         </span>
                         <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
