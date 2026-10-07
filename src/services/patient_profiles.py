@@ -62,6 +62,14 @@ def profile_dict(profile, relation, patient):
 
 async def create_relative(db, user, payload):
     # Never attach an existing account by guessing phone, CCCD, or email.
+    if payload.citizen_id:
+        existing_cid = (await db.execute(select(User).where(User.citizen_id == payload.citizen_id))).scalar_one_or_none()
+        if existing_cid:
+            raise HTTPException(409, 'Số CCCD đã thuộc một hồ sơ khác trong hệ thống.')
+    if payload.health_insurance_code:
+        existing_bhyt = (await db.execute(select(User).where(User.health_insurance_code == payload.health_insurance_code))).scalar_one_or_none()
+        if existing_bhyt:
+            raise HTTPException(409, 'Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác trong hệ thống.')
     patient = User(full_name=payload.full_name, date_of_birth=payload.date_of_birth,
                    gender='unspecified' if payload.gender == 'prefer_not_to_say' else payload.gender, citizen_id=payload.citizen_id,
                    health_insurance_code=payload.health_insurance_code,

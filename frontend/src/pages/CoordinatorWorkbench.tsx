@@ -4,36 +4,13 @@ import type { StaffContext } from '../layouts/StaffLayout'
 import { saveAndRefresh } from '../features/coordinator/mutations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, canAdminister, dateTime, priorities, resolveStaffWorkbenchWebSocketUrl, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
+import { api, canAdminister, dateTime, priorities, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
+import { formatDateVN } from '../features/appointment-booking/dateValidation'
 import './CoordinatorWorkbench.css'
 
 const sourceNames: Record<string, string> = { chat: 'Hội thoại', consultation: 'Phiếu khám', package: 'Gói khám', booking: 'Lịch chờ duyệt' }
 const eventNames: Record<string, string> = { claim: 'Nhận ca', handover: 'Bàn giao', takeover: 'Tiếp quản chat', resume: 'Trả về AI', contact: 'Liên hệ', follow_up: 'Hẹn liên hệ', emergency_detected: 'Phát hiện cảnh báo', emergency_ack: 'Tiếp nhận khẩn', emergency_transfer: 'Bàn giao cấp cứu', complete: 'Hoàn tất', cancel: 'Hủy', plan_updated: 'Đổi phương án khám', deposit_requested: 'Yêu cầu cọc', deposit_verified: 'Xác minh cọc', deposit_expired: 'Hết hạn cọc', booking_confirmed: 'Chốt lịch', refund_request: 'Yêu cầu hoàn cọc', refund_confirm: 'Xác nhận hoàn cọc', intake_submitted: 'Nhận phiếu', human_requested: 'Yêu cầu người hỗ trợ' }
 const depositNames: Record<string, string> = { requested: 'Chờ chuyển cọc', verified: 'Đã xác minh', expired: 'Hết hạn', voided: 'Đã thay phương án', refund_pending: 'Chờ hoàn cọc', refunded: 'Đã hoàn cọc' }
-
-interface CarePipelineStep {
-  step_number: number;
-  anatomical_rank?: number;
-  department_name: string;
-  target_symptoms?: string[];
-  clinical_rationale?: string;
-}
-
-function isCarePipelineStep(value: unknown): value is CarePipelineStep {
-  if (!value || typeof value !== 'object') return false;
-  const step = value as Record<string, unknown>;
-  return typeof step.step_number === 'number' &&
-    typeof step.department_name === 'string' &&
-    (step.anatomical_rank === undefined || typeof step.anatomical_rank === 'number') &&
-    (step.target_symptoms === undefined || (Array.isArray(step.target_symptoms) && step.target_symptoms.every((item) => typeof item === 'string'))) &&
-    (step.clinical_rationale === undefined || typeof step.clinical_rationale === 'string');
-}
-
-function readCarePipelineSteps(value: unknown): CarePipelineStep[] {
-  if (!value || typeof value !== 'object') return [];
-  const steps = (value as Record<string, unknown>).pipeline_steps;
-  return Array.isArray(steps) ? steps.filter(isCarePipelineStep) : [];
-}
 
 export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue' | 'dashboard' | 'emergency' | 'chat' | 'settings' }) {
   const [params, setParams] = useSearchParams()
@@ -81,7 +58,6 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
   const resourcesReady = useRef(false)
   const admin = canAdminister(me)
   const canReceive = (member: Member) => member.user_id !== me?.user_id && member.on_duty && (!member.facility_ids.length || !selected?.facility_id || member.facility_ids.includes(selected.facility_id))
-  const carePipelineSteps = readCarePipelineSteps(selected?.ai_snapshot.care_pipeline)
 
   const load = useCallback(async () => {
     const query = new URLSearchParams({ offset: String(offset), limit: '30' })
@@ -96,9 +72,9 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
     if (generation !== requestGeneration.current) return
     setItems(list.items); setTotal(list.total)
     if (refreshStats) {
-      const [stats, people] = await Promise.all([api<Dashboard>('/dashboard'), api<Member[]>('/members')])
+      const [stats, people, identity] = await Promise.all([api<Dashboard>('/dashboard'), api<Member[]>('/members'), api<Member>('/me')])
       if (generation !== requestGeneration.current) return
-      setDashboard(stats); setMembers(people); statsAt.current = Date.now()
+      setDashboard(stats); setMembers(people); setMe(identity); statsAt.current = Date.now()
     }
     if (!resourcesReady.current && mode !== 'chat') {
       const [options, p] = await Promise.all([api<Catalog>('/catalog'), api<Policy | null>('/policy')])
@@ -117,41 +93,14 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
   }, [offset, status, search, mine, mode])
   useEffect(() => {
     let stopped = false
-    let socket: WebSocket | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
-    let reconnectDelay = 1000
-    const refresh = () => {
-      if (busyRef.current) return
-      void load().then(() => { if (!stopped) setPollError('') }).catch(e => {
-        if (!stopped) setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.')
-      })
+    let timer: ReturnType<typeof setTimeout>
+    const poll = async () => {
+      if (!busyRef.current) try { await load(); if (!stopped) setPollError('') } catch (e) { if (!stopped) { setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.'); setLoading(false) } }
+      if (!stopped) timer = setTimeout(poll, 5000)
     }
-    const connect = () => {
-      if (stopped || mode !== 'chat') return
-      socket = new WebSocket(resolveStaffWorkbenchWebSocketUrl())
-      socket.onopen = () => { reconnectDelay = 1000; refresh() }
-      socket.onmessage = event => {
-        try {
-          const update = JSON.parse(event.data) as { type?: string }
-          if (update.type === 'takeover.case_updated' || update.type === 'takeover.message_created') refresh()
-        } catch { /* Ignore malformed realtime events. */ }
-      }
-      socket.onclose = () => {
-        if (stopped) return
-        reconnectTimer = setTimeout(connect, reconnectDelay)
-        reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
-      }
-      socket.onerror = () => socket?.close()
-    }
-    if (mode === 'chat') connect()
-    else refresh()
-    return () => {
-      stopped = true
-      clearTimeout(reconnectTimer)
-      socket?.close()
-      requestGeneration.current += 1
-    }
-  }, [load, mode])
+    void poll()
+    return () => { stopped = true; clearTimeout(timer); requestGeneration.current += 1 }
+  }, [load])
   useEffect(() => {
     let active = true
     const detailRequest = ++detailGeneration.current
@@ -198,17 +147,6 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
     finally { busyRef.current = false; setBusy(false) }
   }
   const act = (action: string) => selected && run(() => api<CaseDetail>('/cases/' + selected.id + '/actions', 'POST', { version: selected.version, action, note, assigned_to: handover || null, follow_up_at: followUp ? new Date(followUp).toISOString() : null, reference: reference || null }), 'Đã lưu thao tác.')
-  const takeOverChat = () => {
-    if (!selected || !me) return
-    const caseId = selected.id
-    void run(async () => {
-      let current = selected
-      if (!current.assigned_to) {
-        current = await api<CaseDetail>('/cases/' + caseId + '/actions', 'POST', { version: current.version, action: 'claim' })
-      }
-      return api<CaseDetail>('/cases/' + caseId + '/actions', 'POST', { version: current.version, action: 'takeover' })
-    }, 'Đã tiếp quản hội thoại từ AI.')
-  }
   const owned = Boolean(selected && me && selected.assigned_to === me.user_id)
   const allowed = (action: string) => canCaseAction(selected, me, action)
   const choose = (id: string) => setParams({ case: id })
@@ -236,9 +174,9 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
         {!selectedId ? <div className="cw-chat-placeholder"><h2>Chọn một hội thoại để xem tin nhắn</h2><p>Bạn có thể theo dõi AI hoặc nhận ca và tiếp quản để trả lời trực tiếp.</p></div> : !selected ? <p role="status">Đang tải hội thoại…</p> : <>
           <header className="cw-heading"><div><h2>{selected.patient.name || 'Hội thoại bệnh nhân'}</h2><small>{selected.patient.phone || 'Chưa có điện thoại'} · {person(selected.assigned_to)}</small><p>{selected.control === 'human' ? 'Điều phối viên đang trả lời; AI tạm dừng.' : 'AI đang hỗ trợ bệnh nhân.'}</p></div><button onClick={() => setParams({})}>Đóng hội thoại</button></header>
           {selected.priority === 0 && <div className="cw-emergency"><strong>Hội thoại có cảnh báo cấp cứu</strong><p>Tiếp nhận và ghi diễn biến trong trang xử lý cấp cứu.</p><Link to={'/staff/emergency?case=' + encodeURIComponent(selected.id)}>Mở ca cấp cứu</Link></div>}
-          <div className="cw-actions"><button disabled={busy || !me?.on_duty || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>Nhận ca</button><button className="cw-primary" disabled={busy || !me?.on_duty || !selected.session_id || selected.control === 'human' || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={takeOverChat}>{selected.control === 'human' ? 'Đang do nhân viên xử lý' : 'Tiếp quản từ AI'}</button>{selected.status !== 'observing' && <Link to={'/staff/queue?case=' + encodeURIComponent(selected.id)}>Mở phiếu điều phối và xếp lịch</Link>}</div>
+          <div className="cw-actions"><button disabled={busy || !me?.on_duty || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>Nhận ca</button><button disabled={busy || !allowed('takeover')} onClick={() => void act('takeover')}>Tiếp quản từ AI</button>{selected.status !== 'observing' && <Link to={'/staff/queue?case=' + encodeURIComponent(selected.id)}>Mở phiếu điều phối và xếp lịch</Link>}</div>
           <div className="cw-messages cw-chat-messages" role="log" aria-label="Tin nhắn bệnh nhân và nhân viên">
-            {selected.messages.length ? selected.messages.map(m => <article key={m.id} className={'cw-message-' + m.sender}><div className="cw-message-meta"><strong>{m.sender === 'patient' ? 'Bệnh nhân' : m.sender === 'coordinator' ? person(m.actor_id) : m.sender === 'ai' ? 'AI hỗ trợ' : 'Thông báo'}</strong><time>{dateTime(m.created_at)}</time></div><p>{m.body}</p></article>) : <p className="cw-chat-empty">Chưa có tin nhắn được lưu.</p>}
+            {selected.messages.length ? selected.messages.map(m => <article key={m.id} className={'cw-message-' + m.sender}><strong>{m.sender === 'patient' ? 'Bệnh nhân' : m.sender === 'coordinator' ? person(m.actor_id) : m.sender === 'ai' ? 'AI' : 'Thông báo'}</strong><time>{dateTime(m.created_at)}</time><p>{m.body}</p></article>) : <p>Chưa có tin nhắn được lưu.</p>}
           </div>
           <form onSubmit={e => { e.preventDefault(); if (!allowed('message') || !message.trim()) return; const body = message.trim(); const caseId = selected.id; void run(async () => { await api('/cases/' + caseId + '/messages', 'POST', { client_id: crypto.randomUUID(), body }); if (selectedRef.current === caseId) setMessage('') }, 'Đã gửi tin nhắn.') }}>
             <label>Trả lời bệnh nhân<textarea maxLength={5000} disabled={busy || !allowed('message')} required value={message} onChange={e => setMessage(e.target.value)} placeholder="Nhận ca và tiếp quản từ AI để trả lời bệnh nhân." /></label><button className="cw-primary" disabled={busy || !allowed('message') || !message.trim()}>Gửi tin nhắn</button>
@@ -265,7 +203,7 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
       <section className="cw-toolbar"><label>Tìm ca<input placeholder="Tên, điện thoại hoặc mã ca" value={search} onChange={e => { setSearch(e.target.value); setOffset(0) }} /></label><label>Trạng thái<select value={status} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="">Tất cả</option>{Object.entries(statuses).filter(([k]) => k !== 'observing').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label><label className="cw-check"><input type="checkbox" checked={mine} onChange={e => { setMine(e.target.checked); setOffset(0) }} />Ca của tôi</label></section>
       <div className={'cw-grid' + (selectedId ? ' cw-with-detail' : '')}><section className="cw-panel cw-queue"><div className="cw-table-wrap"><table><thead><tr><th>Bệnh nhân / mã</th><th>Ưu tiên</th><th>Trạng thái</th><th>Phụ trách</th><th>Tạo lúc</th></tr></thead><tbody>{items.map(c => <tr key={c.id} className={c.id === selectedId ? 'cw-selected' : ''}><td><button onClick={() => choose(c.id)} className="cw-link">{c.patient.name || 'Chưa có tên'}</button><small>{c.patient.phone || 'Chưa có điện thoại'} · {sourceNames[c.source] || c.source}</small><small>{c.id.slice(0, 8).toUpperCase()}</small></td><td className={c.priority === 0 ? 'cw-critical' : ''}>{priorities[c.priority]}</td><td>{statuses[c.status] || c.status}</td><td>{person(c.assigned_to)}</td><td>{dateTime(c.created_at)}</td></tr>)}</tbody></table></div>{!loading && !items.length && <p className="cw-empty">Không có ca phù hợp.</p>}<footer className="cw-pagination"><span>{total} ca</span><button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 30))}>Trước</button><button disabled={offset + 30 >= total} onClick={() => setOffset(offset + 30)}>Sau</button></footer></section>
       {selectedId && <aside className="cw-detail"><button onClick={() => setParams({})}>Đóng hồ sơ</button>{!selected ? <p>Đang tải hồ sơ…</p> : <>
-        <section className="cw-panel"><h2>{selected.patient.name || 'Hồ sơ ca'}</h2><small>Mã {selected.id} · phiên bản {selected.version}</small><p>{statuses[selected.status]} · {priorities[selected.priority]} · {person(selected.assigned_to)}</p><dl>{Object.entries(selected.patient).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{{ name: 'Họ tên', phone: 'Điện thoại', email: 'Email', date_of_birth: 'Ngày sinh', gender: 'Giới tính', guardian_name: 'Người giám hộ', guardian_phone: 'Liên hệ giám hộ', preferred_date: 'Ngày mong muốn', preferred_period: 'Buổi mong muốn', facility_preference: 'Cơ sở mong muốn', contact_time_preference: 'Thời gian liên hệ', notes: 'Nội dung yêu cầu', consent_to_contact: 'Đồng ý liên hệ' }[k] || k}</dt><dd>{String(v)}</dd></div>)}</dl><p>Hạn xử lý: {dateTime(selected.due_at)}. Nhắc việc: {dateTime(selected.follow_up_at)}</p><button disabled={busy || !me?.on_duty || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>Nhận ca</button></section>
+        <section className="cw-panel"><h2>{selected.patient.name || 'Hồ sơ ca'}</h2><small>Mã {selected.id} · phiên bản {selected.version}</small><p>{statuses[selected.status]} · {priorities[selected.priority]} · {person(selected.assigned_to)}</p><dl>{Object.entries(selected.patient).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{{ name: 'Họ tên', phone: 'Điện thoại', email: 'Email', date_of_birth: 'Ngày sinh', gender: 'Giới tính', guardian_name: 'Người giám hộ', guardian_phone: 'Liên hệ giám hộ', preferred_date: 'Ngày mong muốn', preferred_period: 'Buổi mong muốn', facility_preference: 'Cơ sở mong muốn', contact_time_preference: 'Thời gian liên hệ', notes: 'Nội dung yêu cầu', consent_to_contact: 'Đồng ý liên hệ' }[k] || k}</dt><dd>{(k === 'date_of_birth' || k === 'preferred_date') ? formatDateVN(String(v)) : String(v)}</dd></div>)}</dl><p>Hạn xử lý: {dateTime(selected.due_at)}. Nhắc việc: {dateTime(selected.follow_up_at)}</p><button disabled={busy || !me?.on_duty || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>Nhận ca</button></section>
         <section className="cw-panel cw-ai-panel">
           <h2>Kết quả Định hướng Lâm sàng (AI Triage & Care Pipeline)</h2>
           {Object.keys(selected.ai_snapshot).length ? (
@@ -295,14 +233,14 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
               )}
 
               {/* LỘ TRÌNH KHÁM PHÂN TẦNG ĐA KHOA (STAGED CARE NAVIGATION PIPELINE) */}
-              {carePipelineSteps.length ? (
+              {(selected.ai_snapshot.care_pipeline as any)?.pipeline_steps?.length ? (
                 <div className="cw-pipeline-container">
                   <div className="cw-pipeline-header">
                     <strong>🏥 Lộ trình Khám Ưu tiên Phân tầng (Staged Care Navigation):</strong>
                     <small>Nguyên tắc y khoa: Cơ quan sinh tồn luôn được ưu tiên khám trước mức độ đau đơn thuần.</small>
                   </div>
                   <div className="cw-pipeline-steps">
-                    {carePipelineSteps.map((step) => (
+                    {((selected.ai_snapshot.care_pipeline as any).pipeline_steps as any[]).map((step: any) => (
                       <div key={step.step_number} className={`cw-step-card ${step.step_number === 1 ? 'cw-step-primary' : 'cw-step-secondary'}`}>
                         <div className="cw-step-badge">
                           Bước {step.step_number} {step.anatomical_rank === 1 ? '· Sinh tồn' : step.anatomical_rank === 2 ? '· Nội tạng chính' : '· Ngoại vi'}

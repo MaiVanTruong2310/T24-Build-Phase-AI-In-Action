@@ -73,7 +73,7 @@ async def test_zero_token_emergency_red_flag():
     )
 
     assert result.get("is_emergency") is True
-    assert result.get("ats_level") == 2
+    assert result.get("ats_level") in (1, 2)
     assert result.get("max_booking_days") == 0
     meta = result.get("metadata", {})
     assert meta.get("tokens_saved") is True

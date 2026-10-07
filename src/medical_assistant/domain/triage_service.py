@@ -70,6 +70,7 @@ class ClinicalTriageService:
             ["severity", "trauma", "numbness_weakness"],
         ),
         "fever": ("TONG_QUAT", "Nội tổng quát", ["duration", "temperature", "rash", "shortness_of_breath"]),
+        "eye_symptoms": ("MAT", "Mắt (Nhãn khoa)", ["duration", "severity", "vision_changes"]),
     }
 
     def __init__(self):
@@ -1641,6 +1642,26 @@ class ClinicalTriageService:
                 "dizziness",
             ]
         )
+        has_eye = any(
+            kw in clean_user_text
+            for kw in [
+                "mắt",
+                "thị lực",
+                "mỏi mắt",
+                "mắt mờ",
+                "mờ mắt",
+                "nhìn mờ",
+                "cộm mắt",
+                "đau mắt",
+                "nhãn khoa",
+                "cận thị",
+                "loạn thị",
+                "viễn thị",
+                "eye",
+                "vision",
+                "blur",
+            ]
+        )
         has_resp = any(
             kw in clean_user_text
             for kw in [
@@ -1871,6 +1892,8 @@ class ClinicalTriageService:
             elif rec_spec_code in ["THAN_KINH"]:
                 if has_neuro:
                     score += 15
+                if has_eye and not any(w in clean_user_text for w in ["đầu", "trán", "thái dương", "headache", "liệt", "co giật", "mất ý thức", "nói khó"]):
+                    score -= 30  # Phạt nặng gán nhầm bệnh thần kinh khi chỉ có triệu chứng mắt đơn thuần
 
             if score >= 10:
                 candidates.append({"record": record, "score": score, "flags": rec_matched_flags[:3]})
@@ -2003,7 +2026,9 @@ class ClinicalTriageService:
         # BƯỚC 4: Fallback — dùng Specialty Router thay vì luôn trả "Sức khỏe tổng quát"
         router_result = specialty_router.route(query=user_text)
         fallback_spec = (
-            router_result.get("specialty_name") if router_result.get("confidence", 0.0) >= 0.1 else "Sức khỏe tổng quát"
+            router_result.get("specialty_name")
+            if router_result.get("confidence", 0.0) >= 0.1
+            else ("Mắt (Nhãn khoa)" if has_eye else "Sức khỏe tổng quát")
         )
 
         if safety_emergency and safety_ats is not None:
@@ -2134,7 +2159,7 @@ class ClinicalTriageService:
                     else ATSLevel.LEVEL_4_STANDARD
                 )
             )
-            has_deterministic_evidence = "deterministic" in value["sources"]
+            has_deterministic_evidence = any(s in ("deterministic", "rule_fallback") for s in value["sources"])
             has_independent_evidence = bool(
                 has_deterministic_evidence
                 and value["complaint_codes"]

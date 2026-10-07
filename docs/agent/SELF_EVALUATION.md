@@ -40,7 +40,7 @@ Trước khi Agent hoàn tất sinh câu trả lời hoặc xuất luồng SSE s
 | **Tiết kiệm Chi phí** | Zero-Token Cache Hit Ratio | **100% với FAQ** | Chạy `tests/test_token_cost_optimization.py`, kiểm tra `tokens_saved == True`. |
 | **Tốc độ Phản hồi** | Thời gian phát hiện cờ đỏ cấp cứu | **< 5ms** | Đo lường thời gian thực thi regex compiled của `triage_service`. |
 | **Độ trễ Streaming** | Time to First Token (TTFT) | **< 800ms** | Đo lường thời gian từ khi nhận request SSE đến khi bắn event `type: token` đầu tiên. |
-| **Tính chính xác Lịch** | Thời gian giữ chỗ (Hold duration) | **Đúng 15 phút** | Kiểm tra mã slot hex và thời hạn khóa slot trên `doctor_schedules`. |
+| **Tính chính xác Lịch** | Tiếp nhận yêu cầu khám (HITL) | **Đúng luồng PENDING_CONTACT** | Kiểm tra tạo yêu cầu tiếp nhận hẹn khám, không tự ý khóa cứng lịch sai quy định. |
 
 ---
 

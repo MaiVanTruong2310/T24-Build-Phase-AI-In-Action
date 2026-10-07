@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Edit3, FileDown, AlertTriangle } from 'lucide-react';
 import type { Patient, PatientInfoItem } from './types';
 import { CreditCard, ShieldCheck, Phone, UserCheck } from 'lucide-react';
+import { formatDateVN } from '../../features/appointment-booking/dateValidation';
 
 interface PatientCardProps {
   patient: Patient;
@@ -60,7 +61,7 @@ export const PatientCard = memo(function PatientCard({
 
             {/* Demographics row */}
             <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[13px] text-slate-500 dark:text-app-secondary light:text-app-secondary">
-              <span>♂ {patient.gender} • {patient.age} tuổi • {patient.dateOfBirth}</span>
+              <span>♂ {patient.gender} • {patient.age} tuổi • {formatDateVN(patient.dateOfBirth)}</span>
               <span className="text-slate-300 dark:text-app-secondary">|</span>
               <span>Nhóm máu: {patient.bloodType}</span>
             </p>

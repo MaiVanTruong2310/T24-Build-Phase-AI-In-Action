@@ -3,6 +3,8 @@
 import base64
 import binascii
 import re
+from zoneinfo import ZoneInfo
+
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
@@ -26,22 +28,34 @@ class RegisterRequest(BaseModel):
         """Require at least one account identity during registration."""
         if not self.email and not self.phone:
             raise ValueError("email or phone is required")
-        if self.date_of_birth and self.date_of_birth >= date.today():
-            raise ValueError("date_of_birth must be in the past")
+        today = date.today()
+        if self.date_of_birth:
+            if self.date_of_birth >= today:
+                raise ValueError("date_of_birth must be in the past")
+            min_year = today.year - 150
+            try:
+                min_dob = today.replace(year=min_year)
+            except ValueError:
+                min_dob = date(min_year, 2, 28)
+            if self.date_of_birth < min_dob:
+                raise ValueError("Ngày sinh không hợp lệ: tuổi không được vượt quá 150 tuổi.")
         if self.full_name is not None:
             if not 2 <= len(self.full_name.strip()) <= 200:
                 raise ValueError('Họ tên phải có từ 2 đến 200 ký tự.')
             self.full_name = self.full_name.strip()
-        if self.date_of_birth and self.date_of_birth < date(1900, 1, 1):
-            raise ValueError('Cần ngày sinh hợp lệ từ năm 1900.')
-        if self.phone:
-            self.phone = re.sub(r'[\s.()-]', '', self.phone)
-        if self.phone and not re.fullmatch(r'^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$', self.phone):
-            raise ValueError('Cần số điện thoại Việt Nam hợp lệ.')
+        if self.phone is not None:
+            cleaned_phone = re.sub(r'[\s.()-]', '', self.phone)
+            if cleaned_phone and not re.fullmatch(r'^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$', cleaned_phone):
+                raise ValueError('Cần số điện thoại Việt Nam hợp lệ.')
+            self.phone = cleaned_phone
         if self.email:
             self.email = self.email.strip().lower()
-            if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', self.email):
-                raise ValueError('Email không hợp lệ.')
+            if not re.fullmatch(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', self.email):
+                raise ValueError('Email không đúng định dạng.')
+            if self.email.endswith('@gmail.com'):
+                user_part = self.email.split('@')[0]
+                if not (6 <= len(user_part) <= 30) or not re.fullmatch(r'^[a-zA-Z0-9.]+$', user_part) or user_part.startswith('.') or user_part.endswith('.') or '..' in user_part:
+                    raise ValueError('Địa chỉ Gmail không đúng định dạng (tên tài khoản từ 6-30 ký tự).')
         return self
 
 
@@ -135,7 +149,6 @@ class MedicalCondition(BaseModel):
 
 class PatientDetails(BaseModel):
     """Patient-reported details; these do not certify a clinical diagnosis."""
-
     model_config = ConfigDict(extra="forbid")
     portrait_image: str | None = Field(default=None, max_length=180000)
     medical_history: list[MedicalCondition] = Field(default_factory=list, max_length=100)
@@ -167,7 +180,7 @@ class PortraitUpdateRequest(BaseModel):
         if not value.startswith(prefix):
             raise ValueError("Ảnh hồ sơ cần ở định dạng JPEG.")
         try:
-            image = base64.b64decode(value[len(prefix) :], validate=True)
+            image = base64.b64decode(value[len(prefix):], validate=True)
         except (ValueError, binascii.Error) as exc:
             raise ValueError("Dữ liệu ảnh không hợp lệ.") from exc
         if not image.startswith(b"\xff\xd8\xff") or not image.endswith(b"\xff\xd9"):
@@ -217,9 +230,18 @@ class UpdateProfileRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_date_of_birth(self) -> "UpdateProfileRequest":
-        """Prevent a profile from containing a future birth date."""
-        if self.date_of_birth and self.date_of_birth >= date.today():
-            raise ValueError("date_of_birth must be in the past")
+        """Prevent a profile from containing a future birth date or > 150 years."""
+        if self.date_of_birth:
+            today = date.today()
+            if self.date_of_birth >= today:
+                raise ValueError("date_of_birth must be in the past / Ngày sinh không được ở tương lai.")
+            min_year = today.year - 150
+            try:
+                min_dob = today.replace(year=min_year)
+            except ValueError:
+                min_dob = date(min_year, 2, 28)
+            if self.date_of_birth < min_dob:
+                raise ValueError("Ngày sinh không hợp lệ: tuổi không được vượt quá 150 tuổi.")
         if self.patient_details and "portrait_image" in self.patient_details.model_fields_set:
             raise ValueError("Vui lòng dùng API ảnh hồ sơ để cập nhật ảnh.")
         return self

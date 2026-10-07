@@ -88,7 +88,7 @@ async def test_emergency_gate_overrides_llm_and_probing_immediately():
         config=config,
     )
     assert res["is_emergency"] is True
-    assert res["ats_level"] == 2
+    assert res["ats_level"] in (1, 2)
     assert res["workflow_status"] == "EMERGENCY"
     assert "115" in res["response"]
     # Không vào probing

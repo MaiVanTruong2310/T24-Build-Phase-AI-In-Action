@@ -58,6 +58,10 @@ async def test_json_and_stream_forward_same_profile(client, monkeypatch):
     for endpoint in ("/api/v1/chat", "/api/v1/chat/stream"):
         response = await client.post(endpoint, json=payload)
         assert response.status_code == 200
+        if endpoint.endswith("/stream"):
+            async for _ in response.aiter_lines():
+                pass
+        assert mocked.called
         args = mocked.call_args.args[0]
         assert args["patient_profile"] == payload["patient_profile"]
         assert args["patient_phone"] == "0912345678"

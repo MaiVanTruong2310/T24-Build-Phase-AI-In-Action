@@ -116,10 +116,18 @@ Quy trình này hướng dẫn cách trích xuất, chia nhỏ dataset quốc t�
   - Sáp nhập 49 hồ sơ bệnh học lâm sàng DDXPlus chuẩn tiếng Việt (ICD-10, ATS 1-5, Red Flags, typical symptoms) vào `data/datalake/normalized/diseases_triaged.jsonl` (tăng từ 692 lên **741 mặt bệnh**).
   - Tự động đồng bộ và upsert toàn bộ 741 bản ghi lên bảng `disease_triage` trên cơ sở dữ liệu đám mây Supabase PostgreSQL.
 
-### Bước 3: Chạy Benchmark Tự động trên Chunk
-- **Lệnh thực thi:**
+### Bước 3: Chạy Benchmark Tự động trên Chunk & Benchmark Hiện tại của Repo
+- **Bộ công cụ đánh giá chính thức trong repo (`P124-Dev`):**
+  ```powershell
+  # Benchmark Info Agent (6 công cụ, stratified sampling, simulate DB failure, grounding)
+  python scripts/eval_info.py --eval-mode mock --output-dir eval_output
+
+  # Sinh bộ đánh giá lâm sàng Ground Truth
+  python scripts/build_groundtruth_eval.py
+  ```
+- **Lệnh đánh giá DDXPlus offline (Dataset artifacts):**
   ```powershell
   python scripts/ddxplus/build_ddxplus_eval_suite.py --chunk data/ddxplus/subsets/chunks_50/ddx_part_001.jsonl
   ```
-- **Kết quả đầu ra:** Xuất báo cáo JSON đo lường độ nhạy an toàn cấp cứu (*Safety Recall*) và tỷ lệ điều phối chuyên khoa tại `eval_output/`.
+- **Kết quả đầu ra:** Xuất báo cáo JSON đo lường độ nhạy an toàn cấp cứu (*Safety Recall*), tỷ lệ điều phối chuyên khoa và độ chính xác thực thể tại `eval_output/`.
 

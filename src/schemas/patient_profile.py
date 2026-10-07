@@ -29,8 +29,15 @@ class RelativeInput(BaseModel):
     @model_validator(mode='after')
     def validate_profile(self):
         today = datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).date()
-        if not date(1900, 1, 1) <= self.date_of_birth <= today:
-            raise ValueError('Ngày sinh phải từ năm 1900 đến hôm nay.')
+        if self.date_of_birth > today:
+            raise ValueError('Ngày sinh không được ở tương lai.')
+        min_year = today.year - 150
+        try:
+            min_dob = today.replace(year=min_year)
+        except ValueError:
+            min_dob = date(min_year, 2, 28)
+        if self.date_of_birth < min_dob:
+            raise ValueError('Ngày sinh không hợp lệ: tuổi không được vượt quá 150 tuổi.')
         if not self.consent_to_manage:
             raise ValueError('Cần xác nhận được người khám hoặc người giám hộ đồng ý quản lý hồ sơ đặt lịch.')
         return self

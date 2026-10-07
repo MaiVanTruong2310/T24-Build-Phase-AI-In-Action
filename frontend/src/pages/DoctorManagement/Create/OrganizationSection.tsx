@@ -1,6 +1,7 @@
 import type { DoctorForm, FacilityAssignmentForm } from './FormTypes'
 import type { Specialty } from '../api'
 import type { Facility } from '../../../features/appointment-booking/api'
+import { DateInputVN } from '../../../components/DateInputVN'
 
 interface Props {
   form: DoctorForm
@@ -50,8 +51,8 @@ export function OrganizationSection({ form, onChange, specialties, facilities, s
           <label className="text-sm">Khoa / trung tâm<input value={item.department} onChange={event => update(index, { department: event.target.value })} className="mt-1 w-full rounded-lg border p-2" placeholder="Ví dụ: Trung tâm Tiêu hóa" /></label>
           <label className="text-sm">Chức vụ tại cơ sở<input value={item.position} onChange={event => update(index, { position: event.target.value })} className="mt-1 w-full rounded-lg border p-2" placeholder="Ví dụ: Trưởng khoa" /></label>
           <label className="text-sm">Phòng khám<input value={item.room} onChange={event => update(index, { room: event.target.value })} className="mt-1 w-full rounded-lg border p-2" /></label>
-          <label className="text-sm">Từ ngày<input type="date" value={item.active_from} onChange={event => update(index, { active_from: event.target.value })} className="mt-1 w-full rounded-lg border p-2" /></label>
-          <label className="text-sm">Đến ngày<input type="date" value={item.active_to} onChange={event => update(index, { active_to: event.target.value })} className="mt-1 w-full rounded-lg border p-2" /></label>
+          <div className="text-sm"><span className="block mb-1">Từ ngày (dd/mm/yyyy)</span><DateInputVN value={item.active_from} onChange={event => update(index, { active_from: event.target.value })} className="w-full rounded-lg border p-2" /></div>
+          <div className="text-sm"><span className="block mb-1">Đến ngày (dd/mm/yyyy)</span><DateInputVN value={item.active_to} onChange={event => update(index, { active_to: event.target.value })} className="w-full rounded-lg border p-2" /></div>
         </div>
         <div className="mt-3 flex items-center justify-between"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={item.is_primary} onChange={event => update(index, { is_primary: event.target.checked })} />Cơ sở chính</label><button type="button" onClick={() => onAssignmentsChange(assignments.filter((_, i) => i !== index))} className="text-sm font-semibold text-red-700">Xóa cơ sở</button></div>
       </div>)}

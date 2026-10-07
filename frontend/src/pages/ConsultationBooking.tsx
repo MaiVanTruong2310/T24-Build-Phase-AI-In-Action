@@ -1,6 +1,6 @@
-import { PatientSelector } from '../features/patient-profiles/PatientSelector'
-import { usePatientSelection } from '../features/patient-profiles/usePatientSelection'
-import { appointmentDateError, latestAppointmentDate, vietnamToday } from '../features/appointment-booking/dateValidation'
+import { PatientSelector, usePatientSelection } from '../features/patient-profiles/PatientSelector';
+import { appointmentDateError, birthDateError, formatDateVN, latestAppointmentDate, vietnamToday } from '../features/appointment-booking/dateValidation';
+import { DateInputVN } from '../components/DateInputVN';
 import { TypewriterLoader } from '../components/TypewriterLoader';
 import { useEffect, useRef, useState } from 'react'
 
@@ -167,6 +167,7 @@ export default function ConsultationBooking() {
 
   const [loadingPackages, setLoadingPackages] = useState(false)
 
+  const [packageSubmitted, setPackageSubmitted] = useState<PackageRequest | null>(null)
 
 
 
@@ -550,20 +551,10 @@ export default function ConsultationBooking() {
 
       }
 
-      if (!dateOfBirth) {
-
-        setError('Vui lòng chọn ngày sinh của bệnh nhân.')
-
+      const dobError = birthDateError(dateOfBirth)
+      if (dobError) {
+        setError(dobError)
         return
-
-      }
-
-      if (dateOfBirth > today()) {
-
-        setError('Ngày sinh không thể nằm trong tương lai.')
-
-        return
-
       }
 
     }
@@ -750,12 +741,10 @@ export default function ConsultationBooking() {
 
       }
 
-      if (!dateOfBirth) {
-
-        setError('Vui lòng chọn ngày sinh.')
-
+      const dobError = birthDateError(dateOfBirth)
+      if (dobError) {
+        setError(dobError)
         return
-
       }
 
     }
@@ -799,6 +788,8 @@ export default function ConsultationBooking() {
       })
 
 
+
+      setPackageSubmitted(created)
 
       setSuccess(
 
@@ -1366,35 +1357,26 @@ export default function ConsultationBooking() {
 
               <div className="mt-3">
 
-                <label className="block text-sm font-semibold text-slate-700 dark:text-app-text light:text-app-text">
-
-                  Ngày khám mong muốn
-
-                  <input
-
-                    type="date"
-
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-app-text light:text-app-text mb-1.5">
+                    Ngày khám mong muốn (dd/mm/yyyy)
+                  </label>
+                  <DateInputVN
                     min={today()}
                     max={latestAppointmentDate()}
-
                     value={date}
-
                     required
-                    aria-invalid={Boolean(dateError)}
-                    aria-describedby="doctor-appointment-date-error"
                     onChange={(e) => {
-                      const value = e.currentTarget.value
+                      const value = e.target.value
                       setDate(value)
-                      setDateInputError(e.currentTarget.validity.badInput ? 'Ngày khám không hợp lệ. Vui lòng nhập đầy đủ ngày, tháng và năm.' : '')
+                      setDateInputError('')
                       setSelectedSession('')
                       setSessions([])
                     }}
-
-                    className="mt-1.5 block w-full rounded-xl border border-slate-300 dark:border-app-border light:border-app-border p-3 text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary sm:w-64"
-
+                    placeholder="dd/mm/yyyy"
+                    className="w-full sm:w-64 rounded-xl border border-slate-300 dark:border-app-border light:border-app-border p-3 text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary bg-white dark:bg-app-surface"
                   />
-
-                </label>
+                </div>
                 {dateError && <p id="doctor-appointment-date-error" role="alert" className="mt-2 text-sm text-red-600">{dateError}</p>}
 
               </div>
@@ -1651,25 +1633,18 @@ export default function ConsultationBooking() {
 
 
 
-                    <label className="text-xs font-semibold text-slate-700 dark:text-app-text light:text-app-text">
-
-                      Ngày sinh *
-
-                      <input
-
-                        type="date"
-
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 dark:text-app-text light:text-app-text mb-1 block">
+                        Ngày sinh (dd/mm/yyyy) *
+                      </label>
+                      <DateInputVN
                         max={today()}
-
                         value={dateOfBirth}
-
                         onChange={(e) => setDateOfBirth(e.target.value)}
-
-                        className="mt-1 w-full rounded-xl border border-slate-300 dark:border-app-border light:border-app-border bg-white dark:bg-app-surface light:bg-app-surface p-2.5 text-xs text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary"
-
+                        placeholder="dd/mm/yyyy"
+                        className="w-full rounded-xl border border-slate-300 dark:border-app-border light:border-app-border bg-white dark:bg-app-surface light:bg-app-surface p-2.5 text-xs text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary"
                       />
-
-                    </label>
+                    </div>
 
                   </div>
 
@@ -1797,7 +1772,7 @@ export default function ConsultationBooking() {
 
                     <strong>
 
-                      {guestSubmitted.date} ({periodText(guestSubmitted.period)})
+                      {formatDateVN(guestSubmitted.date)} ({periodText(guestSubmitted.period)})
 
                     </strong>
 
@@ -1845,7 +1820,7 @@ export default function ConsultationBooking() {
 
                         <strong className="text-slate-900 dark:text-app-text light:text-app-text">
 
-                          {item.date} · {periodText(item.period)}
+                          {formatDateVN(item.date)} · {periodText(item.period)}
 
                         </strong>
 
@@ -1877,7 +1852,7 @@ export default function ConsultationBooking() {
 
                         <p className="text-slate-600 dark:text-app-secondary light:text-app-secondary">
 
-                          Giờ khám: {new Date(item.starts_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          Giờ khám: {new Date(item.starts_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ({formatDateVN(item.starts_at)})
 
                         </p>
 
@@ -2316,26 +2291,19 @@ export default function ConsultationBooking() {
 
                   <div className="grid grid-cols-2 gap-2.5">
 
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-app-text light:text-app-text">
-
-                      Ngày dự kiến *
-
-                      <input
-
-                        type="date"
-
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-app-text light:text-app-text mb-1">
+                        Ngày dự kiến (dd/mm/yyyy) *
+                      </label>
+                      <DateInputVN
                         min={today()}
-                    max={latestAppointmentDate()}
-
+                        max={latestAppointmentDate()}
                         value={packageDate}
-
                         onChange={(e) => setPackageDate(e.target.value)}
-
-                        className="mt-1 w-full rounded-xl border border-slate-300 dark:border-app-border light:border-app-border p-2 text-xs text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary"
-
+                        placeholder="dd/mm/yyyy"
+                        className="w-full rounded-xl border border-slate-300 dark:border-app-border light:border-app-border p-2 text-xs text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary bg-white dark:bg-app-surface"
                       />
-
-                    </label>
+                    </div>
 
 
 
@@ -2429,20 +2397,13 @@ export default function ConsultationBooking() {
 
 
 
-                        <input
-
-                          type="date"
-
+                        <DateInputVN
                           max={today()}
-
                           value={dateOfBirth}
-
                           onChange={(e) => setDateOfBirth(e.target.value)}
-
-                          className="rounded-xl border border-slate-300 dark:border-app-border light:border-app-border p-2 text-xs text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary"
-
+                          placeholder="Ngày sinh (dd/mm/yyyy)"
+                          className="rounded-xl border border-slate-300 dark:border-app-border light:border-app-border p-2 text-xs text-slate-900 dark:text-app-text light:text-app-text outline-none focus:border-blue-600 dark:focus:border-blue-800 light:focus:border-app-primary bg-white dark:bg-app-surface"
                         />
-
                       </div>
 
                     </div>
@@ -2537,7 +2498,7 @@ export default function ConsultationBooking() {
 
                       <p className="text-slate-500 dark:text-app-secondary light:text-app-secondary text-[11px]">
 
-                        🏥 {pr.facility_name} · Ngày: {pr.preferred_date}
+                        🏥 {pr.facility_name} · Ngày: {formatDateVN(pr.preferred_date)}
 
                       </p>
 

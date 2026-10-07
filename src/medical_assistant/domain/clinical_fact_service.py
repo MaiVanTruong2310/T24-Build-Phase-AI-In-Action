@@ -63,7 +63,23 @@ FACT_PATTERNS = {
     "one_sided_headache": [r"nua dau (?:ben )?(?:trai|phai)", r"dau mot ben"],
     "nausea": [r"buon non", r"mac non", r"nausea"],
     "photophobia": [r"so anh sang", r"choi mat"],
-    "vision_changes": [r"nhin mo", r"nhin doi", r"hoa mat", r"mo mat"],
+    "vision_changes": [r"nhin mo", r"nhin doi", r"hoa mat", r"mo mat", r"mat mo", r"moi mat", r"mat moi", r"giam thi luc"],
+    "eye_symptoms": [
+        r"moi mat",
+        r"mat moi",
+        r"mat mo",
+        r"mo mat",
+        r"nhin mo",
+        r"com mat",
+        r"kho mat",
+        r"dau mat",
+        r"chay nuoc mat",
+        r"do mat",
+        r"giam thi luc",
+        r"loan thi",
+        r"can thi",
+        r"nhan khoa",
+    ],
     "dizziness": [r"chong mat", r"choang vang", r"dizzy", r"dizziness"],
     "numbness_weakness": [r"te (?:yeu|bi)", r"yeu nua nguoi", r"yeu tay chan", r"te tay", r"te chan"],
     "fatigue": [
@@ -145,6 +161,13 @@ NEGATION_PATTERNS = {
         r"mat binh thuong",
         r"khong (?:bi )?nhin (?:mo|doi)",
     ],
+    "eye_symptoms": [
+        r"khong moi mat",
+        r"khong mo mat",
+        r"mat van ro",
+        r"nhin binh thuong",
+        r"mat binh thuong",
+    ],
     "numbness_weakness": [
         r"khong (?:bi )?te",
         r"khong (?:bi )?yeu",
@@ -169,6 +192,7 @@ COMPLAINT_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("cough", "respiratory", tuple(FACT_PATTERNS["cough"])),
     ("fever", "general_medicine", tuple(FACT_PATTERNS["fever"])),
     ("neck_shoulder_pain", "musculoskeletal", tuple(FACT_PATTERNS["neck_shoulder_pain"])),
+    ("eye_symptoms", "ophthalmology", tuple(FACT_PATTERNS["eye_symptoms"])),
 )
 
 COMPLAINT_SYSTEMS = {code: system for code, system, _ in COMPLAINT_RULES}

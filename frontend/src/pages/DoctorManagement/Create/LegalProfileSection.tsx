@@ -1,6 +1,8 @@
 import React from 'react';
 import { ShieldCheck, CloudUpload, FileText, CheckCircle2 } from 'lucide-react';
 import { DoctorForm, FieldErrors } from './FormTypes';
+import { formatDateVN } from '../../../features/appointment-booking/dateValidation';
+import { DateInputVN } from '../../../components/DateInputVN';
 
 interface Props {
   form: DoctorForm;
@@ -37,11 +39,21 @@ export function LegalProfileSection({ form, errors, onChange }: Props) {
 
         {/* Ngày cấp */}
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1.5">Ngày cấp CCHN <span className="text-rose-500">*</span></label>
-          <input 
-            type="date" 
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm font-semibold text-slate-900">
+              Ngày cấp CCHN <span className="text-rose-500">*</span> <span className="text-xs font-normal text-slate-500">(dd/mm/yyyy)</span>
+            </label>
+            {form.licenseIssueDate && (
+              <span className="text-xs text-teal-600 font-medium">
+                {formatDateVN(form.licenseIssueDate)}
+              </span>
+            )}
+          </div>
+          <DateInputVN 
+            max={new Date().toISOString().split('T')[0]}
             value={form.licenseIssueDate}
             onChange={(e) => onChange('licenseIssueDate', e.target.value)}
+            hasError={Boolean(errors.licenseIssueDate)}
             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-sky-500"
           />
         </div>

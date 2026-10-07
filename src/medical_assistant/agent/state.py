@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# Legacy medical-assistant state schema retained for existing node imports.
 from typing import Any, TypedDict
 
 
@@ -83,3 +82,16 @@ class AgentState(TypedDict, total=False):
     reflection_memory: list[dict[str, Any]] | None  # Cấu trúc bộ nhớ bài học cô đọng theo slide VinUni
     pruned_departments: list[str] | None  # Danh sách chuyên khoa bị Action Space Pruning cấm chọn lại
     pruned_actions: list[str] | None  # Danh sách hành động bị Action Space Pruning cấm chọn lại
+
+    # Thông tin tra cứu & Grounded Tools (Info Agent)
+    last_tool_results: list[dict[str, Any]] | None  # Kết quả tool gần nhất phục vụ trả lời follow-up
+    full_tool_results: list[dict[str, Any]] | None  # Kết quả tool đầy đủ chưa bị compact phục vụ entity grounding
+
+    # Phân luồng ý định thông minh (Intent Router)
+    intent_route: str | None  # 'clinical_triage' | 'booking' | 'info_lookup' | 'chitchat'
+    route_confidence: float | None  # 0.0 - 1.0
+    route_destination: str | None  # 'analyze' | 'info_agent' | 'respond'
+
+
+
+

@@ -1,4 +1,8 @@
-"""LangGraph workflow definition for Production Agent."""
+"""LangGraph workflow definition for Legacy Agent [DEPRECATED].
+
+NOTE: Production clinical agent is implemented in `src.medical_assistant.agent.graph`.
+This module is maintained solely for backward compatibility with baseline scaffolding tests.
+"""
 
 from __future__ import annotations
 

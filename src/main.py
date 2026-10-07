@@ -127,6 +127,30 @@ async def lifespan(app: FastAPI):
             raise
     stop_event = asyncio.Event()
     cleanup_task = None
+
+    # Yêu cầu 7: Health-check các LLM provider khi khởi động ứng dụng
+    try:
+        from src.medical_assistant.infrastructure.llm import get_llm
+        llm_instance = get_llm()
+        if hasattr(llm_instance, "acheck_health"):
+            health_res = await llm_instance.acheck_health()
+            app.state.llm_health = health_res
+            for p_idx, p_st in health_res.items():
+                if p_st.get("status") == "healthy":
+                    logger.info("LLM provider %d healthy (%s, %s)", p_idx, p_st.get("model"), p_st.get("base_url"))
+                else:
+                    logger.warning(
+                        "LLM provider %d UNHEALTHY (%s): error=%s status_code=%s blocked=%s",
+                        p_idx,
+                        p_st.get("model"),
+                        p_st.get("error"),
+                        p_st.get("status_code"),
+                        p_st.get("permanently_blocked"),
+                    )
+    except Exception as exc:
+        logger.warning("LLM health check on startup encountered error: %s", exc)
+        app.state.llm_health = {"error": str(exc)}
+
     try:
         cleanup_task = asyncio.create_task(
             _booking_hold_cleanup_loop(settings.booking_hold_cleanup_interval_seconds, stop_event)
@@ -216,6 +240,7 @@ app.add_middleware(
 app.include_router(medical_assistant_router, prefix="/api/v1")
 app.include_router(agent_core_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
+from src.api.endpoints.patient_profiles import router as patient_profiles_router
 app.include_router(patient_profiles_router, prefix="/api/v1")
 app.include_router(workbench_router, prefix="/api/v1")
 app.include_router(live_coordination_router, prefix="/api/v1")

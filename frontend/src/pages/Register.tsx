@@ -10,6 +10,14 @@ import { AppDispatch, RootState } from '../app/store'
 import { registerUser, sendOtp, verifyOtp, resetRegisterSuccess } from '../features/auth/authSlice'
 
 import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Phone, Mail, AlertCircle } from 'lucide-react'
+import {
+  birthDateError,
+  citizenIdError,
+  emailError,
+  formatDateVN,
+  healthInsuranceCodeError,
+} from '../features/appointment-booking/dateValidation'
+import { DateInputVN } from '../components/DateInputVN'
 
 
 
@@ -110,86 +118,33 @@ export function Register() {
 
 
 
-    // 3. Email (Tùy chọn, nhưng nếu nhập phải đúng chuẩn)
-
-    const emailTrimmed = formData.email.trim()
-
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
-
-    if (emailTrimmed && !emailRegex.test(emailTrimmed)) {
-
-      errors.email = 'Email không đúng định dạng (VD: benhnhan@example.com).'
-
+    // 3. Email / Gmail (Bắt buộc, chuẩn định dạng)
+    const errMail = emailError(formData.email)
+    if (errMail) {
+      errors.email = errMail
     }
 
-
-
-    // 4. Ngày sinh (Bắt buộc, không được vượt quá hiện tại)
-
-    if (!formData.date_of_birth) {
-
-      errors.date_of_birth = 'Vui lòng chọn ngày sinh.'
-
-    } else {
-
-      const dob = new Date(formData.date_of_birth)
-
-      const today = new Date()
-
-      today.setHours(0, 0, 0, 0)
-
-      if (isNaN(dob.getTime())) {
-
-        errors.date_of_birth = 'Ngày sinh không hợp lệ.'
-
-      } else if (dob >= today) {
-
-        errors.date_of_birth = 'Ngày sinh phải trong quá khứ (không được vượt quá hôm nay).'
-
-      } else if (dob.getFullYear() < 1900) {
-
-        errors.date_of_birth = 'Năm sinh không hợp lệ (từ 1900 trở lại đây).'
-
-      }
-
+    // 4. Ngày sinh (Bắt buộc, chuẩn dd/mm/yyyy, không ở tương lai, không quá 150 tuổi)
+    const dobError = birthDateError(formData.date_of_birth)
+    if (dobError) {
+      errors.date_of_birth = dobError
     }
-
-
 
     // 5. Giới tính
-
     if (!formData.gender) {
-
       errors.gender = 'Vui lòng chọn giới tính.'
-
     }
 
-
-
-    // 6. Số CCCD (Tùy chọn, nhưng nếu nhập thì đúng chính xác 12 chữ số)
-
-    const citizenIdTrimmed = formData.citizen_id.trim()
-
-    const cccdRegex = /^\d{12}$/
-
-    if (citizenIdTrimmed && !cccdRegex.test(citizenIdTrimmed)) {
-
-      errors.citizen_id = 'Số CCCD phải gồm chính xác 12 chữ số.'
-
+    // 6. Số CCCD (Tùy chọn, nếu nhập phải đúng 12 chữ số)
+    if (formData.citizen_id.trim()) {
+      const cccdErr = citizenIdError(formData.citizen_id)
+      if (cccdErr) errors.citizen_id = cccdErr
     }
-
-
 
     // 7. Mã BHYT (Tùy chọn, 10-15 ký tự chữ/số)
-
-    const bhiTrimmed = formData.health_insurance_code.trim()
-
-    const bhiRegex = /^[a-zA-Z0-9]{10,15}$/
-
-    if (bhiTrimmed && !bhiRegex.test(bhiTrimmed)) {
-
-      errors.health_insurance_code = 'Mã số BHYT phải gồm từ 10 đến 15 ký tự chữ và số.'
-
+    if (formData.health_insurance_code.trim()) {
+      const bhytErr = healthInsuranceCodeError(formData.health_insurance_code)
+      if (bhytErr) errors.health_insurance_code = bhytErr
     }
 
 
@@ -234,7 +189,9 @@ export function Register() {
 
 
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { target: { name: string; value: string } }
+  ) => {
 
     const { name, value } = e.target
 
@@ -307,8 +264,20 @@ export function Register() {
 
 
 
-    await dispatch(registerUser(payload))
-
+    const resultAction = await dispatch(registerUser(payload))
+    if (registerUser.rejected.match(resultAction)) {
+      const errMsg = String(resultAction.payload || resultAction.error?.message || '')
+      const lower = errMsg.toLowerCase()
+      if (lower.includes('cccd') || lower.includes('citizen_id')) {
+        setFieldErrors(prev => ({ ...prev, citizen_id: errMsg }))
+      } else if (lower.includes('bảo hiểm') || lower.includes('health_insurance')) {
+        setFieldErrors(prev => ({ ...prev, health_insurance_code: errMsg }))
+      } else if (lower.includes('phone') || lower.includes('số điện thoại')) {
+        setFieldErrors(prev => ({ ...prev, phone: errMsg }))
+      } else if (lower.includes('email') || lower.includes('tài khoản đã tồn tại')) {
+        setFieldErrors(prev => ({ ...prev, email: errMsg }))
+      }
+    }
   }
 
 
@@ -619,32 +588,26 @@ export function Register() {
 
                 <div className="space-y-1.5">
 
-                  <label className="text-xs sm:text-sm font-medium text-slate-700 light:text-app-text dark:text-slate-300 block">Ngày sinh <span className="text-red-500">*</span></label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs sm:text-sm font-medium text-slate-700 light:text-app-text dark:text-slate-300 block">
+                      Ngày sinh <span className="text-red-500">*</span> <span className="text-xs font-normal text-slate-500 light:text-app-secondary dark:text-slate-400">(dd/mm/yyyy)</span>
+                    </label>
+                  </div>
 
-                  <input
-
-                    type="date"
-
+                  <DateInputVN
+                    id="date_of_birth"
                     name="date_of_birth"
-
                     max={new Date().toISOString().split('T')[0]}
-
                     value={formData.date_of_birth}
-
                     onChange={handleChange}
-
-                    className={`w-full px-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.date_of_birth
-
-                        ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
-
-                        : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
-
-                    }`}
-
                     disabled={loading}
-
+                    hasError={Boolean(fieldErrors.date_of_birth)}
+                    placeholder="dd/mm/yyyy"
+                    className={`w-full px-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
+                      fieldErrors.date_of_birth
+                        ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
+                        : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
+                    }`}
                   />
 
                   {fieldErrors.date_of_birth && (

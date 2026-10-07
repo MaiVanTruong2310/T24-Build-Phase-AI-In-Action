@@ -3,6 +3,8 @@ import { fetchWeeklyShifts, createWeeklyShift, publishSessions } from '../featur
 import { api, type Catalog } from '../features/coordinator/api'
 import { saveAndRefresh } from '../features/coordinator/mutations'
 import { publicationError, shiftError } from '../features/coordinator/uiLogic'
+import { formatDateVN } from '../features/appointment-booking/dateValidation'
+import { DateInputVN } from '../components/DateInputVN'
 import { Link } from 'react-router-dom'
 import './CoordinatorWorkbench.css'
 
@@ -62,7 +64,7 @@ export default function CoordinatorSchedule() {
       <label>Giờ bắt đầu<input required type="time" min={form.period === 'morning' ? '00:00' : '12:00'} max={form.period === 'morning' ? '11:59' : '23:59'} value={form.start_time} onChange={e => setForm({ ...form, start_time: e.target.value })} /></label>
       <label>Thời lượng mỗi lượt (phút)<input required type="number" min="5" max="240" value={form.slot_minutes} onChange={e => setForm({ ...form, slot_minutes: e.target.value })} /></label>
       <label>Số lượt khám mỗi buổi<input required type="number" min="1" max="20" value={form.slot_count} onChange={e => setForm({ ...form, slot_count: e.target.value })} /></label>
-      <label>Có hiệu lực từ<input required type="date" value={form.effective_from} onChange={e => setForm({ ...form, effective_from: e.target.value })} /></label>
+      <label>Có hiệu lực từ (dd/mm/yyyy)<DateInputVN required value={form.effective_from} onChange={e => setForm({ ...form, effective_from: e.target.value })} /></label>
     </div></div><button disabled={optionsBusy || !catalog}>Lưu quy tắc</button></fieldset></form>
     <table><thead><tr><th>Bác sĩ</th><th>Cơ sở</th><th>Ngày / buổi</th><th>Giờ</th><th>Số lượt</th></tr></thead><tbody>{rules.map(x => <tr key={x.id}><td>{catalog?.doctors.find(d => d.id === x.doctor_id)?.name || x.doctor_id}</td><td>{catalog?.facilities.find(f => f.id === x.facility_id)?.name || x.facility_id}</td><td>{weekdays[x.weekday]} · {x.period === 'morning' ? 'Sáng' : 'Chiều'}</td><td>{x.start_time.slice(0, 5)}</td><td>{x.slot_count}</td></tr>)}</tbody></table>{!rules.length && <p>Chưa có quy tắc lịch.</p>}</section>
     <section className="cw-panel"><h2>Công bố lịch theo ngày</h2><form onSubmit={e => {
@@ -70,6 +72,6 @@ export default function CoordinatorSchedule() {
       const validation = publicationError(from, through, todayIso())
       if (validation) { setError(validation); return }
       void run(async () => { const result = await publishSessions(from, through); return `Đã tạo ${result.sessions_created} buổi khám.` })
-    }}><fieldset disabled={busy}><div className="cw-columns"><label>Từ ngày<input required type="date" min={todayIso()} value={from} onChange={e => setFrom(e.target.value)} /></label><label>Đến ngày<input required type="date" min={from || todayIso()} value={through} onChange={e => setThrough(e.target.value)} /></label></div><button disabled={!rules.some(rule => rule.active)}>Công bố lịch</button></fieldset></form></section>
+    }}><fieldset disabled={busy}><div className="cw-columns"><label>Từ ngày (dd/mm/yyyy)<DateInputVN required min={todayIso()} value={from} onChange={e => setFrom(e.target.value)} /></label><label>Đến ngày (dd/mm/yyyy)<DateInputVN required min={from || todayIso()} value={through} onChange={e => setThrough(e.target.value)} /></label></div><button disabled={!rules.some(rule => rule.active)}>Công bố lịch</button></fieldset></form></section>
   </div>
 }

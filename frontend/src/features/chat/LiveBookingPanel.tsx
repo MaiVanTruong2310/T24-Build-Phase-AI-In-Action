@@ -1,5 +1,6 @@
 import type { PatientProfile } from '../patient-profiles/api';
-import { appointmentDateError, latestAppointmentDate } from '../appointment-booking/dateValidation';
+import { appointmentDateError, birthDateError, formatDateVN, latestAppointmentDate } from '../appointment-booking/dateValidation';
+import { DateInputVN } from '../../components/DateInputVN';
 import { TypewriterLoader } from '../../components/TypewriterLoader';
 import { memo, useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { useSelector } from 'react-redux';
@@ -411,7 +412,8 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
   const patientError = () => {
     if (patientName.trim().length < 2 || patientName.trim().length > 120) return 'Họ tên người khám cần từ 2 đến 120 ký tự.';
     if (!phonePattern.test(normalizePhone(patientPhone))) return 'Số điện thoại chưa đúng định dạng Việt Nam.';
-    if (!dateOfBirth || dateOfBirth > localToday()) return 'Ngày sinh không hợp lệ hoặc nằm trong tương lai.';
+    const dobErr = birthDateError(dateOfBirth);
+    if (dobErr) return dobErr;
     if (isMinor(dateOfBirth) && (guardianName.trim().length < 2 || !phonePattern.test(normalizePhone(guardianPhone)))) {
       return 'Người dưới 18 tuổi cần họ tên và số điện thoại người giám hộ hợp lệ.';
     }
@@ -753,18 +755,15 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
               {/* Date of Birth & Gender (Task 1) */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="flex items-center justify-between text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
-                    <span>Ngày sinh *</span>
-                    {dateOfBirth && (
-                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400">✓ Đã lấy</span>
-                    )}
+                  <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
+                    Ngày sinh (dd/mm/yyyy) *
                   </label>
-                  <input
-                    type="date"
+                  <DateInputVN
                     value={dateOfBirth}
                     max={localToday()}
                     onChange={(e) => { markEdited('dateOfBirth'); setDateOfBirth(e.target.value); }}
                     required
+                    placeholder="dd/mm/yyyy"
                     className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
                   />
                 </div>
@@ -969,15 +968,15 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
-                    Ngày khám *
+                    Ngày khám (dd/mm/yyyy) *
                   </label>
-                  <input
-                    type="date"
+                  <DateInputVN
                     value={preferredDate}
                     min={localToday()}
                     max={latestAppointmentDate()}
                     onChange={(e) => { markEdited('preferredDate'); setPreferredDate(e.target.value); }}
                     required
+                    placeholder="dd/mm/yyyy"
                     className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary text-xs"
                   />
                 </div>
@@ -1254,15 +1253,15 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10.5px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
-                      Ngày khám *
+                      Ngày khám (dd/mm/yyyy) *
                     </label>
-                    <input
-                      type="date"
+                    <DateInputVN
                       value={packageDate}
                       min={localToday()}
-                    max={latestAppointmentDate()}
+                      max={latestAppointmentDate()}
                       onChange={(e) => setPackageDate(e.target.value)}
                       required
+                      placeholder="dd/mm/yyyy"
                       className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"
                     />
                   </div>
@@ -1319,14 +1318,14 @@ export const LiveBookingPanel = memo(function LiveBookingPanel({
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-[10px] font-semibold text-slate-700 light:text-app-text dark:text-slate-300 mb-0.5">
-                        Ngày sinh *
+                        Ngày sinh (dd/mm/yyyy) *
                       </label>
-                      <input
-                        type="date"
+                      <DateInputVN
                         value={dateOfBirth}
                         max={localToday()}
                         onChange={(e) => { markEdited('dateOfBirth'); setDateOfBirth(e.target.value); }}
                         required
+                        placeholder="dd/mm/yyyy"
                         className="w-full rounded-lg border border-slate-200 light:border-app-border dark:border-slate-700 bg-white light:bg-app-surface dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 light:text-app-text dark:text-slate-100 outline-none focus:border-blue-500 light:focus:border-app-primary"
                       />
                     </div>

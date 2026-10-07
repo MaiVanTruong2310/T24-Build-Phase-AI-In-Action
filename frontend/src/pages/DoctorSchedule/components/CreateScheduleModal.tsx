@@ -6,6 +6,8 @@ import {
   Schedule,
   ScheduleApiError,
 } from '../../../features/appointment-booking/api';
+import { formatDateVN } from '../../../features/appointment-booking/dateValidation';
+import { DateInputVN } from '../../../components/DateInputVN';
 
 interface CreateScheduleModalProps {
   doctor: Doctor;
@@ -113,8 +115,17 @@ export function CreateScheduleModal({
           </div>
 
           <div>
-            <label htmlFor="schedule-date" className="mb-1 block text-xs font-bold text-slate-600">Ngày khám *</label>
-            <input id="schedule-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required />
+            <div className="mb-1 flex items-center justify-between">
+              <label htmlFor="schedule-date" className="block text-xs font-bold text-slate-600">
+                Ngày khám * <span className="font-normal text-slate-400">(dd/mm/yyyy)</span>
+              </label>
+              {date && (
+                <span className="text-xs font-medium text-sky-600">
+                  {formatDateVN(date)}
+                </span>
+              )}
+            </div>
+            <DateInputVN id="schedule-date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
