@@ -20,7 +20,6 @@ class ChatPatientProfile(BaseModel):
     @classmethod
     def normalize_phone(cls, value: str) -> str:
         import re
-
         phone = re.sub(r"[\s().-]", "", value)
         if phone and not re.fullmatch(r"\+?\d{9,15}", phone):
             raise ValueError("Số điện thoại không hợp lệ")
@@ -33,11 +32,8 @@ class ChatRequest(BaseModel):
     patient_profile: ChatPatientProfile | None = None
     message: str = Field(..., min_length=1, max_length=5000, description="Tin nhắn từ user")
     session_id: str = Field(
-        default_factory=lambda: str(uuid4()),
-        min_length=1,
-        max_length=200,
-        pattern=r"^[A-Za-z0-9_-]+$",
-        description="Thread ID / Session ID định danh phiên chat của bệnh nhân",
+        default_factory=lambda: str(uuid4()), min_length=1, max_length=200,
+        pattern=r"^[A-Za-z0-9_-]+$", description="Thread ID / Session ID định danh phiên chat của bệnh nhân"
     )
     user_id: str | None = Field(default=None, description="Mã bệnh nhân nếu đã đăng nhập")
     enable_citation: bool = Field(

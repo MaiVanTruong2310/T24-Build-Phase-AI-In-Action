@@ -42,21 +42,9 @@ SECRET_PATTERNS = [
     (re.compile(r"\bsk-proj-[a-zA-Z0-9_\-]{30,}\b"), "[REDACTED_OPENAI_KEY]"),
     (re.compile(r"\bsbp_[a-zA-Z0-9_]{20,}\b"), "[REDACTED_SUPABASE_KEY]"),
     (re.compile(r"\beyJ[a-zA-Z0-9_\-]{10,}\.eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\b"), "[REDACTED_JWT_TOKEN]"),
-    (
-        re.compile(r"(?:postgres|postgresql|mysql|mongodb|redis):\/\/[^\s:]+:[^\s@]+@[^\s\/]+"),
-        "[REDACTED_DATABASE_URL]",
-    ),
-    (
-        re.compile(r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----[^-]+-----END (?:[A-Z]+ )?PRIVATE KEY-----", re.DOTALL),
-        "[REDACTED_PRIVATE_KEY]",
-    ),
-    (
-        re.compile(
-            r"(?:api[_-]?key|secret[_-]?key|db[_-]?password|access[_-]?token)\s*[:=]\s*['\"][^\s'\"]{6,}['\"]",
-            re.IGNORECASE,
-        ),
-        "[REDACTED_CREDENTIAL]",
-    ),
+    (re.compile(r"(?:postgres|postgresql|mysql|mongodb|redis):\/\/[^\s:]+:[^\s@]+@[^\s\/]+"), "[REDACTED_DATABASE_URL]"),
+    (re.compile(r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----[^-]+-----END (?:[A-Z]+ )?PRIVATE KEY-----", re.DOTALL), "[REDACTED_PRIVATE_KEY]"),
+    (re.compile(r"(?:api[_-]?key|secret[_-]?key|db[_-]?password|access[_-]?token)\s*[:=]\s*['\"][^\s'\"]{6,}['\"]", re.IGNORECASE), "[REDACTED_CREDENTIAL]"),
 ]
 
 
@@ -75,7 +63,7 @@ class PresidioDLPService:
     def _init_presidio_if_possible(self):
         try:
             import spacy
-            from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
+            from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
             from presidio_analyzer.nlp_engine import SpacyNlpEngine
             from presidio_anonymizer import AnonymizerEngine
 
@@ -88,6 +76,7 @@ class PresidioDLPService:
                     pass
 
             engine = BlankNlpEngine()
+            logging.getLogger("presidio-analyzer").setLevel(logging.ERROR)
             analyzer = AnalyzerEngine(nlp_engine=engine)
 
             # Thêm Custom Recognizer cho CCCD Việt Nam

@@ -31,7 +31,7 @@ class ClinicalFactModel(BaseModel):
 
     chief_complaint: str | None = Field(
         None,
-        description="Triệu chứng chính hoặc lý do khám chính (e.g. constipation, headache, abdominal_pain, chest_pain, cough, fever, dizziness, back_pain, rash, nausea, sore_throat).",
+        description="Triệu chứng chính hoặc lý do khám chính (e.g. constipation, headache, abdominal_pain, chest_pain, cough, fever, dizziness, back_pain, joint_pain, muscle_pain, rash, nausea, sore_throat).",
     )
     positive_facts: list[str] = Field(
         default_factory=list,
@@ -69,6 +69,11 @@ QUY TẮC BẮT BUỘC:
 4. Quy đổi thời gian sang ngày (duration_days) nếu có (hôm qua = 1, 3 ngày = 3, 1 tuần = 7, hơn 1 tuần = 8).
 5. Nếu có nói về táo bón/khó đi ngoài/phân khô/mấy ngày chưa đi cầu, chief_complaint phải là 'constipation'.
 6. Nếu có triệu chứng đau ngực, chief_complaint là 'chest_pain'. Đau đầu -> 'headache'. Đau bụng -> 'abdominal_pain'.
+7. Phân định VỊ TRÍ GIẢI PHẪU rõ ràng:
+   - "bắp đùi", "đùi", "cơ đùi", "bắp chân", "cẳng chân", "đau cơ", "đau bắp tay" -> chief_complaint là 'muscle_pain' (cơ xương khớp), KHÔNG ĐƯỢC gán nhầm sang 'abdominal_pain'.
+   - "đau khớp", "khớp gối", "đầu gối", "cổ tay", "cổ chân" -> chief_complaint là 'joint_pain'.
+   - "đau lưng", "cột sống", "thắt lưng", "cổ vai gáy" -> chief_complaint là 'back_pain' hoặc 'neck_shoulder_pain'.
+   - Chỉ khi đau ở bụng, dạ dày, thượng vị, hạ sườn, quanh rốn mới là 'abdominal_pain'.
 """
 
 

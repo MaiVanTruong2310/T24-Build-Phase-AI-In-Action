@@ -10,11 +10,7 @@ from src.medical_assistant.domain.schemas import ChatPatientProfile, ChatRequest
 
 
 def test_profile_validation_and_structured_transport():
-    request = ChatRequest(
-        message="Chào bạn",
-        session_id="profile-test",
-        patient_profile={"name": "  Nguyễn   An ", "phone": "0912 345 678"},
-    )
+    request = ChatRequest(message="Chào bạn", session_id="profile-test", patient_profile={"name": "  Nguyễn   An ", "phone": "0912 345 678"})
     payload = chat_agent_input(request)
     assert payload["query"] == "Chào bạn"
     assert payload["patient_name"] == "Nguyễn An"
@@ -27,10 +23,7 @@ def test_profile_validation_and_structured_transport():
 @pytest.mark.asyncio
 async def test_identity_survives_truncated_history_and_is_isolated():
     config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-    first = await agent.ainvoke(
-        chat_agent_input(ChatRequest(message="Chào bạn", patient_profile={"name": "Nguyễn An", "phone": "0912345678"})),
-        config,
-    )
+    first = await agent.ainvoke(chat_agent_input(ChatRequest(message="Chào bạn", patient_profile={"name": "Nguyễn An", "phone": "0912345678"})), config)
     assert "Nguyễn An" in first["response"]
     for _ in range(11):
         await agent.ainvoke({"query": "Xin chào"}, config)
@@ -47,14 +40,9 @@ async def test_identity_survives_truncated_history_and_is_isolated():
 @pytest.mark.asyncio
 async def test_json_and_stream_forward_same_profile(client, monkeypatch):
     from src.medical_assistant.api import routes
-
     mocked = AsyncMock(return_value={"response": "Xin chào", "metadata": {}})
     monkeypatch.setattr(routes.agent, "ainvoke", mocked)
-    payload = {
-        "message": "hi",
-        "session_id": "profile-request",
-        "patient_profile": {"name": "Nguyễn An", "phone": "0912345678"},
-    }
+    payload = {"message": "hi", "session_id": "profile-request", "patient_profile": {"name": "Nguyễn An", "phone": "0912345678"}}
     for endpoint in ("/api/v1/chat", "/api/v1/chat/stream"):
         response = await client.post(endpoint, json=payload)
         assert response.status_code == 200
@@ -70,17 +58,7 @@ async def test_json_and_stream_forward_same_profile(client, monkeypatch):
 @pytest.mark.asyncio
 async def test_booking_form_reuses_profile_fields():
     from src.medical_assistant.agent.nodes.example_node import respond_node
-
-    result = await respond_node(
-        {
-            "query": "để lại thông tin",
-            "workflow_status": "BOOKING_CONTACT_REQUIRED",
-            "patient_name": "Nguyễn An",
-            "patient_phone": "0912345678",
-            "patient_profile": {"name": "Nguyễn An", "phone": "0912345678"},
-            "metadata": {},
-        }
-    )
+    result = await respond_node({"query": "để lại thông tin", "workflow_status": "BOOKING_CONTACT_REQUIRED", "patient_name": "Nguyễn An", "patient_phone": "0912345678", "patient_profile": {"name": "Nguyễn An", "phone": "0912345678"}, "metadata": {}})
     intake = result["metadata"]["booking_intake"]
     assert intake["patient_name"] == "Nguyễn An"
     assert intake["patient_phone"] == "0912345678"

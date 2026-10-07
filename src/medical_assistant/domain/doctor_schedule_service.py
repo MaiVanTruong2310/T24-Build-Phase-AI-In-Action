@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 try:
     from datetime import UTC
 except ImportError:
-    UTC = UTC
+    UTC = timezone.utc
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -233,7 +233,12 @@ class DoctorScheduleService:
                 matches.sort(key=lambda row: str(row.get("code") or "").startswith("VINMEC_"))
                 return matches[0]
         contains = [row for row in rows if folded and folded in normalize_text(row.get("name"))]
-        return contains[0] if len(contains) == 1 else None
+        if not contains:
+            contains = [row for row in rows if folded and folded in normalize_text(row.get("address"))]
+        if contains:
+            contains.sort(key=lambda row: str(row.get("code") or "").startswith("VINMEC_"))
+            return contains[0]
+        return None
 
     def _database_doctors(
         self,
@@ -260,14 +265,15 @@ class DoctorScheduleService:
         )
         doctor_ids = list(dict.fromkeys(str(row["doctor_id"]) for row in relations if row.get("doctor_id")))
         facility_departments: dict[str, str] = {}
-        if facility:
+        if facility and doctor_ids:
             facility_relations = self.client.select(
                 "doctor_facilities",
                 params={
                     "select": "doctor_id,department",
                     "facility_id": f"eq.{facility['id']}",
+                    "doctor_id": f"in.({','.join(doctor_ids)})",
                     "status": "eq.active",
-                    "limit": max(100, limit_doctors * 20),
+                    "limit": len(doctor_ids),
                 },
             )
             facility_ids = {str(row["doctor_id"]) for row in facility_relations if row.get("doctor_id")}

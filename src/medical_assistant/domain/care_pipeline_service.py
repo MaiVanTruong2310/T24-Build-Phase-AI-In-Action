@@ -13,8 +13,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from typing import Any
-
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CarePipelineStep(BaseModel):
@@ -151,7 +150,9 @@ ANATOMICAL_SYSTEMS = {
         "weight": 20,
         "name": "Khoa Răng - Hàm - Mặt",
         "organ_name": "Răng miệng & Vùng hàm mặt",
-        "patterns": [r"\b(?:dau\s+rang|nhuc\s+rang|rang\s+sau|dau\s+tuy|viem\s+loi|nha\s+chu|rang\s+ham)\b"],
+        "patterns": [
+            r"\b(?:dau\s+rang|nhuc\s+rang|rang\s+sau|dau\s+tuy|viem\s+loi|nha\s+chu|rang\s+ham)\b"
+        ],
         "rationale": "Răng miệng và vùng hàm mặt; điều trị dứt điểm cơn đau buốt cục bộ.",
     },
 }
@@ -176,7 +177,6 @@ class CarePipelineService:
         Áp dụng Quy tắc Vị trí Giải phẫu Sinh tồn (Anatomical Priority).
         """
         from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
-
         negation_svc = get_clinical_negation_service()
 
         clean_text = self.normalize_text(query)

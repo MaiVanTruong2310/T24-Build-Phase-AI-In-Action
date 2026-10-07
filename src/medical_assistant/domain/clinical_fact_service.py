@@ -127,6 +127,62 @@ FACT_PATTERNS = {
     ],
     "back_pain": [r"dau lung", r"moi lung", r"dau cot song"],
     "neck_shoulder_pain": [r"dau vai gay", r"moi vai gay", r"moi co", r"cổ vai gáy"],
+    "muscle_pain": [
+        r"bap dui",
+        r"dau dui",
+        r"co dui",
+        r"dau bap dui",
+        r"dau co dui",
+        r"bap chan",
+        r"dau bap chan",
+        r"dau cang chan",
+        r"cang chan",
+        r"dau co\b",
+        r"dau co bap",
+        r"dau bap tay",
+        r"dau chan",
+        r"thigh pain",
+        r"muscle pain",
+        r"leg pain",
+        r"calf pain",
+        r"muscle ache",
+        r"sore muscle",
+    ],
+    "hair_loss": [
+        r"rung toc",
+        r"toc rung",
+        r"hair loss",
+        r"alopecia",
+        r"rung nhieu toc",
+        r"hoi dau",
+    ],
+    "insomnia": [
+        r"mat ngu",
+        r"kho ngu",
+        r"khong ngu duoc",
+        r"thuc trang dem",
+        r"ngu kem",
+        r"kho vao giac",
+        r"insomnia",
+        r"trui ngu",
+    ],
+    "skin_lesion": [
+        r"bong troc",
+        r"bong da",
+        r"troc da",
+        r"da bong troc",
+        r"troc vay",
+        r"vay nen",
+        r"ngua da",
+        r"man ngua",
+        r"viem da",
+        r"phat ban",
+        r"noi me day",
+        r"me day",
+        r"skin peeling",
+        r"peeling skin",
+        r"rash",
+    ],
 }
 
 NEGATION_PATTERNS = {
@@ -177,6 +233,15 @@ NEGATION_PATTERNS = {
         r"khong te tay",
         r"khong te chan",
     ],
+    "muscle_pain": [
+        r"khong (?:bi )?dau co",
+        r"khong (?:bi )?dau dui",
+        r"khong (?:bi )?dau bap dui",
+        r"khong (?:bi )?dau chan",
+        r"het dau co",
+        r"het dau dui",
+        r"het dau bap dui",
+    ],
 }
 
 
@@ -192,7 +257,11 @@ COMPLAINT_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("cough", "respiratory", tuple(FACT_PATTERNS["cough"])),
     ("fever", "general_medicine", tuple(FACT_PATTERNS["fever"])),
     ("neck_shoulder_pain", "musculoskeletal", tuple(FACT_PATTERNS["neck_shoulder_pain"])),
+    ("muscle_pain", "musculoskeletal", tuple(FACT_PATTERNS["muscle_pain"])),
     ("eye_symptoms", "ophthalmology", tuple(FACT_PATTERNS["eye_symptoms"])),
+    ("hair_loss", "dermatology", tuple(FACT_PATTERNS["hair_loss"])),
+    ("insomnia", "psychiatry", tuple(FACT_PATTERNS["insomnia"])),
+    ("skin_lesion", "dermatology", tuple(FACT_PATTERNS["skin_lesion"])),
 )
 
 COMPLAINT_SYSTEMS = {code: system for code, system, _ in COMPLAINT_RULES}
@@ -210,6 +279,10 @@ def _is_resolution(text: str, code: str) -> bool:
             "back_pain",
             "joint_pain",
             "neck_shoulder_pain",
+            "muscle_pain",
+            "hair_loss",
+            "insomnia",
+            "skin_lesion",
         }
     )
 
@@ -306,20 +379,51 @@ class ClinicalFactService:
             bowel_interval_days = 4
 
         location = None
-        abdominal_location = re.search(
-            r"dau bung(?:\s+(?:o|vung))?\s+(?:ben\s+)?(trai|phai|tren|duoi)",
+        msk_loc = re.search(
+            r"(?:dau|nhuc|moi|buot|te|sung)\s+(?:(?:o|vung|phan)\s+)*(bap dui|dui|co dui|bap chan|cang chan|khop goi|dau goi|co tay|co chan|khop hang|that lung|cot song|co vai gay|vai gay|ba vai|canh tay|bap tay|ngon chan|ngon tay|ban chan|ban tay|got chan)",
             normalized,
         )
-        if not abdominal_location:
+        if msk_loc:
+            msk_loc_map = {
+                "bap dui": "bắp đùi",
+                "dui": "đùi",
+                "co dui": "cơ đùi",
+                "bap chan": "bắp chân",
+                "cang chan": "cẳng chân",
+                "khop goi": "khớp gối",
+                "dau goi": "đầu gối",
+                "co tay": "cổ tay",
+                "co chan": "cổ chân",
+                "khop hang": "khớp háng",
+                "that lung": "thắt lưng",
+                "cot song": "cột sống",
+                "co vai gay": "cổ vai gáy",
+                "vai gay": "vai gáy",
+                "ba vai": "bả vai",
+                "canh tay": "cánh tay",
+                "bap tay": "bắp tay",
+                "ngon chan": "ngón chân",
+                "ngon tay": "ngón tay",
+                "ban chan": "bàn chân",
+                "ban tay": "bàn tay",
+                "got chan": "gót chân",
+            }
+            location = msk_loc_map.get(msk_loc.group(1), msk_loc.group(1))
+        else:
             abdominal_location = re.search(
-                r"bung\s+(?:ben\s+)?(trai|phai|tren|duoi)(?:\s+\w+){0,6}\s+dau",
+                r"dau bung(?:\s+(?:o|vung))?\s+(?:ben\s+)?(trai|phai|tren|duoi)",
                 normalized,
             )
-        if abdominal_location:
-            location = f"bụng bên {abdominal_location.group(1)}"
-        elif re.search(r"(?:left|right)\s+(?:side\s+of\s+)?(?:the\s+)?(?:abdomen|stomach)", normalized):
-            side = "left" if "left" in normalized else "right"
-            location = f"{side} abdomen"
+            if not abdominal_location:
+                abdominal_location = re.search(
+                    r"bung\s+(?:ben\s+)?(trai|phai|tren|duoi)(?:\s+\w+){0,6}\s+dau",
+                    normalized,
+                )
+            if abdominal_location:
+                location = f"bụng bên {abdominal_location.group(1)}"
+            elif re.search(r"(?:left|right)\s+(?:side\s+of\s+)?(?:the\s+)?(?:abdomen|stomach)", normalized):
+                side = "left" if "left" in normalized else "right"
+                location = f"{side} abdomen"
 
         complaints: list[dict[str, Any]] = []
         for code, system, patterns in COMPLAINT_RULES:

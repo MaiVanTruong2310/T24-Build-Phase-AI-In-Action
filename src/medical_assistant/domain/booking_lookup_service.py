@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
 import logging
 import re
-from datetime import date, datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 
 from src.db.session import get_session_factory
 from src.models.booking import Booking
@@ -29,15 +30,17 @@ def _format_vn_date_str(iso_or_str: str | None) -> str:
         # Check if contains time
         if "t" in iso_or_str.lower():
             dt = datetime.fromisoformat(iso_or_str)
-            weekday_vn = {0: "Thứ 2", 1: "Thứ 3", 2: "Thứ 4", 3: "Thứ 5", 4: "Thứ 6", 5: "Thứ 7", 6: "Chủ nhật"}.get(
-                dt.weekday(), ""
-            )
+            weekday_vn = {
+                0: "Thứ 2", 1: "Thứ 3", 2: "Thứ 4", 3: "Thứ 5",
+                4: "Thứ 6", 5: "Thứ 7", 6: "Chủ nhật"
+            }.get(dt.weekday(), "")
             return f"{weekday_vn}, ngày {dt.strftime('%d/%m/%Y')} (lúc {dt.strftime('%H:%M')})"
         else:
             d = date.fromisoformat(iso_or_str)
-            weekday_vn = {0: "Thứ 2", 1: "Thứ 3", 2: "Thứ 4", 3: "Thứ 5", 4: "Thứ 6", 5: "Thứ 7", 6: "Chủ nhật"}.get(
-                d.weekday(), ""
-            )
+            weekday_vn = {
+                0: "Thứ 2", 1: "Thứ 3", 2: "Thứ 4", 3: "Thứ 5",
+                4: "Thứ 6", 5: "Thứ 7", 6: "Chủ nhật"
+            }.get(d.weekday(), "")
             return f"{weekday_vn}, ngày {d.strftime('%d/%m/%Y')}"
     except Exception:
         return str(iso_or_str)
@@ -75,21 +78,19 @@ class BookingLookupService:
                     spec = await db.get(Specialty, b.specialty_id)
                     code = "BK-" + str(b.id).split("-")[0].upper()
                     status_text = "Đã xác nhận" if b.status == "confirmed" else "Đang chờ duyệt"
-                    records.append(
-                        {
-                            "type": "booking",
-                            "id": str(b.id),
-                            "code": code,
-                            "status": b.status,
-                            "status_display": status_text,
-                            "facility_name": fac.name if fac else "Vinmec",
-                            "specialty_name": spec.name if spec else "Khám chuyên khoa",
-                            "doctor_name": doc.full_name if doc else "Bác sĩ chuyên khoa",
-                            "starts_at": b.starts_at.isoformat() if b.starts_at else None,
-                            "datetime_display": _format_vn_date_str(b.starts_at.isoformat() if b.starts_at else None),
-                            "reason": b.reason,
-                        }
-                    )
+                    records.append({
+                        "type": "booking",
+                        "id": str(b.id),
+                        "code": code,
+                        "status": b.status,
+                        "status_display": status_text,
+                        "facility_name": fac.name if fac else "Vinmec",
+                        "specialty_name": spec.name if spec else "Khám chuyên khoa",
+                        "doctor_name": doc.full_name if doc else "Bác sĩ chuyên khoa",
+                        "starts_at": b.starts_at.isoformat() if b.starts_at else None,
+                        "datetime_display": _format_vn_date_str(b.starts_at.isoformat() if b.starts_at else None),
+                        "reason": b.reason,
+                    })
 
             # 2. Lookup Cases from coordination_cases table
             conditions = []
@@ -98,7 +99,6 @@ class BookingLookupService:
                 conditions.append(Case.owner_key == f"user:{u_id}")
             if guest_token:
                 import hashlib
-
                 guest_key = "guest:" + hashlib.sha256(guest_token.encode()).hexdigest()
                 conditions.append(Case.owner_key == guest_key)
 
@@ -119,36 +119,28 @@ class BookingLookupService:
                     ai = c.ai_snapshot or {}
                     pref_date = p.get("preferred_date")
                     pref_period = p.get("preferred_period")
-                    period_vn = (
-                        "Buổi sáng (08:00 - 12:00)"
-                        if pref_period == "morning"
-                        else ("Buổi chiều (13:00 - 17:00)" if pref_period == "afternoon" else "Linh hoạt")
-                    )
+                    period_vn = "Buổi sáng (08:00 - 12:00)" if pref_period == "morning" else ("Buổi chiều (13:00 - 17:00)" if pref_period == "afternoon" else "Linh hoạt")
                     date_display = _format_vn_date_str(pref_date) + (f" • {period_vn}" if pref_date else "")
 
                     fac_name = p.get("facility_preference") or "Bệnh viện ĐKQT Vinmec"
-                    spec_name = (
-                        ai.get("suggested_department_name") or c.plan.get("specialty_name") or "Chuyên khoa phù hợp"
-                    )
+                    spec_name = ai.get("suggested_department_name") or c.plan.get("specialty_name") or "Chuyên khoa phù hợp"
                     doc_name = p.get("doctor_name") or "Điều phối viên y tế sắp xếp bác sĩ phù hợp nhất"
                     code = "YC-" + str(c.id).split("-")[0].upper()
-                    records.append(
-                        {
-                            "type": "case",
-                            "id": str(c.id),
-                            "code": code,
-                            "status": c.status,
-                            "status_display": "Đang chờ điều phối viên liên hệ xác nhận",
-                            "facility_name": fac_name,
-                            "specialty_name": spec_name,
-                            "doctor_name": doc_name,
-                            "patient_name": p.get("name") or name or "Quý khách",
-                            "patient_phone": p.get("phone") or clean_phone,
-                            "starts_at": pref_date,
-                            "datetime_display": date_display,
-                            "reason": p.get("notes") or "Đăng ký khám chuyên khoa",
-                        }
-                    )
+                    records.append({
+                        "type": "case",
+                        "id": str(c.id),
+                        "code": code,
+                        "status": c.status,
+                        "status_display": "Đang chờ điều phối viên liên hệ xác nhận",
+                        "facility_name": fac_name,
+                        "specialty_name": spec_name,
+                        "doctor_name": doc_name,
+                        "patient_name": p.get("name") or name or "Quý khách",
+                        "patient_phone": p.get("phone") or clean_phone,
+                        "starts_at": pref_date,
+                        "datetime_display": date_display,
+                        "reason": p.get("notes") or "Đăng ký khám chuyên khoa",
+                    })
 
         # Format output message
         if not records:
@@ -171,7 +163,7 @@ class BookingLookupService:
                 f"• 👨‍⚕️ **Bác sĩ:** {r['doctor_name']}\n"
                 f"• 📅 **Thời gian khám:** {r['datetime_display']}\n"
                 f"• 🔖 **Trạng thái:** {r['status_display']}\n"
-                + (f"• 📝 **Lý do khám:** {r['reason']}\n" if r.get("reason") else "")
+                + (f"• 📝 **Lý do khám:** {r['reason']}\n" if r.get('reason') else "")
             )
 
         lines.append(
@@ -193,15 +185,20 @@ class BookingLookupService:
         state: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Automatically commit the booking intake to coordination_cases when the patient confirms in chat."""
-        from types import SimpleNamespace
-
         from src.services.workbench import intake
+        from types import SimpleNamespace
 
         state = state or {}
         p_name = (
-            intake_data.get("patient_name") or state.get("patient_name") or (user.full_name if user else "Bệnh nhân")
+            intake_data.get("patient_name")
+            or state.get("patient_name")
+            or (user.full_name if user else "Bệnh nhân")
         )
-        p_phone = intake_data.get("patient_phone") or state.get("patient_phone") or (user.phone if user else "")
+        p_phone = (
+            intake_data.get("patient_phone")
+            or state.get("patient_phone")
+            or (user.phone if user else "")
+        )
         p_dob_str = (
             intake_data.get("date_of_birth")
             or state.get("patient_dob")
@@ -212,7 +209,11 @@ class BookingLookupService:
         except Exception:
             p_dob = date(1990, 1, 1)
 
-        p_gender = intake_data.get("gender") or state.get("patient_gender") or (user.gender if user else "other")
+        p_gender = (
+            intake_data.get("gender")
+            or state.get("patient_gender")
+            or (user.gender if user else "other")
+        )
         pref_date_str = intake_data.get("preferred_date")
         pref_date = None
         if pref_date_str:
@@ -241,12 +242,8 @@ class BookingLookupService:
             preferred_period=intake_data.get("preferred_period") or "morning",
             facility_preference=intake_data.get("facility_preference") or "Bệnh viện ĐKQT Vinmec Riverside",
             contact_time_preference=None,
-            patient_notes=intake_data.get("patient_notes")
-            or intake_data.get("clinical_summary")
-            or "Đăng ký khám qua Trợ lý AI",
-            specialty_name=intake_data.get("specialty_name")
-            or state.get("suggested_department_name")
-            or "Chấn thương chỉnh hình & Cột sống",
+            patient_notes=intake_data.get("patient_notes") or intake_data.get("clinical_summary") or "Đăng ký khám qua Trợ lý AI",
+            specialty_name=intake_data.get("specialty_name") or state.get("suggested_department_name") or "Chấn thương chỉnh hình & Cột sống",
             specialty_code=intake_data.get("specialty_code") or state.get("suggested_department_code") or "",
         )
 
@@ -269,9 +266,7 @@ class BookingLookupService:
             request_id = str(case.id)
             request_code = "YC-" + request_id.split("-")[0].upper()
 
-        logger.info(
-            "Conversational booking auto-committed", extra={"case_id": request_id, "request_code": request_code}
-        )
+        logger.info("Conversational booking auto-committed", extra={"case_id": request_id, "request_code": request_code})
         return {
             "saved": True,
             "request_id": request_id,

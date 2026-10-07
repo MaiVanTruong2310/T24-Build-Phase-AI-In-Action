@@ -87,3 +87,4 @@ async def test_polite_greeting_has_no_ats_level_and_no_fake_symptom_acknowledgme
 
     # 4. Must NOT append medical disclaimer on a pure polite greeting
     assert "Khuyến cáo y tế:" not in result["response"]
+

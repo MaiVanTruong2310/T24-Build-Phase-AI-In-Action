@@ -380,6 +380,19 @@ SPECIALTY_PROTOTYPES: dict[str, dict[str, Any]] = {
             "finger",
             "wrist",
             "knee",
+            "bắp đùi",
+            "đùi",
+            "cơ đùi",
+            "đau đùi",
+            "bắp chân",
+            "cẳng chân",
+            "đau chân",
+            "bắp tay",
+            "đi lại",
+            "ảnh hưởng đi lại",
+            "thigh",
+            "leg",
+            "calf",
         ],
     },
     "Da liễu": {
@@ -392,11 +405,22 @@ SPECIALTY_PROTOTYPES: dict[str, dict[str, Any]] = {
             "eczema",
             "acne",
             "edema",
+            "peeling",
+            "flaking",
             "da",
+            "da liễu",
+            "bong tróc",
+            "bong da",
+            "tróc da",
+            "da bong tróc",
+            "tróc vảy",
+            "vảy nến",
+            "ngứa da",
             "mẩn ngứa",
             "chàm",
             "mụn",
             "phù nề",
+            "rụng tóc",
         ],
     },
     "Mắt (Nhãn khoa)": {
@@ -432,7 +456,7 @@ SPECIALTY_PROTOTYPES: dict[str, dict[str, Any]] = {
 }
 
 # Confidence threshold cho Tier 2
-TIER2_CONFIDENCE_THRESHOLD = 0.15
+TIER2_CONFIDENCE_THRESHOLD = 0.10
 
 
 def _tokenize(text: str) -> list[str]:

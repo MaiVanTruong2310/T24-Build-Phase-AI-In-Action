@@ -252,34 +252,57 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "mỏi vai",
             "tê tay",
             "tê chân",
+            # Cơ - Chi dưới / Chi trên
+            "bắp đùi",
+            "đau đùi",
+            "cơ đùi",
+            "đau cơ đùi",
+            "đau bắp đùi",
+            "bắp chân",
+            "đau bắp chân",
+            "đau cẳng chân",
+            "cẳng chân",
+            "đau cơ",
+            "đau cơ bắp",
+            "đau chân",
+            "đau bắp tay",
+            "cơ bắp",
             "knee pain",
             "back pain",
             "neck pain",
             "joint pain",
             "shoulder pain",
             "numbness",
+            "thigh pain",
+            "muscle pain",
+            "leg pain",
+            "calf pain",
+            "muscle ache",
+            "sore muscles",
         ],
         turn_1_question_vi=(
             "Bác có thể mô tả rõ hơn:\n"
-            "- Vị trí đau nhức nhiều nhất ở khớp gối, cổ vai gáy hay cột sống thắt lưng?\n"
+            "- Vị trí đau nhức nhiều nhất ở bắp đùi/cẳng chân, khớp gối, cổ vai gáy hay cột sống thắt lưng?\n"
             "- Cơn đau có kèm cảm giác tê buốt lan dọc xuống cẳng tay hoặc bàn chân không ạ?"
         ),
         turn_1_question_en=(
             "Could you specify:\n"
-            "- Where is the discomfort most pronounced (knee joints, neck/shoulders, or lower spine)?\n"
+            "- Where is the discomfort most pronounced (thigh/calf, knee joints, neck/shoulders, or spine)?\n"
             "- Does the pain radiate with numbness down your arm or leg?"
         ),
         turn_1_quick_replies_vi=[
-            "Cổ vai gáy",
-            "Cột sống thắt lưng",
+            "Bắp đùi / Cẳng chân",
             "Khớp gối",
+            "Cột sống thắt lưng",
+            "Cổ vai gáy",
             "Có tê lan xuống tay/chân",
             "Không tê lan",
         ],
         turn_1_quick_replies_en=[
-            "Neck and shoulders",
-            "Lower back (lumbar)",
+            "Thigh / Calf",
             "Knee joints",
+            "Lower back (lumbar)",
+            "Neck and shoulders",
             "Radiating numbness to limbs",
             "No numbness",
         ],
@@ -316,6 +339,11 @@ class DynamicProbingService:
         "back_pain": "CO_XUONG_KHOP",
         "joint_pain": "CO_XUONG_KHOP",
         "neck_pain": "CO_XUONG_KHOP",
+        # Cơ - Chi dưới / Chi trên
+        "muscle_pain": "CO_XUONG_KHOP",
+        "leg_pain": "CO_XUONG_KHOP",
+        "thigh_pain": "CO_XUONG_KHOP",
+        "neck_shoulder_pain": "CO_XUONG_KHOP",
     }
 
     def find_all_probing_trees(self, text: str) -> list[ProbingClarificationTree]:
@@ -594,6 +622,87 @@ class DynamicProbingService:
                             + " hoặc ".join(prompts)
                             + " không ạ?"
                         )
+                        qr = ["Có dấu hiệu trên", "Không có", "Không rõ"]
+                    return q, qr, tree.category_key
+                return None
+
+        # Với cơ xương khớp, bỏ qua câu hỏi vị trí/thời gian nếu người bệnh đã cung cấp
+        if tree.category_key == "CO_XUONG_KHOP" and clinical_facts:
+            positive = set(clinical_facts.get("positive_facts") or [])
+            negative = set(clinical_facts.get("negative_facts") or [])
+            known = positive | negative
+
+            has_location = bool(
+                clinical_facts.get("location")
+                or any(
+                    w in user_lower
+                    for w in [
+                        "bắp đùi",
+                        "đùi",
+                        "cơ đùi",
+                        "bắp chân",
+                        "cẳng chân",
+                        "đầu gối",
+                        "khớp gối",
+                        "gối",
+                        "lưng",
+                        "vai gáy",
+                        "cổ vai gáy",
+                        "cột sống",
+                        "thắt lưng",
+                        "cổ chân",
+                        "bàn chân",
+                    ]
+                )
+            )
+            has_duration = (
+                clinical_facts.get("duration_days") is not None
+                or any(w in user_lower for w in ["ngày", "tuần", "tháng", "hôm nay", "hôm qua", "bữa"])
+            )
+
+            msk_red_flag_labels = {
+                "trauma": "chấn thương, ngã hoặc va đập mạnh trước đó",
+                "numbness_weakness": "tê buốt lan xuống bàn chân hoặc yếu cơ",
+                "joint_swelling": "sưng, nóng, đỏ tại vùng đau",
+                "fever": "sốt",
+            }
+            missing_msk_flags = [label for fact, label in msk_red_flag_labels.items() if fact not in known]
+
+            if probing_turn == 0 and has_location:
+                loc_desc = clinical_facts.get("location") or "vùng đau"
+                if lang == "en":
+                    loc_desc_en = clinical_facts.get("location") or "the affected area"
+                    q = (
+                        f"I've noted the discomfort at {loc_desc_en}. "
+                        "Could you clarify if the pain started after trauma/injury, and if you have radiating numbness down your leg or localized swelling?"
+                    )
+                    qr = [
+                        "After injury/strain",
+                        "Radiating numbness to leg",
+                        "Localized swelling/redness",
+                        "None of these",
+                    ]
+                else:
+                    q = (
+                        f"Dạ, em đã ghi nhận vị trí và tính chất đau ({loc_desc}). "
+                        "Bác cho em hỏi thêm: cơn đau xuất hiện sau chấn thương/vận động nặng không, và có kèm sưng đỏ hay cảm giác tê buốt lan xuống bàn chân không ạ?"
+                    )
+                    qr = [
+                        "Sau va đập / vận động nặng",
+                        "Có tê lan xuống chân",
+                        "Vùng đau sưng đỏ",
+                        "Không có dấu hiệu trên",
+                    ]
+                return q, qr, tree.category_key
+
+            if probing_turn == 1:
+                if missing_msk_flags:
+                    prompts = missing_msk_flags[:2]
+                    if lang == "en":
+                        q = "Do you experience: " + " or ".join(prompts) + "?"
+                        qr = ["Yes, experiencing some", "No", "Not sure"]
+                    else:
+                        q = "Dạ, bác cho em xác nhận thêm có kèm: " + " hoặc ".join(prompts) + " không ạ?"
                         qr = ["Có dấu hiệu trên", "Không có", "Không rõ"]
                     return q, qr, tree.category_key
                 return None

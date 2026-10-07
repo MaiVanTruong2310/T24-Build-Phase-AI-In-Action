@@ -12,7 +12,6 @@ from __future__ import annotations
 import re
 import unicodedata
 from typing import Any, Literal
-
 from pydantic import BaseModel, Field
 
 from src.medical_assistant.domain.language_service import get_emergency_guidance
@@ -20,7 +19,6 @@ from src.medical_assistant.domain.language_service import get_emergency_guidance
 
 class EvidenceItem(BaseModel):
     """Bằng chứng trích dẫn trực tiếp từ văn bản người dùng hoặc trạng thái Actor."""
-
     source_span: str = Field(..., description="Đoạn văn bản trích dẫn nguyên văn làm bằng chứng")
     matched_context: str | None = Field(default=None, description="Ngữ cảnh hoặc dấu hiệu lâm sàng khớp")
     field_name: str | None = Field(default=None, description="Thuộc tính của Actor bị phát hiện sai lệch")
@@ -28,25 +26,16 @@ class EvidenceItem(BaseModel):
 
 class EvaluatorVerdict(BaseModel):
     """Phán quyết có cấu trúc, máy đọc được (Machine-Readable JSON Schema)."""
-
     verdict: Literal["APPROVED", "REVISE", "REVISED_BY_REFLEXION"] = Field(
         ..., description="Phán quyết thẩm định: Chấp thuận (APPROVED), Yêu cầu sinh lại (REVISE), hoặc Tự sửa (REVISED)"
     )
     score: float = Field(..., ge=0.0, le=1.0, description="Điểm số đánh giá chuẩn xác lâm sàng (0.0 đến 1.0)")
     failed_rubric_id: str | None = Field(default=None, description="Mã rubric bị vi phạm nếu có")
-    rubric_category: str | None = Field(
-        default=None, description="Nhóm tiêu chuẩn vi phạm (ACUITY, ONCOLOGY, SECURITY, POLARITY)"
-    )
+    rubric_category: str | None = Field(default=None, description="Nhóm tiêu chuẩn vi phạm (ACUITY, ONCOLOGY, SECURITY, POLARITY)")
     evidence: list[EvidenceItem] = Field(default_factory=list, description="Danh sách bằng chứng chứng minh")
-    actionable_feedback: str | None = Field(
-        default=None, description="Lời phê bình và chỉ dẫn sửa sai có tính hành động"
-    )
-    corrections: dict[str, Any] = Field(
-        default_factory=dict, description="Các thuộc tính trạng thái đã được hiệu chỉnh chính xác"
-    )
-    reflection_item: dict[str, Any] | None = Field(
-        default=None, description="Mẩu bài học phản tỉnh cô đọng tuân theo chuẩn slide VinUni"
-    )
+    actionable_feedback: str | None = Field(default=None, description="Lời phê bình và chỉ dẫn sửa sai có tính hành động")
+    corrections: dict[str, Any] = Field(default_factory=dict, description="Các thuộc tính trạng thái đã được hiệu chỉnh chính xác")
+    reflection_item: dict[str, Any] | None = Field(default=None, description="Mẩu bài học phản tỉnh cô đọng tuân theo chuẩn slide VinUni")
 
 
 class ClinicalCriticService:
@@ -110,20 +99,18 @@ class ClinicalCriticService:
                 ats_level=1,
                 language=language,
             )
-            corrections.update(
-                {
-                    "is_emergency": True,
-                    "emergency_warning": guidance,
-                    "workflow_status": "EMERGENCY",
-                    "ats_level": 1,
-                    "urgency_tier": "EMERGENCY_BLOCK",
-                    "suggested_department_name": "Cấp cứu Ngoại tiêu hóa",
-                    "suggested_department_code": "CAP_CUU",
-                    "metadata": {
-                        "patient_guidance": guidance,
-                    },
-                }
-            )
+            corrections.update({
+                "is_emergency": True,
+                "emergency_warning": guidance,
+                "workflow_status": "EMERGENCY",
+                "ats_level": 1,
+                "urgency_tier": "EMERGENCY_BLOCK",
+                "suggested_department_name": "Cấp cứu Ngoại tiêu hóa",
+                "suggested_department_code": "CAP_CUU",
+                "metadata": {
+                    "patient_guidance": guidance,
+                },
+            })
 
         # =========================================================================
         # RUBRIC-02: MALIGNANCY DEPARTMENT ALIGNMENT (Chuyên khoa Ung bướu)
@@ -132,9 +119,7 @@ class ClinicalCriticService:
             r"\b(?:k\s+giap|k\s+tuyen\s+giap|ung\s+thu|u\s+ac\s+tinh|di\s+can|hach\s+co\s+nhom|k\s+vu|k\s+phoi|k\s+gan|k\s+dai\s+trang|hoa\s+tri|xa\s+tri)\b",
             clean_query,
         )
-        is_general_dept = any(
-            g in current_dept.lower() for g in ["tổng quát", "general", "sức khỏe tổng quát", "nội khoa"]
-        )
+        is_general_dept = any(g in current_dept.lower() for g in ["tổng quát", "general", "sức khỏe tổng quát", "nội khoa"])
         if oncology_match and is_general_dept and not corrections.get("is_emergency"):
             evidence_span = oncology_match.group(0)
             evidence_list.append(
@@ -151,12 +136,10 @@ class ClinicalCriticService:
                 f"Actor đã phân nhầm về '{current_dept}'. "
                 "Phải điều chỉnh đích đến chính xác sang Trung tâm Ung bướu."
             )
-            corrections.update(
-                {
-                    "suggested_department_name": "Trung tâm Ung bướu",
-                    "suggested_department_code": "UNG_BUOU",
-                }
-            )
+            corrections.update({
+                "suggested_department_name": "Trung tâm Ung bướu",
+                "suggested_department_code": "UNG_BUOU",
+            })
             if workflow_status in {"PROBING_IN_PROGRESS", "TRIAGED_AWAITING_SCHEDULE", "TRIAGED_READY_FOR_BOOKING"}:
                 corrections["workflow_status"] = "TRIAGED_AWAITING_SCHEDULE"
 
@@ -191,26 +174,22 @@ class ClinicalCriticService:
                     f"CẢNH BÁO AN TOÀN BẢO MẬT: Phát hiện chuỗi mã Morse giải mã ra lệnh tấn công: '{decoded_str.strip()}'. "
                     "Phải ngắt luồng ngay và kích hoạt SECURITY_BLOCKED."
                 )
-                from src.medical_assistant.domain.security.security_guardrail_service import (
-                    get_security_guardrail_service,
-                )
+                from src.medical_assistant.domain.security.security_guardrail_service import get_security_guardrail_service
 
                 sec_check = get_security_guardrail_service().inspect_query(decoded_str, language=language)
-                corrections.update(
-                    {
-                        "is_emergency": False,
-                        "emergency_warning": None,
-                        "workflow_status": "SECURITY_BLOCKED",
-                        "suggested_department_name": None,
-                        "ats_level": None,
-                        "metadata": {
-                            "security_blocked": True,
-                            "violation_type": "PROMPT_INJECTION_MORSE_DEOBFUSCATED",
-                            "security_response": sec_check.safe_response,
-                            "tokens_saved": True,
-                        },
-                    }
-                )
+                corrections.update({
+                    "is_emergency": False,
+                    "emergency_warning": None,
+                    "workflow_status": "SECURITY_BLOCKED",
+                    "suggested_department_name": None,
+                    "ats_level": None,
+                    "metadata": {
+                        "security_blocked": True,
+                        "violation_type": "PROMPT_INJECTION_MORSE_DEOBFUSCATED",
+                        "security_response": sec_check.safe_response,
+                        "tokens_saved": True,
+                    },
+                })
 
         # =========================================================================
         # RUBRIC-04: POLARITY / PLEURITIC CHEST PAIN DIFFERENTIAL
@@ -219,15 +198,8 @@ class ClinicalCriticService:
             r"\b(?:khong\s+phai\s+la\s+toi\s+khong\s+dau\s+nguc|nhoi\s+khi\s+ho|dau\s+khi\s+ho)\b",
             clean_query,
         )
-        has_respiratory_signs = bool(
-            re.search(r"\b(?:ho\s+khac\s+dom|sot\s+39|viem\s+phe\s+quan|ho\s+dom\s+vang)\b", clean_query)
-        )
-        if (
-            double_negation_pleuritic
-            and has_respiratory_signs
-            and is_emergency
-            and current_dept == "Trung tâm Tim mạch"
-        ):
+        has_respiratory_signs = bool(re.search(r"\b(?:ho\s+khac\s+dom|sot\s+39|viem\s+phe\s+quan|ho\s+dom\s+vang)\b", clean_query))
+        if double_negation_pleuritic and has_respiratory_signs and is_emergency and current_dept == "Trung tâm Tim mạch":
             evidence_list.append(
                 EvidenceItem(
                     source_span="chỉ nhói nhẹ khi ho, chủ yếu là sốt 39 độ và ho khạc đờm vàng",
@@ -242,18 +214,16 @@ class ClinicalCriticService:
                 "Đây là đau ngực kiểu màng phổi thứ phát sau nhiễm trùng hô hấp, không phải ACS. "
                 "Hạ cấp cứu và điều chỉnh về Khoa Nội hô hấp."
             )
-            corrections.update(
-                {
-                    "is_emergency": False,
-                    "emergency_warning": None,
-                    "ats_level": 3,
-                    "urgency_tier": "SAME_DAY",
-                    "max_booking_days": 1,
-                    "workflow_status": "TRIAGED_AWAITING_SCHEDULE",
-                    "suggested_department_name": "Nội hô hấp",
-                    "suggested_department_code": "HO_HAP",
-                }
-            )
+            corrections.update({
+                "is_emergency": False,
+                "emergency_warning": None,
+                "ats_level": 3,
+                "urgency_tier": "SAME_DAY",
+                "max_booking_days": 1,
+                "workflow_status": "TRIAGED_AWAITING_SCHEDULE",
+                "suggested_department_name": "Nội hô hấp",
+                "suggested_department_code": "HO_HAP",
+            })
 
         # =========================================================================
         # RUBRIC-05: MULTI-SPECIALTY ANATOMICAL PRIORITY PIPELINE
@@ -268,9 +238,7 @@ class ClinicalCriticService:
                 corrections["metadata"]["care_pipeline_applied"] = True
                 corrections["metadata"]["care_pipeline"] = care_pipeline.model_dump()
 
-                if current_dept != top_priority_dept and not any(
-                    p in current_dept.lower() for p in [top_priority_dept.lower()]
-                ):
+                if current_dept != top_priority_dept and not any(p in current_dept.lower() for p in [top_priority_dept.lower()]):
                     evidence_list.append(
                         EvidenceItem(
                             source_span=f"Đa triệu chứng: {', '.join(care_pipeline.secondary_departments)}",
@@ -285,12 +253,10 @@ class ClinicalCriticService:
                         f"Theo nguyên tắc giải phẫu sinh tồn, cơ quan {top_priority_dept} phải được ưu tiên khám tại Bước 1 "
                         f"trước cơ quan {current_dept or 'ngoại vi'}. Điều chỉnh Bước 1 về {top_priority_dept}."
                     )
-                    corrections.update(
-                        {
-                            "suggested_department_name": top_priority_dept,
-                            "workflow_status": "TRIAGED_AWAITING_SCHEDULE",
-                        }
-                    )
+                    corrections.update({
+                        "suggested_department_name": top_priority_dept,
+                        "workflow_status": "TRIAGED_AWAITING_SCHEDULE",
+                    })
 
         # =========================================================================
         # TỔNG HỢP VERDICT
@@ -313,26 +279,20 @@ class ClinicalCriticService:
                 p_dept = corrections.get("suggested_department_name", "cơ quan sinh tồn")
                 failed_strat = f"Định tuyến theo cơ quan ngoại vi / đau nhức bề mặt ({current_dept or 'ngoại vi'})."
                 lesson = f"Thử phân {current_dept} không được vì có triệu chứng liên quan cơ quan sinh tồn {p_dept}. Lần sau phải đặt Bước 1 về {p_dept}."
-                new_const = (
-                    f"Cấm bỏ qua cơ quan sinh tồn ({p_dept}) chỉ vì cơ quan ngoại vi ({current_dept}) đau buốt hơn."
-                )
+                new_const = f"Cấm bỏ qua cơ quan sinh tồn ({p_dept}) chỉ vì cơ quan ngoại vi ({current_dept}) đau buốt hơn."
             elif failed_rubric_id == "RUBRIC-01-RED-FLAG-MISSING":
                 failed_strat = "Phân loại vào lịch khám thường / trì hoãn khi có dấu hiệu cờ đỏ cấp cứu."
                 lesson = "Thử trì hoãn khám thường không được vì triệu chứng đe dọa sinh mạng cấp tính. Lần sau phải cảnh báo cấp cứu ngay."
                 new_const = "Tuyệt đối không xếp lịch hẹn khám thường đối với triệu chứng cờ đỏ ACS hoặc đột quỵ."
 
-            reflection_item = (
-                get_reflection_memory_service()
-                .create_memory_item(
-                    rubric_id=failed_rubric_id or "GENERAL_CLINICAL_RUBRIC",
-                    failed_strategy=failed_strat,
-                    lesson_learned=lesson,
-                    new_constraint=new_const,
-                    trigger_query=query[:150],
-                    source_evidence=[e.model_dump() for e in evidence_list],
-                )
-                .model_dump()
-            )
+            reflection_item = get_reflection_memory_service().create_memory_item(
+                rubric_id=failed_rubric_id or "GENERAL_CLINICAL_RUBRIC",
+                failed_strategy=failed_strat,
+                lesson_learned=lesson,
+                new_constraint=new_const,
+                trigger_query=query[:150],
+                source_evidence=[e.model_dump() for e in evidence_list],
+            ).model_dump()
 
             return EvaluatorVerdict(
                 verdict="REVISED_BY_REFLEXION",

@@ -25,10 +25,7 @@ class TokenCounter:
             self.encoding = tiktoken.encoding_for_model(self.model_name)
         except Exception:
             # Fallback sang cl100k_base nếu tên model không có trong bảng mapping trực tiếp
-            try:
-                self.encoding = tiktoken.get_encoding("cl100k_base")
-            except Exception:
-                self.encoding = None
+            self.encoding = tiktoken.get_encoding("cl100k_base")
 
     def count_tokens(self, text: str | None) -> int:
         """Đếm số token của một chuỗi văn bản bất kỳ"""

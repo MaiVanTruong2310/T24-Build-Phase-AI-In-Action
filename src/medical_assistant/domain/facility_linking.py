@@ -17,7 +17,7 @@ def normalize_text(value: Any) -> str:
 
 SITE_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("ocean_park_2", ("ocean park 2", "ocean city")),
-    ("times_city", ("times city",)),
+    ("times_city", ("times city", "minh khai", "458 minh khai", "hai ba trung")),
     ("smart_city", ("smart city",)),
     ("central_park", ("central park", "sai gon", "tan cang")),
     ("royal_island", ("royal island", "dao vu yen", "vu yen island")),
@@ -178,3 +178,4 @@ def extract_workplaces_from_record(record: dict[str, Any]) -> list[str]:
                 break
 
     return workplaces
+

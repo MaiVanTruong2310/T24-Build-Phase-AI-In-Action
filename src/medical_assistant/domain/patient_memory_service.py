@@ -9,12 +9,12 @@ Tích hợp phòng thủ OWASP ASI06 (Anti-Memory Poisoning / Indirect Prompt In
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import logging
-from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.session import get_session_factory
@@ -25,25 +25,17 @@ logger = logging.getLogger(__name__)
 
 # Danh mục Key được phép lưu trữ (Whitelist)
 ALLOWED_MEMORY_CATEGORIES = {
-    "symptom_history",  # Tiền sử triệu chứng các đợt trước
-    "allergy",  # Dị ứng thuốc, thức ăn
-    "chronic_condition",  # Bệnh lý nền (tiểu đường, huyết áp...)
-    "facility_preference",  # Cơ sở y tế quen thuộc / gần nhà
+    "symptom_history",     # Tiền sử triệu chứng các đợt trước
+    "allergy",             # Dị ứng thuốc, thức ăn
+    "chronic_condition",   # Bệnh lý nền (tiểu đường, huyết áp...)
+    "facility_preference", # Cơ sở y tế quen thuộc / gần nhà
     "specialty_interest",  # Chuyên khoa hay thăm khám
 }
 
 # Các từ khóa tấn công đặc quyền bị cấm tuyệt đối (OWASP ASI06)
 BANNED_POISON_KEYS = {
-    "vip",
-    "discount",
-    "free",
-    "admin",
-    "role",
-    "system_prompt",
-    "override",
-    "priority_bypass",
-    "allow_all",
-    "god_mode",
+    "vip", "discount", "free", "admin", "role", "system_prompt",
+    "override", "priority_bypass", "allow_all", "god_mode"
 }
 
 
@@ -83,48 +75,40 @@ class PatientMemoryService:
         value_text = str(fact_value)
         sec_check = self.security_service.inspect_query(value_text)
         if not sec_check.is_safe:
-            logger.error(
-                "OWASP ASI06 Alert: Payload detected in memory value for key '%s': %s",
-                key_clean,
-                sec_check.violation_type,
-            )
+            logger.error("OWASP ASI06 Alert: Payload detected in memory value for key '%s': %s", key_clean, sec_check.violation_type)
             return False
 
         # 3. Tính toán TTL
         valid_until = None
         if ttl_days:
-            valid_until = datetime.now(UTC) + timedelta(days=ttl_days)
+            valid_until = datetime.now(timezone.utc) + timedelta(days=ttl_days)
         elif cat_clean == "symptom_history":
             # Triệu chứng cấp tính mặc định hết hạn sau 14 ngày
-            valid_until = datetime.now(UTC) + timedelta(days=14)
+            valid_until = datetime.now(timezone.utc) + timedelta(days=14)
 
         confidence = 1.0 if provenance == "verified_by_coordinator" else 0.7
 
         async with self.sessionmaker() as session:
             async with session.begin():
-                stmt = (
-                    insert(PatientMemoryItem)
-                    .values(
-                        user_id=u_id,
-                        category=cat_clean,
-                        fact_key=key_clean,
-                        fact_value=fact_value,
-                        provenance=provenance,
-                        confidence=confidence,
-                        taint_status="clean",
-                        source_session_id=source_session_id,
-                        valid_until=valid_until,
-                    )
-                    .on_conflict_do_update(
-                        index_elements=["user_id", "fact_key"],
-                        set_={
-                            "fact_value": fact_value,
-                            "provenance": provenance,
-                            "confidence": confidence,
-                            "valid_until": valid_until,
-                            "updated_at": datetime.now(UTC),
-                        },
-                    )
+                stmt = insert(PatientMemoryItem).values(
+                    user_id=u_id,
+                    category=cat_clean,
+                    fact_key=key_clean,
+                    fact_value=fact_value,
+                    provenance=provenance,
+                    confidence=confidence,
+                    taint_status="clean",
+                    source_session_id=source_session_id,
+                    valid_until=valid_until,
+                ).on_conflict_do_update(
+                    index_elements=["user_id", "fact_key"],
+                    set_={
+                        "fact_value": fact_value,
+                        "provenance": provenance,
+                        "confidence": confidence,
+                        "valid_until": valid_until,
+                        "updated_at": datetime.now(timezone.utc),
+                    }
                 )
                 await session.execute(stmt)
                 logger.info("Saved patient memory item: user=%s, key=%s, provenance=%s", u_id, key_clean, provenance)
@@ -135,18 +119,14 @@ class PatientMemoryService:
         if not user_id:
             return []
         u_id = UUID(str(user_id)) if isinstance(user_id, str) else user_id
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
 
         async with self.sessionmaker() as session:
-            stmt = (
-                select(PatientMemoryItem)
-                .where(
-                    PatientMemoryItem.user_id == u_id,
-                    PatientMemoryItem.taint_status == "clean",
-                    (PatientMemoryItem.valid_until.is_(None) | (PatientMemoryItem.valid_until > now)),
-                )
-                .order_by(PatientMemoryItem.updated_at.desc())
-            )
+            stmt = select(PatientMemoryItem).where(
+                PatientMemoryItem.user_id == u_id,
+                PatientMemoryItem.taint_status == "clean",
+                (PatientMemoryItem.valid_until.is_(None) | (PatientMemoryItem.valid_until > now))
+            ).order_by(PatientMemoryItem.updated_at.desc())
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 {
@@ -170,7 +150,7 @@ class PatientMemoryService:
         if not user_id:
             return None
         u_id = UUID(str(user_id)) if isinstance(user_id, str) else user_id
-        due_at = datetime.now(UTC) + timedelta(minutes=due_minutes) if due_minutes else None
+        due_at = datetime.now(timezone.utc) + timedelta(minutes=due_minutes) if due_minutes else None
 
         async with self.sessionmaker() as session:
             async with session.begin():
@@ -192,14 +172,10 @@ class PatientMemoryService:
             return []
         u_id = UUID(str(user_id)) if isinstance(user_id, str) else user_id
         async with self.sessionmaker() as session:
-            stmt = (
-                select(PatientOpenLoop)
-                .where(
-                    PatientOpenLoop.user_id == u_id,
-                    PatientOpenLoop.status == "open",
-                )
-                .order_by(PatientOpenLoop.created_at.desc())
-            )
+            stmt = select(PatientOpenLoop).where(
+                PatientOpenLoop.user_id == u_id,
+                PatientOpenLoop.status == "open",
+            ).order_by(PatientOpenLoop.created_at.desc())
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 {
@@ -218,15 +194,11 @@ class PatientMemoryService:
         u_id = UUID(str(user_id)) if isinstance(user_id, str) else user_id
         async with self.sessionmaker() as session:
             async with session.begin():
-                stmt = (
-                    update(PatientOpenLoop)
-                    .where(
-                        PatientOpenLoop.user_id == u_id,
-                        PatientOpenLoop.loop_type == loop_type,
-                        PatientOpenLoop.status == "open",
-                    )
-                    .values(status="resolved")
-                )
+                stmt = update(PatientOpenLoop).where(
+                    PatientOpenLoop.user_id == u_id,
+                    PatientOpenLoop.loop_type == loop_type,
+                    PatientOpenLoop.status == "open",
+                ).values(status="resolved")
                 res = await session.execute(stmt)
                 return res.rowcount
 

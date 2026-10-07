@@ -65,3 +65,21 @@ def test_denied_diarrhea_and_blood_are_recorded_as_negative_facts():
 
     assert {"diarrhea", "blood_in_stool"} <= set(facts["negative_facts"])
     assert not ({"diarrhea", "blood_in_stool"} & set(facts["positive_facts"]))
+
+
+def test_thigh_pain_classified_as_musculoskeletal_not_abdominal():
+    from src.medical_assistant.domain.probing_service import get_probing_service
+    from src.medical_assistant.domain.triage_service import get_triage_service
+
+    query = "Tôi thấy bị đau ở phần bắp đùi, đau âm ỉ khoảng 5 ngày nay rồi nó ảnh hưởng đến việc đi lại của tôi."
+    facts = ClinicalFactService().extract(query)
+    assert facts["chief_complaint"] == "muscle_pain"
+    assert facts["complaints"][0]["system"] == "musculoskeletal"
+
+    tree = get_probing_service().find_probing_tree(query)
+    assert tree is not None
+    assert tree.category_key == "CO_XUONG_KHOP"
+
+    res = get_triage_service().evaluate_symptoms(query)
+    assert res.suggested_specialty == "Chấn thương chỉnh hình - Y học thể thao"
+
