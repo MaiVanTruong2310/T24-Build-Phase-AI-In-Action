@@ -1,3 +1,7 @@
+import datetime
+if not hasattr(datetime, "UTC"):
+    datetime.UTC = datetime.timezone.utc
+
 from unittest.mock import AsyncMock
 
 import pytest

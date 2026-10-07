@@ -85,11 +85,7 @@ class CompactionService:
         ]
 
         new_soap_note = "\n".join(soap_lines)
-        logger.info(
-            "Compacted %d messages into SOAP durable note. Preserved %d recent messages.",
-            len(older_messages),
-            len(recent_messages),
-        )
+        logger.info("Compacted %d messages into SOAP durable note. Preserved %d recent messages.", len(older_messages), len(recent_messages))
 
         return {
             "recent_messages": recent_messages,

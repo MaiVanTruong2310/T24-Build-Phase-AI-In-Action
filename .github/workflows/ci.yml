@@ -1,80 +1,80 @@
-# name: CI Test Suite
+name: CI Test Suite
 
-# on:
-#   push:
-#     branches: [ main, develop, "feature/**", "fix/**" ]
-#   pull_request:
-#     branches: [ main, develop ]
-#   workflow_dispatch:
+on:
+  push:
+    branches: [ main, develop, "feature/**", "fix/**" ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
 
-# jobs:
-#   offline-tests:
-#     name: Offline Tests & Documentation Check (Python 3.11)
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 15
+jobs:
+  offline-tests:
+    name: Offline Tests & Documentation Check (Python 3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-#       - name: Set up Python 3.11
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: "3.11"
-#           cache: "pip"
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
 
-#       - name: Install dependencies
-#         run: |
-#           python -m pip install --upgrade pip
-#           pip install -r requirements.txt
-#           pip install pytest pytest-asyncio anyio httpx
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio anyio httpx
 
-#       - name: Check Documentation Consistency
-#         run: |
-#           python scripts/check_docs.py
+      - name: Check Documentation Consistency
+        run: |
+          python scripts/check_docs.py
 
-#       - name: Run Offline Agent & Medical Assistant Tests
-#         env:
-#           DEEPSEEK_API_KEY: "test-offline-key"
-#           SUPABASE_URL: "https://mock.supabase.co"
-#           SUPABASE_KEY: "mock-anon-key"
-#           INFO_AGENT_ENABLED: "false"
-#         run: |
-#           pytest tests/agent/ tests/test_medical_assistant/ -v -ra --tb=short
+      - name: Run Offline Agent & Medical Assistant Tests
+        env:
+          DEEPSEEK_API_KEY: "test-offline-key"
+          SUPABASE_URL: "https://mock.supabase.co"
+          SUPABASE_KEY: "mock-anon-key"
+          INFO_AGENT_ENABLED: "false"
+        run: |
+          pytest tests/agent/ tests/test_medical_assistant/ -v -ra --tb=short
 
-#       - name: Run Info Agent Benchmark Tests
-#         run: |
-#           pytest tests/agent/test_prompt_f3_benchmark.py tests/agent/test_eval_info.py -v
+      - name: Run Info Agent Benchmark Tests
+        run: |
+          pytest tests/agent/test_prompt_f3_benchmark.py tests/agent/test_eval_info.py -v
 
-#   integration-tests:
-#     name: Live Integration Tests (LLM & Supabase)
-#     needs: offline-tests
-#     if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 25
+  integration-tests:
+    name: Live Integration Tests (LLM & Supabase)
+    needs: offline-tests
+    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
 
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-#       - name: Set up Python 3.11
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: "3.11"
-#           cache: "pip"
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
 
-#       - name: Install dependencies
-#         run: |
-#           python -m pip install --upgrade pip
-#           pip install -r requirements.txt
-#           pip install pytest pytest-asyncio anyio httpx
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio anyio httpx
 
-#       - name: Run Integration Suite
-#         env:
-#           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-#           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-#           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-#           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-#           INFO_AGENT_ENABLED: "true"
-#         run: |
-#           pytest tests/ -m "integration" -v -ra --tb=short || true
+      - name: Run Integration Suite
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          INFO_AGENT_ENABLED: "true"
+        run: |
+          pytest tests/ -m "integration" -v -ra --tb=short || true

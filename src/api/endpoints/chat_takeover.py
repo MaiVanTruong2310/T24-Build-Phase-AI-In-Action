@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from src.api.dependencies import require_staff
+from src.api.dependencies import get_current_user, require_staff
 from src.api.response import success_response
-from src.core.security import decode_access_token
+from src.core.security import create_access_token, decode_access_token
 from src.db.dependencies import get_db_session
 from src.db.session import get_auth_session_factory, get_session_factory
 from src.models.user import User
@@ -37,6 +37,14 @@ def case_response(case) -> ChatTakeoverCaseResponse:
 
 def message_response(message_payload_value: dict) -> ChatTakeoverMessageResponse:
     return ChatTakeoverMessageResponse.model_validate(message_payload_value)
+
+
+@router.get("/ticket", response_model=ApiResponse[dict[str, str]])
+async def get_takeover_ticket(
+    current_user: User = Depends(get_current_user),
+) -> ApiResponse[dict[str, str]]:
+    token, _ = create_access_token(str(current_user.id), current_user.role)
+    return success_response({"token": token}, "Takeover ticket issued")
 
 
 @router.get("/cases", response_model=ApiResponse[list[ChatTakeoverCaseResponse]])
@@ -147,11 +155,6 @@ async def staff_socket(websocket: WebSocket) -> None:
 async def patient_socket(session_id: str, websocket: WebSocket) -> None:
     user = await authenticate_socket(websocket)
     if user is None:
-        await websocket.close(code=1008)
-        return
-    async with get_session_factory()() as session:
-        case = await ChatTakeoverService(session).get_case_for_patient(user.id, session_id)
-    if case is None:
         await websocket.close(code=1008)
         return
     await chat_takeover_manager.connect_session(session_id, websocket)

@@ -37,6 +37,7 @@ import {
   streamChat,
   type BookingIntake,
   type ChatMetadata,
+  fetchTakeoverTicket,
   resolveChatTakeoverWebSocketUrl,
 } from '../features/chat/api';
 
@@ -313,9 +314,11 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     let socket: WebSocket | null = null;
     let reconnectTimer: number | undefined;
 
-    const connect = () => {
+    const connect = async () => {
       if (stopped) return;
-      socket = new WebSocket(resolveChatTakeoverWebSocketUrl(sessionId));
+      const ticket = await fetchTakeoverTicket().catch(() => null);
+      if (stopped) return;
+      socket = new WebSocket(resolveChatTakeoverWebSocketUrl(sessionId, ticket));
       socket.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data) as {
@@ -339,13 +342,14 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
           // Ignore malformed realtime events; durable history remains authoritative.
         }
       };
-      socket.onclose = () => {
-        if (!stopped) reconnectTimer = window.setTimeout(connect, 5000);
+      socket.onclose = (event) => {
+        if (event.code === 1008 || event.code === 1000) return;
+        if (!stopped) reconnectTimer = window.setTimeout(connect, 10000);
       };
       socket.onerror = () => socket?.close();
     };
 
-    connect();
+    void connect();
     return () => {
       stopped = true;
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);

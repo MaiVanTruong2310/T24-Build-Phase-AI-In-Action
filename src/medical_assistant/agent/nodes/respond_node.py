@@ -254,7 +254,7 @@ async def respond_node(state: AgentState) -> dict:
                     lang=lang,
                 )
                 quick_replies = []
-    elif care_pipeline.is_multi_specialty and workflow_status not in {"OUT_OF_SCOPE", "SOCIAL_REDIRECT", "CONFIRM_BOOKING_CONVERSATIONALLY"}:
+    elif care_pipeline.is_multi_specialty and workflow_status not in {"OUT_OF_SCOPE", "SOCIAL_REDIRECT", "CONFIRM_BOOKING_CONVERSATIONALLY", "SAFETY_REVIEW"}:
         p_dept = care_pipeline.primary_department
         s_dept = care_pipeline.secondary_departments[0] if care_pipeline.secondary_departments else "Khoa phối hợp"
         if is_emergency:
@@ -515,7 +515,7 @@ async def respond_node(state: AgentState) -> dict:
     elif (
         (meta.get("is_booking_intent") or meta.get("booking_entities_found"))
         and not is_emergency
-        and workflow_status not in {"VISIT_PURPOSE_CLARIFICATION", "OUT_OF_SCOPE", "SOCIAL_REDIRECT", "TRIAGED_READY_FOR_BOOKING"}
+        and workflow_status not in {"PROBING_IN_PROGRESS", "VISIT_PURPOSE_CLARIFICATION", "OUT_OF_SCOPE", "SOCIAL_REDIRECT", "TRIAGED_READY_FOR_BOOKING"}
     ):
         has_specific_booking = bool(
             booking_intake.get("facility_preference")
@@ -622,10 +622,17 @@ async def respond_node(state: AgentState) -> dict:
                     if doc.get("source_url") and enable_citation:
                         doctors_text += f"   • [Hồ sơ nguồn Vinmec]({doc['source_url']})\n"
             if has_verified_slots:
+                matched_facility_name = state.get("facility_preference") or booking_intake.get("facility_preference") or meta.get("facility_preference")
+                facility_location_text = ""
+                if matched_facility_name and any(k in str(matched_facility_name).lower() for k in ["minh khai", "times city", "hai bà trưng", "hai ba trung"]):
+                    facility_location_text = "tại cơ sở **Bệnh viện Đa khoa Quốc tế Vinmec Times City** (458 Minh Khai, Hai Bà Trưng, Hà Nội) "
+                elif matched_facility_name:
+                    facility_location_text = f"tại cơ sở **{matched_facility_name}** "
+
                 prefix = (
-                    f"Em đã kiểm tra lịch được database xác minh tại **Khoa {spec_display}** trong {max_days} ngày tới."
+                    f"Dạ, em đã kiểm tra lịch khám được database xác minh {facility_location_text}thuộc **Khoa {spec_display}** trong {max_days} ngày tới:"
                     if lang == "vi"
-                    else f"I found database-verified availability at **{spec_display}** for the next {max_days} days."
+                    else f"I found database-verified availability {facility_location_text}at **{spec_display}** for the next {max_days} days:"
                 )
                 quick_replies = []
             elif meta.get("is_doctor_inquiry"):

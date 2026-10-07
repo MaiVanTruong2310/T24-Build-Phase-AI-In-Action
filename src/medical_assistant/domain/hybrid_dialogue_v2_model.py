@@ -50,6 +50,10 @@ class FactsDelta(BaseModel):
     severity: Literal["mild", "moderate", "severe", "null"] = "null"
     pain_severity_0_10: int | None = Field(None, ge=0, le=10)
     qualifiers: list[str] = Field(default_factory=list)
+    body_regions: list[str] = Field(default_factory=list)
+    primary_system: str | None = None
+    functional_impairment: bool = False
+    missing_dimensions: list[str] = Field(default_factory=list)
     corrections: list[FactCorrection] = Field(default_factory=list)
     patient_name: str | None = None
     patient_phone: str | None = None

@@ -7,10 +7,7 @@ def has_clinical_evidence(clinical_facts: dict[str, Any], v2_response: Any) -> b
         return True
     if len(clinical_facts.get("positive_facts", [])) > 0:
         return True
-    if (
-        clinical_facts.get("duration_days") is not None
-        and (clinical_facts.get("complaints") or clinical_facts.get("positive_facts"))
-    ) or clinical_facts.get("location"):
+    if (clinical_facts.get("duration_days") is not None and (clinical_facts.get("complaints") or clinical_facts.get("positive_facts"))) or clinical_facts.get("location"):
         return True
     if hasattr(v2_response.facts_delta, "observations") and any(
         obs.polarity != "negative" for obs in v2_response.facts_delta.observations

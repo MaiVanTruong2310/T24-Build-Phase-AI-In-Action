@@ -129,6 +129,11 @@ class ClinicalNegationService:
         phrase_norm = self._normalize_ascii(phrase)
         text_norm = self._normalize_ascii(full_text)
 
+        # Triệu chứng mang từ "không/chưa" là triệu chứng chỉ mất chức năng (VD: "không thở được", "không cử động được", "không nói được")
+        # Bản thân từ "không" là một phần triệu chứng, không thể tự phủ định chính nó!
+        if phrase_norm.startswith(("khong ", "chua ", "chang ", "cannot ", "unable to ", "can't ")):
+            return False
+
         # 1. Kiểm tra trên text gốc
         scopes = self.extract_negated_scopes(full_text)
         for _, _, scope_str in scopes:

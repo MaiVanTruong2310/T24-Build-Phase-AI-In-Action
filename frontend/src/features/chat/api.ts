@@ -233,8 +233,32 @@ export async function checkAgentStatus(signal?: AbortSignal): Promise<boolean> {
   }
 }
 
-export function resolveChatTakeoverWebSocketUrl(sessionId: string): string {
+let cachedTicket: { token: string; expiresAt: number } | null = null;
+
+export async function fetchTakeoverTicket(signal?: AbortSignal): Promise<string | null> {
+  if (cachedTicket && cachedTicket.expiresAt > Date.now()) {
+    return cachedTicket.token;
+  }
   const token = readAccessToken();
+  if (token) return token;
+
+  try {
+    const response = await fetchWithAuth('/staff/chat-takeover/ticket', { signal });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const ticketToken = data?.data?.token;
+    if (typeof ticketToken === 'string') {
+      cachedTicket = { token: ticketToken, expiresAt: Date.now() + 5 * 60 * 1000 };
+      return ticketToken;
+    }
+  } catch {
+    // Ticket retrieval failed or unauthenticated
+  }
+  return null;
+}
+
+export function resolveChatTakeoverWebSocketUrl(sessionId: string, explicitToken?: string | null): string {
+  const token = explicitToken ?? readAccessToken();
   const query = token ? `?${new URLSearchParams({ token }).toString()}` : '';
   return resolveWebSocketUrl(`/staff/chat-takeover/ws/${encodeURIComponent(sessionId)}${query}`);
 }

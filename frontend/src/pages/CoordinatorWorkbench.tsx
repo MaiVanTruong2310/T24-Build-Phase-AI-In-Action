@@ -5,11 +5,10 @@ import { saveAndRefresh } from '../features/coordinator/mutations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, canAdminister, dateTime, priorities, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
-import { formatDateVN } from '../features/appointment-booking/dateValidation'
 import './CoordinatorWorkbench.css'
 
 const sourceNames: Record<string, string> = { chat: 'Hội thoại', consultation: 'Phiếu khám', package: 'Gói khám', booking: 'Lịch chờ duyệt' }
-const eventNames: Record<string, string> = { claim: 'Nhận ca', handover: 'Bàn giao', takeover: 'Tiếp quản chat', resume: 'Trả về AI', contact: 'Liên hệ', follow_up: 'Hẹn liên hệ', emergency_detected: 'Phát hiện cảnh báo', emergency_ack: 'Tiếp nhận khẩn', emergency_transfer: 'Bàn giao cấp cứu', complete: 'Hoàn tất', cancel: 'Hủy', plan_updated: 'Đổi phương án khám', deposit_requested: 'Yêu cầu cọc', deposit_verified: 'Xác minh cọc', deposit_expired: 'Hết hạn cọc', booking_confirmed: 'Chốt lịch', refund_request: 'Yêu cầu hoàn cọc', refund_confirm: 'Xác nhận hoàn cọc', intake_submitted: 'Nhận phiếu', human_requested: 'Yêu cầu người hỗ trợ' }
+const eventNames: Record<string, string> = { claim: 'Nhận ca', decline: 'Từ chối nhận ca', handover: 'Bàn giao', takeover: 'Tiếp quản chat', resume: 'Trả về AI', contact: 'Liên hệ', follow_up: 'Hẹn liên hệ', emergency_detected: 'Phát hiện cảnh báo', emergency_ack: 'Tiếp nhận khẩn', emergency_transfer: 'Bàn giao cấp cứu', complete: 'Hoàn tất', cancel: 'Hủy', plan_updated: 'Đổi phương án khám', deposit_requested: 'Yêu cầu cọc', deposit_verified: 'Xác minh cọc', deposit_expired: 'Hết hạn cọc', booking_confirmed: 'Chốt lịch', refund_request: 'Yêu cầu hoàn cọc', refund_confirm: 'Xác nhận hoàn cọc', intake_submitted: 'Nhận phiếu', human_requested: 'Yêu cầu người hỗ trợ' }
 const depositNames: Record<string, string> = { requested: 'Chờ chuyển cọc', verified: 'Đã xác minh', expired: 'Hết hạn', voided: 'Đã thay phương án', refund_pending: 'Chờ hoàn cọc', refunded: 'Đã hoàn cọc' }
 
 export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue' | 'dashboard' | 'emergency' | 'chat' | 'settings' }) {
@@ -18,6 +17,7 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
   const { member: me, updateMember: setMe } = useOutletContext<StaffContext>()
   const [members, setMembers] = useState<Member[]>([])
   const [items, setItems] = useState<Case[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState<CaseDetail | null>(null)
@@ -146,40 +146,211 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
     } catch (e) { setError(e instanceof Error ? e.message : 'Thao tác thất bại.') }
     finally { busyRef.current = false; setBusy(false) }
   }
-  const act = (action: string) => selected && run(() => api<CaseDetail>('/cases/' + selected.id + '/actions', 'POST', { version: selected.version, action, note, assigned_to: handover || null, follow_up_at: followUp ? new Date(followUp).toISOString() : null, reference: reference || null }), 'Đã lưu thao tác.')
+  const act = (action: string) => selected && run(async () => {
+    const res = await api<CaseDetail>('/cases/' + selected.id + '/actions', 'POST', { version: selected.version, action, note, assigned_to: handover || null, follow_up_at: followUp ? new Date(followUp).toISOString() : null, reference: reference || null })
+    if (action === 'decline') setParams({})
+    return res
+  }, action === 'decline' ? 'Đã từ chối nhận ca.' : action === 'claim' ? 'Đã nhận ca thành công.' : 'Đã lưu thao tác.')
   const owned = Boolean(selected && me && selected.assigned_to === me.user_id)
   const allowed = (action: string) => canCaseAction(selected, me, action)
   const choose = (id: string) => setParams({ case: id })
   const person = (id: string | null) => members.find(x => x.user_id === id)?.name || (id ? 'Nhân viên đã ngừng hoạt động' : 'Chưa nhận')
+
+  const handleSelectAll = () => {
+    if (items.length > 0 && items.every(i => selectedIds.includes(i.id))) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(items.map(i => i.id))
+    }
+  }
+
+  const toggleItemSelect = (id: string, e: React.MouseEvent | React.ChangeEvent) => {
+    e.stopPropagation()
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const handleBulkDecline = async () => {
+    if (!selectedIds.length || busy) return
+    const count = selectedIds.length
+    if (!window.confirm(`Xác nhận từ chối nhận ${count} ca hội thoại đã chọn?`)) return
+    await run(async () => {
+      await api('/cases/bulk-actions', 'POST', {
+        case_ids: selectedIds,
+        action: 'decline',
+        note: 'Bác sĩ từ chối nhận ca'
+      })
+      const declined = [...selectedIds]
+      setSelectedIds([])
+      if (selectedId && declined.includes(selectedId)) setParams({})
+    }, `Đã từ chối nhận ${count} ca hội thoại.`)
+  }
+
+  const handleBulkClaim = async () => {
+    if (!selectedIds.length || busy) return
+    const count = selectedIds.length
+    await run(async () => {
+      await api('/cases/bulk-actions', 'POST', {
+        case_ids: selectedIds,
+        action: 'claim',
+        note: 'Nhận ca'
+      })
+      setSelectedIds([])
+    }, `Đã nhận ${count} ca hội thoại thành công.`)
+  }
+
   if (mode === 'chat') return <div className="coordinator-workbench cw-chat-workspace">
-    <header className="cw-heading"><div><h1>Hội thoại bệnh nhân</h1><p>Theo dõi hội thoại với AI, tiếp quản và trả lời trực tiếp cho bệnh nhân.</p></div><button disabled={busy} onClick={() => void load().catch(e => setPollError(e.message))}>Làm mới</button></header>
+    <header className="cw-heading"><div><h1>Hội thoại bệnh nhân</h1><p>Theo dõi các hội thoại bệnh nhân chủ động yêu cầu hỗ trợ hoặc đang cần cấp cứu.</p></div><button disabled={busy} onClick={() => void load().catch(e => setPollError(e.message))}>Làm mới</button></header>
     {pollError && <p className="cw-error" role="alert">{pollError}</p>}{error && <p className="cw-error" role="alert">{error}</p>}{notice && <p className="cw-notice" role="status">{notice}</p>}
     {me && <div className="cw-actions"><strong>{me.name} · {me.on_duty ? 'Đang trực' : 'Chưa bắt đầu ca trực'}</strong><button disabled={busy || me.on_duty} onClick={() => void run(() => api('/duty/start', 'POST'), 'Đã bắt đầu ca trực.')}>Bắt đầu ca trực</button><button disabled={busy || !me.on_duty} onClick={() => void run(() => api('/duty/end', 'POST'), 'Đã kết thúc ca trực.')}>Kết thúc ca trực</button></div>}
     <div className="cw-chat-layout">
       <section className="cw-panel cw-conversation-list" aria-label="Danh sách hội thoại">
         <h2>Danh sách hội thoại</h2>
         <label>Tìm bệnh nhân<input placeholder="Tên, điện thoại hoặc mã ca" value={search} onChange={e => { setSearch(e.target.value); setOffset(0) }} /></label>
-        <label>Trạng thái<select value={status} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="">Tất cả hội thoại</option>{Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <label>Trạng thái<select value={status} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="">Tất cả hội thoại</option>{Object.entries(statuses).filter(([key]) => key !== 'observing').map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label className="cw-check"><input type="checkbox" checked={mine} onChange={e => { setMine(e.target.checked); setOffset(0) }} />Hội thoại của tôi</label>
+
+        {items.length > 0 && <div className="cw-list-toolbar">
+          <div className="cw-toolbar-row">
+            <label className="cw-select-all-pill">
+              <input
+                type="checkbox"
+                className="cw-checkbox-input"
+                checked={items.length > 0 && items.every(i => selectedIds.includes(i.id))}
+                onChange={handleSelectAll}
+              />
+              <span className="cw-select-label">Chọn tất cả</span>
+              <span className="cw-count-badge">{items.length}</span>
+            </label>
+            {selectedIds.length > 0 && (
+              <span className="cw-selected-pill">Đã chọn: <strong>{selectedIds.length}</strong></span>
+            )}
+          </div>
+          {selectedIds.length > 0 && <div className="cw-bulk-action-bar">
+            <button
+              type="button"
+              className="cw-bulk-btn cw-bulk-btn-claim"
+              disabled={busy}
+              onClick={() => void handleBulkClaim()}
+            >
+              📥 Nhận ({selectedIds.length})
+            </button>
+            <button
+              type="button"
+              className="cw-bulk-btn cw-bulk-btn-decline"
+              disabled={busy}
+              onClick={() => void handleBulkDecline()}
+            >
+              ✕ Từ chối ({selectedIds.length})
+            </button>
+          </div>}
+        </div>}
+
         {loading && <p role="status">Đang tải hội thoại…</p>}
-        {items.map(item => <button key={item.id} className={'cw-conversation-card' + (item.id === selectedId ? ' cw-conversation-active' : '')} onClick={() => choose(item.id)}>
-          <strong>{item.patient.name || 'Bệnh nhân chưa cung cấp tên'}</strong><small>{item.patient.phone || 'Chưa có điện thoại'} · {item.id.slice(0, 8).toUpperCase()}</small>
-          <span className={item.priority === 0 ? 'cw-critical' : ''}>{item.priority === 0 ? 'Cảnh báo cấp cứu · ' : ''}{item.control === 'human' ? 'Điều phối viên đang trả lời' : 'AI đang hỗ trợ'}</span>
-          <small>{statuses[item.status] || item.status} · {person(item.assigned_to)}</small><small>{dateTime(item.created_at)}</small>
-        </button>)}
-        {!loading && !items.length && <p className="cw-empty">Không có hội thoại phù hợp.</p>}
+        {items.map(item => {
+          const isSelected = selectedIds.includes(item.id)
+          const isActive = item.id === selectedId
+          return (
+            <div
+              key={item.id}
+              className={`cw-conv-card ${isActive ? 'cw-conv-card-active' : ''} ${isSelected ? 'cw-conv-card-selected' : ''}`}
+              onClick={() => choose(item.id)}
+            >
+              <div className="cw-conv-card-top">
+                <label className="cw-conv-checkbox-label" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className="cw-checkbox-input"
+                    checked={isSelected}
+                    onChange={e => toggleItemSelect(item.id, e)}
+                  />
+                </label>
+                <div className="cw-conv-patient-info">
+                  <strong className="cw-conv-patient-name">{item.patient.name || 'Bệnh nhân chưa cung cấp tên'}</strong>
+                  <span className="cw-conv-subtext">{item.patient.phone || 'Chưa có SĐT'} · {item.id.slice(0, 8).toUpperCase()}</span>
+                </div>
+                {item.priority === 0 && (
+                  <span className="cw-priority-badge cw-priority-emergency">CẤP CỨU</span>
+                )}
+              </div>
+
+              <div className="cw-conv-status-tag">
+                <span className={item.priority === 0 ? 'cw-status-crit' : item.control === 'human' ? 'cw-status-doc' : 'cw-status-patient'}>
+                  {item.priority === 0 ? '🚨 Cảnh báo cấp cứu' : item.control === 'human' ? '👨‍⚕️ Bác sĩ đang hỗ trợ' : '💬 Chờ phản hồi'}
+                </span>
+              </div>
+
+              <div className="cw-conv-footer">
+                <span className="cw-conv-state">{statuses[item.status] || item.status} {item.assigned_to ? `· ${person(item.assigned_to)}` : ''}</span>
+                <time className="cw-conv-time">{dateTime(item.created_at)}</time>
+              </div>
+            </div>
+          )
+        })}
+        {!loading && !items.length && <p className="cw-empty">Không có hội thoại yêu cầu hỗ trợ hoặc cấp cứu.</p>}
         <footer className="cw-pagination"><span>{total} hội thoại</span><button disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 30))}>Trước</button><button disabled={offset + 30 >= total} onClick={() => setOffset(offset + 30)}>Sau</button></footer>
       </section>
       <section className="cw-panel cw-conversation-thread" aria-label="Nội dung hội thoại">
-        {!selectedId ? <div className="cw-chat-placeholder"><h2>Chọn một hội thoại để xem tin nhắn</h2><p>Bạn có thể theo dõi AI hoặc nhận ca và tiếp quản để trả lời trực tiếp.</p></div> : !selected ? <p role="status">Đang tải hội thoại…</p> : <>
-          <header className="cw-heading"><div><h2>{selected.patient.name || 'Hội thoại bệnh nhân'}</h2><small>{selected.patient.phone || 'Chưa có điện thoại'} · {person(selected.assigned_to)}</small><p>{selected.control === 'human' ? 'Điều phối viên đang trả lời; AI tạm dừng.' : 'AI đang hỗ trợ bệnh nhân.'}</p></div><button onClick={() => setParams({})}>Đóng hội thoại</button></header>
+        {!selectedId ? <div className="cw-chat-placeholder"><h2>Chọn một hội thoại để xem tin nhắn</h2><p>Tiếp nhận ca yêu cầu hỗ trợ hoặc khẩn cấp để xử lý và tư vấn trực tiếp cho bệnh nhân.</p></div> : !selected ? <p role="status">Đang tải hội thoại…</p> : <>
+          <header className="cw-heading"><div><h2>{selected.patient.name || 'Hội thoại bệnh nhân'}</h2><small>{selected.patient.phone || 'Chưa có điện thoại'} · {person(selected.assigned_to)}</small><p>{selected.priority === 0 ? '🚨 Tình trạng cấp cứu - Cần can thiệp khẩn cấp.' : selected.control === 'human' ? 'Bác sĩ điều phối đang trả lời; AI tạm dừng.' : 'Bệnh nhân đang chờ bác sĩ / điều phối viên tiếp quản.'}</p></div><button onClick={() => setParams({})}>Đóng hội thoại</button></header>
           {selected.priority === 0 && <div className="cw-emergency"><strong>Hội thoại có cảnh báo cấp cứu</strong><p>Tiếp nhận và ghi diễn biến trong trang xử lý cấp cứu.</p><Link to={'/staff/emergency?case=' + encodeURIComponent(selected.id)}>Mở ca cấp cứu</Link></div>}
-          <div className="cw-actions"><button disabled={busy || !me?.on_duty || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>Nhận ca</button><button disabled={busy || !allowed('takeover')} onClick={() => void act('takeover')}>Tiếp quản từ AI</button>{selected.status !== 'observing' && <Link to={'/staff/queue?case=' + encodeURIComponent(selected.id)}>Mở phiếu điều phối và xếp lịch</Link>}</div>
+          <div className="cw-thread-action-bar">
+            {owned ? (
+              <div className="cw-owned-status-pill">
+                <span className="cw-owned-dot">●</span>
+                <span>Bạn đang phụ trách hội thoại này</span>
+              </div>
+            ) : selected.assigned_to ? (
+              <div className="cw-other-assigned-pill">
+                <span>Bác sĩ phụ trách: {person(selected.assigned_to)}</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="cw-btn-primary-claim"
+                disabled={busy || ['completed', 'cancelled'].includes(selected.status)}
+                onClick={() => void act('claim')}
+              >
+                📥 Nhận ca
+              </button>
+            )}
+            <button
+              type="button"
+              className="cw-btn-danger-decline"
+              disabled={busy || ['completed', 'cancelled'].includes(selected.status)}
+              onClick={() => void act('decline')}
+            >
+              ✕ Từ chối nhận
+            </button>
+            {selected.status !== 'observing' && (
+              <Link to={'/staff/queue?case=' + encodeURIComponent(selected.id)} className="cw-btn-link-action">
+                Phiếu điều phối & xếp lịch →
+              </Link>
+            )}
+          </div>
           <div className="cw-messages cw-chat-messages" role="log" aria-label="Tin nhắn bệnh nhân và nhân viên">
             {selected.messages.length ? selected.messages.map(m => <article key={m.id} className={'cw-message-' + m.sender}><strong>{m.sender === 'patient' ? 'Bệnh nhân' : m.sender === 'coordinator' ? person(m.actor_id) : m.sender === 'ai' ? 'AI' : 'Thông báo'}</strong><time>{dateTime(m.created_at)}</time><p>{m.body}</p></article>) : <p>Chưa có tin nhắn được lưu.</p>}
           </div>
-          <form onSubmit={e => { e.preventDefault(); if (!allowed('message') || !message.trim()) return; const body = message.trim(); const caseId = selected.id; void run(async () => { await api('/cases/' + caseId + '/messages', 'POST', { client_id: crypto.randomUUID(), body }); if (selectedRef.current === caseId) setMessage('') }, 'Đã gửi tin nhắn.') }}>
-            <label>Trả lời bệnh nhân<textarea maxLength={5000} disabled={busy || !allowed('message')} required value={message} onChange={e => setMessage(e.target.value)} placeholder="Nhận ca và tiếp quản từ AI để trả lời bệnh nhân." /></label><button className="cw-primary" disabled={busy || !allowed('message') || !message.trim()}>Gửi tin nhắn</button>
+          <form className="cw-chat-composer" onSubmit={e => { e.preventDefault(); if (!allowed('message') || !message.trim()) return; const body = message.trim(); const caseId = selected.id; void run(async () => { await api('/cases/' + caseId + '/messages', 'POST', { client_id: crypto.randomUUID(), body }); if (selectedRef.current === caseId) setMessage('') }, 'Đã gửi tin nhắn.') }}>
+            <label className="cw-composer-label">
+              <span>Nội dung phản hồi bệnh nhân:</span>
+              <textarea
+                maxLength={5000}
+                disabled={busy || !allowed('message')}
+                required
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder={owned ? "Nhập nội dung tư vấn và hỗ trợ bệnh nhân trực tiếp..." : "Hãy bấm 'Nhận ca' để bắt đầu trao đổi với bệnh nhân."}
+              />
+            </label>
+            <div className="cw-composer-actions">
+              <button
+                type="submit"
+                className="cw-btn-send-message"
+                disabled={busy || !allowed('message') || !message.trim()}
+              >
+                Gửi tin nhắn ✈
+              </button>
+            </div>
           </form>
           {selected.control === 'human' && <details className="cw-chat-resume"><summary>Trả hội thoại về AI</summary><label>Tóm tắt nội dung đã hỗ trợ<textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Ghi thông tin AI cần biết để tiếp tục hỗ trợ." /></label><button disabled={busy || !allowed('resume') || !note.trim()} onClick={() => void act('resume')}>Trả về AI kèm tóm tắt</button></details>}
         </>}
@@ -203,7 +374,7 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
       <section className="cw-toolbar"><label>Tìm ca<input placeholder="Tên, điện thoại hoặc mã ca" value={search} onChange={e => { setSearch(e.target.value); setOffset(0) }} /></label><label>Trạng thái<select value={status} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="">Tất cả</option>{Object.entries(statuses).filter(([k]) => k !== 'observing').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label><label className="cw-check"><input type="checkbox" checked={mine} onChange={e => { setMine(e.target.checked); setOffset(0) }} />Ca của tôi</label></section>
       <div className={'cw-grid' + (selectedId ? ' cw-with-detail' : '')}><section className="cw-panel cw-queue"><div className="cw-table-wrap"><table><thead><tr><th>Bệnh nhân / mã</th><th>Ưu tiên</th><th>Trạng thái</th><th>Phụ trách</th><th>Tạo lúc</th></tr></thead><tbody>{items.map(c => <tr key={c.id} className={c.id === selectedId ? 'cw-selected' : ''}><td><button onClick={() => choose(c.id)} className="cw-link">{c.patient.name || 'Chưa có tên'}</button><small>{c.patient.phone || 'Chưa có điện thoại'} · {sourceNames[c.source] || c.source}</small><small>{c.id.slice(0, 8).toUpperCase()}</small></td><td className={c.priority === 0 ? 'cw-critical' : ''}>{priorities[c.priority]}</td><td>{statuses[c.status] || c.status}</td><td>{person(c.assigned_to)}</td><td>{dateTime(c.created_at)}</td></tr>)}</tbody></table></div>{!loading && !items.length && <p className="cw-empty">Không có ca phù hợp.</p>}<footer className="cw-pagination"><span>{total} ca</span><button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 30))}>Trước</button><button disabled={offset + 30 >= total} onClick={() => setOffset(offset + 30)}>Sau</button></footer></section>
       {selectedId && <aside className="cw-detail"><button onClick={() => setParams({})}>Đóng hồ sơ</button>{!selected ? <p>Đang tải hồ sơ…</p> : <>
-        <section className="cw-panel"><h2>{selected.patient.name || 'Hồ sơ ca'}</h2><small>Mã {selected.id} · phiên bản {selected.version}</small><p>{statuses[selected.status]} · {priorities[selected.priority]} · {person(selected.assigned_to)}</p><dl>{Object.entries(selected.patient).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{{ name: 'Họ tên', phone: 'Điện thoại', email: 'Email', date_of_birth: 'Ngày sinh', gender: 'Giới tính', guardian_name: 'Người giám hộ', guardian_phone: 'Liên hệ giám hộ', preferred_date: 'Ngày mong muốn', preferred_period: 'Buổi mong muốn', facility_preference: 'Cơ sở mong muốn', contact_time_preference: 'Thời gian liên hệ', notes: 'Nội dung yêu cầu', consent_to_contact: 'Đồng ý liên hệ' }[k] || k}</dt><dd>{(k === 'date_of_birth' || k === 'preferred_date') ? formatDateVN(String(v)) : String(v)}</dd></div>)}</dl><p>Hạn xử lý: {dateTime(selected.due_at)}. Nhắc việc: {dateTime(selected.follow_up_at)}</p><button disabled={busy || !me?.on_duty || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>Nhận ca</button></section>
+        <section className="cw-panel"><h2>{selected.patient.name || 'Hồ sơ ca'}</h2><small>Mã {selected.id} · phiên bản {selected.version}</small><p>{statuses[selected.status]} · {priorities[selected.priority]} · {person(selected.assigned_to)}</p><dl>{Object.entries(selected.patient).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{{ name: 'Họ tên', phone: 'Điện thoại', email: 'Email', date_of_birth: 'Ngày sinh', gender: 'Giới tính', guardian_name: 'Người giám hộ', guardian_phone: 'Liên hệ giám hộ', preferred_date: 'Ngày mong muốn', preferred_period: 'Buổi mong muốn', facility_preference: 'Cơ sở mong muốn', contact_time_preference: 'Thời gian liên hệ', notes: 'Nội dung yêu cầu', consent_to_contact: 'Đồng ý liên hệ' }[k] || k}</dt><dd>{String(v)}</dd></div>)}</dl><p>Hạn xử lý: {dateTime(selected.due_at)}. Nhắc việc: {dateTime(selected.follow_up_at)}</p><button className="cw-btn-primary-claim" disabled={busy || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>📥 Nhận ca</button></section>
         <section className="cw-panel cw-ai-panel">
           <h2>Kết quả Định hướng Lâm sàng (AI Triage & Care Pipeline)</h2>
           {Object.keys(selected.ai_snapshot).length ? (

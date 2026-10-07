@@ -8,14 +8,18 @@ export function acceptCaseDetail(current: CaseDetail | null, incoming: CaseDetai
 }
 
 export function canCaseAction(case_: CaseDetail | null, member: Member | null, action: string): boolean {
-  if (!case_ || !member || case_.assigned_to !== member.user_id) return false
+  if (!case_ || !member) return false
   const closed = ['completed', 'cancelled'].includes(case_.status)
+  if (closed) return false
+  if (action === 'claim') return !case_.assigned_to || case_.assigned_to === member.user_id
+  if (action === 'decline') return true
+  if (case_.assigned_to !== member.user_id) return false
   if (action === 'refund_request') return case_.deposits.some(d => d.status === 'verified')
   if (action === 'refund_confirm') return case_.deposits.some(d => d.status === 'refund_pending')
-  if (closed) return false
   if (action === 'complete') return ['confirmed', 'emergency_transferred'].includes(case_.status)
   if (action === 'takeover') return Boolean(case_.session_id) && case_.control !== 'human'
-  if (action === 'resume' || action === 'message') return Boolean(case_.session_id) && case_.control === 'human'
+  if (action === 'resume') return Boolean(case_.session_id) && case_.control === 'human'
+  if (action === 'message') return Boolean(case_.session_id)
   if (action === 'emergency_ack') return case_.priority === 0 && !['emergency_active', 'emergency_transferred'].includes(case_.status)
   if (action === 'emergency_transfer') return case_.priority === 0 && case_.status === 'emergency_active'
   return ['contact', 'cancel', 'handover', 'follow_up'].includes(action)
