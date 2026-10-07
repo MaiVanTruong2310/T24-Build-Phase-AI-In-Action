@@ -1,12 +1,10 @@
 import * as E from 'fp-ts/Either';
 import { pipe } from 'fp-ts/function';
 import { DoctorForm, FieldErrors } from './FormTypes';
+import { birthDateError, citizenIdError, emailError } from '../../../features/appointment-booking/dateValidation';
 
 const validateRequired = (value: string, errorMsg: string): E.Either<string, string> =>
   value.trim().length > 0 ? E.right(value.trim()) : E.left(errorMsg);
-
-const validateEmail = (email: string): E.Either<string, string> =>
-  email.includes('@') && email.includes('.') ? E.right(email.trim()) : E.left('Email không hợp lệ');
 
 export const validateDoctorForm = (form: DoctorForm): E.Either<FieldErrors, DoctorForm> => {
   const errors: FieldErrors = {};
@@ -15,7 +13,18 @@ export const validateDoctorForm = (form: DoctorForm): E.Either<FieldErrors, Doct
   pipe(validateRequired(form.academicTitle, 'Học hàm/Học vị là bắt buộc'), E.mapLeft(e => { errors.academicTitle = e }));
   
   if (form.email) {
-     pipe(validateEmail(form.email), E.mapLeft(e => { errors.email = e }));
+    const err = emailError(form.email);
+    if (err) errors.email = err;
+  }
+
+  if (form.dateOfBirth) {
+    const err = birthDateError(form.dateOfBirth);
+    if (err) errors.dateOfBirth = err;
+  }
+
+  if (form.idNumber) {
+    const err = citizenIdError(form.idNumber);
+    if (err) errors.idNumber = err;
   }
 
   pipe(validateRequired(form.licenseNumber, 'Số CCHN là bắt buộc'), E.mapLeft(e => { errors.licenseNumber = e }));

@@ -38,6 +38,18 @@ class UserRepository:
             return None
         return (await self.session.execute(select(User).where(or_(*filters)))).scalar_one_or_none()
 
+    async def get_by_citizen_id(self, citizen_id: str | None) -> User | None:
+        """Find a user by citizen_id (CCCD)."""
+        if not citizen_id:
+            return None
+        return (await self.session.execute(select(User).where(User.citizen_id == citizen_id))).scalar_one_or_none()
+
+    async def get_by_health_insurance_code(self, health_insurance_code: str | None) -> User | None:
+        """Find a user by health_insurance_code (BHYT)."""
+        if not health_insurance_code:
+            return None
+        return (await self.session.execute(select(User).where(User.health_insurance_code == health_insurance_code))).scalar_one_or_none()
+
     async def create(self, user: User) -> User:
         """Persist a user and flush it so generated fields are available."""
         self.session.add(user)

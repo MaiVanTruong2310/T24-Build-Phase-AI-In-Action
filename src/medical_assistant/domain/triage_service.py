@@ -1318,6 +1318,55 @@ class ClinicalTriageService:
                     patient_guidance=guidance,
                 )
 
+            # Da liễu / Ban đỏ ngoài da / Ngứa ngáy (không có suy hô hấp, không sốc)
+            has_dermatology = any(
+                term in clean_user_text
+                for term in (
+                    "nổi ban đỏ",
+                    "ban đỏ",
+                    "nổi ban",
+                    "ngứa ngáy",
+                    "nổi mẩn",
+                    "mẩn đỏ",
+                    "phát ban",
+                    "ngứa da",
+                    "dị ứng da",
+                    "mề đay",
+                    "nổi mề đay",
+                    "da liễu",
+                    "viêm da",
+                    "nổi sẩn",
+                    "sẩn ngứa",
+                )
+            )
+            if has_dermatology and not safety_emergency:
+                guidance = get_triage_guidance(
+                    specialty="Da liễu",
+                    ats_level=4,
+                    max_days=7,
+                    language=lang,
+                )
+                return TriageEvaluationResult(
+                    ats_level=ATSLevel.LEVEL_4_STANDARD,
+                    urgency_tier=UrgencyTier.WITHIN_WEEK,
+                    max_booking_days=7,
+                    is_emergency=False,
+                    care_setting="OUTPATIENT_CLINIC",
+                    triggered_red_flags=[],
+                    triggered_rule_ids=[],
+                    suggested_specialty="Da liễu",
+                    recommended_specialties=[
+                        SpecialtyRecommendation(
+                            code="DA_LIEU",
+                            name="Da liễu",
+                            priority=1,
+                            rationale="Triệu chứng ngoài da (nổi ban đỏ, ngứa ngáy)",
+                        )
+                    ],
+                    clarification_question=None,
+                    patient_guidance=guidance,
+                )
+
             # Dị ứng nhẹ / Da liễu (không có suy hô hấp, không sốc)
             has_mild_allergy = any(
                 term in clean_user_text

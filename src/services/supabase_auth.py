@@ -94,6 +94,14 @@ async def register_email(request, session: AsyncSession) -> dict:
         existing_phone = (await session.execute(select(User).where(User.phone == request.phone))).scalar_one_or_none()
         if existing_phone and (existing_phone.email or "").lower() != email:
             raise ConflictError("PHONE_EXISTS", "Số điện thoại đã thuộc một hồ sơ khác.")
+    if request.citizen_id:
+        existing_cid = (await session.execute(select(User).where(User.citizen_id == request.citizen_id))).scalar_one_or_none()
+        if existing_cid and (existing_cid.email or "").lower() != email:
+            raise ConflictError("CITIZEN_ID_EXISTS", "Số CCCD đã thuộc một hồ sơ khác.")
+    if request.health_insurance_code:
+        existing_bhyt = (await session.execute(select(User).where(User.health_insurance_code == request.health_insurance_code))).scalar_one_or_none()
+        if existing_bhyt and (existing_bhyt.email or "").lower() != email:
+            raise ConflictError("HEALTH_INSURANCE_EXISTS", "Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác.")
     await session.commit()
     settings = get_settings()
     redirect = settings.supabase_auth_redirect_url.rstrip("/") + "/login"

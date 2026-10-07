@@ -1,6 +1,8 @@
 import React from 'react';
 import { Camera, User, FileBadge2, CreditCard, Phone, Mail } from 'lucide-react';
 import { DoctorForm, FieldErrors } from './FormTypes';
+import { formatDateVN } from '../../../features/appointment-booking/dateValidation';
+import { DateInputVN } from '../../../components/DateInputVN';
 
 interface Props {
   form: DoctorForm;
@@ -88,13 +90,24 @@ export function PersonalInfoSection({ form, errors, onChange }: Props) {
 
         {/* Ngày sinh */}
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1.5">Ngày sinh <span className="text-rose-500">*</span></label>
-          <input 
-            type="date" 
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm font-semibold text-slate-900">
+              Ngày sinh <span className="text-rose-500">*</span> <span className="text-xs font-normal text-slate-500">(dd/mm/yyyy)</span>
+            </label>
+            {form.dateOfBirth && (
+              <span className="text-xs text-sky-600 font-medium">
+                {formatDateVN(form.dateOfBirth)}
+              </span>
+            )}
+          </div>
+          <DateInputVN 
+            max={new Date().toISOString().split('T')[0]}
             value={form.dateOfBirth}
             onChange={(e) => onChange('dateOfBirth', e.target.value)}
+            hasError={Boolean(errors.dateOfBirth)}
             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-sky-500 focus:bg-white"
           />
+          {errors.dateOfBirth && <p className="mt-1 text-xs text-rose-500">{errors.dateOfBirth}</p>}
         </div>
 
         {/* Số CCCD */}
@@ -107,9 +120,10 @@ export function PersonalInfoSection({ form, errors, onChange }: Props) {
               value={form.idNumber}
               onChange={(e) => onChange('idNumber', e.target.value)}
               placeholder="079082001923"
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-sky-500 focus:bg-white"
+              className={`w-full pl-10 pr-4 py-2 bg-slate-50 border ${errors.idNumber ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200'} rounded-lg text-sm focus:outline-none focus:border-sky-500 focus:bg-white`}
             />
           </div>
+          {errors.idNumber && <p className="mt-1 text-xs text-rose-500">{errors.idNumber}</p>}
         </div>
 
         {/* SĐT */}

@@ -15,6 +15,7 @@ import {
   Filter,
 } from 'lucide-react';
 import type { TimelineEntry } from './types';
+import { formatDateVN } from '../../features/appointment-booking/dateValidation';
 
 interface MedicalTimelineProps {
   entries: TimelineEntry[];
@@ -107,7 +108,7 @@ function TimelineEntryCard({ entry }: { entry: TimelineEntry }) {
                 {entry.title}
               </h4>
               <span className="text-[11px] text-slate-400 dark:text-app-secondary light:text-app-secondary">
-                • {entry.date} {entry.time && `lúc ${entry.time}`}
+                • {formatDateVN(entry.date)} {entry.time && `lúc ${entry.time}`}
               </span>
             </div>
 

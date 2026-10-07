@@ -166,53 +166,37 @@ cp .env.example .env
 
 ## 5. Hướng dẫn cài đặt & Chạy dự án (Setup Instructions)
 
-### Yêu cầu tiên quyết
+### Yêu cầu tiên quyết (Prerequisites)
 
 * **Python:** Phiên bản `3.11` trở lên
-* **Node.js:** `20.19+` hoặc `22.12+` và `npm` để chạy Vite 7.
-* **Database:** PostgreSQL hoặc dự án Supabase đã có dữ liệu bác sĩ, cơ sở và lịch khám.
+* **Node.js:** `20.19+` hoặc `22.12+` và `npm` (để chạy frontend Vite 7)
+* **Database:** PostgreSQL (hỗ trợ pgvector nếu dùng DB vector) hoặc dự án Supabase đã có dữ liệu bác sĩ, cơ sở và lịch khám
 * **Hệ điều hành:** Hỗ trợ Windows, macOS, Linux
 
 ---
 
-### Lấy mã nguồn
+### Lấy mã nguồn (Clone Repository)
 
 ```bash
-git clone --branch develop https://github.com/AI20K-Build-Phase-Cohort-4/P-124.git
+git clone https://github.com/AI20K-Build-Phase-Cohort-4/P-124.git
 cd P-124
 ```
 
 ---
 
-### Bước 1: Khởi tạo Backend
-
-#### Cách 1: Cài đặt tự động bằng Installer (Khuyên dùng)
-Dự án cung cấp sẵn script thiết lập tự động môi trường, cấu hình file `.env` và kích hoạt Git Hooks:
-
-* **Trên Windows (CMD hoặc PowerShell):**
-  ```cmd
-  python scripts\install.py
-  ```
-* **Trên Linux / macOS:**
-  ```bash
-  python3 scripts/install.py
-  ```
-
----
-
-#### Cách 2: Thiết lập thủ công từng bước
+### Bước 1: Khởi tạo & Chạy Backend (FastAPI)
 
 1. **Tạo và kích hoạt môi trường ảo (Virtual Environment):**
 
    * **Windows (Command Prompt - CMD):**
      ```cmd
-     python -m venv .venv
+     py -3.11 -m venv .venv
      .venv\Scripts\activate.bat
      ```
 
    * **Windows (PowerShell):**
      ```powershell
-     python -m venv .venv
+     py -3.11 -m venv .venv
      .\.venv\Scripts\Activate.ps1
      ```
 
@@ -222,7 +206,7 @@ Dự án cung cấp sẵn script thiết lập tự động môi trường, cấ
      source .venv/bin/activate
      ```
 
-2. **Cài đặt các gói phụ thuộc:**
+2. **Cài đặt các gói phụ thuộc (Dependencies):**
    ```bash
    python -m pip install --upgrade pip
    pip install -r requirements.txt
@@ -241,23 +225,25 @@ Dự án cung cấp sẵn script thiết lập tự động môi trường, cấ
      ```bash
      cp .env.example .env
      ```
-   * *Mở file `.env` vừa tạo và điền các khóa cấu hình: `DATABASE_URL`, `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY` và `AI_LOG_API_KEY` (từ Phoenix dashboard của BTC).*
+   * *Mở file `.env` vừa tạo và điền các khóa cấu hình chính:*
+     * `DATABASE_URL`: Chuỗi kết nối PostgreSQL (ví dụ: `postgresql+psycopg://user:password@localhost:5432/vcare`).
+     * `OPENROUTER_API_KEY` (hoặc `GOOGLE_AI_API_KEY` / `OPENAI_API_KEY`): Khóa API cho mô hình ngôn ngữ lớn (LLM).
+     * `JWT_SECRET_KEY`: Khóa bí mật dùng để ký và xác thực JWT token.
+     * `SUPABASE_URL` và `SUPABASE_KEY`: Thông tin kết nối Supabase (nếu đồng bộ cơ sở y tế/bác sĩ).
+     *(Tham khảo chi tiết bảng mô tả đầy đủ các tham số tại [Mục 4: Bảng biến môi trường](#4-bảng-biến-môi-trường-environment-variables)).*
 
-4. **Kích hoạt AI Log Git Hooks:**
-   * **Windows (PowerShell):**
-     ```powershell
-     powershell -ExecutionPolicy Bypass -File scripts\setup_hooks.ps1
-     ```
-   * **macOS / Linux:**
+4. **Khởi tạo cơ sở dữ liệu (Tùy chọn):**
+   * Mặc định hệ thống tự động sinh cấu trúc bảng ORM khi khởi động (`DATABASE_AUTO_CREATE=true`).
+   * Nếu muốn áp dụng thủ công các migration schema qua Alembic:
      ```bash
-     bash scripts/setup_hooks.sh
+     alembic upgrade head
      ```
 
 5. **Khởi chạy máy chủ Backend FastAPI:**
    * **Windows (CMD / PowerShell):**
      ```cmd
      python scripts\run_backend.py --host 127.0.0.1 --port 8000
-     # Hoặc khởi chạy trực tiếp qua uvicorn:
+     # Hoặc khởi chạy trực tiếp qua Uvicorn:
      python -m uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
      ```
    * **macOS / Linux:**
@@ -266,14 +252,14 @@ Dự án cung cấp sẵn script thiết lập tự động môi trường, cấ
      # Hoặc:
      python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
      ```
-   * Swagger UI kiểm thử API trực tiếp: **<http://127.0.0.1:8000/docs>**
-   * Kiểm tra tình trạng sẵn sàng: **<http://127.0.0.1:8000/health/ready>**
+   * 📘 **Swagger UI tài liệu API tương tác:** **<http://127.0.0.1:8000/docs>**
+   * 🩺 **Kiểm tra trạng thái sẵn sàng (Health Check):** **<http://127.0.0.1:8000/health/ready>**
 
 ---
 
-### Bước 2: Khởi tạo Frontend (React 19 + Vite)
+### Bước 2: Khởi tạo & Chạy Frontend (React 19 + Vite)
 
-Mở một cửa sổ Terminal mới tại thư mục gốc `P-124`:
+Mở một cửa sổ Terminal mới tại thư mục gốc của dự án `P-124`:
 
 1. **Di chuyển vào thư mục frontend & cài đặt thư viện:**
    * **Windows (CMD / PowerShell):**
@@ -291,24 +277,16 @@ Mở một cửa sổ Terminal mới tại thư mục gốc `P-124`:
    ```bash
    npm run dev
    ```
-   * Giao diện người dùng sẽ chạy tại: **<http://localhost:5173>**
-   * Mặc định frontend sẽ kết nối tới backend tại `http://localhost:8000`.
+   * 🌐 Giao diện ứng dụng web sẽ hoạt động tại: **<http://localhost:5173>**
+   * Frontend đã tích hợp sẵn proxy tự động chuyển tiếp toàn bộ truy vấn `/api/` sang Backend tại `http://localhost:8000`.
 
 ---
 
-### Bước 3: Khởi chạy nhanh toàn bộ qua Docker (Tùy chọn)
+### Bước 3: Tạo & Đồng bộ Vector DB ChromaDB (Tùy chọn)
 
-Nếu bạn đã cài đặt Docker và Docker Compose trên máy:
-```bash
-docker compose up --build
-```
-Compose sẽ tự động xây dựng container cho Backend FastAPI và container PostgreSQL hỗ trợ pgvector.
+Dự án ứng dụng kiến trúc **Hybrid RAG** (kết hợp vector search ChromaDB và SQLite FTS5 full-text search). Chỉ mục vector mẫu đã được lưu trữ sẵn tại thư mục `data/chroma/`.
 
----
-
-### Bước 4: Tạo cơ sở dữ liệu Vector DB ChromaDB (Tùy chọn)
-
-Nếu bạn muốn tạo lại chỉ mục vector embedding từ nguồn dữ liệu JSONL của Vinmec:
+Nếu bạn muốn tạo lại hoặc cập nhật chỉ mục vector embedding từ nguồn dữ liệu JSONL của Vinmec (`data/datalake/rag/specialties.jsonl`):
 * **Windows (CMD / PowerShell):**
   ```cmd
   python scripts\build_vector_store.py
@@ -318,28 +296,31 @@ Nếu bạn muốn tạo lại chỉ mục vector embedding từ nguồn dữ li
   python3 scripts/build_vector_store.py
   ```
 
-Script tạo embedding qua Gemini API, có sử dụng hạn ngạch API. Nguồn chuyên khoa
-`data/datalake/rag/specialties.jsonl` có trong Git. Hai nguồn tùy chọn
-`disease_education.jsonl` và `services.jsonl` trong cùng thư mục hiện được Git bỏ qua;
-script sẽ bỏ qua nguồn chưa có. Muốn tạo lại đầy đủ cần bổ sung cùng bộ nguồn.
-Khởi động lại backend sau khi tạo chỉ mục. Nếu vector store chưa sẵn sàng,
-Hybrid RAG dùng nhánh truy xuất SQLite FTS5.
+> **Lưu ý:** Script sử dụng Gemini Embedding API (`GOOGLE_AI_API_KEY`). Nếu vector store chưa khởi tạo hoặc chưa có API key, hệ thống sẽ tự động fallback sang nhánh tìm kiếm SQLite FTS5 để đảm bảo ứng dụng luôn hoạt động thông suốt.
 
-Để chuyển chỉ mục hiện có, dừng backend rồi sao chép **toàn bộ** `data/chroma/`;
-chỉ sao chép `chroma.sqlite3` sẽ thiếu các file chỉ mục. Xem [hướng dẫn Vector DB](docs/vector-db.md).
+---
 
-### Các trang điều phối
+### Bước 4: Khởi chạy nhanh toàn bộ qua Docker (Tùy chọn)
 
-| Trang | Chức năng |
-|:---|:---|
-| `/staff/queue` | Nhận và xử lý phiếu, lập phương án khám, xếp lịch, xử lý cọc. |
-| `/staff/chat` | Danh sách hội thoại và khung tin nhắn riêng; nhận ca, tiếp quản từ AI, trả lời bệnh nhân, trả về AI kèm tóm tắt. |
-| `/staff/emergency` | Theo dõi và xử lý các ca có cảnh báo cấp cứu. |
+Nếu bạn đã cài đặt Docker và Docker Compose trên hệ thống:
+```bash
+docker compose up --build
+```
+Compose sẽ tự động xây dựng container cho Backend FastAPI và container PostgreSQL hỗ trợ pgvector.
 
-Điều phối viên cần bắt đầu ca trực, nhận ca và tiếp quản trước khi gửi tin nhắn.
-Trang Hội thoại có liên kết mở phiếu tương ứng trong Hàng đợi.
-Tài khoản nhân viên truy cập trang bệnh nhân sẽ được chuyển về khu vực nhân viên;
-cập nhật hồ sơ bệnh nhân được kiểm tra quyền tại API.
+---
+
+### Danh mục các phân hệ & Trang chức năng trên Web
+
+| Phân hệ / URL | Người dùng | Chức năng chính |
+|:---|:---|:---|
+| `/` | Bệnh nhân | Chatbot tiếp đón thông minh, sàng lọc triệu chứng, phân tầng ATS & phân luồng chuyên khoa |
+| `/booking` | Bệnh nhân | Phiếu đăng ký đặt lịch khám, chọn cơ sở y tế Vinmec, chọn ngày khám và bác sĩ |
+| `/staff/queue` | Điều phối viên | Quản lý hàng đợi tiếp nhận bệnh nhân, lập phương án khám, xếp lịch & xử lý cọc |
+| `/staff/chat` | Điều phối viên | Khung tin nhắn thời gian thực, nhận ca, tiếp quản (takeover) từ AI để tư vấn trực tiếp |
+| `/staff/emergency` | Đội ngũ cấp cứu | Theo dõi và tiếp nhận tức thì các ca có cờ đỏ cấp cứu tối khẩn (ATS Level 1-2) |
+| `/family` | Bệnh nhân | Quản lý hồ sơ y bạ gia đình & người phụ thuộc |
+| `/docs` | Lập trình viên / Đánh giá | Tài liệu tương tác API Swagger UI đầy đủ |
 
 ---
 
@@ -560,12 +541,12 @@ P-124/
 │   ├── test_agents/                         # Kiểm thử LangGraph Agent flow & State structure
 │   ├── test_api/                            # Kiểm thử REST API, auth, cookies & validation
 │   └── test_medical_assistant/              # Kiểm thử kịch bản lâm sàng, cấp cứu, nén SOAP & RAG
-├── scripts/                                 # Hook ghi log AI + Installer tự động
-│   ├── install.py                           # Installer tự động thiết lập môi trường & .env
-│   ├── log_antigravity.py                   # Hook ghi nhận AI telemetry log cho Antigravity
+├── scripts/                                 # Scripts vận hành, tiện ích & khởi chạy hệ thống
+│   ├── run_backend.py                       # Launcher máy chủ Backend FastAPI (tương thích Windows/Linux)
+│   ├── build_vector_store.py                # Xây dựng chỉ mục vector ChromaDB từ dữ liệu tri thức RAG
 │   ├── verify_logins.py                     # Kiểm thử đăng nhập Supabase Auth & RBAC
-│   ├── build_vector_store.py                # Xây dựng vector database từ dữ liệu crawled
-│   └── setup_hooks.ps1 / setup_hooks.sh     # Cài đặt Git hooks tự động
+│   ├── link_doctors_to_facilities.py        # Liên kết danh mục bác sĩ với cơ sở bệnh viện Vinmec
+│   └── seed_full_database.py                # Nạp dữ liệu mẫu ban đầu cho cơ sở dữ liệu
 ├── docs/                                    # Tài liệu kỹ thuật
 │   ├── guide/                               # Technical Guidebook 10 chương chuyên sâu
 │   └── architecture_diagram.md              # Sơ đồ kiến trúc Mermaid
@@ -579,7 +560,7 @@ P-124/
 ├── .github/                                 # Cấu hình GitHub & CI/CD
 │   ├── workflows/ci.yml                     # Pipeline CI tự động (Lint, Pytest, Docker Build)
 │   └── hooks/                               # Hooks đồng bộ mã nguồn
-├── .claude/ .codex/ .cursor/ .gemini/ .agents/ # Cấu hình AI Assistant hooks cho từng công cụ
+├── .agents/                                 # Cấu hình Agentic workflows & tool rules
 ├── Dockerfile                               # Multi-stage production container build
 ├── docker-compose.yml                       # Docker Compose chạy Backend + PostgreSQL/pgvector
 ├── README_boilerplate.md                    # Khung README mẫu tiêu chuẩn của chương trình

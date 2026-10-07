@@ -137,6 +137,16 @@ VI_PATHOLOGY_MAP: dict[str, dict[str, str]] = {
     "lupus ban đỏ": {"code": "DI_UNG", "name": "Miễn dịch - Dị ứng"},
     "gãy xương sườn": {"code": "XUONG_KHOP", "name": "Chấn thương chỉnh hình - Y học thể thao"},
     "cơn hoảng loạn": {"code": "TAM_THAN", "name": "Trung tâm chăm sóc sức khỏe tinh thần tích hợp"},
+    "nổi ban đỏ": {"code": "DA_LIEU", "name": "Da liễu"},
+    "ban đỏ": {"code": "DA_LIEU", "name": "Da liễu"},
+    "nổi ban": {"code": "DA_LIEU", "name": "Da liễu"},
+    "ngứa ngáy": {"code": "DA_LIEU", "name": "Da liễu"},
+    "phát ban": {"code": "DA_LIEU", "name": "Da liễu"},
+    "mề đay": {"code": "DA_LIEU", "name": "Da liễu"},
+    "nổi mề đay": {"code": "DA_LIEU", "name": "Da liễu"},
+    "dị ứng da": {"code": "DA_LIEU", "name": "Da liễu"},
+    "viêm da": {"code": "DA_LIEU", "name": "Da liễu"},
+    "viêm da cơ địa": {"code": "DA_LIEU", "name": "Da liễu"},
 }
 for vi_name, vi_spec in VI_PATHOLOGY_MAP.items():
     _PATHOLOGY_INDEX[vi_name] = vi_spec
@@ -390,6 +400,21 @@ SPECIALTY_PROTOTYPES: dict[str, dict[str, Any]] = {
             "chàm",
             "mụn",
             "phù nề",
+            "ban đỏ",
+            "nổi ban",
+            "ngứa ngáy",
+            "ngứa",
+            "ngứa da",
+            "phát ban",
+            "nổi mẩn",
+            "mẩn đỏ",
+            "dị ứng da",
+            "mề đay",
+            "nổi mề đay",
+            "viêm da",
+            "vảy nến",
+            "nổi sẩn",
+            "sẩn ngứa",
         ],
     },
 }
@@ -407,32 +432,40 @@ def _compute_keyword_score(tokens: list[str], keywords: list[str]) -> float:
     """Tính overlap score giữa query tokens và specialty keywords."""
     if not tokens:
         return 0.0
-    # Build keyword token set (mỗi keyword phrase có thể có nhiều tokens)
+    # Stopwords tiếng Việt thường gặp không mang ý nghĩa chuyên khoa
+    stopwords = {"tôi", "toi", "bị", "bi", "và", "va", "ở", "o", "tại", "tai", "có", "co", "hay", "cảm", "thấy", "thay", "bác", "sĩ", "cho", "em", "hỏi", "với", "ạ", "nhé", "đang", "dang"}
+    filtered_tokens = [t for t in tokens if t not in stopwords] or tokens
+
     keyword_tokens = set()
     keyword_bigrams = set()
     for kw in keywords:
         kw_parts = _tokenize(kw)
         keyword_tokens.update(kw_parts)
-        # Thêm bigrams cho precision cao hơn
         for i in range(len(kw_parts) - 1):
             keyword_bigrams.add(f"{kw_parts[i]}_{kw_parts[i + 1]}")
 
-    # Unigram matching
-    query_set = set(tokens)
+    query_set = set(filtered_tokens)
     unigram_hits = len(query_set & keyword_tokens)
 
-    # Bigram matching (trọng số x2)
     query_bigrams = set()
     for i in range(len(tokens) - 1):
         query_bigrams.add(f"{tokens[i]}_{tokens[i + 1]}")
     bigram_hits = len(query_bigrams & keyword_bigrams)
 
-    # Weighted score, normalize bởi tổng keyword count
-    total_possible = len(keyword_tokens) + len(keyword_bigrams)
-    if total_possible == 0:
+    if unigram_hits == 0 and bigram_hits == 0:
         return 0.0
-    raw_score = (unigram_hits + bigram_hits * 2) / total_possible
-    return raw_score
+
+    # Query coverage: tỷ lệ triệu chứng thực sự của bệnh nhân khớp vào chuyên khoa
+    query_len = max(len(query_set), 1)
+    coverage = (unigram_hits + bigram_hits * 2.0) / (query_len * 2.0)
+
+    # Prototype density
+    total_possible = len(keyword_tokens) + len(keyword_bigrams)
+    density = (unigram_hits + bigram_hits * 2.0) / max(total_possible, 1)
+
+    # Điểm tổng hợp: ưu tiên độ khớp triệu chứng của bệnh nhân (coverage)
+    score = 0.8 * min(coverage, 1.0) + 0.2 * density
+    return min(score, 1.0)
 
 
 def tier2_semantic_route(query_text: str) -> tuple[str, str, float] | None:

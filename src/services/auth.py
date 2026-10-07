@@ -52,6 +52,14 @@ class AuthService:
             if await self.users.get_by_identity(email, phone):
                 logger.warning("AuthService.register account already exists")
                 raise ConflictError("ACCOUNT_EXISTS", "An account already exists")
+            if request.citizen_id and hasattr(self.users, "get_by_citizen_id"):
+                existing_cid = await self.users.get_by_citizen_id(request.citizen_id)
+                if existing_cid:
+                    raise ConflictError("CITIZEN_ID_EXISTS", "Số CCCD đã thuộc một hồ sơ khác trong hệ thống.")
+            if request.health_insurance_code and hasattr(self.users, "get_by_health_insurance_code"):
+                existing_bhyt = await self.users.get_by_health_insurance_code(request.health_insurance_code)
+                if existing_bhyt:
+                    raise ConflictError("HEALTH_INSURANCE_EXISTS", "Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác trong hệ thống.")
             user = User(
                 email=email,
                 phone=phone,
@@ -253,6 +261,14 @@ class AuthService:
                     updates["patient_details"] = {**(user.patient_details or {}), **(updates["patient_details"] or {})}
                 if "full_name" in updates:
                     updates["full_name"] = updates["full_name"].strip() or None if updates["full_name"] else None
+                if "citizen_id" in updates and updates["citizen_id"] and hasattr(self.users, "get_by_citizen_id"):
+                    existing_cid = await self.users.get_by_citizen_id(updates["citizen_id"])
+                    if existing_cid and existing_cid.id != user.id:
+                        raise ConflictError("CITIZEN_ID_EXISTS", "Số CCCD đã thuộc một hồ sơ khác trong hệ thống.")
+                if "health_insurance_code" in updates and updates["health_insurance_code"] and hasattr(self.users, "get_by_health_insurance_code"):
+                    existing_bhyt = await self.users.get_by_health_insurance_code(updates["health_insurance_code"])
+                    if existing_bhyt and existing_bhyt.id != user.id:
+                        raise ConflictError("HEALTH_INSURANCE_EXISTS", "Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác trong hệ thống.")
                 for field, value in updates.items():
                     setattr(user, field, value)
                 await self.session.flush()

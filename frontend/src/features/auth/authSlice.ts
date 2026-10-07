@@ -53,8 +53,11 @@ const translateError = (msg: string | undefined | null): string => {
   const lower = msg.toLowerCase();
   if (lower.includes('invalid login credentials')) return 'Sai tài khoản hoặc mật khẩu.';
   if (lower.includes('invalid or expired otp')) return 'Mã OTP không hợp lệ hoặc đã hết hạn.';
-  if (lower.includes('account already exists')) return 'Tài khoản đã tồn tại.';
+  if (lower.includes('account already exists')) return 'Tài khoản đã tồn tại trong hệ thống.';
   if (lower.includes('account is not active')) return 'Tài khoản chưa được kích hoạt.';
+  if (lower.includes('citizen_id') || lower.includes('cccd')) return 'Số CCCD đã thuộc một hồ sơ khác trong hệ thống.';
+  if (lower.includes('health_insurance') || lower.includes('bảo hiểm y tế')) return 'Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác trong hệ thống.';
+  if (lower.includes('phone_exists') || lower.includes('số điện thoại đã thuộc')) return 'Số điện thoại đã thuộc một hồ sơ khác.';
   return msg;
 };
 

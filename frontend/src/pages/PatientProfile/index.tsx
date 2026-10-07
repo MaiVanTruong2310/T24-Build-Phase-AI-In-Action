@@ -22,9 +22,10 @@ import { Header } from './Header';
 import { PortraitUploader } from './PortraitUploader';
 
 import { MedicalTabs } from './MedicalTabs';
-
 import { MedicalHistory } from './MedicalHistory';
-
+import { FamilyProfilesSection } from './FamilyProfilesSection';
+import { formatDateVN, birthDateError, vietnamToday } from '../../features/appointment-booking/dateValidation';
+import { DateInputVN } from '../../components/DateInputVN';
 import type { MedicalTabKey } from './types';
 
 
@@ -113,7 +114,7 @@ function displayValue(profile: PatientProfile, field: Field): string {
 
   if (field.options) return field.options.find(option => option.value === value)?.label || 'Chưa cung cấp';
 
-  if (field.type === 'date') { const [year,month,day] = String(value).split('-'); return `${day}/${month}/${year}`; }
+  if (field.type === 'date') return formatDateVN(String(value), 'Chưa cung cấp');
 
   return `${value}${field.unit ? ` ${field.unit}` : ''}`;
 
@@ -197,7 +198,10 @@ export default function PatientProfilePage() {
 
     if (value !== null && editing.key === 'citizen_id' && !/^\d{12}$/.test(String(value))) { setSaveError('CCCD cần đủ 12 chữ số.'); return; }
 
-    if (value !== null && editing.type === 'date' && String(value) >= new Date().toISOString().slice(0,10)) { setSaveError('Ngày sinh phải trước ngày hiện tại.'); return; }
+    if (value !== null && (editing.type === 'date' || editing.key === 'date_of_birth')) {
+      const err = birthDateError(String(value));
+      if (err) { setSaveError(err); return; }
+    }
 
     const update: PatientProfileUpdate = editing.details ? { patient_details: { [editing.key]: value } } : { [editing.key]: value };
 
@@ -275,6 +279,8 @@ export default function PatientProfilePage() {
 
         {section('Thông tin cá nhân',coreFields)}
 
+        <FamilyProfilesSection />
+
         {section('Thông tin sức khỏe',healthFields,'Thông tin do bạn cung cấp.')}
 
         <MedicalHistory history={profile.patient_details?.medical_history || []} onSave={async medical_history => {
@@ -305,11 +311,25 @@ export default function PatientProfilePage() {
 
         <div className="mb-5 flex items-center justify-between"><h2 id="profile-editor-title" className="font-semibold text-slate-900 dark:text-app-text light:text-app-text">Chỉnh sửa {editing.label.toLowerCase()}</h2><button disabled={saving} type="button" aria-label="Đóng chỉnh sửa" onClick={() => setEditing(null)} className="rounded p-1 text-slate-400 dark:text-app-secondary light:text-app-secondary hover:text-slate-700 dark:hover:text-app-text light:hover:text-app-text"><X className="h-5 w-5" /></button></div>
 
-        <label htmlFor="profile-field" className="mb-2 block text-sm text-slate-600 dark:text-app-secondary light:text-app-secondary">{editing.label}{editing.unit ? ` (${editing.unit})` : ''}</label>
+        <label htmlFor="profile-field" className="mb-2 block text-sm text-slate-600 dark:text-app-secondary light:text-app-secondary">
+          {editing.label}{editing.unit ? ` (${editing.unit})` : ''}{editing.type === 'date' && draft ? ` (dd/mm/yyyy: ${formatDateVN(draft)})` : ''}
+        </label>
 
-        {editing.options ? <select autoFocus id="profile-field" value={draft} onChange={e => setDraft(e.target.value)} disabled={saving} className="w-full rounded-lg border border-slate-300 dark:border-app-border light:border-app-border p-3"><option value="">Chưa cung cấp</option>{editing.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
-
-        : <input autoFocus id="profile-field" type={editing.type || 'text'} value={draft} onChange={e => setDraft(e.target.value)} disabled={saving} step={editing.type === 'number' ? ['systolic','diastolic','heart_rate'].includes(editing.key) ? '1' : 'any' : undefined} min={editing.min} max={editing.max} maxLength={editing.maxLength} className="w-full rounded-lg border border-slate-300 dark:border-app-border light:border-app-border p-3" />}
+        {editing.options ? (
+          <select autoFocus id="profile-field" value={draft} onChange={e => setDraft(e.target.value)} disabled={saving} className="w-full rounded-lg border border-slate-300 dark:border-app-border light:border-app-border p-3"><option value="">Chưa cung cấp</option>{editing.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+        ) : editing.type === 'date' ? (
+          <DateInputVN
+            id="profile-field"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            disabled={saving}
+            max={vietnamToday()}
+            placeholder="dd/mm/yyyy"
+            className="w-full rounded-lg border border-slate-300 dark:border-app-border light:border-app-border p-3 bg-white dark:bg-slate-900"
+          />
+        ) : (
+          <input autoFocus id="profile-field" type={editing.type || 'text'} value={draft} onChange={e => setDraft(e.target.value)} disabled={saving} step={editing.type === 'number' ? ['systolic','diastolic','heart_rate'].includes(editing.key) ? '1' : 'any' : undefined} min={editing.min} max={editing.max} maxLength={editing.maxLength} className="w-full rounded-lg border border-slate-300 dark:border-app-border light:border-app-border p-3" />
+        )}
 
         {saveError && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-300">{saveError}</p>}
 

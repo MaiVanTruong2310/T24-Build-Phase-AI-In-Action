@@ -142,7 +142,7 @@ ANATOMICAL_SYSTEMS = {
         "name": "Khoa Da liễu",
         "organ_name": "Bề mặt da & Phần phụ",
         "patterns": [
-            r"\b(?:man\s+ngua|ngua\s+da|noi\s+me\s+day|mun\s+boc|mun\s+viem|da\s+lieu|vay\s+nen|viem\s+da|ngua\s+khap\s+nguoi|ngua\s+do|vung\s+da.*ngua)\b"
+            r"\b(?:man\s+ngua|ngua\s+da|noi\s+me\s+day|me\s+day|mun\s+boc|mun\s+viem|da\s+lieu|vay\s+nen|viem\s+da|ngua\s+khap\s+nguoi|ngua\s+do|vung\s+da.*ngua|ban\s+do|noi\s+ban|ngua\s+ngay|phat\s+ban|noi\s+man|man\s+do|di\s+ung\s+da|san\s+ngua)\b"
         ],
         "rationale": "Tổn thương da liễu bề mặt; điều trị giảm triệu chứng ngứa và bảo vệ hàng rào bảo vệ cơ thể.",
     },

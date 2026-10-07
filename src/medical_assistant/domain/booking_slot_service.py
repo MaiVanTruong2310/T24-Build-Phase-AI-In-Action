@@ -295,6 +295,16 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
     entities: dict[str, Any] = {}
 
     # 1. Booking intent detection
+    is_questioning = any(
+        re.search(p, lower_text)
+        for p in [
+            r"\b(?:thế\s+)?sao\s+(?:không|lại)\b",
+            r"\btại\s+sao\b",
+            r"\bvì\s+sao\b",
+            r"\bphải\s+không\b",
+            r"\bkhác\s+gì\b",
+        ]
+    )
     booking_intent_keywords = [
         "đặt lịch", "dat lich", "hẹn khám", "hen kham", "đăng ký khám", "dang ky kham",
         "muốn khám", "muon kham", "muốn đi khám", "muon di kham", "đi khám", "di kham",
@@ -302,7 +312,7 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         "phiếu khám", "phieu kham", "đặt hẹn", "dat hen", "lên lịch", "len lich",
         "lịch hẹn", "lich hen", "khám bệnh", "kham benh"
     ]
-    is_booking_intent = any(kw in lower_text for kw in booking_intent_keywords)
+    is_booking_intent = (not is_questioning) and any(kw in lower_text for kw in booking_intent_keywords)
     entities["is_booking_intent"] = is_booking_intent
     entities["is_doctor_inquiry"] = detect_doctor_inquiry(text_clean)
     entities["is_booking_confirmation"] = detect_booking_confirmation(text_clean)
@@ -340,11 +350,13 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
 
     # 4. Extract Date of Birth / Year / Age
     today = _get_vn_today()
-    dob_match = re.search(r"sinh\s+ngày\s+(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text_clean, re.IGNORECASE)
+    dob_match = re.search(r"(?:ngày\s+sinh|sinh\s+ngày|sinh|dob)\s*[:\-]?\s*(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text_clean, re.IGNORECASE)
     if dob_match:
         day, month, year = int(dob_match.group(1)), int(dob_match.group(2)), int(dob_match.group(3))
         try:
-            entities["date_of_birth"] = date(year, month, day).isoformat()
+            d = date(year, month, day)
+            if date(1900, 1, 1) <= d <= today:
+                entities["date_of_birth"] = d.isoformat()
         except ValueError:
             pass
     if "date_of_birth" not in entities:
@@ -632,6 +644,8 @@ def extract_clinical_details(
         complaints.append("Sốt")
     if any(w in lower_comb for w in ["ho khan", "ho đờm", "ho dai dẳng"]):
         complaints.append("Ho kéo dài")
+    if any(w in lower_comb for w in ["nổi ban", "ban đỏ", "ngứa ngáy", "mẩn ngứa", "ngứa da", "ngứa", "phát ban", "nổi mề đay", "mề đay", "dị ứng da", "viêm da"]):
+        complaints.append("Nổi ban đỏ, ngứa ngáy da")
 
     if not complaints:
         # Fallback to symptoms list from facts
