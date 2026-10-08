@@ -375,9 +375,33 @@ def case_dict(case):
 
 async def detail(db, case):
     value = case_dict(case)
-    for name, model in [('messages', Message), ('events', Event), ('deposits', Deposit)]:
+    for name, model in [('events', Event), ('deposits', Deposit)]:
         rows = (await db.execute(select(model).where(model.case_id == case.id).order_by(model.created_at))).scalars().all()
         value[name] = [{col.name: (str(v) if isinstance(v, UUID) else v.isoformat() if isinstance(v, datetime) else v) for col in model.__table__.columns for v in [getattr(row, col.name)]} for row in rows]
+
+    from src.models.conversation import Message as UnifiedMsg
+    msg_rows = (await db.execute(select(UnifiedMsg).where(UnifiedMsg.conversation_id == case.id).order_by(UnifiedMsg.created_at))).scalars().all()
+    messages_list = []
+    for m in msg_rows:
+        meta = m.msg_metadata or {}
+        legacy_sender = str(meta.get('legacy_sender') or '').lower()
+        sender_t = (m.sender_type or '').upper()
+        sender = (
+            'coordinator' if sender_t in ('STAFF', 'COORDINATOR') or legacy_sender in ('coordinator', 'staff')
+            else 'patient' if sender_t in ('PATIENT', 'USER') or legacy_sender in ('patient', 'user')
+            else 'ai' if sender_t in ('AGENT', 'BOT', 'AI') or legacy_sender in ('ai', 'assistant', 'bot')
+            else 'system'
+        )
+        messages_list.append({
+            'id': str(m.id),
+            'case_id': str(m.conversation_id),
+            'client_id': str(meta.get('client_id') or ''),
+            'sender': sender,
+            'actor_id': str(m.sender_id) if m.sender_id else None,
+            'body': m.content or '',
+            'created_at': m.created_at.isoformat() if m.created_at else now().isoformat(),
+        })
+    value['messages'] = messages_list
     return value
 
 
