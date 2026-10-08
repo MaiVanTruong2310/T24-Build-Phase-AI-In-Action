@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # LLM
     llm_provider: str = Field(default="deepseek", description="Nhà cung cấp LLM chính: deepseek | openrouter | gemini | openai")
     openai_api_key: str = ""
+    openai_model_name: str = "gpt-4o-mini"
+    openai_base_url: str = "https://api.openai.com/v1"
     model_name: str = "deepseek-chat"
     llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     openrouter_api_key: str = ""

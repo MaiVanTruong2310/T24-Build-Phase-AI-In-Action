@@ -385,13 +385,16 @@ def get_llm() -> FailoverChatModel:
     openai_providers: list[ChatOpenAI] = []
     openai_api_key = _usable_secret(getattr(settings, "openai_api_key", ""))
     if openai_api_key:
+        oai_model = getattr(settings, "openai_model_name", None) or getattr(settings, "model_name", "gpt-4o-mini")
+        if "deepseek" in oai_model.lower():
+            oai_model = "gpt-4o-mini"
         openai_providers.append(
-            ChatOpenAI(
-                model=settings.model_name,
+            _build_openai_compatible_model(
                 api_key=openai_api_key,
+                base_url=getattr(settings, "openai_base_url", "https://api.openai.com/v1"),
+                model=oai_model,
                 temperature=settings.llm_temperature,
                 timeout=settings.llm_request_timeout_seconds,
-                max_retries=0,
             )
         )
 
