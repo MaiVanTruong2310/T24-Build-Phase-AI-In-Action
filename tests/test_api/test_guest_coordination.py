@@ -1,13 +1,25 @@
 import uuid
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.api.endpoints.coordination import VN_TZ
 from src.db.dependencies import get_db_session
 from src.main import app
+
+
+@pytest.fixture
+def guest_request_db(monkeypatch):
+    db = AsyncMock()
+    db.begin = MagicMock(return_value=AsyncMock())
+
+    async def database():
+        yield db
+
+    monkeypatch.setitem(app.dependency_overrides, get_db_session, database)
+    return db
 
 
 @pytest.mark.asyncio
@@ -33,7 +45,7 @@ async def test_guest_list_sessions_unauthenticated(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_guest_create_request_requires_guest_fields(client):
+async def test_guest_create_request_requires_guest_fields(client, guest_request_db):
     """Guest requests without personal information are rejected."""
     fake_session_id = str(uuid.uuid4())
     fake_service_id = str(uuid.uuid4())
@@ -55,7 +67,7 @@ async def test_guest_create_request_requires_guest_fields(client):
 
 
 @pytest.mark.asyncio
-async def test_guest_create_request_validates_phone(client):
+async def test_guest_create_request_validates_phone(client, guest_request_db):
     """Guest requests with invalid Vietnamese phone are rejected."""
     fake_session_id = str(uuid.uuid4())
     fake_service_id = str(uuid.uuid4())

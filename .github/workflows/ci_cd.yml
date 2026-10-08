@@ -50,8 +50,8 @@ jobs:
           APP_ENV: test
           OPENAI_API_KEY: test-key
           JWT_SECRET_KEY: test-secret-key-with-at-least-32-bytes
-          # DATABASE_URL: postgresql+psycopg://ai20k_test:ai20k_test@localhost:${{ job.services.postgres.ports[5432] }}/ai20k_test
-          DATABASE_URL: $ {{secrets.DATABASE_URL}}
+          DATABASE_URL: postgresql+psycopg://ai20k_test:ai20k_test@localhost:${{ job.services.postgres.ports[5432] }}/ai20k_test
+          # DATABASE_URL: $ {{secrets.DATABASE_URL}}
           DATABASE_AUTO_CREATE: "false"
 
       - name: Run Core & Benchmark Tests
