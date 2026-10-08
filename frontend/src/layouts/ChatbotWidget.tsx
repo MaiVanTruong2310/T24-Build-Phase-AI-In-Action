@@ -647,7 +647,6 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
           {/* Message List */}
           <PatientSelector selection={patientSelection} disabled={isSending || historyLoading} />
           {authUser && historyOpen && <ChatHistoryPanel patientProfileId={patientSelection.profileId || undefined} key={authUser.id + patientSelection.profileId} activeSessionId={sessionId} onSelect={openConversation} busy={isSending || historyLoading} onDeletingChange={setHistoryDeleting} onDeleted={id => { if (id === sessionId) { historyRequest.current?.abort(); setHistoryError(''); setHistoryMore(false); setHistoryOffset(0); resetConversation(); } }} />}
-          {authUser && <p className="border-b border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800">Hồ sơ người khám đang chọn · Hội thoại được tách riêng theo người khám.</p>}
           {historyError && <p role="alert" className="px-4 py-2 text-xs text-red-600">{historyError} <button type="button" onClick={() => setHistoryReload(value => value + 1)} className="underline">Thử tải lại</button></p>}
           {historyLoading && <p className="px-4 py-2 text-xs text-slate-500">Đang tải cuộc trò chuyện…</p>}
           {historyMore && <button disabled={historyLoading || isSending} type="button" onClick={loadOlderMessages} className="px-4 py-2 text-xs text-blue-600">Tải tin nhắn cũ hơn</button>}
@@ -702,7 +701,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                         <span>Đang chờ phản hồi từ trợ lý…</span>
                       </div>
                     ) : (
-                      <div className="whitespace-pre-wrap break-words leading-relaxed text-xs sm:text-[13px]">
+                      <div className={`${isUser ? 'whitespace-pre-wrap' : ''} break-words leading-relaxed text-xs sm:text-[13px]`}>
                         {isUser ? message.text : <AssistantMessage text={message.text} />}
                       </div>
                     )}
