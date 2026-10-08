@@ -101,7 +101,7 @@ async def ensure_chat_case(db, request, user, token):
     return case
 
 
-async def add_message(db, case, client_id, sender, body, actor=None):
+async def add_message(db, case, client_id, sender, body, actor=None, channel: str | None = None):
     from datetime import datetime, timezone
     from src.models.conversation import Conversation, Message as UnifiedMsg
     sender_type = "PATIENT" if sender in ("patient", "user") else "STAFF" if sender in ("coordinator", "staff") else "AGENT" if sender in ("ai", "assistant", "bot") else "SYSTEM"
@@ -119,6 +119,9 @@ async def add_message(db, case, client_id, sender, body, actor=None):
             updated_at=now,
         ).on_conflict_do_nothing(index_elements=["id"])
     )
+    msg_meta = {"client_id": str(client_id), "legacy_sender": sender}
+    if channel:
+        msg_meta["channel"] = channel
     await db.execute(
         insert(UnifiedMsg).values(
             id=uuid4(),
@@ -127,7 +130,7 @@ async def add_message(db, case, client_id, sender, body, actor=None):
             sender_id=actor.id if actor else None,
             message_type="TEXT",
             content=body,
-            msg_metadata={"client_id": str(client_id), "legacy_sender": sender},
+            msg_metadata=msg_meta,
             created_at=now,
         )
     )

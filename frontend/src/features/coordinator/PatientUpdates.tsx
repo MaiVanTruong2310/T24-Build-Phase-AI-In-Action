@@ -39,6 +39,7 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
 ) {
   const [messages, setMessages] = useState<Update[]>([])
   const [control, setControl] = useState('ai')
+  const [caseStatus, setCaseStatus] = useState('observing')
   const [notice, setNotice] = useState('')
   const [reply, setReply] = useState('')
   const [busy, setBusy] = useState(false)
@@ -54,6 +55,7 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
     cursor.current = ''
     setMessages([])
     setControl('ai')
+    setCaseStatus('observing')
     setNotice('')
     setHumanRequested(false)
 
@@ -83,6 +85,9 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
         const currentCase = value.data?.case
 
         setControl(currentControl)
+        if (currentCase?.status) {
+          setCaseStatus(currentCase.status)
+        }
         if (updates.length > 0) {
           setMessages((previous) =>
             [...previous, ...updates].filter(
@@ -203,9 +208,19 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
     }
   }
 
-  // Khi chưa yêu cầu hỗ trợ, bác sĩ chưa tiếp nhận và không có tin nhắn điều phối nào
-  // Trong ChatbotWidget (showRequestButton === false), hoàn toàn ẩn để không làm bẩn giao diện AI bot
-  const isSessionActive = humanRequested || control === 'human' || messages.length > 0
+  // Phiên điều phối CHỈ kích hoạt khi:
+  // 1. Người dùng chủ động bấm yêu cầu hỗ trợ (humanRequested)
+  // 2. Bác sĩ điều phối đang trực tuyến tiếp quản (control === 'human')
+  // 3. Thực sự có tin nhắn từ Bác sĩ điều phối gửi cho bệnh nhân (hasCoordinatorMessages)
+  // 4. Ca điều phối đang ở trạng thái active (đã được tiếp nhận/chuyển ca/khẩn cấp, không phải chỉ quan sát ngầm)
+  const hasCoordinatorMessages = messages.some((m) => m.sender === 'coordinator')
+  const isCaseActive = Boolean(
+    caseStatus &&
+      caseStatus !== 'observing' &&
+      caseStatus !== 'completed' &&
+      caseStatus !== 'cancelled'
+  )
+  const isSessionActive = humanRequested || control === 'human' || hasCoordinatorMessages || isCaseActive
   if (!isSessionActive && !showRequestButton && !canReply) {
     return null
   }

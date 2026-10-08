@@ -395,11 +395,20 @@ async def updates(session_id: str, after: UUID | None = None, key=Depends(patien
         meta = m.msg_metadata or {}
         client_id = str(meta.get('client_id') or '')
         legacy_sender = str(meta.get('legacy_sender') or '').lower()
+        channel = str(meta.get('channel') or '')
         sender_t = (m.sender_type or '').upper()
         # Loại bỏ triệt để các tin nhắn do AI Bot sinh ra
         if sender_t in ('AGENT', 'BOT', 'AI') or legacy_sender in ('ai', 'assistant', 'bot') or client_id.endswith(':ai'):
             continue
-        sender = 'coordinator' if sender_t in ('STAFF', 'COORDINATOR') or legacy_sender in ('coordinator', 'staff') else 'patient' if sender_t in ('PATIENT', 'USER') or legacy_sender in ('patient', 'user') else 'system'
+        # Bỏ qua tin nhắn người bệnh gửi trong luồng chat AI thông thường
+        if channel == 'ai_chat':
+            continue
+        is_patient = sender_t in ('PATIENT', 'USER') or legacy_sender in ('patient', 'user')
+        # Với dữ liệu chưa có gắn tag channel: nếu ca vẫn observing và control == 'ai',
+        # tin nhắn người bệnh hoàn toàn là chat với AI bot, không phải tin nhắn phiên điều phối
+        if is_patient and case.status == 'observing' and case.control == 'ai':
+            continue
+        sender = 'coordinator' if sender_t in ('STAFF', 'COORDINATOR') or legacy_sender in ('coordinator', 'staff') else 'patient' if is_patient else 'system'
         filtered_messages.append({
             'id': str(m.id),
             'sender': sender,
@@ -435,7 +444,7 @@ async def patient_message(session_id: str, payload: MessageInput, key=Depends(pa
             raise HTTPException(404, 'Không tìm thấy phiếu trong phiên này.')
         if case.status in {'cancelled', 'completed'}:
             raise HTTPException(409, 'Phiếu đã đóng. Vui lòng tạo yêu cầu mới.')
-        await svc.add_message(db, case, payload.client_id, 'patient', payload.body)
+        await svc.add_message(db, case, payload.client_id, 'patient', payload.body, channel="coordinator_chat")
         from src.medical_assistant.domain.triage_service import get_triage_service
         triage = get_triage_service().evaluate_symptoms(payload.body)
         if triage.is_emergency:

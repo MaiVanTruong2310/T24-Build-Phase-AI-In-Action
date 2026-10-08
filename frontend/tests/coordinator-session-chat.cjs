@@ -17,7 +17,11 @@ assert.ok(
   'Must filter out AI bot / assistant senders in PatientUpdates'
 );
 
-// 2. Verify inactive state hides the element when not requested and no messages
+// 2. Verify inactive state hides the element when not requested and no coordinator intervention
+assert.ok(
+  file.includes('hasCoordinatorMessages') && file.includes('isCaseActive'),
+  'Must verify coordinator intervention or active case before showing coordinator session'
+);
 assert.ok(
   file.includes('if (!isSessionActive && !showRequestButton && !canReply)'),
   'Must hide component when session is inactive to prevent polluting chatbot widget'
