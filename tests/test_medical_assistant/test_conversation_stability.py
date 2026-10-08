@@ -1,6 +1,6 @@
 import pytest
 
-from src.medical_assistant.agent.graph import agent
+from src.medical_assistant.agent.graph import agent, build_graph
 from src.medical_assistant.domain.doctor_schedule_service import DoctorScheduleService
 from src.medical_assistant.domain.guardrail_service import ClinicalGuardrailService
 
@@ -45,14 +45,26 @@ def test_schedule_code_alias_and_slot_hold_validation():
 
 
 @pytest.mark.asyncio
-async def test_nearest_facility_query_does_not_depend_on_clinical_department_state():
-    result = await agent.ainvoke(
-        {"query": "Bệnh viện gần Hồ Hoàn Kiếm nhất"},
+async def test_nearest_facility_query_does_not_depend_on_clinical_department_state(monkeypatch):
+    info_agent_calls = []
+
+    async def fake_info_agent(state):
+        info_agent_calls.append(state["query"])
+        return {"workflow_status": "INFO_ANSWERED", "response": "Mocked nearest facility information."}
+
+    monkeypatch.setattr("src.medical_assistant.agent.nodes.router_node.is_info_agent_enabled", lambda: True)
+    monkeypatch.setattr("src.medical_assistant.agent.graph.is_info_agent_enabled", lambda: True)
+    monkeypatch.setattr("src.medical_assistant.agent.graph.info_agent_node", fake_info_agent)
+    test_agent = build_graph()
+    query = "Bệnh viện gần Hồ Hoàn Kiếm nhất"
+    result = await test_agent.ainvoke(
+        {"query": query},
         config={"configurable": {"thread_id": "facility-hoan-kiem-no-clinical-context"}},
     )
 
     assert result["workflow_status"] in {"FACILITY_INFO", "INFO_ANSWERED", "INFO_UNAVAILABLE"}
     assert result["response"]
+    assert info_agent_calls == [query]
 
 
 def test_specific_department_info_request_is_detected():

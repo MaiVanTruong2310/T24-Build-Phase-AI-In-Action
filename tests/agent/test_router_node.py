@@ -155,7 +155,8 @@ class TestIntentRouter(unittest.IsolatedAsyncioTestCase):
     async def test_llm_routes_to_info_agent_when_info_lookup(self):
         mock_llm = FakeStructuredLLM(route="info_lookup", confidence=0.9)
         state = {"query": "Bác sĩ khoa tiêu hóa nào tốt nhất?"}
-        res = await route_intent_node(state, llm=mock_llm)
+        with patch("src.medical_assistant.agent.nodes.router_node.is_info_agent_enabled", return_value=True):
+            res = await route_intent_node(state, llm=mock_llm)
         self.assertEqual(res["intent_route"], "info_lookup")
         self.assertEqual(res["route_destination"], "info_agent")
 
@@ -163,7 +164,8 @@ class TestIntentRouter(unittest.IsolatedAsyncioTestCase):
         # Nếu confidence < 0.6 -> an toàn điều hướng sang info_agent
         mock_llm = FakeStructuredLLM(route="clinical_triage", confidence=0.5)
         state = {"query": "Tôi muốn hỏi thăm một chút về sức khỏe"}
-        res = await route_intent_node(state, llm=mock_llm)
+        with patch("src.medical_assistant.agent.nodes.router_node.is_info_agent_enabled", return_value=True):
+            res = await route_intent_node(state, llm=mock_llm)
         self.assertEqual(res["route_destination"], "info_agent")
 
     async def test_chitchat_sets_social_redirect_and_preserves_state(self):
@@ -201,6 +203,8 @@ class TestIntentRouter(unittest.IsolatedAsyncioTestCase):
                 "src.medical_assistant.agent.nodes.router_node.get_llm",
                 return_value=FakeStructuredLLM("info_lookup"),
             ),
+            patch("src.medical_assistant.agent.nodes.router_node.is_info_agent_enabled", return_value=True),
+            patch("src.medical_assistant.agent.graph.is_info_agent_enabled", return_value=True),
             patch("src.medical_assistant.agent.graph.info_agent_node", new=fake_info_agent),
         ):
             custom_graph = build_graph()

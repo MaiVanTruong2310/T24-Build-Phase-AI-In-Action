@@ -176,13 +176,14 @@ E2E_ROUTER_DATASET = [
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_live_router_e2e_40_queries():
+async def test_live_router_e2e_40_queries(monkeypatch):
     """Chạy toàn bộ 40 câu hỏi qua route_intent_node trực tiếp không mock."""
-    # Yêu cầu 8: Điều kiện chạy rõ ràng cho Integration Test
+    # Live LLM costs money and can be flaky; a configured test key is not opt-in.
     run_live = os.getenv("RUN_LIVE_LLM", "").lower() in ("true", "1", "yes")
     has_key = bool(os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENROUTER_API_KEY"))
-    if not (run_live or has_key):
-        pytest.skip("Bỏ qua Live Integration Test: RUN_LIVE_LLM hoặc API Key chưa được cấu hình rõ ràng.")
+    if not run_live or not has_key:
+        pytest.skip("Set RUN_LIVE_LLM=true and configure a provider key to run the live router benchmark.")
+    monkeypatch.setenv("INFO_AGENT_ENABLED", "true")
 
     assert len(E2E_ROUTER_DATASET) >= 40, "Dataset phải có ít nhất 40 câu hỏi"
 
