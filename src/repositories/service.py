@@ -38,4 +38,3 @@ class MedicalServiceRepositoryMixin:
             statement = statement.where(Service.category == category)
         statement = statement.order_by(Service.name).offset(offset).limit(limit)
         return list((await self.session.execute(statement)).scalars().all())
-

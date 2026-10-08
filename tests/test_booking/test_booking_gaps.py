@@ -18,7 +18,6 @@ GAP 4 — Doctor / Facility status gates:
   facility is inactive.
 """
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
@@ -28,28 +27,38 @@ import pytest
 from src.core.exceptions import ConflictError
 from src.schemas.booking import BookingHoldCreate
 from src.services.booking import BookingService
-from src.services.notification import NotificationService
-
 
 # ---------- Shared fakes (same pattern as existing test_service.py) ----------
 
+
 class FakeTransaction:
-    async def __aenter__(self): return self
-    async def __aexit__(self, *_): return None
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        return None
 
 
 class FakeSession:
     def __init__(self):
         self.added = []
 
-    def begin(self): return FakeTransaction()
-    def add(self, value): self.added.append(value)
-    async def flush(self): return None
-    async def execute(self, _): return SimpleNamespace(rowcount=0)
+    def begin(self):
+        return FakeTransaction()
+
+    def add(self, value):
+        self.added.append(value)
+
+    async def flush(self):
+        return None
+
+    async def execute(self, _):
+        return SimpleNamespace(rowcount=0)
 
 
-def make_schedule(capacity: int = 1, status: str = "available", doctor_status: str = "active",
-                  facility_status: str = "active"):
+def make_schedule(
+    capacity: int = 1, status: str = "available", doctor_status: str = "active", facility_status: str = "active"
+):
     starts_at = datetime.now(UTC) + timedelta(hours=1)
     return SimpleNamespace(
         id=uuid4(),
@@ -71,27 +80,55 @@ def make_schedule(capacity: int = 1, status: str = "available", doctor_status: s
 def make_service_obj():
     return SimpleNamespace(
         id=uuid4(),
-        is_active=True,
+        status="active",
+        booking_mode="group",
         duration_minutes=30,
     )
 
 
+def make_specialty():
+    return SimpleNamespace(id=uuid4(), status="active")
+
+
 class FakeBookingRepository:
-    def __init__(self, schedule, service_obj, active_count: int = 0, holds: list = None):
+    def __init__(self, schedule, service_obj, specialty, active_count: int = 0, holds: list = None):
         self.schedule = schedule
         self.service_obj = service_obj
+        self.specialty = specialty
         self.active_count = active_count
         self.holds = holds or []
         self.booking = None
         self.expired_hold_count = 0
 
-    async def get_schedule_for_update(self, schedule_id): return self.schedule
-    async def get_schedules_for_update(self, ids): return {i: self.schedule for i in ids}
-    async def get_service(self, _): return self.service_obj
+    async def get_schedule_for_update(self, schedule_id):
+        return self.schedule
+
+    async def get_schedules_for_update(self, ids):
+        return {i: self.schedule for i in ids}
+
+    async def get_service(self, _):
+        return self.service_obj
+
+    async def get_specialty(self, _):
+        return self.specialty
+
+    async def get_active_hold_for_user_schedule(self, *_, **__):
+        return None
+
+    async def has_doctor_specialty(self, *_, **__):
+        return True
+
+    async def count_reservations_for_schedule(self, *_, **__):
+        return self.active_count
+
+    async def add_hold(self, hold):
+        self.holds.append(hold)
+        return hold
 
     async def get_doctor(self, doctor_id):
         return SimpleNamespace(
-            id=doctor_id, status=self.schedule.doctor.status,
+            id=doctor_id,
+            status=self.schedule.doctor.status,
             review_status=self.schedule.doctor.review_status,
             booking_enabled=self.schedule.doctor.booking_enabled,
         )
@@ -99,7 +136,8 @@ class FakeBookingRepository:
     async def get_facility(self, facility_id):
         return SimpleNamespace(id=facility_id, status=self.schedule.facility.status)
 
-    async def count_active_bookings(self, *_, **__): return self.active_count
+    async def count_active_bookings(self, *_, **__):
+        return self.active_count
 
     async def create(self, booking):
         self.booking = booking
@@ -109,22 +147,21 @@ class FakeBookingRepository:
         self.holds.append(hold)
         return hold
 
-    async def expire_holds(self, *_, **__): return self.expired_hold_count
+    async def expire_holds(self, *_, **__):
+        return self.expired_hold_count
 
 
 def make_booking_service(schedule, active_count: int = 0, holds: list = None):
-    repo = FakeBookingRepository(schedule, make_service_obj(), active_count, holds)
-    notification = SimpleNamespace(send_booking_confirmation=lambda *_, **__: None)
-    return BookingService(
-        session=FakeSession(),
-        booking_repository=repo,
-        notification_service=notification,
-    ), repo
+    svc = BookingService(session=FakeSession())
+    repo = FakeBookingRepository(schedule, make_service_obj(), make_specialty(), active_count, holds)
+    svc.bookings = repo
+    return svc, repo
 
 
 # ===========================================================================
 # GAP 1 — CONCURRENCY: DOUBLE-BOOKING CONFLICT
 # ===========================================================================
+
 
 class TestConcurrencyConflict:
     """A slot with capacity=1 must reject the second hold as ConflictError."""
@@ -136,14 +173,12 @@ class TestConcurrencyConflict:
 
         hold = BookingHoldCreate(
             schedule_id=schedule.id,
-            user_id=uuid4(),
             service_id=repo.service_obj.id,
+            specialty_id=repo.specialty.id,
         )
 
-        with pytest.raises((ConflictError, Exception)) as exc_info:
-            await svc.create_hold(hold)
-
-        assert exc_info.value is not None
+        with pytest.raises(ConflictError, match="no remaining capacity"):
+            await svc.hold(uuid4(), hold)
 
     @pytest.mark.asyncio
     async def test_first_hold_on_empty_slot_succeeds(self):
@@ -152,16 +187,17 @@ class TestConcurrencyConflict:
 
         hold = BookingHoldCreate(
             schedule_id=schedule.id,
-            user_id=uuid4(),
             service_id=repo.service_obj.id,
+            specialty_id=repo.specialty.id,
         )
-        result = await svc.create_hold(hold)
+        result = await svc.hold(uuid4(), hold)
         assert result is not None
 
 
 # ===========================================================================
 # GAP 2 — DOCTOR / FACILITY STATUS GATES
 # ===========================================================================
+
 
 class TestDoctorAndFacilityStatusGates:
     """Bookings must be blocked when doctor is suspended or facility is inactive."""
@@ -173,11 +209,11 @@ class TestDoctorAndFacilityStatusGates:
 
         hold = BookingHoldCreate(
             schedule_id=schedule.id,
-            user_id=uuid4(),
             service_id=repo.service_obj.id,
+            specialty_id=repo.specialty.id,
         )
         with pytest.raises(Exception):
-            await svc.create_hold(hold)
+            await svc.hold(uuid4(), hold)
 
     @pytest.mark.asyncio
     async def test_inactive_facility_blocks_booking(self):
@@ -186,11 +222,11 @@ class TestDoctorAndFacilityStatusGates:
 
         hold = BookingHoldCreate(
             schedule_id=schedule.id,
-            user_id=uuid4(),
             service_id=repo.service_obj.id,
+            specialty_id=repo.specialty.id,
         )
         with pytest.raises(Exception):
-            await svc.create_hold(hold)
+            await svc.hold(uuid4(), hold)
 
     @pytest.mark.asyncio
     async def test_active_doctor_and_facility_allows_booking(self):
@@ -200,8 +236,8 @@ class TestDoctorAndFacilityStatusGates:
 
         hold = BookingHoldCreate(
             schedule_id=schedule.id,
-            user_id=uuid4(),
             service_id=repo.service_obj.id,
+            specialty_id=repo.specialty.id,
         )
-        result = await svc.create_hold(hold)
+        result = await svc.hold(uuid4(), hold)
         assert result is not None

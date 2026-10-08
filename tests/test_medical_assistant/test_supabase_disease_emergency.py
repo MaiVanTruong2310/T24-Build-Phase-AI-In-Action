@@ -1,4 +1,5 @@
 import pytest
+
 from src.medical_assistant.domain.disease_triage import ATSLevel, UrgencyTier
 from src.medical_assistant.domain.triage_service import ClinicalTriageService
 

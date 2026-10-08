@@ -91,7 +91,3 @@ class AgentState(TypedDict, total=False):
     intent_route: str | None  # 'clinical_triage' | 'booking' | 'info_lookup' | 'chitchat'
     route_confidence: float | None  # 0.0 - 1.0
     route_destination: str | None  # 'analyze' | 'info_agent' | 'respond'
-
-
-
-

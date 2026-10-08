@@ -1,5 +1,5 @@
 import type { PatientProfile } from '../patient-profiles/api';
-import { appointmentDateError, birthDateError, formatDateVN, latestAppointmentDate } from '../appointment-booking/dateValidation';
+import { appointmentDateError, birthDateError, latestAppointmentDate } from '../appointment-booking/dateValidation';
 import { DateInputVN } from '../../components/DateInputVN';
 import { TypewriterLoader } from '../../components/TypewriterLoader';
 import { memo, useState, useEffect, useMemo, useRef, type FormEvent } from 'react';

@@ -8,7 +8,6 @@ Cung cấp:
 from __future__ import annotations
 
 import glob
-import json
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -63,7 +62,7 @@ def get_daily_telemetry_metrics(target_date: str | None = None) -> dict[str, Any
         log_files = sorted(glob.glob(str(TELEMETRY_LOG_DIR / "telemetry.log*")), reverse=True)
         for lf in log_files:
             try:
-                with open(lf, "r", encoding="utf-8", errors="ignore") as f:
+                with open(lf, encoding="utf-8", errors="ignore") as f:
                     lines.extend(f.readlines())
             except Exception:
                 continue
@@ -74,19 +73,22 @@ def get_daily_telemetry_metrics(target_date: str | None = None) -> dict[str, Any
     if target_date:
         return {
             "date": target_date,
-            "metrics": all_stats.get(target_date, {
-                "total_turns": 0,
-                "fallback_count": 0,
-                "fallback_rate_pct": 0.0,
-                "clarify_visit_purpose_count": 0,
-                "clarify_visit_purpose_rate_pct": 0.0,
-                "data_unavailable_count": 0,
-                "data_unavailable_rate_pct": 0.0,
-                "info_unavailable_count": 0,
-                "info_unavailable_rate_pct": 0.0,
-                "route_distribution": {"info_agent": 0, "clinical": 0, "chitchat": 0},
-                "avg_latency_ms": 0.0,
-            }),
+            "metrics": all_stats.get(
+                target_date,
+                {
+                    "total_turns": 0,
+                    "fallback_count": 0,
+                    "fallback_rate_pct": 0.0,
+                    "clarify_visit_purpose_count": 0,
+                    "clarify_visit_purpose_rate_pct": 0.0,
+                    "data_unavailable_count": 0,
+                    "data_unavailable_rate_pct": 0.0,
+                    "info_unavailable_count": 0,
+                    "info_unavailable_rate_pct": 0.0,
+                    "route_distribution": {"info_agent": 0, "clinical": 0, "chitchat": 0},
+                    "avg_latency_ms": 0.0,
+                },
+            ),
         }
 
     return {

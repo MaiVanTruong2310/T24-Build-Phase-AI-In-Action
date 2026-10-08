@@ -50,9 +50,7 @@ class ConversationParticipant(Base):
     """Actors associated with a conversation."""
 
     __tablename__ = "conversation_participants"
-    __table_args__ = (
-        Index("ix_participants_conv_type", "conversation_id", "participant_type"),
-    )
+    __table_args__ = (Index("ix_participants_conv_type", "conversation_id", "participant_type"),)
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     conversation_id: Mapped[UUID] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
@@ -67,9 +65,7 @@ class Message(Base):
     """Unified message store across patient, staff, agent, and system events."""
 
     __tablename__ = "messages"
-    __table_args__ = (
-        Index("ix_messages_conv_created", "conversation_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_messages_conv_created", "conversation_id", "created_at"),)
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     conversation_id: Mapped[UUID] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
@@ -85,9 +81,7 @@ class Handoff(Base):
     """Transfers between AI and Human coordinators."""
 
     __tablename__ = "handoffs"
-    __table_args__ = (
-        Index("ix_handoffs_conv_status", "conversation_id", "status"),
-    )
+    __table_args__ = (Index("ix_handoffs_conv_status", "conversation_id", "status"),)
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     conversation_id: Mapped[UUID] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
@@ -109,9 +103,7 @@ class PatientChatContext(Base):
 
     __tablename__ = "patient_chat_context"
 
-    conversation_id: Mapped[UUID] = mapped_column(
-        ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True
-    )
+    conversation_id: Mapped[UUID] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True)
     patient_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
     booking_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     specialty_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
@@ -127,9 +119,7 @@ class StaffAgentContext(Base):
 
     __tablename__ = "staff_agent_context"
 
-    conversation_id: Mapped[UUID] = mapped_column(
-        ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True
-    )
+    conversation_id: Mapped[UUID] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True)
     staff_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     context_patient_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     context_booking_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)

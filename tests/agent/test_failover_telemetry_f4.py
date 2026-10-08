@@ -10,13 +10,12 @@ Covers requirements from context_agent/plan2.md (Prompt F4):
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from langchain_core.messages import AIMessage
 
 from src.medical_assistant.agent.nodes.info_agent_node import (
-    MEDICAL_DISCLAIMER_VI,
     _run_react_loop,
     info_agent_node,
 )

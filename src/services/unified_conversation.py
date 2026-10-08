@@ -1,22 +1,19 @@
 """Unified Conversation Service handling patient support, handoffs, and messages."""
 
-import json
-import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import desc, func, select, text, update
+from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.logging import get_logger, log_event
+from src.core.logging import get_logger
 from src.models.conversation import (
     Conversation,
     ConversationParticipant,
     Handoff,
     Message,
     PatientChatContext,
-    StaffAgentContext,
 )
 
 logger = get_logger(__name__)
@@ -41,9 +38,7 @@ class UnifiedConversationService:
         stmt = (
             select(Conversation)
             .join(PatientChatContext, PatientChatContext.conversation_id == Conversation.id)
-            .where(
-                PatientChatContext.context_data["session_id"].as_string() == session_id
-            )
+            .where(PatientChatContext.context_data["session_id"].as_string() == session_id)
             .order_by(desc(Conversation.created_at))
             .limit(1)
         )
@@ -55,7 +50,7 @@ class UnifiedConversationService:
 
         # 2. Create new conversation
         conv_id = uuid4()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         conv = Conversation(
             id=conv_id,
             category=category,
@@ -122,7 +117,7 @@ class UnifiedConversationService:
         metadata: dict[str, Any] | None = None,
     ) -> Message:
         """Append a new message to the conversation and touch updated_at."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         msg = Message(
             id=uuid4(),
             conversation_id=conversation_id,
@@ -136,9 +131,7 @@ class UnifiedConversationService:
         self.session.add(msg)
 
         await self.session.execute(
-            update(Conversation)
-            .where(Conversation.id == conversation_id)
-            .values(updated_at=now)
+            update(Conversation).where(Conversation.id == conversation_id).values(updated_at=now)
         )
         await self.session.flush()
         return msg
@@ -166,7 +159,7 @@ class UnifiedConversationService:
         assigned_staff_id: UUID | None = None,
     ) -> Handoff:
         """Trigger handoff from Agent to Staff."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         handoff = Handoff(
             id=uuid4(),
             conversation_id=conversation_id,
@@ -195,7 +188,7 @@ class UnifiedConversationService:
         conversation_id: UUID,
     ) -> None:
         """Resolve any pending handoffs and transition conversation back to AI or RESOLVED."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await self.session.execute(
             update(Handoff)
             .where(

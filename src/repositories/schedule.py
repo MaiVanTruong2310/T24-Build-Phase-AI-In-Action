@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from src.models.catalog import Doctor, DoctorSchedule, Facility, Service
+from src.models.catalog import Doctor, DoctorSchedule, Facility
 
 
 class ScheduleRepositoryMixin:

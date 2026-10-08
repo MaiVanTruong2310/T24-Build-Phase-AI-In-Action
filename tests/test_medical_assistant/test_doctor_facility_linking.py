@@ -116,4 +116,3 @@ def test_extract_workplaces_from_record_fallback():
     }
     wps = extract_workplaces_from_record(rec3)
     assert any("Central Park" in wp for wp in wps)
-

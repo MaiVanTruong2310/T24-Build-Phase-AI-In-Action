@@ -1,4 +1,3 @@
-import pytest
 from src.medical_assistant.domain.clinical_fact_service import ClinicalFactService
 from src.medical_assistant.domain.fact_catalog import (
     CLINICAL_FACT_CATALOG,
@@ -48,7 +47,7 @@ def test_conversational_yesterday_does_not_set_duration_days():
 def test_diacritics_normalization_vomiting_and_neck_pain():
     """Ensure vomiting ('nôn') and neck pain ('cổ vai gáy') match properly."""
     svc = ClinicalFactService()
-    
+
     # Vomiting with diacritics
     facts_vomit = svc.extract("tôi bị nôn ói liên tục")
     assert "vomiting" in facts_vomit["positive_facts"]
@@ -61,7 +60,7 @@ def test_diacritics_normalization_vomiting_and_neck_pain():
 def test_fact_catalog_compilation_and_red_flags():
     """Verify CLINICAL_FACT_CATALOG compiles patterns with boundaries and detects red flags."""
     pos_pats, neg_pats, red_flags = build_compiled_fact_patterns()
-    
+
     # Check that chest_pain and shortness_of_breath are in red flags
     assert len(red_flags) > 0
     assert "chest_pain" in pos_pats

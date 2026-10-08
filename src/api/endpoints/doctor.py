@@ -231,7 +231,9 @@ def _doctor_response(value: Doctor, *, public_only: bool = False, on_date: date 
     services = [
         item
         for item in raw_services
-        if not public_only or getattr(item, "service", None) is None or getattr(item.service, "status", None) == "active"
+        if not public_only
+        or getattr(item, "service", None) is None
+        or getattr(item.service, "status", None) == "active"
     ]
     return DoctorResponse(
         id=value.id,

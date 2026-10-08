@@ -82,4 +82,3 @@ def test_thigh_pain_classified_as_musculoskeletal_not_abdominal():
 
     res = get_triage_service().evaluate_symptoms(query)
     assert res.suggested_specialty == "Chấn thương chỉnh hình - Y học thể thao"
-

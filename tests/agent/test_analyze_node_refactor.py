@@ -5,16 +5,16 @@ operate correctly according to the strict priority table.
 """
 
 from unittest.mock import MagicMock
+
 import pytest
 
 from src.medical_assistant.agent.nodes.analyze_node import (
-    security_gate,
-    emergency_gate,
     cache_gate,
+    emergency_gate,
     resolve_action,
+    security_gate,
 )
 from src.medical_assistant.agent.state import AgentState
-from src.medical_assistant.domain.disease_triage import ATSLevel, UrgencyTier
 
 
 def test_security_gate():
@@ -381,4 +381,3 @@ def test_resolve_action_headache_visual_change_veto():
     )
     assert action == "request_safety_review"
     assert "VETO" in reason
-

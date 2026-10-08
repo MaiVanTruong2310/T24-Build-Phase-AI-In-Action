@@ -78,10 +78,11 @@ class TestBilingualTriageEngine:
         assert res.suggested_specialty in ["Tiêu hóa - Gan mật", "Tiêu hóa"]
         assert "Gastroenterology" in res.patient_guidance
 
-    def test_english_outpatient_respiratory(self):
+    def test_english_respiratory_symptoms_with_dyspnea_require_same_day_review(self):
         res = self.triage.evaluate_symptoms("I have persistent cough, wheezing and shortness of breath for 4 days")
-        assert res.ats_level.value == 4
+        assert res.ats_level.value == 3
         assert res.is_emergency is False
+        assert res.disposition == "URGENT_SAME_DAY"
         assert "hô hấp" in res.suggested_specialty.lower()
         assert "Pulmonology" in res.patient_guidance
 
@@ -209,5 +210,8 @@ class TestEnglishAgentNodeFlow:
 
         state_3.update(res_analyze_3)
         res_respond_3 = await respond_node(state_3)
-        assert "Appointment Request Form" in res_respond_3["response"] or "Appointment Information" in res_respond_3["response"]
+        assert (
+            "Appointment Request Form" in res_respond_3["response"]
+            or "Appointment Information" in res_respond_3["response"]
+        )
         assert "BK-6749FA" not in res_respond_3["response"]

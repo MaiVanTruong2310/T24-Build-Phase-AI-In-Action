@@ -145,7 +145,9 @@ class BookingRepository:
 
     async def get_hold_for_user(self, hold_id: UUID, user_id: UUID, *, for_update: bool = False) -> BookingHold | None:
         """Fetch a hold only when it belongs to the current user."""
-        statement = select(BookingHold).where(BookingHold.id == hold_id, (BookingHold.user_id == user_id) | (BookingHold.requested_by_user_id == user_id))
+        statement = select(BookingHold).where(
+            BookingHold.id == hold_id, (BookingHold.user_id == user_id) | (BookingHold.requested_by_user_id == user_id)
+        )
         if for_update:
             statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
@@ -196,7 +198,9 @@ class BookingRepository:
 
     async def list_for_user(self, user_id: UUID, status: str | None, offset: int, limit: int) -> list[Booking]:
         """List only bookings owned by the authenticated user."""
-        statement = self._with_context(select(Booking).where((Booking.user_id == user_id) | (Booking.requested_by_user_id == user_id)))
+        statement = self._with_context(
+            select(Booking).where((Booking.user_id == user_id) | (Booking.requested_by_user_id == user_id))
+        )
         if status:
             statement = statement.where(Booking.status == status)
         statement = statement.order_by(Booking.created_at.desc()).offset(offset).limit(limit)
@@ -204,7 +208,11 @@ class BookingRepository:
 
     async def get_for_user(self, booking_id: UUID, user_id: UUID, *, for_update: bool = False) -> Booking | None:
         """Fetch one booking only when it belongs to the current user."""
-        statement = self._with_context(select(Booking).where(Booking.id == booking_id, (Booking.user_id == user_id) | (Booking.requested_by_user_id == user_id)))
+        statement = self._with_context(
+            select(Booking).where(
+                Booking.id == booking_id, (Booking.user_id == user_id) | (Booking.requested_by_user_id == user_id)
+            )
+        )
         if for_update:
             statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()

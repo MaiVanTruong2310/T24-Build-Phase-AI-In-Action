@@ -1,4 +1,5 @@
-import { PatientSelector, usePatientSelection } from '../features/patient-profiles/PatientSelector';
+import { PatientSelector } from '../features/patient-profiles/PatientSelector';
+import { usePatientSelection } from '../features/patient-profiles/usePatientSelection';
 import { appointmentDateError, birthDateError, formatDateVN, latestAppointmentDate, vietnamToday } from '../features/appointment-booking/dateValidation';
 import { DateInputVN } from '../components/DateInputVN';
 import { TypewriterLoader } from '../components/TypewriterLoader';
@@ -167,7 +168,6 @@ export default function ConsultationBooking() {
 
   const [loadingPackages, setLoadingPackages] = useState(false)
 
-  const [packageSubmitted, setPackageSubmitted] = useState<PackageRequest | null>(null)
 
 
 
@@ -290,7 +290,7 @@ export default function ConsultationBooking() {
 
     }
 
-  }, [selectedCategory, packageSearch])
+  }, [selectedCategory, packageSearch, selectedPackage])
 
 
 
@@ -775,13 +775,11 @@ export default function ConsultationBooking() {
         patient_name: finalName || undefined,
         patient_phone: finalPhone || undefined,
         patient_email: (patientEmail || user?.email || '').trim() || undefined,
-        gender: gender || patientSelection.selectedProfile?.gender || (user?.gender as any) || 'prefer_not_to_say',
-        date_of_birth: dateOfBirth || patientSelection.selectedProfile?.date_of_birth || (user?.date_of_birth as any) || undefined,
+        gender: gender || patientSelection.selectedProfile?.gender || user?.gender || 'prefer_not_to_say',
+        date_of_birth: dateOfBirth || patientSelection.selectedProfile?.date_of_birth || user?.date_of_birth || undefined,
       })
 
 
-
-      setPackageSubmitted(created)
 
       setSuccess(
 

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -99,27 +99,33 @@ class ChatHistoryService:
             message_length=len(request.message),
         )
         lease = uuid4()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if get_settings().use_unified_conversation:
             async with self.session.begin():
                 row = (
-                    await self.session.execute(
-                        text("""SELECT c.id, ctx.context_data
+                    (
+                        await self.session.execute(
+                            text("""SELECT c.id, ctx.context_data
                       FROM public.conversations c
                       JOIN public.patient_chat_context ctx ON ctx.conversation_id = c.id
                       WHERE c.patient_id = :uid AND ctx.context_data->>'session_id' = :sid
                       FOR UPDATE"""),
-                        {"uid": user.id, "sid": request.session_id},
+                            {"uid": user.id, "sid": request.session_id},
+                        )
                     )
-                ).mappings().first()
+                    .mappings()
+                    .first()
+                )
 
                 if not row:
                     cid = uuid4()
                     ctx_data = {
                         "session_id": request.session_id,
                         "title": request.message[:80],
-                        "patient_profile_id": str(getattr(request, "patient_profile_id", None)) if getattr(request, "patient_profile_id", None) else None,
+                        "patient_profile_id": str(getattr(request, "patient_profile_id", None))
+                        if getattr(request, "patient_profile_id", None)
+                        else None,
                         "lease_token": str(lease),
                         "busy_until": (now + timedelta(minutes=5)).isoformat(),
                         "checkpoint": {},
@@ -143,7 +149,7 @@ class ChatHistoryService:
                     await self.session.execute(
                         text("""INSERT INTO public.conversation_participants (
                             id, conversation_id, participant_type, participant_id, role, joined_at
-                        ) VALUES 
+                        ) VALUES
                             (:p1, :cid, 'PATIENT', :uid, 'patient', :now),
                             (:p2, :cid, 'AGENT', NULL, 'assistant', :now)"""),
                         {"p1": uuid4(), "p2": uuid4(), "cid": cid, "uid": user.id, "now": now},
@@ -158,24 +164,32 @@ class ChatHistoryService:
                         raise HTTPException(409, "Hội thoại đã thuộc hồ sơ khác. Hãy mở hội thoại mới.")
 
                     prev_msg = (
-                        await self.session.execute(
-                            text("""SELECT content, metadata FROM public.messages
+                        (
+                            await self.session.execute(
+                                text("""SELECT content, metadata FROM public.messages
                           WHERE conversation_id = :cid AND metadata->>'request_id' = :rid AND sender_type = 'PATIENT'"""),
-                            {"cid": conv_id, "rid": str(request.request_id)},
+                                {"cid": conv_id, "rid": str(request.request_id)},
+                            )
                         )
-                    ).mappings().first()
+                        .mappings()
+                        .first()
+                    )
 
                     if prev_msg and prev_msg["content"] != request.message:
                         raise HTTPException(409, "Mã lượt chat đã được dùng cho một tin nhắn khác.")
 
                     if prev_msg:
                         agent_msg = (
-                            await self.session.execute(
-                                text("""SELECT content, metadata FROM public.messages
+                            (
+                                await self.session.execute(
+                                    text("""SELECT content, metadata FROM public.messages
                               WHERE conversation_id = :cid AND metadata->>'request_id' = :rid AND sender_type = 'AGENT'"""),
-                                {"cid": conv_id, "rid": str(request.request_id)},
+                                    {"cid": conv_id, "rid": str(request.request_id)},
+                                )
                             )
-                        ).mappings().first()
+                            .mappings()
+                            .first()
+                        )
                         if agent_msg and agent_msg.get("metadata", {}).get("result"):
                             return {"cached": agent_msg["metadata"]["result"], "conversation_id": conv_id}
 
@@ -215,7 +229,13 @@ class ChatHistoryService:
             await self.session.execute(
                 text("""INSERT INTO public.chat_conversations(id,user_id,session_id,title,patient_profile_id)
               VALUES(:id,:uid,:sid,:title,:pid) ON CONFLICT(user_id,session_id) DO NOTHING"""),
-                {"id": uuid4(), "uid": user.id, "sid": request.session_id, "title": request.message[:80], "pid": getattr(request, "patient_profile_id", None)},
+                {
+                    "id": uuid4(),
+                    "uid": user.id,
+                    "sid": request.session_id,
+                    "title": request.message[:80],
+                    "pid": getattr(request, "patient_profile_id", None),
+                },
             )
             conv = (
                 (
@@ -279,7 +299,7 @@ class ChatHistoryService:
             state_fields=sorted(key for key in state if key in STATE_FIELDS),
         )
         checkpoint = {key: state[key] for key in STATE_FIELDS if key in state}
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cid = turn["conversation_id"]
         uid = turn.get("user_id")
         rid = str(turn["request_id"])
@@ -287,11 +307,17 @@ class ChatHistoryService:
         if get_settings().use_unified_conversation:
             async with self.session.begin():
                 ctx_row = (
-                    await self.session.execute(
-                        text("SELECT context_data FROM public.patient_chat_context WHERE conversation_id = :cid FOR UPDATE"),
-                        {"cid": cid},
+                    (
+                        await self.session.execute(
+                            text(
+                                "SELECT context_data FROM public.patient_chat_context WHERE conversation_id = :cid FOR UPDATE"
+                            ),
+                            {"cid": cid},
+                        )
                     )
-                ).mappings().first()
+                    .mappings()
+                    .first()
+                )
 
                 if ctx_row:
                     ctx = ctx_row["context_data"] or {}
@@ -377,15 +403,21 @@ class ChatHistoryService:
 
     async def fail(self, turn):
         cid = turn["conversation_id"]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if get_settings().use_unified_conversation:
             async with self.session.begin():
                 ctx_row = (
-                    await self.session.execute(
-                        text("SELECT context_data FROM public.patient_chat_context WHERE conversation_id = :cid FOR UPDATE"),
-                        {"cid": cid},
+                    (
+                        await self.session.execute(
+                            text(
+                                "SELECT context_data FROM public.patient_chat_context WHERE conversation_id = :cid FOR UPDATE"
+                            ),
+                            {"cid": cid},
+                        )
                     )
-                ).mappings().first()
+                    .mappings()
+                    .first()
+                )
                 if ctx_row:
                     ctx = ctx_row["context_data"] or {}
                     ctx["lease_token"] = None
@@ -416,16 +448,21 @@ class ChatHistoryService:
         if get_settings().use_unified_conversation:
             async with self.session.begin():
                 row = (
-                    await self.session.execute(
-                        text("""SELECT c.id FROM public.conversations c
+                    (
+                        await self.session.execute(
+                            text("""SELECT c.id FROM public.conversations c
                       JOIN public.patient_chat_context ctx ON ctx.conversation_id = c.id
                       WHERE c.patient_id = :uid AND ctx.context_data->>'session_id' = :sid"""),
-                        {"uid": user.id, "sid": session_id},
+                            {"uid": user.id, "sid": session_id},
+                        )
                     )
-                ).mappings().first()
+                    .mappings()
+                    .first()
+                )
                 if not row:
                     raise HTTPException(404, "Không tìm thấy cuộc trò chuyện.")
                 from src.medical_assistant.agent.graph import checkpointer
+
                 await checkpointer.adelete_thread(graph_thread(session_id, user))
                 await self.session.execute(
                     text("DELETE FROM public.conversations WHERE id = :cid"),
@@ -435,17 +472,22 @@ class ChatHistoryService:
 
         async with self.session.begin():
             row = (
-                await self.session.execute(
-                    text("""SELECT id, busy_until > now() AS processing FROM public.chat_conversations
+                (
+                    await self.session.execute(
+                        text("""SELECT id, busy_until > now() AS processing FROM public.chat_conversations
             WHERE user_id=:uid AND session_id=:sid FOR UPDATE"""),
-                    {"uid": user.id, "sid": session_id},
+                        {"uid": user.id, "sid": session_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if not row:
                 raise HTTPException(404, "Không tìm thấy cuộc trò chuyện.")
             if row["processing"]:
                 raise HTTPException(409, "Cuộc trò chuyện đang xử lý. Vui lòng chờ trước khi xóa.")
             from src.medical_assistant.agent.graph import checkpointer
+
             await checkpointer.adelete_thread(graph_thread(session_id, user))
             await self.session.execute(
                 text("DELETE FROM public.chat_conversations WHERE id=:cid AND user_id=:uid"),
@@ -455,8 +497,9 @@ class ChatHistoryService:
     async def list_conversations(self, user_id, limit=30, offset=0, patient_profile_id=None):
         if get_settings().use_unified_conversation:
             rows = (
-                await self.session.execute(
-                    text("""SELECT 
+                (
+                    await self.session.execute(
+                        text("""SELECT
                     c.id,
                     c.created_at,
                     c.updated_at,
@@ -467,9 +510,12 @@ class ChatHistoryService:
                   WHERE c.patient_id = :uid AND c.category = 'PATIENT_SUPPORT'
                   ORDER BY c.updated_at DESC
                   LIMIT :limit OFFSET :offset"""),
-                    {"uid": user_id, "limit": limit + 1, "offset": offset},
+                        {"uid": user_id, "limit": limit + 1, "offset": offset},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             await self.session.commit()
             return {
                 "conversations": [dict(r) for r in rows[:limit]],
@@ -477,32 +523,40 @@ class ChatHistoryService:
             }
 
         rows = (
-            await self.session.execute(
-                text("""SELECT session_id,title,created_at,updated_at FROM public.chat_conversations
+            (
+                await self.session.execute(
+                    text("""SELECT session_id,title,created_at,updated_at FROM public.chat_conversations
           WHERE user_id=:uid AND (
             (CAST(:pid AS uuid) IS NOT NULL AND patient_profile_id=CAST(:pid AS uuid)) OR
             (CAST(:pid AS uuid) IS NULL AND (patient_profile_id IS NULL OR patient_profile_id IN
               (SELECT id FROM public.patient_profiles WHERE linked_user_id=:uid))))
           ORDER BY updated_at DESC,id DESC LIMIT :limit OFFSET :offset"""),
-                {"uid": user_id, "limit": limit + 1, "offset": offset, "pid": patient_profile_id},
+                    {"uid": user_id, "limit": limit + 1, "offset": offset, "pid": patient_profile_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         await self.session.commit()
         return {"conversations": [dict(r) for r in rows[:limit]], "has_more": len(rows) > limit}
 
     async def history(self, user_id, session_id, limit=50, offset=0):
         if get_settings().use_unified_conversation:
             conv_row = (
-                await self.session.execute(
-                    text("""SELECT c.id, ctx.context_data
+                (
+                    await self.session.execute(
+                        text("""SELECT c.id, ctx.context_data
                   FROM public.conversations c
                   JOIN public.patient_chat_context ctx ON ctx.conversation_id = c.id
                   WHERE (:uid IS NULL OR c.patient_id = :uid) AND ctx.context_data->>'session_id' = :sid
                   ORDER BY c.updated_at DESC
                   LIMIT 1"""),
-                    {"uid": user_id, "sid": session_id},
+                        {"uid": user_id, "sid": session_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
 
             if not conv_row:
                 await self.session.commit()
@@ -513,14 +567,18 @@ class ChatHistoryService:
             title = ctx.get("title") or "Cuộc trò chuyện mới"
 
             msgs = (
-                await self.session.execute(
-                    text("""SELECT id, sender_type, content, metadata, created_at
+                (
+                    await self.session.execute(
+                        text("""SELECT id, sender_type, content, metadata, created_at
                   FROM public.messages
                   WHERE conversation_id = :cid
                   ORDER BY created_at ASC"""),
-                    {"cid": cid},
+                        {"cid": cid},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             await self.session.commit()
 
             turns = []
@@ -537,7 +595,9 @@ class ChatHistoryService:
                         "assistant_text": agent_msg["content"] if agent_msg else "",
                         "result": meta.get("result") or {"response": agent_msg["content"] if agent_msg else ""},
                         "status": meta.get("status") or "completed",
-                        "created_at": m["created_at"].isoformat() if hasattr(m["created_at"], "isoformat") else str(m["created_at"]),
+                        "created_at": m["created_at"].isoformat()
+                        if hasattr(m["created_at"], "isoformat")
+                        else str(m["created_at"]),
                     }
                     turns.append(turn_dict)
                     i += 2 if agent_msg else 1
@@ -552,22 +612,32 @@ class ChatHistoryService:
             }
 
         conv = (
-            await self.session.execute(
-                text("SELECT id,title,checkpoint FROM public.chat_conversations WHERE user_id=:uid AND session_id=:sid"),
-                {"uid": user_id, "sid": session_id},
+            (
+                await self.session.execute(
+                    text(
+                        "SELECT id,title,checkpoint FROM public.chat_conversations WHERE user_id=:uid AND session_id=:sid"
+                    ),
+                    {"uid": user_id, "sid": session_id},
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         if not conv:
             await self.session.commit()
             return {"title": "Cuộc trò chuyện mới", "turns": [], "has_more": False}
 
         rows = (
-            await self.session.execute(
-                text("""SELECT id,request_id,user_text,assistant_text,result,status,created_at FROM public.chat_turns
+            (
+                await self.session.execute(
+                    text("""SELECT id,request_id,user_text,assistant_text,result,status,created_at FROM public.chat_turns
               WHERE conversation_id=:cid ORDER BY created_at DESC,id DESC LIMIT :limit OFFSET :offset"""),
-                {"cid": conv["id"], "limit": limit + 1, "offset": offset},
+                    {"cid": conv["id"], "limit": limit + 1, "offset": offset},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         await self.session.commit()
         return {
             "title": conv["title"],

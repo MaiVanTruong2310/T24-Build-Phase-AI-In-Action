@@ -163,7 +163,10 @@ class HybridDialogueService:
         triage_res = get_triage_service().evaluate_symptoms(text, language=language)
         has_symptoms = bool(
             facts.get("chief_complaint")
-            or (triage_res.suggested_specialty and triage_res.suggested_specialty not in {"Sức khỏe tổng quát", "General Health", "TONG_QUAT"})
+            or (
+                triage_res.suggested_specialty
+                and triage_res.suggested_specialty not in {"Sức khỏe tổng quát", "General Health", "TONG_QUAT"}
+            )
         )
         action = action_map.get(guard_intent)
         if action is None:
@@ -331,10 +334,12 @@ class HybridDialogueService:
         reflection_mem = state.get("reflection_memory") or []
         if reflection_mem:
             from src.medical_assistant.domain.reflection_memory_service import get_reflection_memory_service
+
             reflection_lessons = get_reflection_memory_service().format_reflections_for_prompt(reflection_mem)
         else:
             try:
                 from src.medical_assistant.domain.reflection_memory_service import get_reflection_memory_service
+
                 past_reflections = get_reflection_memory_service().retrieve_relevant_reflections(text, limit=1)
                 if past_reflections:
                     reflection_lessons = get_reflection_memory_service().format_reflections_for_prompt(past_reflections)
@@ -374,7 +379,9 @@ class HybridDialogueService:
                 llm_result.proposed_action = "request_safety_review"
 
             # 2. Nếu độ tin cậy quá thấp, không cho phép tự ý hold/confirm slot
-            if (llm_result.action_confidence < 0.6 or llm_result.extraction_confidence < 0.5) and llm_result.proposed_action in {"hold_slot", "confirm_booking"}:
+            if (
+                llm_result.action_confidence < 0.6 or llm_result.extraction_confidence < 0.5
+            ) and llm_result.proposed_action in {"hold_slot", "confirm_booking"}:
                 logger.info(
                     "Low confidence (act=%.2f, ext=%.2f); downgrading '%s' to 'ask_clarifying_question'",
                     llm_result.action_confidence,
@@ -427,7 +434,9 @@ class HybridDialogueService:
             "duration_days": v2_response.facts_delta.duration_days,
             "bowel_interval_days": v2_response.facts_delta.bowel_interval_days,
             "location": v2_response.facts_delta.location,
-            "severity": v2_response.facts_delta.severity if v2_response.facts_delta.severity not in {"null", "unknown"} else None,
+            "severity": v2_response.facts_delta.severity
+            if v2_response.facts_delta.severity not in {"null", "unknown"}
+            else None,
             "qualifiers": v2_response.facts_delta.qualifiers,
             "confidence": v2_response.extraction_confidence,
             "extraction_method": "HYBRID_LLM_V2" if llm_succeeded else "RULE_FALLBACK",

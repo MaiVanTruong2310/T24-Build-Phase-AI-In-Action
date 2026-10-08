@@ -678,9 +678,8 @@ class DynamicProbingService:
                     ]
                 )
             )
-            has_duration = (
-                clinical_facts.get("duration_days") is not None
-                or any(w in user_lower for w in ["ngày", "tuần", "tháng", "hôm nay", "hôm qua", "bữa"])
+            has_duration = clinical_facts.get("duration_days") is not None or any(
+                w in user_lower for w in ["ngày", "tuần", "tháng", "hôm nay", "hôm qua", "bữa"]
             )
 
             msk_red_flag_labels = {

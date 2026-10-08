@@ -1,11 +1,7 @@
 import { CalendarPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-interface Props {
-  patientId: string;
-}
-
-export function AppointmentProgressHeader({ patientId: _ }: Props) {
+export function AppointmentProgressHeader() {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-2 border-b border-slate-200 dark:border-app-border light:border-app-border">
       <div>

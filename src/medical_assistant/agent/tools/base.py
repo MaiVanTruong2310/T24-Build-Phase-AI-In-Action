@@ -13,7 +13,7 @@ VN_TZ = timezone(timedelta(hours=7))
 try:
     from datetime import UTC
 except ImportError:
-    UTC = timezone.utc
+    UTC = UTC
 
 
 class ToolExecutionError(Exception):

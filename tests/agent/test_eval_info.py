@@ -4,6 +4,7 @@ Unit tests verifying Prompt 6 benchmark dataset and eval runner.
 
 import json
 from pathlib import Path
+
 import pytest
 
 
@@ -12,7 +13,7 @@ def test_eval_dataset_integrity():
     dataset_path = Path("tests/eval/info_questions.jsonl")
     assert dataset_path.exists(), "Dataset info_questions.jsonl must exist"
 
-    with open(dataset_path, "r", encoding="utf-8") as f:
+    with open(dataset_path, encoding="utf-8") as f:
         lines = [line.strip() for line in f if line.strip()]
 
     assert len(lines) >= 100, f"Dataset must contain at least 100 questions, got {len(lines)}"
@@ -25,7 +26,9 @@ def test_eval_dataset_integrity():
         data = json.loads(line)
         for k in required_keys:
             assert k in data, f"Line {idx} missing key '{k}': {data}"
-        assert data["expected_route"] in {"info_agent", "analyze", "respond"}, f"Invalid route: {data['expected_route']}"
+        assert data["expected_route"] in {"info_agent", "analyze", "respond"}, (
+            f"Invalid route: {data['expected_route']}"
+        )
         categories.add(data["category"])
         routes.add(data["expected_route"])
 
@@ -106,8 +109,8 @@ def test_compute_percentiles():
 
 def test_simulate_db_error_sets_data_unavailable():
     """G5.2: Kiểm tra khi DoctorScheduleService.client = None, tool trả về data_unavailable=True."""
+    from src.medical_assistant.agent.tools.doctor_tools import get_doctor_slots, search_doctors
     from src.medical_assistant.domain.doctor_schedule_service import get_doctor_schedule_service
-    from src.medical_assistant.agent.tools.doctor_tools import search_doctors, get_doctor_slots
 
     svc = get_doctor_schedule_service()
     orig_client = getattr(svc, "client", None)
@@ -115,11 +118,15 @@ def test_simulate_db_error_sets_data_unavailable():
         svc.client = None
         # Gọi search_doctors
         res_search = search_doctors.invoke({"specialty": "tim mạch"})
-        assert res_search.get("data_unavailable") is True, "search_doctors must set data_unavailable=True when client is None"
+        assert res_search.get("data_unavailable") is True, (
+            "search_doctors must set data_unavailable=True when client is None"
+        )
 
         # Gọi get_doctor_slots
         res_slots = get_doctor_slots.invoke({"doctor_id": "doc-test-123"})
-        assert res_slots.get("data_unavailable") is True, "get_doctor_slots must set data_unavailable=True when client is None"
+        assert res_slots.get("data_unavailable") is True, (
+            "get_doctor_slots must set data_unavailable=True when client is None"
+        )
     finally:
         svc.client = orig_client
 
@@ -146,7 +153,18 @@ def test_generate_markdown_report_trial_mode_warnings():
         "fallback_rate_pct": 20.0,
         "latency_p50_ms": 1200.0,
         "latency_p95_ms": 2500.0,
-        "category_metrics": {"doctor_lookup": {"count": 10, "route_accuracy": 100.0, "tool_accuracy": 100.0, "grounded_rate": 100.0, "hallucination_rate": 0.0, "clarify_rate": 0.0, "p50_ms": 1200, "p95_ms": 2500}},
+        "category_metrics": {
+            "doctor_lookup": {
+                "count": 10,
+                "route_accuracy": 100.0,
+                "tool_accuracy": 100.0,
+                "grounded_rate": 100.0,
+                "hallucination_rate": 0.0,
+                "clarify_rate": 0.0,
+                "p50_ms": 1200,
+                "p95_ms": 2500,
+            }
+        },
         "agg_entities": {},
         "detailed_results": [],
     }
@@ -164,6 +182,7 @@ def test_generate_markdown_report_trial_mode_warnings():
 async def test_evaluate_single_item_db_error_restores_client():
     """G5.2: Kiểm tra evaluate_single_item patch svc.client = None và luôn restore trong finally."""
     from unittest.mock import AsyncMock, MagicMock
+
     from scripts.eval_info import evaluate_single_item
     from src.medical_assistant.domain.doctor_schedule_service import get_doctor_schedule_service
 
@@ -205,5 +224,3 @@ async def test_evaluate_single_item_db_error_restores_client():
     assert svc.client is dummy_client, "svc.client must be restored in finally block"
     # 3. Kết quả xác nhận ca DB error đạt chuẩn
     assert res["db_error_verified"] is True
-
-

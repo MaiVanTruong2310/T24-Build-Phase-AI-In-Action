@@ -1,4 +1,4 @@
-import { CalendarClock, ChevronRight, MapPin, Package, Sparkles, Stethoscope, UserRoundCheck } from 'lucide-react';
+import { CalendarClock, ChevronRight, MapPin, Package, Stethoscope, UserRoundCheck } from 'lucide-react';
 import clsx from 'clsx';
 import { Booking } from '../../appointment-booking/api';
 import { AppointmentDisplayData } from '../types';

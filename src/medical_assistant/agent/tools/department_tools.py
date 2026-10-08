@@ -8,7 +8,6 @@ from typing import Any
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from src.medical_assistant.agent.tools.base import ToolExecutionError
 from src.medical_assistant.domain.guardrail_service import get_guardrail_service
 from src.medical_assistant.domain.language_service import get_specialty_display_name
 

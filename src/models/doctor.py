@@ -93,4 +93,3 @@ class DoctorFacility(Base):
 
     doctor: Mapped[Doctor] = relationship(back_populates="facilities")
     facility: Mapped[Facility] = relationship(back_populates="doctors")
-

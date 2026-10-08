@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Environment variables must load before application imports initialize settings.
+# ruff: noqa: E402
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +17,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.api.endpoints.auth import patient_router, user_router
 from src.api.endpoints.auth import router as auth_router
-from src.api.endpoints.auth import user_router
 from src.api.endpoints.booking import router as booking_router
 from src.api.endpoints.booking import staff_router as staff_booking_router
 from src.api.endpoints.catalog import router as catalog_router
@@ -135,6 +137,7 @@ async def lifespan(app: FastAPI):
     # Yêu cầu 7: Health-check các LLM provider khi khởi động ứng dụng
     try:
         from src.medical_assistant.infrastructure.llm import get_llm
+
         llm_instance = get_llm()
         if hasattr(llm_instance, "acheck_health"):
             health_res = await llm_instance.acheck_health()
@@ -244,11 +247,11 @@ app.add_middleware(
 app.include_router(medical_assistant_router, prefix="/api/v1")
 app.include_router(agent_core_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
-from src.api.endpoints.patient_profiles import router as patient_profiles_router
 app.include_router(patient_profiles_router, prefix="/api/v1")
 app.include_router(workbench_router, prefix="/api/v1")
 app.include_router(live_coordination_router, prefix="/api/v1")
 app.include_router(user_router, prefix="/api/v1")
+app.include_router(patient_router, prefix="/api/v1")
 app.include_router(booking_router, prefix="/api/v1")
 app.include_router(staff_booking_router, prefix="/api/v1")
 app.include_router(coordination_router, prefix="/api/v1")

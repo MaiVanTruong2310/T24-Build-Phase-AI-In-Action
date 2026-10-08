@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -12,8 +11,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from src.medical_assistant.agent.tools.base import (
-    ToolExecutionError,
     VN_TZ,
+    ToolExecutionError,
     format_utc_to_vn_time,
     normalize_fold,
 )
@@ -113,24 +112,30 @@ def search_doctors(
                 # 1.1 Tìm các chuyên khoa khớp trong DB nếu người dùng lọc theo specialty
                 target_doc_ids: set[str] | None = None
                 if specialty_terms:
-                    all_db_specs = doctor_service.client.select(
-                        "specialties",
-                        params={"select": "id,name", "limit": 300},
-                    ) or []
+                    all_db_specs = (
+                        doctor_service.client.select(
+                            "specialties",
+                            params={"select": "id,name", "limit": 300},
+                        )
+                        or []
+                    )
                     matched_spec_ids = [
                         str(s["id"])
                         for s in all_db_specs
                         if any(term in normalize_fold(str(s.get("name") or "")) for term in specialty_terms)
                     ]
                     if matched_spec_ids:
-                        ds_rows = doctor_service.client.select(
-                            "doctor_specialties",
-                            params={
-                                "select": "doctor_id",
-                                "specialty_id": f"in.({','.join(matched_spec_ids)})",
-                                "limit": 100,
-                            },
-                        ) or []
+                        ds_rows = (
+                            doctor_service.client.select(
+                                "doctor_specialties",
+                                params={
+                                    "select": "doctor_id",
+                                    "specialty_id": f"in.({','.join(matched_spec_ids)})",
+                                    "limit": 100,
+                                },
+                            )
+                            or []
+                        )
                         target_doc_ids = {str(r["doctor_id"]) for r in ds_rows if r.get("doctor_id")}
                     else:
                         target_doc_ids = set()
@@ -207,9 +212,7 @@ def search_doctors(
                             continue
 
                         exp_display = (
-                            f"{years_val} năm kinh nghiệm"
-                            if years_val > 0
-                            else "Bác sĩ Chuyên khoa giàu kinh nghiệm"
+                            f"{years_val} năm kinh nghiệm" if years_val > 0 else "Bác sĩ Chuyên khoa giàu kinh nghiệm"
                         )
                         matched_doctors.append(
                             {
@@ -228,7 +231,9 @@ def search_doctors(
             except Exception as exc:
                 db_unavailable = True
                 db_error_message = str(exc)
-                logger.warning("Supabase doctors search failed: %s; falling back to crawl data with data_unavailable flag.", exc)
+                logger.warning(
+                    "Supabase doctors search failed: %s; falling back to crawl data with data_unavailable flag.", exc
+                )
         else:
             db_unavailable = True
             db_error_message = "Cơ sở dữ liệu Supabase chưa được cấu hình hoặc tạm thời ngắt kết nối."
@@ -260,14 +265,10 @@ def search_doctors(
             # Tính điểm tương đồng chuyên khoa
             score = 1
             if specialty_terms:
-                searchable = normalize_fold(
-                    " ".join([*specialties, *positions, str(record.get("overview") or "")])
-                )
+                searchable = normalize_fold(" ".join([*specialties, *positions, str(record.get("overview") or "")]))
                 spec_text = normalize_fold(" ".join(specialties))
                 matched_term_count = sum(
-                    4 if term in spec_text else 1
-                    for term in specialty_terms
-                    if term in searchable
+                    4 if term in spec_text else 1 for term in specialty_terms if term in searchable
                 )
                 if matched_term_count == 0:
                     continue
@@ -295,11 +296,7 @@ def search_doctors(
             if any(d["full_name"] == rec_name for d in matched_doctors):
                 continue
 
-            exp_display = (
-                f"{years} năm kinh nghiệm"
-                if years > 0
-                else "Bác sĩ Chuyên khoa giàu kinh nghiệm"
-            )
+            exp_display = f"{years} năm kinh nghiệm" if years > 0 else "Bác sĩ Chuyên khoa giàu kinh nghiệm"
             matched_doctors.append(
                 {
                     "id": f"crawl-{identifier}",
@@ -361,7 +358,9 @@ def search_doctors(
             "data_unavailable": db_unavailable,
         }
         if db_unavailable:
-            resp_data["warning"] = "Cơ sở dữ liệu lịch khám Supabase gián đoạn; kết quả dựa trên hồ sơ lưu trữ và chưa xác thực lịch khám."
+            resp_data["warning"] = (
+                "Cơ sở dữ liệu lịch khám Supabase gián đoạn; kết quả dựa trên hồ sơ lưu trữ và chưa xác thực lịch khám."
+            )
         return resp_data
     except Exception as exc:
         logger.error("Error in search_doctors tool: %s", exc, exc_info=True)
@@ -397,11 +396,7 @@ def get_doctor_detail(doctor_id: str) -> dict[str, Any]:
                     positions = record.get("positions") or []
                     title = ", ".join(credentials) or (positions[0] if positions else "Bác sĩ chuyên khoa")
 
-                    exp_display = (
-                        f"{years} năm kinh nghiệm"
-                        if years > 0
-                        else "Bác sĩ Chuyên khoa giàu kinh nghiệm"
-                    )
+                    exp_display = f"{years} năm kinh nghiệm" if years > 0 else "Bác sĩ Chuyên khoa giàu kinh nghiệm"
 
                     return {
                         "found": True,
@@ -438,9 +433,7 @@ def get_doctor_detail(doctor_id: str) -> dict[str, Any]:
                     years = doc.get("years_of_experience")
                     years_val = int(years) if years is not None and str(years).isdigit() else 0
                     exp_display = (
-                        f"{years_val} năm kinh nghiệm"
-                        if years_val > 0
-                        else "Bác sĩ Chuyên khoa giàu kinh nghiệm"
+                        f"{years_val} năm kinh nghiệm" if years_val > 0 else "Bác sĩ Chuyên khoa giàu kinh nghiệm"
                     )
 
                     doc_facilities = []

@@ -284,6 +284,7 @@ async def cancel_booking(
     case = await _get_owned_case(service.session, booking_id, user_id, user_key, guest_token, for_update=True)
     if case is None:
         from src.models.package_request import PackageRequest
+
         package_req = await service.session.get(PackageRequest, booking_id, with_for_update=True)
         if package_req and (package_req.patient_id == user_id or package_req.requested_by_user_id == user_id):
             if package_req.status == "cancelled":

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDateVN, parseVNToIsoDate } from '../features/appointment-booking/dateValidation'
 
 export interface DateInputVNProps {

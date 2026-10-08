@@ -113,13 +113,27 @@ class FailoverChatModel:
                         self._set_last_winner(winner_meta)
                         if hasattr(result, "response_metadata") and isinstance(result.response_metadata, dict):
                             result.response_metadata.update(winner_meta)
-                        logging.getLogger(__name__).info("llm.completed provider_index=%d model=%s elapsed_ms=%.0f", index, prov_model, (time.monotonic()-started)*1000)
+                        logging.getLogger(__name__).info(
+                            "llm.completed provider_index=%d model=%s elapsed_ms=%.0f",
+                            index,
+                            prov_model,
+                            (time.monotonic() - started) * 1000,
+                        )
                         return result
                     except Exception as exc:
                         self._mark_failed(index, exc)
-                        logging.getLogger(__name__).warning("llm.failed provider_index=%d error_type=%s status=%s elapsed_ms=%.0f", index, type(exc).__name__, getattr(exc, "status_code", None), (time.monotonic()-started)*1000)
+                        logging.getLogger(__name__).warning(
+                            "llm.failed provider_index=%d error_type=%s status=%s elapsed_ms=%.0f",
+                            index,
+                            type(exc).__name__,
+                            getattr(exc, "status_code", None),
+                            (time.monotonic() - started) * 1000,
+                        )
                         if hasattr(exc, "errors"):
-                            logging.getLogger(__name__).warning("llm.validation_fields=%s", [(item["loc"], item["type"]) for item in exc.errors(include_input=False)][:10])
+                            logging.getLogger(__name__).warning(
+                                "llm.validation_fields=%s",
+                                [(item["loc"], item["type"]) for item in exc.errors(include_input=False)][:10],
+                            )
                         last_error = exc
                 if queue and len(pending) < 2 and (not pending or time.monotonic() >= hedge_at):
                     launch()
@@ -272,7 +286,10 @@ class _StructuredFailover:
     def invoke(self, input: Any, **kwargs: Any) -> Any:
         last_error: Exception | None = None
         for candidate, provider_index in zip(self.candidates, self.provider_indexes, strict=True):
-            if provider_index in self.owner._permanently_failed or self.owner._blocked_until.get(provider_index, 0.0) > time.monotonic():
+            if (
+                provider_index in self.owner._permanently_failed
+                or self.owner._blocked_until.get(provider_index, 0.0) > time.monotonic()
+            ):
                 continue
             try:
                 return candidate.invoke(input, **kwargs)

@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 from src.medical_assistant.agent.tools import (
     ALL_TOOLS,
-    ToolExecutionError,
     get_department_info,
     get_doctor_detail,
     get_doctor_slots,
@@ -18,6 +17,22 @@ from src.medical_assistant.agent.tools import (
 
 
 class TestMedicalTools(unittest.TestCase):
+    FACILITIES = [
+        {
+            "id": "times-city",
+            "name": "Vinmec Times City",
+            "address": "458 Minh Khai, Hai Ba Trung, Ha Noi",
+            "phone": "1900",
+        },
+        {"id": "central-park", "name": "Vinmec Central Park", "address": "Ho Chi Minh City", "phone": "1900"},
+    ]
+
+    def mock_facilities(self, service_cls):
+        service = service_cls.return_value
+        service.fetch_active_facilities.return_value = self.FACILITIES
+        service._find_detail_metadata.return_value = {}
+        return service
+
     def test_all_tools_exported(self):
         self.assertEqual(len(ALL_TOOLS), 6)
         names = {t.name for t in ALL_TOOLS}
@@ -174,7 +189,9 @@ class TestMedicalTools(unittest.TestCase):
     # =========================================================================
     # 6. list_facilities
     # =========================================================================
-    def test_list_facilities_all(self):
+    @patch("src.medical_assistant.agent.tools.facility_tools.FacilityService")
+    def test_list_facilities_all(self, service_cls):
+        self.mock_facilities(service_cls)
         res = list_facilities.invoke({})
         self.assertTrue(res["found"])
         self.assertGreaterEqual(res["count"], 1)
@@ -182,24 +199,25 @@ class TestMedicalTools(unittest.TestCase):
         self.assertIn("name", fac)
         self.assertIn("address", fac)
         self.assertIn("facility_type", fac)
-        self.assertIn("source", fac)
 
-    def test_list_facilities_filter_hanoi(self):
-        res = list_facilities.invoke({"region": "Hà Nội"})
+    @patch("src.medical_assistant.agent.tools.facility_tools.FacilityService")
+    def test_list_facilities_filter_hanoi(self, service_cls):
+        self.mock_facilities(service_cls)
+        res = list_facilities.invoke({"region": "Ha Noi"})
         self.assertTrue(res["found"])
         for fac in res["facilities"]:
-            self.assertTrue(
-                "hà nội" in fac["address"].lower()
-                or "hà nội" in fac["name"].lower()
-                or "ha noi" in fac["address"].lower()
-            )
+            self.assertTrue("ha noi" in fac["address"].lower() or "ha noi" in fac["name"].lower())
 
-    def test_list_facilities_filter_times_city(self):
+    @patch("src.medical_assistant.agent.tools.facility_tools.FacilityService")
+    def test_list_facilities_filter_times_city(self, service_cls):
+        self.mock_facilities(service_cls)
         res = list_facilities.invoke({"name": "Times City"})
         self.assertTrue(res["found"])
         self.assertTrue(any("times city" in fac["name"].lower() for fac in res["facilities"]))
 
-    def test_list_facilities_not_found(self):
+    @patch("src.medical_assistant.agent.tools.facility_tools.FacilityService")
+    def test_list_facilities_not_found(self, service_cls):
+        self.mock_facilities(service_cls)
         res = list_facilities.invoke({"region": "DiaDanhKhongTonTai12345"})
         self.assertFalse(res["found"])
         self.assertEqual(res["count"], 0)

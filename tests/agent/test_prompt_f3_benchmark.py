@@ -9,14 +9,10 @@ Covers requirements from context_agent/plan2.md (Prompt F3):
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import MagicMock, patch
-
 from scripts.eval_info import (
-    extract_all_entities,
     evaluate_entity_grounding,
-    stratified_sample,
     generate_markdown_report,
+    stratified_sample,
 )
 
 
@@ -61,8 +57,8 @@ def test_entity_grounding_covers_all_six_entity_types():
                 "facility": {
                     "name": "Vinmec Times City",
                     "address": "458 Minh Khai",
-                }
-            }
+                },
+            },
         }
     ]
 

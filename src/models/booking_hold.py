@@ -38,7 +38,9 @@ class BookingHold(Base):
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    patient_profile_id: Mapped[UUID | None] = mapped_column(ForeignKey("patient_profiles.id", ondelete="RESTRICT"), index=True)
+    patient_profile_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("patient_profiles.id", ondelete="RESTRICT"), index=True
+    )
     requested_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
     schedule_id: Mapped[UUID] = mapped_column(
         ForeignKey("doctor_schedules.id", ondelete="RESTRICT"), nullable=False, index=True

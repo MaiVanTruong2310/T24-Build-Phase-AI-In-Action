@@ -7,6 +7,7 @@ cho ClinicalCriticService độc lập (Domain Layer) và áp dụng EvaluatorVe
 from __future__ import annotations
 
 from typing import Any
+
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.clinical_critic_service import get_clinical_critic_service
 
@@ -70,15 +71,33 @@ async def critic_node(state: AgentState) -> dict[str, Any]:
         failed_dept = state.get("suggested_department_name")
         failed_code = state.get("suggested_department_code")
         pruned_depts = list(state.get("pruned_departments") or [])
-        if failed_dept and failed_dept != verdict.corrections.get("suggested_department_name") and failed_dept not in pruned_depts:
+        if (
+            failed_dept
+            and failed_dept != verdict.corrections.get("suggested_department_name")
+            and failed_dept not in pruned_depts
+        ):
             pruned_depts.append(failed_dept)
-        if failed_code and failed_code != verdict.corrections.get("suggested_department_code") and failed_code not in pruned_depts:
+        if (
+            failed_code
+            and failed_code != verdict.corrections.get("suggested_department_code")
+            and failed_code not in pruned_depts
+        ):
             pruned_depts.append(failed_code)
 
         failed_act = state.get("workflow_status")
         pruned_acts = list(state.get("pruned_actions") or [])
-        if failed_act and failed_act in {"TRIAGED_AWAITING_SCHEDULE", "TRIAGED_READY_FOR_BOOKING"} and verdict.corrections.get("workflow_status") == "EMERGENCY":
-            for act in ["search_available_slot", "hold_slot", "start_facility_booking", "suggest_specialty", "book_appointment_directly"]:
+        if (
+            failed_act
+            and failed_act in {"TRIAGED_AWAITING_SCHEDULE", "TRIAGED_READY_FOR_BOOKING"}
+            and verdict.corrections.get("workflow_status") == "EMERGENCY"
+        ):
+            for act in [
+                "search_available_slot",
+                "hold_slot",
+                "start_facility_booking",
+                "suggest_specialty",
+                "book_appointment_directly",
+            ]:
                 if act not in pruned_acts:
                     pruned_acts.append(act)
 

@@ -129,6 +129,8 @@ class ClinicalNegationService:
 
         phrase_norm = self._normalize_ascii(phrase)
         text_norm = self._normalize_ascii(full_text)
+        if re.search(rf"\b(?:con\s+)?{re.escape(phrase_norm)}\s+(?:da\s+qua|het|qua\s+roi)\b", text_norm):
+            return True
 
         # Triệu chứng mang từ "không/chưa" là triệu chứng chỉ mất chức năng (VD: "không thở được", "không cử động được", "không nói được")
         # Bản thân từ "không" là một phần triệu chứng, không thể tự phủ định chính nó!

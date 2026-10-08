@@ -15,11 +15,9 @@ Kiểm tra:
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from langchain_core.messages import AIMessage
-
-from src.medical_assistant.agent.graph import agent, build_graph
+from src.medical_assistant.agent.graph import build_graph
 from src.medical_assistant.agent.nodes.router_node import (
     IntentRouteResult,
     _rule_based_fallback_route,
@@ -195,22 +193,30 @@ class TestIntentRouter(unittest.IsolatedAsyncioTestCase):
     # 3. TÍCH HỢP END-TO-END VỚI STATEGRAPH
     # =========================================================================
     async def test_graph_executes_info_lookup_end_to_end(self):
-        custom_graph = build_graph()
-        # Chạy một câu hỏi tra cứu cơ sở y tế
-        state_input = {
-            "query": "Các cơ sở bệnh viện Vinmec tại Hà Nội ở đâu?",
-            "messages": [{"role": "user", "content": "Các cơ sở bệnh viện Vinmec tại Hà Nội ở đâu?"}],
-        }
-        # Thực thi qua StateGraph với thread_id config
-        output = await custom_graph.ainvoke(
-            state_input,
-            config={"configurable": {"thread_id": "test_thread_info_001"}},
-        )
+        async def fake_info_agent(state):
+            return {"workflow_status": "INFO_ANSWERED", "response": "Mocked facility information."}
+
+        with (
+            patch(
+                "src.medical_assistant.agent.nodes.router_node.get_llm",
+                return_value=FakeStructuredLLM("info_lookup"),
+            ),
+            patch("src.medical_assistant.agent.graph.info_agent_node", new=fake_info_agent),
+        ):
+            custom_graph = build_graph()
+            # Chạy một câu hỏi tra cứu cơ sở y tế, không gọi LLM hay dịch vụ bên ngoài.
+            state_input = {
+                "query": "Các cơ sở bệnh viện Vinmec tại Hà Nội ở đâu?",
+                "messages": [{"role": "user", "content": "Các cơ sở bệnh viện Vinmec tại Hà Nội ở đâu?"}],
+            }
+            output = await custom_graph.ainvoke(
+                state_input,
+                config={"configurable": {"thread_id": "test_thread_info_001"}},
+            )
         self.assertIn("response", output)
         self.assertTrue(len(output["response"]) > 0)
         # Kiểm tra workflow_status có thể là INFO_ANSWERED hoặc FAQ_ANSWERED
         self.assertIn(output.get("workflow_status"), ["INFO_ANSWERED", "FAQ_ANSWERED"])
-
 
 
 if __name__ == "__main__":

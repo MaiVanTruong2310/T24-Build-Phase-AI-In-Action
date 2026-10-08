@@ -17,12 +17,10 @@ import {
   fetchSpecialties,
   MedicalService,
   Specialty,
-  cancelBooking,
   fetchMyPackageRequests,
   PackageRequest,
 } from '../features/appointment-booking/api';
 
-import { fetchCurrentUser, peekCurrentUser, PatientProfile } from '../features/patient/api';
 
 import {
   AppointmentCard,
@@ -30,7 +28,7 @@ import {
   AppointmentProgressHeader,
 } from '../features/appointment-progress/components';
 
-import { AppointmentCatalog, AppointmentDisplayData, AppointmentFilter } from '../features/appointment-progress/types';
+import { AppointmentCatalog, AppointmentFilter } from '../features/appointment-progress/types';
 
 
 
@@ -67,7 +65,6 @@ export default function AppointmentProgress() {
   const hadCachedBookings = useRef(previousBookings !== undefined);
   const previousView = peekQuery<SavedView>(VIEW_KEY);
 
-  const [profile, setProfile] = useState<PatientProfile | null>(() => peekCurrentUser() ?? null);
   const [bookings, setBookings] = useState<BookingListItem[]>(() => previousBookings ?? []);
   const [catalog, setCatalog] = useState<AppointmentCatalog>(cachedCatalog);
   const [filter, setFilter] = useState<AppointmentFilter>(() => previousView?.filter ?? 'all');
@@ -84,9 +81,8 @@ export default function AppointmentProgress() {
     else setIsRefreshing(true);
     setError('');
 
-    const [bookingResult, profileResult, doctorsResult, facilitiesResult, servicesResult, specialtiesResult, liveCasesResult, packageRequestsResult] = await Promise.allSettled([
+    const [bookingResult, doctorsResult, facilitiesResult, servicesResult, specialtiesResult, liveCasesResult, packageRequestsResult] = await Promise.allSettled([
       force ? fetchBookings() : cachedQuery('treatment:bookings-request', 0, fetchBookings),
-      fetchCurrentUser(),
       fetchDoctors(),
       fetchFacilities(),
       fetchServices(),
@@ -225,8 +221,6 @@ export default function AppointmentProgress() {
     setBookings(combinedBookings);
     rememberQuery(SNAPSHOT_KEY, combinedBookings, SNAPSHOT_TTL_MS);
 
-    if (profileResult.status === 'fulfilled') setProfile(profileResult.value);
-
     setCatalog((current) => ({
       doctors: doctorsResult.status === 'fulfilled' ? toCatalogMap(doctorsResult.value) : current.doctors,
       facilities: facilitiesResult.status === 'fulfilled' ? toCatalogMap(facilitiesResult.value) : current.facilities,
@@ -271,7 +265,7 @@ export default function AppointmentProgress() {
 
   return (
     <section className="space-y-6">
-      <AppointmentProgressHeader patientId={profile?.id || 'unknown'} />
+      <AppointmentProgressHeader />
 
       {error && (
         <div role="alert" className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 px-4 py-3 text-xs text-red-700 dark:text-red-300">

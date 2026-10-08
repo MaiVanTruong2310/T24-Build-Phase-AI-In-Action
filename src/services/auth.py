@@ -59,7 +59,9 @@ class AuthService:
             if request.health_insurance_code and hasattr(self.users, "get_by_health_insurance_code"):
                 existing_bhyt = await self.users.get_by_health_insurance_code(request.health_insurance_code)
                 if existing_bhyt:
-                    raise ConflictError("HEALTH_INSURANCE_EXISTS", "Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác trong hệ thống.")
+                    raise ConflictError(
+                        "HEALTH_INSURANCE_EXISTS", "Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác trong hệ thống."
+                    )
             user = User(
                 email=email,
                 phone=phone,
@@ -265,15 +267,23 @@ class AuthService:
                     existing_cid = await self.users.get_by_citizen_id(updates["citizen_id"])
                     if existing_cid and existing_cid.id != user.id:
                         raise ConflictError("CITIZEN_ID_EXISTS", "Số CCCD đã thuộc một hồ sơ khác trong hệ thống.")
-                if "health_insurance_code" in updates and updates["health_insurance_code"] and hasattr(self.users, "get_by_health_insurance_code"):
+                if (
+                    "health_insurance_code" in updates
+                    and updates["health_insurance_code"]
+                    and hasattr(self.users, "get_by_health_insurance_code")
+                ):
                     existing_bhyt = await self.users.get_by_health_insurance_code(updates["health_insurance_code"])
                     if existing_bhyt and existing_bhyt.id != user.id:
-                        raise ConflictError("HEALTH_INSURANCE_EXISTS", "Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác trong hệ thống.")
+                        raise ConflictError(
+                            "HEALTH_INSURANCE_EXISTS", "Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác trong hệ thống."
+                        )
                 for field, value in updates.items():
                     setattr(user, field, value)
                 await self.session.flush()
         except IntegrityError as exc:
-            raise ConflictError("PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác.") from exc
+            raise ConflictError(
+                "PROFILE_CONFLICT", "Số điện thoại hoặc thông tin định danh đã thuộc hồ sơ khác."
+            ) from exc
         logger.info("AuthService.update_profile profile updated")
         return user
 

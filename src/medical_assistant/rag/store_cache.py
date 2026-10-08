@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 from src.medical_assistant.config import get_settings
@@ -24,6 +24,7 @@ class HybridRagStore:
         if chroma_dir.exists():
             try:
                 from src.medical_assistant.rag.chroma_store import ChromaRagStore
+
                 c_store = ChromaRagStore()
                 if c_store.count > 0:
                     self.chroma_store = c_store

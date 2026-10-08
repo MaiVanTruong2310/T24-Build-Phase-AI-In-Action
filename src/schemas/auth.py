@@ -3,8 +3,6 @@
 import base64
 import binascii
 import re
-from zoneinfo import ZoneInfo
-
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
@@ -41,21 +39,29 @@ class RegisterRequest(BaseModel):
                 raise ValueError("Ngày sinh không hợp lệ: tuổi không được vượt quá 150 tuổi.")
         if self.full_name is not None:
             if not 2 <= len(self.full_name.strip()) <= 200:
-                raise ValueError('Họ tên phải có từ 2 đến 200 ký tự.')
+                raise ValueError("Họ tên phải có từ 2 đến 200 ký tự.")
             self.full_name = self.full_name.strip()
         if self.phone is not None:
-            cleaned_phone = re.sub(r'[\s.()-]', '', self.phone)
-            if cleaned_phone and not re.fullmatch(r'^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$', cleaned_phone):
-                raise ValueError('Cần số điện thoại Việt Nam hợp lệ.')
+            cleaned_phone = re.sub(r"[\s.()-]", "", self.phone)
+            if cleaned_phone and not re.fullmatch(
+                r"^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$", cleaned_phone
+            ):
+                raise ValueError("Cần số điện thoại Việt Nam hợp lệ.")
             self.phone = cleaned_phone
         if self.email:
             self.email = self.email.strip().lower()
-            if not re.fullmatch(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', self.email):
-                raise ValueError('Email không đúng định dạng.')
-            if self.email.endswith('@gmail.com'):
-                user_part = self.email.split('@')[0]
-                if not (6 <= len(user_part) <= 30) or not re.fullmatch(r'^[a-zA-Z0-9.]+$', user_part) or user_part.startswith('.') or user_part.endswith('.') or '..' in user_part:
-                    raise ValueError('Địa chỉ Gmail không đúng định dạng (tên tài khoản từ 6-30 ký tự).')
+            if not re.fullmatch(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", self.email):
+                raise ValueError("Email không đúng định dạng.")
+            if self.email.endswith("@gmail.com"):
+                user_part = self.email.split("@")[0]
+                if (
+                    not (6 <= len(user_part) <= 30)
+                    or not re.fullmatch(r"^[a-zA-Z0-9.]+$", user_part)
+                    or user_part.startswith(".")
+                    or user_part.endswith(".")
+                    or ".." in user_part
+                ):
+                    raise ValueError("Địa chỉ Gmail không đúng định dạng (tên tài khoản từ 6-30 ký tự).")
         return self
 
 
@@ -149,6 +155,7 @@ class MedicalCondition(BaseModel):
 
 class PatientDetails(BaseModel):
     """Patient-reported details; these do not certify a clinical diagnosis."""
+
     model_config = ConfigDict(extra="forbid")
     portrait_image: str | None = Field(default=None, max_length=180000)
     medical_history: list[MedicalCondition] = Field(default_factory=list, max_length=100)
@@ -180,7 +187,7 @@ class PortraitUpdateRequest(BaseModel):
         if not value.startswith(prefix):
             raise ValueError("Ảnh hồ sơ cần ở định dạng JPEG.")
         try:
-            image = base64.b64decode(value[len(prefix):], validate=True)
+            image = base64.b64decode(value[len(prefix) :], validate=True)
         except (ValueError, binascii.Error) as exc:
             raise ValueError("Dữ liệu ảnh không hợp lệ.") from exc
         if not image.startswith(b"\xff\xd8\xff") or not image.endswith(b"\xff\xd9"):

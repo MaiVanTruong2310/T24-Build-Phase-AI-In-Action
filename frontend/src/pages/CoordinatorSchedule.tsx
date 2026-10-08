@@ -3,7 +3,6 @@ import { fetchWeeklyShifts, createWeeklyShift, publishSessions } from '../featur
 import { api, type Catalog } from '../features/coordinator/api'
 import { saveAndRefresh } from '../features/coordinator/mutations'
 import { publicationError, shiftError } from '../features/coordinator/uiLogic'
-import { formatDateVN } from '../features/appointment-booking/dateValidation'
 import { DateInputVN } from '../components/DateInputVN'
 import { Link } from 'react-router-dom'
 import './CoordinatorWorkbench.css'

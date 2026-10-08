@@ -3,18 +3,17 @@ Unit tests for Step 4: Failure Transparency & Telemetry
 Tests transparent error responses when Supabase DB or LLM fails.
 """
 
-import asyncio
 from unittest.mock import MagicMock, patch
+
 import pytest
 
+from scripts.stats_telemetry import compute_statistics, parse_telemetry_lines
 from src.medical_assistant.agent.nodes.doctor_node import find_doctors_node
 from src.medical_assistant.agent.nodes.respond_node import respond_node
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.hybrid_dialogue_service import (
     HybridDialogueService,
-    get_hybrid_dialogue_service,
 )
-from scripts.stats_telemetry import parse_telemetry_lines, compute_statistics
 
 
 @pytest.mark.asyncio
@@ -172,7 +171,9 @@ async def test_hybrid_dialogue_fallback_transparency():
         "clinical_facts": {},
     }
 
-    with patch("src.medical_assistant.domain.hybrid_dialogue_service.get_llm", side_effect=RuntimeError("LLM quota exceeded")):
+    with patch(
+        "src.medical_assistant.domain.hybrid_dialogue_service.get_llm", side_effect=RuntimeError("LLM quota exceeded")
+    ):
         v2_res, llm_succeeded = await service.process_turn_async("Tôi bị đau bụng 2 ngày nay", state)
 
         assert llm_succeeded is False

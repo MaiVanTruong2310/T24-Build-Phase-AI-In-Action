@@ -8,7 +8,7 @@ from typing import Any
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from src.medical_assistant.agent.tools.base import ToolExecutionError, normalize_fold
+from src.medical_assistant.agent.tools.base import normalize_fold
 from src.medical_assistant.domain.facility_service import FacilityService
 
 logger = logging.getLogger(__name__)

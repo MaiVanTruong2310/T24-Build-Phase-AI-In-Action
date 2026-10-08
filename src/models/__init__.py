@@ -14,13 +14,6 @@ from src.models.catalog import (
     Specialty,
 )
 from src.models.chat_takeover import ChatTakeoverAuditEvent, ChatTakeoverCase, ChatTakeoverMessage
-from src.models.coordination import (
-    ConsultationRequest,
-    ConsultationRequestEvent,
-    ConsultationSession,
-    ConsultationSlot,
-    WeeklyShift,
-)
 from src.models.conversation import (
     Conversation,
     ConversationParticipant,
@@ -28,6 +21,13 @@ from src.models.conversation import (
     Message,
     PatientChatContext,
     StaffAgentContext,
+)
+from src.models.coordination import (
+    ConsultationRequest,
+    ConsultationRequestEvent,
+    ConsultationSession,
+    ConsultationSlot,
+    WeeklyShift,
 )
 from src.models.notification import Notification
 from src.models.package_request import PackageRequest

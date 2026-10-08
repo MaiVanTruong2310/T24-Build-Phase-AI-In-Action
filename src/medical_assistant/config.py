@@ -22,9 +22,10 @@ class Settings(BaseSettings):
     hospital_hotline: str = "1900 232 389"
     info_agent_enabled: bool = Field(default=True)
 
-
     # LLM
-    llm_provider: str = Field(default="deepseek", description="Nhà cung cấp LLM chính: deepseek | openrouter | gemini | openai")
+    llm_provider: str = Field(
+        default="deepseek", description="Nhà cung cấp LLM chính: deepseek | openrouter | gemini | openai"
+    )
     openai_api_key: str = ""
     openai_model_name: str = "gpt-4o-mini"
     openai_base_url: str = "https://api.openai.com/v1"
@@ -40,7 +41,9 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model_name: str = "deepseek-chat"
-    enable_llm_fallbacks: bool = Field(default=False, description="Tự động fallback sang các provider khác nếu có cấu hình")
+    enable_llm_fallbacks: bool = Field(
+        default=False, description="Tự động fallback sang các provider khác nếu có cấu hình"
+    )
     llm_request_timeout_seconds: float = Field(default=20.0, gt=0.0, le=120.0)
     llm_hedge_delay_seconds: float = Field(default=3.0, gt=0.0, le=30.0)
     llm_total_timeout_seconds: float = Field(default=25.0, gt=0.0, le=120.0)
@@ -73,4 +76,3 @@ def is_info_agent_enabled() -> bool:
     if val is not None:
         return val.strip().lower() in ("true", "1", "yes")
     return bool(get_settings().info_agent_enabled)
-

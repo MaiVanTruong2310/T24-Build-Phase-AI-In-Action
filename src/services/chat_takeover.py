@@ -310,10 +310,13 @@ async def workbench_message(session, case, client_id: str, content: str, actor_i
             return existing
 
         from sqlalchemy.dialects.postgresql import insert as pg_insert
+
         from src.models.conversation import Conversation
+
         now = datetime.now(UTC)
         await session.execute(
-            pg_insert(Conversation).values(
+            pg_insert(Conversation)
+            .values(
                 id=case.id,
                 category="PATIENT_SUPPORT",
                 mode="HUMAN" if getattr(case, "control", "ai") == "human" else "AI",
@@ -323,7 +326,8 @@ async def workbench_message(session, case, client_id: str, content: str, actor_i
                 created_by_id=case.patient_id,
                 created_at=getattr(case, "created_at", None) or now,
                 updated_at=now,
-            ).on_conflict_do_nothing(index_elements=["id"])
+            )
+            .on_conflict_do_nothing(index_elements=["id"])
         )
 
         sender_type = "STAFF" if sender in ("coordinator", "staff") else "PATIENT"

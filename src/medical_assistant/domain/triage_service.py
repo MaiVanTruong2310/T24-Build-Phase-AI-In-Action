@@ -34,6 +34,25 @@ TRIAGED_DISEASES_PATH = ROOT_DIR / "data" / "datalake" / "normalized" / "disease
 
 
 class ClinicalTriageService:
+    NON_SPECIFIC_RED_FLAGS = {
+        "buồn nôn",
+        "chóng mặt",
+        "nhìn mờ",
+        "mờ mắt",
+        "khó thở",
+        "ho",
+        "sốt",
+        "đau đầu",
+        "đau ngực",
+        "nausea",
+        "dizziness",
+        "blurred vision",
+        "shortness of breath",
+        "cough",
+        "fever",
+        "headache",
+        "chest pain",
+    }
     PRIMARY_ROUTING_THRESHOLD = 0.65
     SECONDARY_ROUTING_THRESHOLD = 0.60
     SECONDARY_TO_PRIMARY_RATIO = 0.75
@@ -77,7 +96,11 @@ class ClinicalTriageService:
         "fever": ("TONG_QUAT", "Nội tổng quát", ["duration", "temperature", "rash", "shortness_of_breath"]),
         "eye_symptoms": ("MAT", "Mắt (Nhãn khoa)", ["duration", "severity", "vision_changes"]),
         "hair_loss": ("DA_LIEU", "Da liễu", ["duration", "severity", "scalp_itching", "patchy_loss"]),
-        "insomnia": ("TAM_THAN", "Trung tâm Chăm sóc sức khỏe tinh thần", ["duration", "stress_anxiety", "fatigue", "mood_changes"]),
+        "insomnia": (
+            "TAM_THAN",
+            "Trung tâm Chăm sóc sức khỏe tinh thần",
+            ["duration", "stress_anxiety", "fatigue", "mood_changes"],
+        ),
         "skin_lesion": ("DA_LIEU", "Da liễu", ["duration", "location", "itching", "rash"]),
     }
 
@@ -224,6 +247,22 @@ class ClinicalTriageService:
                 "Phản vệ nguy kịch đường thở",
             ),
         ]
+        raw_hard_red_flags.extend(
+            [
+                (
+                    "SUICIDAL_IDEATION",
+                    r"(?:chán sống|chan song|không muốn sống|khong muon song|không muốn thức dậy|khong muon thuc day|muốn uống.{0,30}thuốc|muon uong.{0,30}thuoc|suicid|kill myself|end my life|self-harm)",
+                    "Cấp cứu",
+                    "Nguy cơ tự hại / khủng hoảng tâm lý",
+                ),
+                (
+                    "MENINGITIS_TRIAD",
+                    r"(?=.*(?:đau đầu|headache))(?=.*(?:cổ cứng|stiff neck))(?=.*(?:sợ ánh sáng|photophobia))(?=.*(?:sốt(?: cao|\s+(?:39|40)(?:\s*độ)?)|fever))",
+                    "Cấp cứu",
+                    "Dấu hiệu nghi ngờ viêm màng não",
+                ),
+            ]
+        )
         self.hard_red_flags = [
             (rid, re.compile(pat, re.IGNORECASE), spec, name) for rid, pat, spec, name in raw_hard_red_flags
         ]
@@ -470,7 +509,14 @@ class ClinicalTriageService:
                         "tho doc",
                     ],
                 ],
-                "negative_factors": ["không khó thở", "không đau ngực", "không đau tim", "khong kho tho", "khong dau nguc", "khong dau tim"],
+                "negative_factors": [
+                    "không khó thở",
+                    "không đau ngực",
+                    "không đau tim",
+                    "khong kho tho",
+                    "khong dau nguc",
+                    "khong dau tim",
+                ],
                 "ats_level": ATSLevel.LEVEL_2_EMERGENT,
                 "care_setting": "EMERGENCY_DEPT",
                 "default_specialty": "Trung tâm Tim mạch",
@@ -777,6 +823,12 @@ class ClinicalTriageService:
         # TẦNG 3: Warning Signs (Khám trong ngày - Level 3)
         raw_warning_rules = [
             (
+                "COUGH_WITH_DYSPNEA",
+                r"(?:ho.*(?:khó thở|hụt hơi)|(?:khó thở|hụt hơi).*ho|cough.*(?:shortness of breath|dyspnea)|(?:shortness of breath|dyspnea).*cough)",
+                "Nội hô hấp",
+                "Ho kèm khó thở cần được đánh giá trong ngày",
+            ),
+            (
                 "UNDIFFERENTIATED_CHEST_DISCOMFORT",
                 r"đau\s+(?:tức|thắt|nặng|đè)\s+(?:lồng\s+|vùng\s+)?ngực|"
                 r"(?:đau|tức|thắt|nặng|đè)\s+(?:lồng\s+|vùng\s+)?ngực|"
@@ -900,7 +952,10 @@ class ClinicalTriageService:
         ]
 
         # Kiểm tra nhanh: Nếu bệnh nhân khẳng định ngực/tim hoàn toàn bình thường hoặc phủ định đau ngực/tim
-        if re.search(r"\b(?:ngực|nguc|vùng\s*ngực|tim)\s+(?:hoàn\s+toàn\s+)?bình\s+thường\b|\b(?:không|khong|ko|k)\s+(?:bị\s+)?(?:đau|tức|thắt|nặng)\s*(?:vùng\s*)?(?:ngực|tim)\b", clean_user_text):
+        if re.search(
+            r"\b(?:ngực|nguc|vùng\s*ngực|tim)\s+(?:hoàn\s+toàn\s+)?bình\s+thường\b|\b(?:không|khong|ko|k)\s+(?:bị\s+)?(?:đau|tức|thắt|nặng)\s*(?:vùng\s*)?(?:ngực|tim)\b",
+            clean_user_text,
+        ):
             return None
 
         has_positive_chest = False
@@ -954,7 +1009,9 @@ class ClinicalTriageService:
             "lan co",
             "lan lung",
         ]
-        has_radiation = any(rs in clean_user_text and not negation_svc.is_phrase_negated(rs, user_text) for rs in radiation_signals)
+        has_radiation = any(
+            rs in clean_user_text and not negation_svc.is_phrase_negated(rs, user_text) for rs in radiation_signals
+        )
 
         # 3. Thần kinh thực vật / Vã mồ hôi lạnh
         sweat_signals = [
@@ -973,7 +1030,9 @@ class ClinicalTriageService:
             "mo hoi lanh",
             "toat mo hoi",
         ]
-        has_sweat = any(ss in clean_user_text and not negation_svc.is_phrase_negated(ss, user_text) for ss in sweat_signals)
+        has_sweat = any(
+            ss in clean_user_text and not negation_svc.is_phrase_negated(ss, user_text) for ss in sweat_signals
+        )
 
         # 4. Khó thở / Hụt hơi
         dyspnea_signals = [
@@ -987,7 +1046,9 @@ class ClinicalTriageService:
             "hut hoi",
             "tho doc",
         ]
-        has_dyspnea = any(ds in clean_user_text and not negation_svc.is_phrase_negated(ds, user_text) for ds in dyspnea_signals)
+        has_dyspnea = any(
+            ds in clean_user_text and not negation_svc.is_phrase_negated(ds, user_text) for ds in dyspnea_signals
+        )
 
         # 5. Choáng váng / Chóng mặt / Tiền ngất
         dizzy_signals = [
@@ -1005,7 +1066,9 @@ class ClinicalTriageService:
             "ngat",
             "muon xiu",
         ]
-        has_dizzy = any(dz in clean_user_text and not negation_svc.is_phrase_negated(dz, user_text) for dz in dizzy_signals)
+        has_dizzy = any(
+            dz in clean_user_text and not negation_svc.is_phrase_negated(dz, user_text) for dz in dizzy_signals
+        )
 
         # 6. Khởi phát khi gắng sức
         exertion_signals = [
@@ -1022,7 +1085,9 @@ class ClinicalTriageService:
             "di bo nhanh",
             "mang vac",
         ]
-        has_exertion = any(ex in clean_user_text and not negation_svc.is_phrase_negated(ex, user_text) for ex in exertion_signals)
+        has_exertion = any(
+            ex in clean_user_text and not negation_svc.is_phrase_negated(ex, user_text) for ex in exertion_signals
+        )
 
         # 7. Tính chất đè nén / bóp nghẹt dữ dội
         crushing_signals = [
@@ -1044,15 +1109,17 @@ class ClinicalTriageService:
             "crushing",
             "squeezing",
         ]
-        has_crushing = any(cr in clean_user_text and not negation_svc.is_phrase_negated(cr, user_text) for cr in crushing_signals)
+        has_crushing = any(
+            cr in clean_user_text and not negation_svc.is_phrase_negated(cr, user_text) for cr in crushing_signals
+        )
 
         # Nếu có đau thắt dữ dội kèm theo triệu chứng lan/vã mồ hôi/khó thở -> ATS 1 Resuscitation
         # Nếu có đau ngực kèm dấu hiệu nghi ngờ tim mạch -> ATS 2 Emergent
         if has_crushing and (has_radiation or has_sweat or has_dyspnea):
             return {
-                "rule_id": "ACS_COMBINED_CARDIAC_RULE_ATS1",
+                "rule_id": "ACS_COMBINED_CARDIAC_RULE",
                 "name": "Nghi ngờ Nhồi máu cơ tim cấp tối khẩn (Acute STEMI/ACS Red Flag)",
-                "ats_level": ATSLevel.LEVEL_1_RESUSCITATION,
+                "ats_level": ATSLevel.LEVEL_2_EMERGENT,
             }
 
         if has_crushing or (sum([has_radiation, has_sweat, has_dyspnea, has_dizzy, has_exertion]) >= 1):
@@ -1113,7 +1180,7 @@ class ClinicalTriageService:
                         continue
                     safety_ats = (
                         ATSLevel.LEVEL_2_EMERGENT
-                        if rid in {"STEMI_ACS_CRUSHING", "STROKE_FAST"}
+                        if rid in {"STEMI_ACS_CRUSHING", "STROKE_FAST", "MENINGITIS_TRIAD"}
                         else ATSLevel.LEVEL_1_RESUSCITATION
                     )
                     safety_emergency = True
@@ -1165,6 +1232,8 @@ class ClinicalTriageService:
         if not safety_emergency:
             for db_rf in getattr(self, "db_emergency_red_flags", []):
                 phrase = db_rf["phrase"]
+                if phrase in self.NON_SPECIFIC_RED_FLAGS:
+                    continue
                 # Khớp cụm từ triệu chứng cờ đỏ và đảm bảo không bị phủ định
                 if phrase in clean_user_text and not negation_svc.is_phrase_negated(phrase, user_text):
                     # Tránh các cờ đỏ 1 từ quá đơn lẻ không có ngữ cảnh nguy kịch
@@ -1206,6 +1275,21 @@ class ClinicalTriageService:
         # =========================================================================
         # 3. TẦNG 3: QUÉT WARNING SIGNS (ATS Level 3 Bán khẩn)
         # =========================================================================
+        positional_dizziness = re.search(
+            r"(?:chóng mặt|choáng|dizziness).{0,35}(?:đứng lên|đứng dậy|standing up)", user_text
+        )
+        if positional_dizziness and not safety_emergency:
+            red_flags = ("đau ngực", "mờ mắt", "nhìn mờ", "ngất", "yếu liệt", "tê yếu", "khó thở", "headache")
+            if not any(flag in user_text and not negation_svc.is_phrase_negated(flag, user_text) for flag in red_flags):
+                return TriageEvaluationResult(
+                    ats_level=ATSLevel.LEVEL_4_STANDARD,
+                    urgency_tier=UrgencyTier.WITHIN_WEEK,
+                    max_booking_days=7,
+                    is_emergency=False,
+                    suggested_specialty="Thần kinh",
+                    patient_guidance=get_triage_guidance(specialty="Thần kinh", ats_level=4, max_days=7, language=lang),
+                )
+
         if not safety_emergency:
             for rule_id, pattern, spec_name, warning_name in self.warning_rules:
                 match = pattern.search(user_text)
@@ -1536,8 +1620,7 @@ class ClinicalTriageService:
             )
             if has_psychology and not safety_emergency:
                 has_hair_loss = any(
-                    term in clean_user_text
-                    for term in ("rụng tóc", "rung toc", "tóc rụng", "toc rung", "hair loss")
+                    term in clean_user_text for term in ("rụng tóc", "rung toc", "tóc rụng", "toc rung", "hair loss")
                 )
                 if has_hair_loss:
                     clarification = (
@@ -2042,6 +2125,8 @@ class ClinicalTriageService:
             rec_matched_flags = []
             for rf in record.symptom_hierarchy.red_flags:
                 rf_clean = rf.lower().strip()
+                if rf_clean in self.NON_SPECIFIC_RED_FLAGS:
+                    continue
                 phrases = [p.strip() for p in re.split(r"[,:;]+", rf_clean) if len(p.strip()) >= 5]
                 for phrase in phrases:
                     if phrase not in CLINICAL_STOPWORDS and phrase in clean_user_text:
@@ -2051,7 +2136,12 @@ class ClinicalTriageService:
                 if len(words) >= 2:
                     for i in range(len(words) - 1):
                         bigram = f"{words[i]} {words[i + 1]}"
-                        if len(bigram) > 6 and bigram not in CLINICAL_STOPWORDS and bigram in scoring_user_text:
+                        if (
+                            len(bigram) > 6
+                            and bigram not in CLINICAL_STOPWORDS
+                            and bigram not in self.NON_SPECIFIC_RED_FLAGS
+                            and bigram in scoring_user_text
+                        ):
                             score += 3
                             rec_matched_flags.append(bigram)
 
@@ -2091,7 +2181,10 @@ class ClinicalTriageService:
             elif rec_spec_code in ["THAN_KINH"]:
                 if has_neuro and score > 0:
                     score += 15
-                if has_eye and not any(w in clean_user_text for w in ["đầu", "trán", "thái dương", "headache", "liệt", "co giật", "mất ý thức", "nói khó"]):
+                if has_eye and not any(
+                    w in clean_user_text
+                    for w in ["đầu", "trán", "thái dương", "headache", "liệt", "co giật", "mất ý thức", "nói khó"]
+                ):
                     score -= 30  # Phạt nặng gán nhầm bệnh thần kinh khi chỉ có triệu chứng mắt đơn thuần
             elif rec_spec_code in ["XUONG_KHOP", "CHAN_THUONG_CHINH_HINH"]:
                 if has_msk and score > 0:
@@ -2191,11 +2284,9 @@ class ClinicalTriageService:
             cand_emergency = acuity.max_booking_days == 0
             cand_care_setting = "EMERGENCY_DEPT" if cand_emergency else "OUTPATIENT_CLINIC"
 
-            # ĐỐI VỚI BỆNH CẤP CỨU TỪ SUPABASE KNOWLEDGE BASE (ATS 1 & ATS 2):
+            # Database acuity alone cannot establish an emergency without a specific red flag.
             if cand_ats in (ATSLevel.LEVEL_1_RESUSCITATION, ATSLevel.LEVEL_2_EMERGENT):
-                # Nếu ứng viên khớp với điểm bằng chứng cao (score >= 25) hoặc có cờ đỏ đi kèm:
-                # TUYỆT ĐỐI KHÔNG HẠ CẤP XUỐNG ATS 3! ĐÂY LÀ TÌNH TRẠNG NGUY KỊCH TỪ DATABASE CẦN BÁO ĐỘNG NGAY!
-                if best_cand_in_winner["score"] >= 25 or len(matched_flags) > 0:
+                if matched_flags:
                     cand_emergency = True
                     cand_tier = UrgencyTier.EMERGENCY_BLOCK
                     cand_max_days = 0

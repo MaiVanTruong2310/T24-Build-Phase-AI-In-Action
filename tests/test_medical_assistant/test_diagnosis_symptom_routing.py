@@ -1,5 +1,6 @@
 import os
 from unittest.mock import patch
+
 import pytest
 
 from src.medical_assistant.agent.graph import agent
@@ -13,12 +14,15 @@ def mock_offline_llm():
     if os.getenv("RUN_LIVE_LLM", "").lower() in ("true", "1", "yes"):
         yield
     else:
-        with patch(
-            "src.medical_assistant.infrastructure.llm.FailoverChatModel._ainvoke_candidates",
-            side_effect=RuntimeError("Offline test mode - LLM network disabled"),
-        ), patch(
-            "src.medical_assistant.domain.hybrid_dialogue_service.get_llm",
-            side_effect=RuntimeError("Offline test mode - LLM network disabled"),
+        with (
+            patch(
+                "src.medical_assistant.infrastructure.llm.FailoverChatModel._ainvoke_candidates",
+                side_effect=RuntimeError("Offline test mode - LLM network disabled"),
+            ),
+            patch(
+                "src.medical_assistant.domain.hybrid_dialogue_service.get_llm",
+                side_effect=RuntimeError("Offline test mode - LLM network disabled"),
+            ),
         ):
             yield
 

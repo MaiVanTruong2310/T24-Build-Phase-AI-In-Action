@@ -14,7 +14,6 @@ import {
   birthDateError,
   citizenIdError,
   emailError,
-  formatDateVN,
   healthInsuranceCodeError,
 } from '../features/appointment-booking/dateValidation'
 import { DateInputVN } from '../components/DateInputVN'
@@ -47,10 +46,6 @@ export function Register() {
     confirm_password: ''
 
   })
-
-  const [otpCode, setOtpCode] = useState('')
-
-  const [emailVerified, setEmailVerified] = useState(false)
 
   const [confirmationNotice, setConfirmationNotice] = useState('')
 

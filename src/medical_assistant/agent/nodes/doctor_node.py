@@ -4,15 +4,14 @@ Fetches real doctors and open appointment slots from Supabase database
 when triage is complete and non-emergency.
 """
 
-import asyncio
 import logging
-
 from unittest.mock import patch
+
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.doctor_schedule_service import (
-    get_doctor_schedule_service,
-    fetch_available_doctors_slots_cached,
     clear_turn_slot_cache,
+    fetch_available_doctors_slots_cached,
+    get_doctor_schedule_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,7 +46,10 @@ async def find_doctors_node(state: AgentState) -> dict:
 
     if get_doctor_schedule_service is not _orig_get_doctor_schedule_service:
         clear_turn_slot_cache()
-        with patch("src.medical_assistant.domain.doctor_schedule_service.get_doctor_schedule_service", get_doctor_schedule_service):
+        with patch(
+            "src.medical_assistant.domain.doctor_schedule_service.get_doctor_schedule_service",
+            get_doctor_schedule_service,
+        ):
             doctors_with_slots, data_unavailable, data_unavailable_reason = await fetch_available_doctors_slots_cached(
                 state=state,
                 specialty_name=specialty_name,
@@ -76,4 +78,3 @@ async def find_doctors_node(state: AgentState) -> dict:
         "available_slots": doctors_with_slots,
         "metadata": meta,
     }
-

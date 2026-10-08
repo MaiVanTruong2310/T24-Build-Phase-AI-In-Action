@@ -1,10 +1,9 @@
 """Tests for Prompt C (P1): Info Agent Integration, Observability & Telemetry."""
 
-import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 
 from src.medical_assistant.agent.nodes.doctor_node import find_doctors_node
 from src.medical_assistant.agent.nodes.info_agent_node import info_agent_node
@@ -17,7 +16,6 @@ from src.medical_assistant.infrastructure.telemetry_logger import (
 
 
 class TestPromptCIntegration(unittest.IsolatedAsyncioTestCase):
-
     async def test_info_agent_simulated_db_unavailable_honest_answer(self):
         """Giả lập DB/tool báo data_unavailable -> Trả lời trung thực, cờ data_unavailable=True, có telemetry."""
         mock_llm = MagicMock()
@@ -117,7 +115,12 @@ class TestPromptCIntegration(unittest.IsolatedAsyncioTestCase):
         mock_bound_1.ainvoke = AsyncMock(side_effect=[call_msg_1, final_msg_1])
 
         tool_data = [
-            {"full_name": "Trần Văn Bình", "title": "Bác sĩ Chuyên khoa II", "years_of_experience": 15, "specialties": ["Tai Mũi Họng"]}
+            {
+                "full_name": "Trần Văn Bình",
+                "title": "Bác sĩ Chuyên khoa II",
+                "years_of_experience": 15,
+                "specialties": ["Tai Mũi Họng"],
+            }
         ]
 
         with patch("src.medical_assistant.agent.nodes.info_agent_node.ALL_TOOLS") as mock_tools:
@@ -142,7 +145,9 @@ class TestPromptCIntegration(unittest.IsolatedAsyncioTestCase):
             mock_llm_2.bind_tools.return_value = mock_bound_2
 
             # Ở lượt 2, model trực tiếp trả lời từ ngữ cảnh mà không cần gọi tool lại
-            final_msg_2 = AIMessage(content="Dạ, Bác sĩ Trần Văn Bình có 15 năm kinh nghiệm chuyên khoa Tai Mũi Họng ạ.")
+            final_msg_2 = AIMessage(
+                content="Dạ, Bác sĩ Trần Văn Bình có 15 năm kinh nghiệm chuyên khoa Tai Mũi Họng ạ."
+            )
             mock_bound_2.ainvoke = AsyncMock(return_value=final_msg_2)
 
             state_turn2 = {

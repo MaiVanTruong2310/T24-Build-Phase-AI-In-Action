@@ -48,7 +48,9 @@ class UserRepository:
         """Find a user by health_insurance_code (BHYT)."""
         if not health_insurance_code:
             return None
-        return (await self.session.execute(select(User).where(User.health_insurance_code == health_insurance_code))).scalar_one_or_none()
+        return (
+            await self.session.execute(select(User).where(User.health_insurance_code == health_insurance_code))
+        ).scalar_one_or_none()
 
     async def create(self, user: User) -> User:
         """Persist a user and flush it so generated fields are available."""

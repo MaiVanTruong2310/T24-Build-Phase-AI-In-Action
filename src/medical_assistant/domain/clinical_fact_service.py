@@ -63,7 +63,16 @@ FACT_PATTERNS = {
     "one_sided_headache": [r"nua dau (?:ben )?(?:trai|phai)", r"dau mot ben"],
     "nausea": [r"buon non", r"mac non", r"nausea"],
     "photophobia": [r"so anh sang", r"choi mat"],
-    "vision_changes": [r"nhin mo", r"nhin doi", r"hoa mat", r"mo mat", r"mat mo", r"moi mat", r"mat moi", r"giam thi luc"],
+    "vision_changes": [
+        r"nhin mo",
+        r"nhin doi",
+        r"hoa mat",
+        r"mo mat",
+        r"mat mo",
+        r"moi mat",
+        r"mat moi",
+        r"giam thi luc",
+    ],
     "eye_symptoms": [
         r"moi mat",
         r"mat moi",
@@ -279,7 +288,18 @@ COMPLAINT_SYSTEMS = {code: system for code, system, _ in COMPLAINT_RULES}
 ANATOMICAL_BODY_REGIONS: dict[str, dict[str, Any]] = {
     "lower_limb": {
         "primary_system": "musculoskeletal",
-        "synonyms": ["bắp đùi", "đùi", "cơ đùi", "bắp chuối", "cẳng chân", "gối", "khớp gối", "cổ chân", "gót chân", "bàn chân"],
+        "synonyms": [
+            "bắp đùi",
+            "đùi",
+            "cơ đùi",
+            "bắp chuối",
+            "cẳng chân",
+            "gối",
+            "khớp gối",
+            "cổ chân",
+            "gót chân",
+            "bàn chân",
+        ],
         "complaint_codes": ["muscle_pain", "joint_pain"],
     },
     "spine_back": {

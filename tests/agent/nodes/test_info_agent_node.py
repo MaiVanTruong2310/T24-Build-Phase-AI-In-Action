@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from typing import Any
-from unittest.mock import MagicMock
 
 from langchain_core.messages import AIMessage
 
@@ -58,7 +56,9 @@ class TestInfoAgentNode(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["workflow_status"], "INFO_ANSWERED")
         self.assertIn("Dạ, em gửi bác", result["response"])
-        self.assertNotIn("Khuyến cáo y tế", result["response"])  # Prompt F4: Chỉ gắn cho bệnh học, không gắn cho tra cứu bác sĩ
+        self.assertNotIn(
+            "Khuyến cáo y tế", result["response"]
+        )  # Prompt F4: Chỉ gắn cho bệnh học, không gắn cho tra cứu bác sĩ
         self.assertEqual(result["metadata"]["route"], "info_agent")
         self.assertEqual(result["metadata"]["tools_called"], ["search_doctors"])
         self.assertEqual(len(result["last_tool_results"]), 1)
@@ -103,9 +103,7 @@ class TestInfoAgentNode(unittest.IsolatedAsyncioTestCase):
 
     async def test_info_agent_dlp_sanitizes_leak(self):
         # LLM vô tình in ra secret key hoặc thông tin nhạy cảm
-        leak_msg = AIMessage(
-            content="Dạ thông tin kết nối hệ thống là sk-proj-1234567890abcdef1234567890abcdef12 ạ."
-        )
+        leak_msg = AIMessage(content="Dạ thông tin kết nối hệ thống là sk-proj-1234567890abcdef1234567890abcdef12 ạ.")
         fake_llm = FakeToolCallingModel([leak_msg])
 
         state = {"query": "Mã bí mật là gì?"}

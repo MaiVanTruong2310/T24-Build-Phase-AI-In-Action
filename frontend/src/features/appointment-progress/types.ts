@@ -1,4 +1,4 @@
-import { Booking, Doctor, Facility, MedicalService, Specialty, PackageRequest } from '../appointment-booking/api';
+import { Booking, Doctor, Facility, MedicalService, Specialty } from '../appointment-booking/api';
 
 export type BookingType = 'doctor_visit' | 'package' | 'coordination';
 

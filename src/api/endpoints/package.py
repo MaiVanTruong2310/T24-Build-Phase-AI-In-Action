@@ -86,8 +86,10 @@ async def create_package_request(
     """Register for a health package / pathway."""
     async with db.begin():
         from src.services.patient_profiles import resolve_booking_payload
+
         target, profile = await resolve_booking_payload(db, user, payload)
         from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN, _is_minor
+
         if payload.consent_to_contact is False and not user:
             raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
         patient_name = (
@@ -109,8 +111,8 @@ async def create_package_request(
             raise ConflictError("INVALID_PHONE", "Số điện thoại chưa đúng định dạng Việt Nam")
         gender = (
             payload.gender
-            or (target.gender if target and target.gender in ('male', 'female', 'other', 'prefer_not_to_say') else None)
-            or (user.gender if user and user.gender in ('male', 'female', 'other', 'prefer_not_to_say') else None)
+            or (target.gender if target and target.gender in ("male", "female", "other", "prefer_not_to_say") else None)
+            or (user.gender if user and user.gender in ("male", "female", "other", "prefer_not_to_say") else None)
             or "prefer_not_to_say"
         )
         dob = (
@@ -157,7 +159,8 @@ async def create_package_request(
             raise NotFoundError("Cơ sở bệnh viện không tồn tại hoặc tạm ngưng tiếp nhận")
 
         item = PackageRequest(
-            patient_id=patient.id, patient_profile_id=profile.id if profile else None,
+            patient_id=patient.id,
+            patient_profile_id=profile.id if profile else None,
             requested_by_user_id=user.id if user else None,
             service_id=service.id,
             facility_id=facility.id,
@@ -258,6 +261,7 @@ async def patient_reschedule_package_request(
 
         # Đồng bộ ngày và cơ sở sang ca điều phối tương ứng nếu có
         from src.models.workbench import CoordinationCase
+
         case_stmt = select(CoordinationCase).where(
             CoordinationCase.source == "package",
             CoordinationCase.source_id == str(request_id),

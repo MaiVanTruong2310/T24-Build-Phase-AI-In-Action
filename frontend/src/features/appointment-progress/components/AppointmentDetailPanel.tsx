@@ -1,6 +1,5 @@
 import {
   CalendarClock,
-  Clock,
   CreditCard,
   FileText,
   MapPin,

@@ -21,6 +21,7 @@ from src.medical_assistant.domain.triage_service import get_triage_service
 
 MAX_DETAILS_HISTORY = 4
 
+
 async def analyze_node(state: AgentState) -> dict:
     query = state.get("query") or state.get("user_input", "")
     current_lang = state.get("language")
@@ -118,6 +119,7 @@ async def analyze_node(state: AgentState) -> dict:
     is_app_query = detect_appointment_query(query)
     if is_app_query:
         from src.medical_assistant.domain.booking_lookup_service import get_booking_lookup_service
+
         lookup_svc = get_booking_lookup_service()
         user_id = state.get("user_id") or (state.get("metadata") or {}).get("user_id")
         user_phone = (state.get("patient_profile") or {}).get("phone") or state.get("patient_phone")
@@ -204,6 +206,7 @@ async def analyze_node(state: AgentState) -> dict:
 
     # 6-HOOK AGENT MIDDLEWARE PIPELINE
     from src.medical_assistant.domain.middleware_pipeline import get_middleware_pipeline
+
     middleware = get_middleware_pipeline()
 
     # HOOK 2: before_model_call (Action Space Pruning)
@@ -406,8 +409,14 @@ async def analyze_node(state: AgentState) -> dict:
         or facility_pref
         or intake_state.get("facility_preference")
     )
-    preferred_date = booking_entities.get("preferred_date") or state.get("preferred_date") or intake_state.get("preferred_date")
-    preferred_period = booking_entities.get("preferred_period") or state.get("preferred_period") or intake_state.get("preferred_period")
+    preferred_date = (
+        booking_entities.get("preferred_date") or state.get("preferred_date") or intake_state.get("preferred_date")
+    )
+    preferred_period = (
+        booking_entities.get("preferred_period")
+        or state.get("preferred_period")
+        or intake_state.get("preferred_period")
+    )
     doctor_pref = (
         booking_entities.get("doctor_preference")
         or state.get("doctor_preference")
@@ -415,16 +424,14 @@ async def analyze_node(state: AgentState) -> dict:
         or ""
     )
     doctor_name = (
-        booking_entities.get("doctor_name")
-        or state.get("doctor_name")
-        or intake_state.get("doctor_name")
-        or ""
+        booking_entities.get("doctor_name") or state.get("doctor_name") or intake_state.get("doctor_name") or ""
     )
 
     # Grounding LLM-extracted slots from v2_response (Dialogue State Tracking)
     llm_facility_name = getattr(v2_response.action_args, "facility_name", None)
     if llm_facility_name and not booking_entities.get("facility_preference"):
         from src.medical_assistant.domain.booking_slot_service import FACILITY_MAPPING
+
         lower_fac = llm_facility_name.lower().strip()
         matched_fac = None
         for k in sorted(FACILITY_MAPPING.keys(), key=len, reverse=True):
@@ -439,6 +446,7 @@ async def analyze_node(state: AgentState) -> dict:
         from zoneinfo import ZoneInfo
 
         from src.medical_assistant.domain.booking_slot_service import parse_vietnamese_date
+
         vn_today = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
         parsed_dt = parse_vietnamese_date(llm_date_text, reference_date=vn_today)
         if parsed_dt:
@@ -457,7 +465,10 @@ async def analyze_node(state: AgentState) -> dict:
         booking_entities.get("is_booking_intent")
         or is_package_inquiry
         or bool(llm_facility_name or llm_date_text)
-        or (intent_check and intent_check.get("intent") in {"HOLD_BOOKING", "BOOKING_CONTACT_REQUEST", "FACILITY_BOOKING_START"})
+        or (
+            intent_check
+            and intent_check.get("intent") in {"HOLD_BOOKING", "BOOKING_CONTACT_REQUEST", "FACILITY_BOOKING_START"}
+        )
     )
 
     is_describe_more = bool(intent_check and intent_check.get("intent") == "DESCRIBE_MORE_SYMPTOMS")
@@ -508,15 +519,16 @@ async def analyze_node(state: AgentState) -> dict:
     if state.get("pruned_departments"):
         pruned_depts_lower = {d.lower() for d in state["pruned_departments"]}
         candidate_specialties = [
-            cs for cs in candidate_specialties
+            cs
+            for cs in candidate_specialties
             if cs.get("name", "").lower() not in pruned_depts_lower
             and cs.get("code", "").lower() not in pruned_depts_lower
         ]
         if triage_result.recommended_specialties:
             filtered_recs = [
-                rec for rec in triage_result.recommended_specialties
-                if rec.name.lower() not in pruned_depts_lower
-                and rec.code.lower() not in pruned_depts_lower
+                rec
+                for rec in triage_result.recommended_specialties
+                if rec.name.lower() not in pruned_depts_lower and rec.code.lower() not in pruned_depts_lower
             ]
             if filtered_recs:
                 triage_result.recommended_specialties = filtered_recs
@@ -574,10 +586,7 @@ async def analyze_node(state: AgentState) -> dict:
         suggested_dept_code = current_dept or triage_result.suggested_specialty
 
     # Nếu người dùng hỏi/chọn bác sĩ hoặc xác nhận đặt lịch
-    has_explicit_booking_request = bool(
-        booking_entities.get("is_booking_intent")
-        or is_booking_intent
-    )
+    has_explicit_booking_request = bool(booking_entities.get("is_booking_intent") or is_booking_intent)
     if booking_entities.get("is_doctor_inquiry"):
         action = "search_available_slot"
     elif booking_entities.get("is_booking_confirmation") and not is_emergency:
@@ -597,9 +606,17 @@ async def analyze_node(state: AgentState) -> dict:
         current_dept=current_dept,
     )
     if action != "confirm_booking_conversationally" and (
-        (is_describe_more and state.get("active_probing_category")) or (
-            (getattr(v2_response, "needs_clarification", False) or v2_response.proposed_action == "clarify_visit_purpose")
-            and not (intent_check and intent_check.get("intent") in {"FACILITY_INFO", "FACILITY_DOCTORS", "DEPARTMENT_INFO", "VIEW_SCHEDULE"})
+        (is_describe_more and state.get("active_probing_category"))
+        or (
+            (
+                getattr(v2_response, "needs_clarification", False)
+                or v2_response.proposed_action == "clarify_visit_purpose"
+            )
+            and not (
+                intent_check
+                and intent_check.get("intent")
+                in {"FACILITY_INFO", "FACILITY_DOCTORS", "DEPARTMENT_INFO", "VIEW_SCHEDULE"}
+            )
         )
     ):
         action = "ask_clarifying_question" if state.get("active_probing_category") else "clarify_visit_purpose"
@@ -768,7 +785,6 @@ async def analyze_node(state: AgentState) -> dict:
     else:
         workflow_status = "TRIAGED_AWAITING_SCHEDULE"
 
-
     canonical_dept = canonicalize_specialty_code(suggested_dept_code)
     digestive_query = (
         "dau quan bung" in normalized_query
@@ -842,10 +858,9 @@ async def analyze_node(state: AgentState) -> dict:
         )
 
     from src.medical_assistant.domain.compaction_service import get_compaction_service
+
     conversation_messages = list(state.get("messages") or [])
-    compaction_res = get_compaction_service().compact_conversation(
-        conversation_messages, state, recent_window_size=4
-    )
+    compaction_res = get_compaction_service().compact_conversation(conversation_messages, state, recent_window_size=4)
     compacted_messages = compaction_res["recent_messages"]
     durable_soap_note = compaction_res["durable_soap_note"]
 
@@ -860,7 +875,8 @@ async def analyze_node(state: AgentState) -> dict:
         or (canonical_dept != "TONG_QUAT" and canonical_dept is not None)
     )
     is_department_focused_action = bool(
-        workflow_status in {
+        workflow_status
+        in {
             "DEPARTMENT_INFO",
             "FACILITY_DOCTORS",
             "FACILITY_BOOKING_START",
@@ -885,8 +901,12 @@ async def analyze_node(state: AgentState) -> dict:
         else (current_max_days if (has_evidence or is_department_focused_action) else None),
         "acuity_status": triage_result.acuity_status if (has_evidence or is_emergency) else "NOT_APPLICABLE",
         "disposition": triage_result.disposition if (has_evidence or is_emergency) else "CONVERSATIONAL",
-        "suggested_department_code": canonical_dept if ((has_evidence or is_department_focused_action) and workflow_status != "VISIT_PURPOSE_CLARIFICATION") else None,
-        "suggested_department_name": department_display if ((has_evidence or is_department_focused_action) and workflow_status != "VISIT_PURPOSE_CLARIFICATION") else None,
+        "suggested_department_code": canonical_dept
+        if ((has_evidence or is_department_focused_action) and workflow_status != "VISIT_PURPOSE_CLARIFICATION")
+        else None,
+        "suggested_department_name": department_display
+        if ((has_evidence or is_department_focused_action) and workflow_status != "VISIT_PURPOSE_CLARIFICATION")
+        else None,
         "patient_name": patient_name,
         "patient_phone": patient_phone,
         "patient_dob": patient_dob,
@@ -934,7 +954,13 @@ async def analyze_node(state: AgentState) -> dict:
             "is_booking_intent": is_booking_intent,
             "is_doctor_inquiry": bool(booking_entities.get("is_doctor_inquiry")),
             "is_booking_confirmation": bool(booking_entities.get("is_booking_confirmation")),
-            "booking_entities_found": bool(booking_entities.get("patient_name") or booking_entities.get("patient_phone") or booking_entities.get("date_of_birth") or booking_entities.get("facility_preference") or booking_entities.get("preferred_date")),
+            "booking_entities_found": bool(
+                booking_entities.get("patient_name")
+                or booking_entities.get("patient_phone")
+                or booking_entities.get("date_of_birth")
+                or booking_entities.get("facility_preference")
+                or booking_entities.get("preferred_date")
+            ),
             "tokens_saved": skip_llm,
             "llm_invoked": not skip_llm,
             "llm_succeeded": llm_succeeded,
@@ -944,5 +970,3 @@ async def analyze_node(state: AgentState) -> dict:
             "disposition": triage_result.disposition,
         },
     }
-
-

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 
 def normalize_term(text: str) -> str:
@@ -66,7 +66,6 @@ CLINICAL_FACT_CATALOG: dict[str, ClinicalFactItem] = {
         negation_cues=("khong danh trong nguc", "khong hoi hop"),
         is_red_flag=False,
     ),
-
     # ================= HÔ HẤP (Respiratory) =================
     "shortness_of_breath": ClinicalFactItem(
         code="shortness_of_breath",
@@ -108,7 +107,6 @@ CLINICAL_FACT_CATALOG: dict[str, ClinicalFactItem] = {
         is_red_flag=True,
         red_flag_severity="critical",
     ),
-
     # ================= THẦN KINH (Neurology) =================
     "headache": ClinicalFactItem(
         code="headache",
@@ -207,7 +205,6 @@ CLINICAL_FACT_CATALOG: dict[str, ClinicalFactItem] = {
         negation_cues=("khong te", "khong yeu", "khong te yeu", "tay chan binh thuong"),
         is_red_flag=False,
     ),
-
     # ================= TIÊU HÓA (Gastroenterology) =================
     "abdominal_pain": ClinicalFactItem(
         code="abdominal_pain",
@@ -307,7 +304,6 @@ CLINICAL_FACT_CATALOG: dict[str, ClinicalFactItem] = {
         synonyms=("o chua", "o nong", "trao nguoc", "trao nguoc da day"),
         negation_cues=("khong o chua", "khong o nong"),
     ),
-
     # ================= CƠ XƯƠNG KHỚP (Musculoskeletal) =================
     "muscle_pain": ClinicalFactItem(
         code="muscle_pain",
@@ -375,7 +371,6 @@ CLINICAL_FACT_CATALOG: dict[str, ClinicalFactItem] = {
         synonyms=("dau vai gay", "moi vai gay", "moi co", "co vai gay", "dau co vai gay"),
         negation_cues=("khong dau vai gay", "het dau vai gay", "khong con dau vai gay"),
     ),
-
     # ================= TAI MŨI HỌNG (Ear Nose Throat) =================
     "sore_throat": ClinicalFactItem(
         code="sore_throat",
@@ -392,7 +387,6 @@ CLINICAL_FACT_CATALOG: dict[str, ClinicalFactItem] = {
         ),
         negation_cues=("khong dau hong", "het dau hong", "khong con dau hong"),
     ),
-
     # ================= DA LIỄU (Dermatology) =================
     "skin_lesion": ClinicalFactItem(
         code="skin_lesion",
@@ -426,7 +420,6 @@ CLINICAL_FACT_CATALOG: dict[str, ClinicalFactItem] = {
         synonyms=("rung toc", "toc rung", "hair loss", "alopecia", "hoi dau"),
         negation_cues=("khong rung toc",),
     ),
-
     # ================= TOÀN THÂN & KHÁC =================
     "fever": ClinicalFactItem(
         code="fever",

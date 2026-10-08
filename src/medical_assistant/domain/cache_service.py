@@ -305,6 +305,8 @@ class ZeroTokenCacheService:
         lang = language if language in ["vi", "en"] else detect_language(user_query)
         norm_text = _normalize_text(text)
         has_symptoms = self.has_clinical_symptom(text)
+        if has_symptoms:
+            return None
 
         for entry in self.entries:
             # Nếu người dùng có triệu chứng y tế thực sự, không được chặn bằng GREETING

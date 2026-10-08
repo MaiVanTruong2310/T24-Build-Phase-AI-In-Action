@@ -7,20 +7,18 @@ Tests for Prompt F5:
 4) respond_node eliminates ungrounded statements ('luôn sẵn sàng tiếp nhận').
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from src.medical_assistant.agent.nodes.analyze_node import (
     resolve_action,
-    security_gate,
-    emergency_gate,
 )
 from src.medical_assistant.agent.nodes.doctor_node import find_doctors_node
 from src.medical_assistant.agent.nodes.respond_node import respond_node
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.doctor_schedule_service import (
     clear_turn_slot_cache,
-    fetch_available_doctors_slots_cached,
 )
 
 
@@ -175,9 +173,7 @@ async def test_slot_single_fetch_caching_across_nodes():
     """Kiểm tra cache lượt: chỉ truy vấn Supabase/service 1 lần duy nhất trong cả lượt."""
     clear_turn_slot_cache()
 
-    dummy_doctors = [
-        {"full_name": "Bác sĩ Nguyễn Văn A", "slots": ["08:00", "09:00"]}
-    ]
+    dummy_doctors = [{"full_name": "Bác sĩ Nguyễn Văn A", "slots": ["08:00", "09:00"]}]
 
     state: AgentState = {
         "session_id": "thread_abc_123",

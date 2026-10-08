@@ -106,11 +106,15 @@ async def register_email(request, session: AsyncSession) -> dict:
         if existing_phone and (existing_phone.email or "").lower() != email:
             raise ConflictError("PHONE_EXISTS", "Số điện thoại đã thuộc một hồ sơ khác.")
     if request.citizen_id:
-        existing_cid = (await session.execute(select(User).where(User.citizen_id == request.citizen_id))).scalar_one_or_none()
+        existing_cid = (
+            await session.execute(select(User).where(User.citizen_id == request.citizen_id))
+        ).scalar_one_or_none()
         if existing_cid and (existing_cid.email or "").lower() != email:
             raise ConflictError("CITIZEN_ID_EXISTS", "Số CCCD đã thuộc một hồ sơ khác.")
     if request.health_insurance_code:
-        existing_bhyt = (await session.execute(select(User).where(User.health_insurance_code == request.health_insurance_code))).scalar_one_or_none()
+        existing_bhyt = (
+            await session.execute(select(User).where(User.health_insurance_code == request.health_insurance_code))
+        ).scalar_one_or_none()
         if existing_bhyt and (existing_bhyt.email or "").lower() != email:
             raise ConflictError("HEALTH_INSURANCE_EXISTS", "Số thẻ bảo hiểm y tế đã thuộc một hồ sơ khác.")
     await session.commit()
@@ -136,7 +140,18 @@ async def register_email(request, session: AsyncSession) -> dict:
             if profile and profile.auth_user_id and str(profile.auth_user_id) != auth_id:
                 raise ConflictError("PROFILE_BOUND", "Hồ sơ đã liên kết với một tài khoản khác.")
             if not profile:
-                profile = User(email=email, phone=request.phone, full_name=request.full_name, role="patient", status="pending_verification", date_of_birth=request.date_of_birth, gender=request.gender, citizen_id=request.citizen_id, health_insurance_code=request.health_insurance_code, patient_details={"address": request.address} if request.address else {})
+                profile = User(
+                    email=email,
+                    phone=request.phone,
+                    full_name=request.full_name,
+                    role="patient",
+                    status="pending_verification",
+                    date_of_birth=request.date_of_birth,
+                    gender=request.gender,
+                    citizen_id=request.citizen_id,
+                    health_insurance_code=request.health_insurance_code,
+                    patient_details={"address": request.address} if request.address else {},
+                )
                 session.add(profile)
             profile.auth_user_id = UUID(auth_id)
             await session.commit()

@@ -18,7 +18,7 @@ import logging
 import time
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.agent.tools import ALL_TOOLS
@@ -130,10 +130,12 @@ def _compact_tool_results(results: list[dict[str, Any]], max_bytes: int = 2048) 
             current_size += item_bytes
         else:
             # Nếu một item vượt 2048 bytes, vẫn lưu tối thiểu danh sách thực thể
-            compacted.append({
-                "tool": item.get("tool"),
-                "data": {"compacted": True, "summary": str(cleaned)[:1000]},
-            })
+            compacted.append(
+                {
+                    "tool": item.get("tool"),
+                    "data": {"compacted": True, "summary": str(cleaned)[:1000]},
+                }
+            )
             break
     return compacted
 
@@ -264,7 +266,8 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
 
         # Kiểm tra xem có tool nào dùng crawl hoặc báo data_unavailable hoặc error không
         used_crawl = any(
-            isinstance(res_item.get("data"), dict) and (
+            isinstance(res_item.get("data"), dict)
+            and (
                 res_item["data"].get("source") == "vinmec_crawl"
                 or any(d.get("data_source") == "vinmec_crawl" for d in res_item["data"].get("doctors", []))
             )
@@ -277,12 +280,14 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
             if isinstance(data_dict, dict):
                 if data_dict.get("data_unavailable"):
                     has_data_unavailable = True
-                    data_unavailable_reason = data_dict.get("reason") or data_dict.get("warning") or "TOOL_DATA_UNAVAILABLE"
+                    data_unavailable_reason = (
+                        data_dict.get("reason") or data_dict.get("warning") or "TOOL_DATA_UNAVAILABLE"
+                    )
                 elif data_dict.get("found") is False and data_dict.get("error"):
                     has_data_unavailable = True
                     data_unavailable_reason = f"TOOL_ERROR: {data_dict.get('error')}"
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("info_agent_node timed out after 20 seconds for query: %s", query)
         final_text = (
             "Dạ, quá trình tra cứu thông tin chi tiết đang mất nhiều thời gian hơn dự kiến. "
@@ -334,14 +339,21 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
             data_unavailable_reason = f"ERROR: {type(exc).__name__}"
 
     # Yêu cầu 6: Disclaimer chỉ gắn khi dùng search_disease_knowledge hoặc nội dung bệnh học
-    PATHOLOGY_KEYWORDS = [
-        "bệnh lý", "bệnh học", "chẩn đoán", "phác đồ điều trị", "nguyên nhân gây bệnh",
-        "triệu chứng bệnh", "biến chứng", "thuốc điều trị", "tác dụng phụ của thuốc",
+    pathology_keywords = [
+        "bệnh lý",
+        "bệnh học",
+        "chẩn đoán",
+        "phác đồ điều trị",
+        "nguyên nhân gây bệnh",
+        "triệu chứng bệnh",
+        "biến chứng",
+        "thuốc điều trị",
+        "tác dụng phụ của thuốc",
     ]
     is_pathology = (
         any(tc["tool"] == "search_disease_knowledge" for tc in tools_called)
-        or any(k in query.lower() for k in PATHOLOGY_KEYWORDS)
-        or any(k in final_text.lower() for k in PATHOLOGY_KEYWORDS)
+        or any(k in query.lower() for k in pathology_keywords)
+        or any(k in final_text.lower() for k in pathology_keywords)
     )
     if is_pathology:
         if "Khuyến cáo y tế" not in final_text and "Medical Disclaimer" not in final_text:
@@ -377,9 +389,7 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
         history.append({"role": "user", "content": query})
     history.append({"role": "assistant", "content": sanitized_response})
 
-    compaction_res = get_compaction_service().compact_conversation(
-        history, state, recent_window_size=4
-    )
+    compaction_res = get_compaction_service().compact_conversation(history, state, recent_window_size=4)
     compacted_messages = compaction_res["recent_messages"]
     durable_soap_note = compaction_res["durable_soap_note"]
 
@@ -437,8 +447,17 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
 
     # Yêu cầu 5: metadata merge chỉ giữ các khóa phiên cần bảo toàn
     existing_meta = dict(state.get("metadata") or {})
-    PRESERVED_METADATA_KEYS = {"session_id", "patient_id", "patient_profile", "user_id", "thread_id", "client_ip", "locale", "device"}
-    preserved_meta = {k: v for k, v in existing_meta.items() if k in PRESERVED_METADATA_KEYS}
+    preserved_metadata_keys = {
+        "session_id",
+        "patient_id",
+        "patient_profile",
+        "user_id",
+        "thread_id",
+        "client_ip",
+        "locale",
+        "device",
+    }
+    preserved_meta = {k: v for k, v in existing_meta.items() if k in preserved_metadata_keys}
     merged_meta = {**preserved_meta, **new_meta}
 
     return {

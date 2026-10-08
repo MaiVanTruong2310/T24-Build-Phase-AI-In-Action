@@ -45,9 +45,7 @@ class AgentStatusResponse(BaseModel):
     status: str = Field(default="ready", description="Trạng thái dịch vụ")
     agent: str = Field(default="LangGraph Clinical Triage Agent v1.0")
     version: str = Field(default="1.0.0")
-    nodes: list[str] = Field(
-        default_factory=lambda: ["analyze", "critic", "find_doctors", "respond"]
-    )
+    nodes: list[str] = Field(default_factory=lambda: ["analyze", "critic", "find_doctors", "respond"])
     features: list[str] = Field(default_factory=lambda: ["session_memory", "sse_streaming", "ats_triage"])
 
 

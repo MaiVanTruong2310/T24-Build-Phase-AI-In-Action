@@ -1,41 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { ChevronDown, User } from 'lucide-react';
 import type { RootState } from '../../app/store';
-import { fetchPatientProfiles, relationshipNames, type PatientProfile } from './api';
+import { relationshipNames } from './api';
 import { formatDateVN } from '../appointment-booking/dateValidation';
-
-export function usePatientSelection() {
-  const user = useSelector((state: RootState) => state.auth.user);
-  const [profileId, setProfileId] = useState('');
-  const [profiles, setProfiles] = useState<PatientProfile[]>([]);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    setProfileId('');
-    setProfiles([]);
-    setError('');
-    if (user?.role !== 'patient') return;
-    setLoading(true);
-    fetchPatientProfiles()
-      .then(items => { if (active) setProfiles(items); })
-      .catch(e => { if (active) setError(e.message); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [user?.id, user?.role]);
-
-  return {
-    profileId,
-    profiles,
-    selectedProfile: profiles.find(p => p.id === profileId),
-    loading,
-    error,
-    choose: setProfileId,
-  };
-}
 
 import { type PatientSelection } from './usePatientSelection';
 

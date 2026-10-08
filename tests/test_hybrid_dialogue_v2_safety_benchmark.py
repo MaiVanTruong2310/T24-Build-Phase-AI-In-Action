@@ -1,21 +1,19 @@
-import pytest
+from src.medical_assistant.domain.clinical_fact_service import (
+    ANATOMICAL_BODY_REGIONS,
+    COMPLAINT_SYSTEMS,
+    ClinicalFactService,
+)
+from src.medical_assistant.domain.hybrid_dialogue_service import (
+    EXTRACTION_SYSTEM_PROMPT_V2,
+    HybridDialogueService,
+)
 from src.medical_assistant.domain.hybrid_dialogue_v2_model import (
     ComplaintDelta,
     FactsDelta,
     HybridDialogueResponse,
     SafetyConcern,
-    ActionArgs,
-)
-from src.medical_assistant.domain.clinical_fact_service import (
-    ClinicalFactService,
-    ANATOMICAL_BODY_REGIONS,
-    COMPLAINT_SYSTEMS,
 )
 from src.medical_assistant.domain.probing_service import DynamicProbingService
-from src.medical_assistant.domain.hybrid_dialogue_service import (
-    HybridDialogueService,
-    EXTRACTION_SYSTEM_PROMPT_V2,
-)
 
 
 def test_schema_model_contracts():
@@ -23,13 +21,9 @@ def test_schema_model_contracts():
     resp = HybridDialogueResponse(
         facts_delta=FactsDelta(
             severity="unknown",
-            complaints=[
-                ComplaintDelta(code=None, evidence="cảm giác như sắp chết")
-            ],
+            complaints=[ComplaintDelta(code=None, evidence="cảm giác như sắp chết")],
         ),
-        safety_concerns=[
-            SafetyConcern(reason="Nghi ngờ cờ đỏ cấp cứu", evidence="cảm giác như sắp chết")
-        ],
+        safety_concerns=[SafetyConcern(reason="Nghi ngờ cờ đỏ cấp cứu", evidence="cảm giác như sắp chết")],
     )
     assert resp.schema_version == "2.0"
     assert resp.facts_delta.severity == "unknown"
@@ -41,7 +35,7 @@ def test_schema_model_contracts():
 def test_clinical_signal_orthogonality():
     """Ensure shortness_of_breath, chest_pain, headache, and dizziness are separate."""
     fact_svc = ClinicalFactService()
-    
+
     # 1. Shortness of breath vs Chest pain
     dyspnea_facts = fact_svc.extract("tôi bị khó thở dữ dội, hụt hơi")
     assert "shortness_of_breath" in dyspnea_facts["positive_facts"]
@@ -81,7 +75,7 @@ def test_anatomical_body_regions_mapping():
 def test_dynamic_probing_candidates_injection():
     """Verify backend dynamic probing supplies relevant candidates instead of hardcoded limb questions."""
     probing_svc = DynamicProbingService()
-    
+
     # Abdominal pain should get GI probing questions
     candidates_ab = probing_svc.get_probing_candidates_for_context("abdominal_pain", language="vi")
     assert len(candidates_ab) >= 2
@@ -113,14 +107,10 @@ def test_system_prompt_structure_integrity():
 def test_backend_adapt_v2_to_v1_severity():
     """Verify adapt_v2_to_v1 normalizes 'unknown' and 'null' to None."""
     svc = HybridDialogueService()
-    resp_unknown = HybridDialogueResponse(
-        facts_delta=FactsDelta(severity="unknown")
-    )
+    resp_unknown = HybridDialogueResponse(facts_delta=FactsDelta(severity="unknown"))
     adapted = svc.adapt_v2_to_v1(resp_unknown)
     assert adapted["severity"] is None
 
-    resp_mild = HybridDialogueResponse(
-        facts_delta=FactsDelta(severity="mild")
-    )
+    resp_mild = HybridDialogueResponse(facts_delta=FactsDelta(severity="mild"))
     adapted_mild = svc.adapt_v2_to_v1(resp_mild)
     assert adapted_mild["severity"] == "mild"

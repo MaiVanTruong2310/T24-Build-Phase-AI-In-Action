@@ -1,4 +1,4 @@
-import { Booking, Doctor, Facility, MedicalService, Specialty, PackageRequest } from '../appointment-booking/api';
+import { Booking, PackageRequest } from '../appointment-booking/api';
 import { AppointmentCatalog, AppointmentDisplayData, BookingType } from './types';
 
 export interface LiveCoordinationCase {

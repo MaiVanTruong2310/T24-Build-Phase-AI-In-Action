@@ -95,48 +95,140 @@ def _rule_based_fallback_route(query: str, rule_hint: str | None) -> tuple[str, 
 
     # Nhận diện booking
     booking_terms = [
-        "đặt lịch", "dat lich", "lịch khám", "lich kham", "khung giờ", "khung gio",
-        "slot", "hẹn khám", "hen kham", "phiếu hẹn", "phieu hen", "tiến trình điều trị",
-        "muốn khám", "muon kham", "muốn đi khám", "muon di kham", "đăng ký khám", "dang ky kham",
-        "đặt hẹn", "dat hen", "ca sáng", "ca sang", "ca chiều", "ca chieu", "ngày mai ca",
+        "đặt lịch",
+        "dat lich",
+        "lịch khám",
+        "lich kham",
+        "khung giờ",
+        "khung gio",
+        "slot",
+        "hẹn khám",
+        "hen kham",
+        "phiếu hẹn",
+        "phieu hen",
+        "tiến trình điều trị",
+        "muốn khám",
+        "muon kham",
+        "muốn đi khám",
+        "muon di kham",
+        "đăng ký khám",
+        "dang ky kham",
+        "đặt hẹn",
+        "dat hen",
+        "ca sáng",
+        "ca sang",
+        "ca chiều",
+        "ca chieu",
+        "ngày mai ca",
     ]
     if any(t in q_low for t in booking_terms):
         return "booking", 0.85
 
     # Nhận diện info lookup (bác sĩ, cơ sở, chuyên khoa, bệnh học, thông tin tổng quát)
     info_terms = [
-        "bác sĩ", "bac si", "chuyên khoa", "chuyen khoa", "khoa ", "khoa nào", "khoa gi", "khoa khám",
-        "bệnh viện", "benh vien", "cơ sở", "co so", "chi nhánh", "chi nhanh", "ở đâu", "o dau",
-        "địa chỉ", "dia chi", "bệnh học", "nguyên nhân", "phòng ngừa", "bảng giá", "chi phí",
-        "giờ làm việc", "hotline", "danh sách", "danh sach", "bệnh gì", "benh gi", "điều trị những bệnh",
-        "dấu hiệu cảnh báo", "dau hieu canh bao", "dấu hiệu của", "dau hieu cua", "dấu hiệu", "dau hieu",
-        "triệu chứng điển hình", "trieu chung dien hinh", "những triệu chứng", "nhung trieu chung",
-        "biểu hiện của", "bieu hien cua",
+        "bác sĩ",
+        "bac si",
+        "chuyên khoa",
+        "chuyen khoa",
+        "khoa ",
+        "khoa nào",
+        "khoa gi",
+        "khoa khám",
+        "bệnh viện",
+        "benh vien",
+        "cơ sở",
+        "co so",
+        "chi nhánh",
+        "chi nhanh",
+        "ở đâu",
+        "o dau",
+        "địa chỉ",
+        "dia chi",
+        "bệnh học",
+        "nguyên nhân",
+        "phòng ngừa",
+        "bảng giá",
+        "chi phí",
+        "giờ làm việc",
+        "hotline",
+        "danh sách",
+        "danh sach",
+        "bệnh gì",
+        "benh gi",
+        "điều trị những bệnh",
+        "dấu hiệu cảnh báo",
+        "dau hieu canh bao",
+        "dấu hiệu của",
+        "dau hieu cua",
+        "dấu hiệu",
+        "dau hieu",
+        "triệu chứng điển hình",
+        "trieu chung dien hinh",
+        "những triệu chứng",
+        "nhung trieu chung",
+        "biểu hiện của",
+        "bieu hien cua",
     ]
     if any(t in q_low for t in info_terms):
         return "info_lookup", 0.85
 
-
-
     # Nhận diện triệu chứng lâm sàng
     clinical_terms = [
-        "đau", "dau", "sốt", "sot", "mệt", "met", "ho", "khó thở", "kho tho",
-        "chóng mặt", "chong mat", "buồn nôn", "buon non", "nôn", "tê bì", "te bi",
-        "ngứa", "ngua", "sưng", "sung", "chảy máu", "chay mau", "tiêu chảy", "tieu chay",
-        "táo bón", "tao bon", "bị bệnh", "bi benh", "khám bệnh", "kham benh",
+        "đau",
+        "dau",
+        "sốt",
+        "sot",
+        "mệt",
+        "met",
+        "ho",
+        "khó thở",
+        "kho tho",
+        "chóng mặt",
+        "chong mat",
+        "buồn nôn",
+        "buon non",
+        "nôn",
+        "tê bì",
+        "te bi",
+        "ngứa",
+        "ngua",
+        "sưng",
+        "sung",
+        "chảy máu",
+        "chay mau",
+        "tiêu chảy",
+        "tieu chay",
+        "táo bón",
+        "tao bon",
+        "bị bệnh",
+        "bi benh",
+        "khám bệnh",
+        "kham benh",
     ]
     if any(t in q_low for t in clinical_terms):
         return "clinical_triage", 0.8
 
     # Nhận diện xã giao / chào hỏi / chúc tụng
     chitchat_terms = [
-        "xin chào", "xin chao", "chào", "chao", "hello", "hi", "cảm ơn", "cam on",
-        "tạm biệt", "tam biet", "bạn là ai", "ban la ai", "mấy tuổi", "may tuoi", "chúc", "chuc",
+        "xin chào",
+        "xin chao",
+        "chào",
+        "chao",
+        "hello",
+        "hi",
+        "cảm ơn",
+        "cam on",
+        "tạm biệt",
+        "tam biet",
+        "bạn là ai",
+        "ban la ai",
+        "mấy tuổi",
+        "may tuoi",
+        "chúc",
+        "chuc",
     ]
     if any(t in q_low for t in chitchat_terms):
         return "chitchat", 0.9
-
-
 
     # Mặc định nghiêng về tra cứu thông tin
     return "info_lookup", 0.55
@@ -211,7 +303,9 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
         r"(?:hien thi|xem|kiem tra|cho biet)\s+(?:thong tin(?: ca nhan)?|ho so|ten|sdt|so dien thoai)\s+(?:cua\s+)?(?:toi|minh)\b|"
         r"\bmy\s+(?:name|phone|address|profile|info|contact)\b"
     )
-    if re.search(id_pattern, norm_q) and not any(re.search(rf"\b{kw}\b", norm_q) for kw in ["dau", "sot", "ho", "benh", "kham"]):
+    if re.search(id_pattern, norm_q) and not any(
+        re.search(rf"\b{kw}\b", norm_q) for kw in ["dau", "sot", "ho", "benh", "kham"]
+    ):
         return {
             "intent_route": "info_lookup",
             "route_confidence": 1.0,
@@ -223,7 +317,10 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
     if (
         booking_entities.get("is_booking_intent")
         or booking_entities.get("is_booking_confirmation")
-        or (booking_entities.get("preferred_date") and not any(re.search(rf"\b{kw}\b", norm_q) for kw in ["dau", "sot", "ho", "benh"]))
+        or (
+            booking_entities.get("preferred_date")
+            and not any(re.search(rf"\b{kw}\b", norm_q) for kw in ["dau", "sot", "ho", "benh"])
+        )
     ):
         return {
             "intent_route": "booking",
@@ -307,11 +404,17 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
             }
 
     # 1.5 Bảo toàn phiên hội thoại lâm sàng đang probing (Clinical Episode Isolation)
-    if (
-        state.get("workflow_status") in {"PROBING_IN_PROGRESS", "SAFETY_REVIEW", "GUARDRAIL_DIAGNOSIS", "GUARDRAIL_MEDICATION"}
-        or state.get("active_probing_category")
-    ):
-        if "mo ta them" in norm_q or "mô tả thêm" in query.lower() or state.get("workflow_status") in {"PROBING_IN_PROGRESS", "SAFETY_REVIEW"}:
+    if state.get("workflow_status") in {
+        "PROBING_IN_PROGRESS",
+        "SAFETY_REVIEW",
+        "GUARDRAIL_DIAGNOSIS",
+        "GUARDRAIL_MEDICATION",
+    } or state.get("active_probing_category"):
+        if (
+            "mo ta them" in norm_q
+            or "mô tả thêm" in query.lower()
+            or state.get("workflow_status") in {"PROBING_IN_PROGRESS", "SAFETY_REVIEW"}
+        ):
             return {
                 "intent_route": "clinical_triage",
                 "route_confidence": 0.95,
@@ -335,10 +438,7 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
     # 2. PHÂN LUỒNG Ý ĐỊNH BẰNG SMALL LLM (STRUCTURED OUTPUT)
     # =========================================================================
     hint_str = str(intent_hint.get("intent")) if intent_hint else "None"
-    prompt_content = (
-        f"Tin nhắn người dùng: \"{query}\"\n"
-        f"Gợi ý từ bộ lọc quy tắc (rule hint): {hint_str}"
-    )
+    prompt_content = f'Tin nhắn người dùng: "{query}"\nGợi ý từ bộ lọc quy tắc (rule hint): {hint_str}'
 
     route_chosen: str = "info_lookup"
     confidence_val: float = 0.8

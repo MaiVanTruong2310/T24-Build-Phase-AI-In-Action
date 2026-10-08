@@ -2,9 +2,11 @@ from enum import Enum
 
 try:
     from enum import StrEnum
-except ImportError:
-    class StrEnum(str, Enum):
+except ImportError:  # pragma: no cover - Python 3.10 compatibility
+
+    class StrEnum(str, Enum):  # noqa: UP042 - retain the Python 3.10 fallback.
         """Python 3.10 fallback for StrEnum."""
+
         pass
 
 
