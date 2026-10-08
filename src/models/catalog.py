@@ -1,7 +1,7 @@
 """Compatibility facade for split catalog persistence models."""
 
 from src.models.audit import CatalogAuditEvent
-from src.models.doctor import Doctor, DoctorFacility, DoctorService, DoctorSpecialty
+from src.models.doctor import Doctor, DoctorFacility, DoctorSpecialty
 from src.models.facility import Facility
 from src.models.schedule import DoctorSchedule
 from src.models.service import Service
@@ -12,9 +12,9 @@ __all__ = [
     "Doctor",
     "DoctorFacility",
     "DoctorSchedule",
-    "DoctorService",
     "DoctorSpecialty",
     "Facility",
     "Service",
     "Specialty",
 ]
+

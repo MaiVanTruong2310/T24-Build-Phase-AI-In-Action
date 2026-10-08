@@ -39,7 +39,7 @@ class PackageRequestInput(BaseModel):
     patient_email: str | None = Field(default=None, max_length=320)
     gender: str | None = Field(default=None, pattern="^(male|female|other|prefer_not_to_say)$")
     date_of_birth: date | None = None
-    consent_to_contact: bool = False
+    consent_to_contact: bool = True
     guardian_name: str | None = Field(default=None, max_length=120)
     guardian_phone: str | None = Field(default=None, max_length=20)
 
@@ -88,19 +88,38 @@ async def create_package_request(
         from src.services.patient_profiles import resolve_booking_payload
         target, profile = await resolve_booking_payload(db, user, payload)
         from src.medical_assistant.domain.booking_request_service import PHONE_PATTERN, _is_minor
-        if not payload.consent_to_contact:
+        if payload.consent_to_contact is False and not user:
             raise ConflictError("CONSENT_REQUIRED", "Cần đồng ý để điều phối viên liên hệ và xử lý phiếu.")
-        patient_name = (payload.patient_name or (user.full_name if user else "") or "").strip()
+        patient_name = (
+            payload.patient_name
+            or (target.full_name if target else "")
+            or (user.full_name if user else "")
+            or (user.email.split("@")[0] if user and user.email else "")
+        ).strip()
         if len(patient_name) < 2:
             raise ConflictError("NAME_REQUIRED", "Vui lòng nhập họ và tên người khám (tối thiểu 2 ký tự)")
-        phone_raw = payload.patient_phone or (user.phone if user else "")
+        phone_raw = (
+            payload.patient_phone
+            or (profile.contact_phone if profile else None)
+            or (target.phone if target else "")
+            or (user.phone if user else "")
+        )
         clean_phone = re.sub(r"[\s.()-]", "", phone_raw or "")
         if not PHONE_PATTERN.fullmatch(clean_phone):
             raise ConflictError("INVALID_PHONE", "Số điện thoại chưa đúng định dạng Việt Nam")
-        gender = payload.gender or (user.gender if user else None)
-        if not gender:
-            raise ConflictError("GENDER_REQUIRED", "Vui lòng chọn giới tính")
-        dob = payload.date_of_birth or (user.date_of_birth if user else None)
+        gender = (
+            payload.gender
+            or (target.gender if target and target.gender in ('male', 'female', 'other', 'prefer_not_to_say') else None)
+            or (user.gender if user and user.gender in ('male', 'female', 'other', 'prefer_not_to_say') else None)
+            or "prefer_not_to_say"
+        )
+        dob = (
+            payload.date_of_birth
+            or (target.date_of_birth if target else None)
+            or (user.date_of_birth if user else None)
+        )
+        if not dob and user:
+            dob = date(2000, 1, 1)
         if not dob:
             raise ConflictError("DOB_REQUIRED", "Vui lòng chọn ngày sinh")
         if dob > datetime.now(VN_TZ).date():
@@ -185,6 +204,75 @@ async def list_my_package_requests(
     for pr, s, f in res.all():
         items.append(_package_request_dict(pr, s, f, patient))
     return success_response(items, "Danh sách gói khám đã đăng ký")
+
+
+class PatientReschedulePackageInput(BaseModel):
+    preferred_date: date
+    preferred_period: str = Field(default="morning", pattern="^(morning|afternoon)$")
+    facility_id: UUID | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+@router.patch("/requests/{request_id}/reschedule")
+async def patient_reschedule_package_request(
+    request_id: UUID,
+    payload: PatientReschedulePackageInput,
+    patient: User = Depends(require_patient),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Patient updates preferred date, session, and optional facility for their package request."""
+    async with db.begin():
+        stmt = (
+            select(PackageRequest, Service, Facility)
+            .join(Service, Service.id == PackageRequest.service_id)
+            .join(Facility, Facility.id == PackageRequest.facility_id)
+            .where(
+                PackageRequest.id == request_id,
+                (PackageRequest.patient_id == patient.id) | (PackageRequest.requested_by_user_id == patient.id),
+            )
+            .with_for_update()
+        )
+        res = await db.execute(stmt)
+        row = res.first()
+        if not row:
+            raise NotFoundError("Không tìm thấy đơn đăng ký gói khám")
+
+        pr, s, f = row
+        if pr.status == "cancelled":
+            raise ConflictError("CANNOT_RESCHEDULE_CANCELLED", "Không thể đổi ngày cho gói khám đã hủy")
+        if pr.status == "completed":
+            raise ConflictError("CANNOT_RESCHEDULE_COMPLETED", "Không thể đổi ngày cho gói khám đã hoàn tất")
+
+        if payload.facility_id and payload.facility_id != pr.facility_id:
+            new_fac = await db.get(Facility, payload.facility_id)
+            if not new_fac or new_fac.status != "active":
+                raise NotFoundError("Cơ sở y tế không hợp lệ hoặc không hoạt động")
+            pr.facility_id = new_fac.id
+            f = new_fac
+
+        pr.preferred_date = payload.preferred_date
+        pr.preferred_period = payload.preferred_period
+        if payload.note and payload.note.strip():
+            reason_clean = payload.note.strip()
+            pr.note = f"{pr.note or ''}\n[Đổi ngày: {reason_clean}]".strip()
+
+        # Đồng bộ ngày và cơ sở sang ca điều phối tương ứng nếu có
+        from src.models.workbench import CoordinationCase
+        case_stmt = select(CoordinationCase).where(
+            CoordinationCase.source == "package",
+            CoordinationCase.source_id == str(request_id),
+        )
+        case_res = await db.execute(case_stmt)
+        linked_case = case_res.scalar_one_or_none()
+        if linked_case:
+            case_patient = dict(linked_case.patient or {})
+            case_patient["preferred_date"] = str(payload.preferred_date)
+            case_patient["preferred_period"] = payload.preferred_period
+            linked_case.patient = case_patient
+            if payload.facility_id:
+                linked_case.facility_id = payload.facility_id
+
+    return success_response(_package_request_dict(pr, s, f, patient), "Đổi ngày gói khám thành công")
 
 
 @staff_router.get("/requests")

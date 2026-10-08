@@ -10,7 +10,7 @@ from sqlalchemy import select
 from src.core.errors import integrity_guard
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger, log_event
-from src.models.catalog import Doctor, DoctorFacility, DoctorService, DoctorSpecialty
+from src.models.catalog import Doctor, DoctorFacility, DoctorSpecialty
 from src.models.coordination import ConsultationSession
 from src.schemas.catalog import (
     DoctorCreate,
@@ -440,85 +440,9 @@ class DoctorServiceMixin:
         return await self.get_doctor(doctor_id, public_only=False)
 
     async def assign_doctor_service(self, doctor_id: UUID, request: DoctorServiceAssignment, actor_id: UUID) -> Doctor:
-        """Assign a service to a doctor."""
-        log_event(
-            logger,
-            logging.INFO,
-            "catalog.doctor.service_assign.start",
-            description="Starting doctor medical service assignment",
-            doctor_id=str(doctor_id),
-            service_id=str(request.service_id),
-            actor_id=str(actor_id),
-        )
-        async with (
-            self.session.begin(),
-            integrity_guard(
-                logger=logger,
-                event="catalog.doctor.service.persistence_conflict",
-                code="ASSIGNMENT_EXISTS",
-                message="Assignment already exists",
-                log_description="Doctor service assignment hit a duplicate relationship constraint",
-                actor_id=str(actor_id),
-                doctor_id=str(doctor_id),
-                service_id=str(request.service_id),
-            ),
-        ):
-            doctor = await self._required(self.catalog.get_doctor(doctor_id), "Doctor not found")
-            service = await self._required(self.catalog.get_service(request.service_id), "Service not found")
-            duplicate = await self.session.scalar(
-                select(DoctorService).where(
-                    DoctorService.doctor_id == doctor_id,
-                    DoctorService.service_id == request.service_id,
-                )
-            )
-            if duplicate:
-                raise ConflictError("ASSIGNMENT_EXISTS", "Doctor service assignment already exists")
-            self.session.add(DoctorService(doctor_id=doctor.id, service_id=service.id))
-            await self.session.flush()
-            await self._audit(actor_id, "doctor", doctor_id, "service_assigned", {"service_id": service.id})
-        log_event(
-            logger,
-            logging.INFO,
-            "catalog.doctor.service_assigned",
-            description="A medical service was assigned to the doctor",
-            doctor_id=str(doctor_id),
-            service_id=str(request.service_id),
-            actor_id=str(actor_id),
-        )
-        self._invalidate_catalog_cache()
+        """Assign a service to a doctor (deprecated/no-op)."""
         return await self.get_doctor(doctor_id, public_only=False)
 
     async def remove_doctor_service(self, doctor_id: UUID, service_id: UUID, actor_id: UUID) -> Doctor:
-        """Remove a doctor-service assignment."""
-        log_event(
-            logger,
-            logging.INFO,
-            "catalog.doctor.service_remove.start",
-            description="Starting doctor medical service assignment removal",
-            doctor_id=str(doctor_id),
-            service_id=str(service_id),
-            actor_id=str(actor_id),
-        )
-        async with self.session.begin():
-            await self._required(self.catalog.get_doctor(doctor_id), "Doctor not found")
-            assignment = await self.session.scalar(
-                select(DoctorService).where(
-                    DoctorService.doctor_id == doctor_id,
-                    DoctorService.service_id == service_id,
-                )
-            )
-            if assignment is None:
-                raise NotFoundError("Doctor service assignment not found")
-            await self.session.delete(assignment)
-            await self._audit(actor_id, "doctor", doctor_id, "service_removed", {"service_id": service_id})
-        log_event(
-            logger,
-            logging.INFO,
-            "catalog.doctor.service_removed",
-            description="A medical service assignment was removed from the doctor",
-            doctor_id=str(doctor_id),
-            service_id=str(service_id),
-            actor_id=str(actor_id),
-        )
-        self._invalidate_catalog_cache()
+        """Remove a doctor-service assignment (deprecated/no-op)."""
         return await self.get_doctor(doctor_id, public_only=False)

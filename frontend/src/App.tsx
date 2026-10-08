@@ -95,6 +95,7 @@ const router = createBrowserRouter([
           { path: 'doctors/:id', element: <DoctorProfile /> },
           { path: 'appointments/history', element: <PatientAuthGate><AppointmentHistory /></PatientAuthGate> },
           { path: 'progress', element: <PatientAuthGate><AppointmentProgress /></PatientAuthGate> },
+          { path: 'progress/:id', element: <PatientAuthGate><AppointmentDetail /></PatientAuthGate> },
           { path: 'appointments/:id', element: <PatientAuthGate><AppointmentDetail /></PatientAuthGate> }
         ]
       }

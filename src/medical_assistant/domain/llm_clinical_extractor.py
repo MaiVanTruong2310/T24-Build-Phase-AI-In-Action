@@ -67,13 +67,19 @@ QUY TẮC BẮT BUỘC:
    - positive_facts: Triệu chứng người bệnh THỰC SỰ CÓ.
    - negative_facts: Triệu chứng người bệnh NÓI RÕ LÀ KHÔNG CÓ, CHƯA BỊ, hoặc ĐÃ HẾT (phủ định).
 4. Quy đổi thời gian sang ngày (duration_days) nếu có (hôm qua = 1, 3 ngày = 3, 1 tuần = 7, hơn 1 tuần = 8).
-5. Nếu có nói về táo bón/khó đi ngoài/phân khô/mấy ngày chưa đi cầu, chief_complaint phải là 'constipation'.
-6. Nếu có triệu chứng đau ngực, chief_complaint là 'chest_pain'. Đau đầu -> 'headache'. Đau bụng -> 'abdominal_pain'.
-7. Phân định VỊ TRÍ GIẢI PHẪU rõ ràng:
-   - "bắp đùi", "đùi", "cơ đùi", "bắp chân", "cẳng chân", "đau cơ", "đau bắp tay" -> chief_complaint là 'muscle_pain' (cơ xương khớp), KHÔNG ĐƯỢC gán nhầm sang 'abdominal_pain'.
-   - "đau khớp", "khớp gối", "đầu gối", "cổ tay", "cổ chân" -> chief_complaint là 'joint_pain'.
-   - "đau lưng", "cột sống", "thắt lưng", "cổ vai gáy" -> chief_complaint là 'back_pain' hoặc 'neck_shoulder_pain'.
-   - Chỉ khi đau ở bụng, dạ dày, thượng vị, hạ sườn, quanh rốn mới là 'abdominal_pain'.
+5. Ánh xạ triệu chứng chính (chief_complaint) chuẩn xác và độc lập:
+   - Táo bón / phân khô / khó đi ngoài -> 'constipation'.
+   - Đau ngực / tức ngực / thắt ngực -> 'chest_pain'.
+   - Khó thở / hụt hơi / thở dốc -> 'shortness_of_breath' (TUYỆT ĐỐI KHÔNG gộp vào chest_pain).
+   - Đau đầu / nhức đầu -> 'headache'.
+   - Chóng mặt / mất thăng bằng / choáng váng -> 'dizziness' (TUYỆT ĐỐI KHÔNG gộp vào headache).
+   - Đau bụng / dạ dày / thượng vị -> 'abdominal_pain'.
+   - Ho -> 'cough', Đau họng -> 'sore_throat', Sốt -> 'fever'.
+6. Phân định vị trí cơ xương khớp:
+   - Đau cơ, bắp đùi, đùi, cẳng chân, bắp chân, bắp tay -> 'muscle_pain'.
+   - Khớp, khớp gối, cổ chân, cổ tay -> 'joint_pain'.
+   - Đau lưng, cột sống, thắt lưng -> 'back_pain'.
+   - Cổ vai gáy -> 'neck_shoulder_pain'.
 """
 
 

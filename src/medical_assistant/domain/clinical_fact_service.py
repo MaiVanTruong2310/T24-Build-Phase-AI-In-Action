@@ -21,11 +21,11 @@ def _normalize(text: str) -> str:
 FACT_PATTERNS = {
     # Táo bón / Tiêu hóa
     "hard_stool": [r"phan (?:kho|cung|kho cung)"],
-    "straining": [r"(?:phai )?ran", r"ran (?:met|muon xiu|nhieu)"],
+    "straining": [r"\b(?:phai )?ran\b", r"\bran (?:met|muon xiu|nhieu)\b"],
     "abdominal_bloating": [r"bung(?:\s+\w+){0,2}\s+(?:chuong|cang)", r"day bung", r"i ach"],
     "passing_gas": [r"van (?:danh hoi|trung tien) duoc", r"van xa hoi duoc"],
     "unable_to_pass_gas": [r"khong (?:danh hoi|trung tien) duoc"],
-    "vomiting": [r"non oi", r"bi non", r"nôn"],
+    "vomiting": [r"\bnon oi\b", r"\bbi non\b", r"\bnon\b"],
     "fever": [r"bi sot", r"sot cao", r"len con sot", r"nhiet do cao"],
     "weight_loss": [r"sut can", r"giam can khong chu y"],
     "blood_in_stool": [r"mau (?:do )?(?:tren giay|trong phan)", r"dinh (?:chut )?mau", r"di ngoai ra mau"],
@@ -126,7 +126,7 @@ FACT_PATTERNS = {
         r"knee pain",
     ],
     "back_pain": [r"dau lung", r"moi lung", r"dau cot song"],
-    "neck_shoulder_pain": [r"dau vai gay", r"moi vai gay", r"moi co", r"cổ vai gáy"],
+    "neck_shoulder_pain": [r"dau vai gay", r"moi vai gay", r"moi co", r"co vai gay"],
     "muscle_pain": [
         r"bap dui",
         r"dau dui",
@@ -178,7 +178,10 @@ FACT_PATTERNS = {
         r"viem da",
         r"phat ban",
         r"noi me day",
-        r"me day",
+        r"bi me day",
+        r"man me day",
+        r"di ung me day",
+        r"me day man tinh",
         r"skin peeling",
         r"peeling skin",
         r"rash",
@@ -203,7 +206,7 @@ NEGATION_PATTERNS = {
     "fatigue": [r"khong met", r"khong thay met", r"het met", r"khong con met"],
     "chest_pain": [r"khong dau nguc", r"khong tuc nguc", r"khong thay tuc nguc"],
     "shortness_of_breath": [r"khong kho tho", r"tho binh thuong"],
-    "cough": [r"khong ho", r"khong bi ho"],
+    "cough": [r"\bkhong ho\b(?!\s+(?:tro|hoi|hoc)\b)", r"\bkhong bi ho\b", r"\bhet ho\b", r"\bkhong con ho\b"],
     "sore_throat": [r"khong dau hong", r"het dau hong", r"khong con dau hong"],
     "back_pain": [r"khong dau lung", r"het dau lung", r"khong con dau lung"],
     "joint_pain": [r"khong dau khop", r"het dau khop", r"khong con dau khop"],
@@ -242,12 +245,19 @@ NEGATION_PATTERNS = {
         r"het dau dui",
         r"het dau bap dui",
     ],
+    "dizziness": [
+        r"khong (?:bi )?chong mat",
+        r"het chong mat",
+        r"khong con chong mat",
+        r"khong chong mat",
+    ],
 }
 
 
 COMPLAINT_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("constipation", "gastroenterology", tuple(FACT_PATTERNS["constipation"])),
     ("headache", "neurology", tuple(FACT_PATTERNS["headache"])),
+    ("dizziness", "neurology", tuple(FACT_PATTERNS.get("dizziness", ()))),
     ("sore_throat", "ear_nose_throat", tuple(FACT_PATTERNS["sore_throat"])),
     ("chest_pain", "cardiology", tuple(FACT_PATTERNS["chest_pain"])),
     ("shortness_of_breath", "respiratory", tuple(FACT_PATTERNS["shortness_of_breath"])),
@@ -265,6 +275,44 @@ COMPLAINT_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 )
 
 COMPLAINT_SYSTEMS = {code: system for code, system, _ in COMPLAINT_RULES}
+
+ANATOMICAL_BODY_REGIONS: dict[str, dict[str, Any]] = {
+    "lower_limb": {
+        "primary_system": "musculoskeletal",
+        "synonyms": ["bắp đùi", "đùi", "cơ đùi", "bắp chuối", "cẳng chân", "gối", "khớp gối", "cổ chân", "gót chân", "bàn chân"],
+        "complaint_codes": ["muscle_pain", "joint_pain"],
+    },
+    "spine_back": {
+        "primary_system": "musculoskeletal",
+        "synonyms": ["thắt lưng", "lưng", "cột sống", "đốt sống", "cổ vai gáy"],
+        "complaint_codes": ["back_pain", "neck_shoulder_pain"],
+    },
+    "abdomen": {
+        "primary_system": "gastroenterology",
+        "synonyms": ["thượng vị", "quanh rốn", "hạ vị", "đau bụng", "dạ dày", "ruột"],
+        "complaint_codes": ["abdominal_pain", "constipation"],
+    },
+    "thorax_chest": {
+        "primary_system": "cardiology",
+        "synonyms": ["ngực", "tức ngực", "nhói ngực", "thắt ngực"],
+        "complaint_codes": ["chest_pain"],
+    },
+    "respiratory": {
+        "primary_system": "respiratory",
+        "synonyms": ["khó thở", "hụt hơi", "thở dốc", "thở rít"],
+        "complaint_codes": ["shortness_of_breath", "cough"],
+    },
+    "head": {
+        "primary_system": "neurology",
+        "synonyms": ["đau đầu", "nhức đầu", "nửa đầu"],
+        "complaint_codes": ["headache"],
+    },
+    "vestibular": {
+        "primary_system": "neurology",
+        "synonyms": ["chóng mặt", "mất thăng bằng", "quay cuồng", "choáng"],
+        "complaint_codes": ["dizziness"],
+    },
+}
 
 
 def _is_resolution(text: str, code: str) -> bool:
@@ -351,25 +399,23 @@ class ClinicalFactService:
 
         duration_days = None
         is_greeting_wish = bool(re.search(r"chuc(?:\s+\w+)?\s+\d*\s*ngay\s+(?:vui|tot|an|hanh|dep)", normalized))
-        if not is_greeting_wish:
-            if re.search(r"dung (?:mot )?tuan|1 tuan", normalized):
+        has_clinical_duration_context = bool(
+            positive
+            or re.search(r"\b(?:bi|dau|nhuc|moi|buot|te|sung|sot|kho tho|kho chiu|met|ho|non|oi)\b", normalized)
+        )
+        if not is_greeting_wish and has_clinical_duration_context:
+            if re.search(r"\b(?:dung (?:mot )?tuan|1 tuan)\b", normalized):
                 duration_days = 7
-            elif re.search(r"(?:hom qua|tu hom qua|duoc 1 ngay|mot ngay)", normalized):
+            elif re.search(r"\b(?:tu hom qua|duoc 1 ngay|mot ngay|hom qua)\b", normalized):
                 duration_days = 1
-            elif re.search(r"(?:hom kia|2 ngay|hai ngay)", normalized):
+            elif re.search(r"\b(?:hom kia|2 ngay|hai ngay)\b", normalized):
                 duration_days = 2
-            elif re.search(r"(?:ba ngay|3 ngay)", normalized):
+            elif re.search(r"\b(?:ba ngay|3 ngay)\b", normalized):
                 duration_days = 3
             else:
-                match = re.search(r"(\d+)\s+ngay", normalized)
+                match = re.search(r"\b(\d+)\s+ngay\b", normalized)
                 if match:
-                    has_duration_context = bool(
-                        positive
-                        or re.search(r"\b(?:bi|dau|khoang|duoc|suot|tam)\s+\d+\s+ngay\b", normalized)
-                        or re.search(r"\b\d+\s+ngay\s+(?:nay|roi|qua|tro lai|truoc)\b", normalized)
-                    )
-                    if has_duration_context:
-                        duration_days = int(match.group(1))
+                    duration_days = int(match.group(1))
 
         bowel_interval_days = None
         interval = re.search(r"(\d+)\s*(?:-|den)?\s*(\d+)?\s*ngay moi di (?:cau|ngoai)", normalized)
@@ -531,6 +577,7 @@ class ClinicalFactService:
                 current.get("source") == "deterministic"
                 and incoming.get("source") == "llm"
                 and incoming.get("last_seen_turn") is None
+                and code in {"chest_pain", "shortness_of_breath", "syncope", "stroke_signs"}
             )
             if incoming_status and incoming_status != "uncertain" and not preserve_deterministic_status:
                 current["status"] = incoming_status

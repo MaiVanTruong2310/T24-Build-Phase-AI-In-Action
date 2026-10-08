@@ -13,7 +13,6 @@ def test_catalog_metadata_contains_required_tables_and_constraints():
         "doctors",
         "doctor_specialties",
         "doctor_facilities",
-        "doctor_services",
         "doctor_schedules",
         "catalog_audit_events",
     }

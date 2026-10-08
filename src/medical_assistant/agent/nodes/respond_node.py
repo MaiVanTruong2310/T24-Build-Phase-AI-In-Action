@@ -604,7 +604,7 @@ async def respond_node(state: AgentState) -> dict:
                     if doc.get("source_url"):
                         doctors_text += f"   • [Official profile]({doc['source_url']})\n"
             else:
-                doctors_text = f"\n\n👨‍⚕️ **Bác sĩ phù hợp có hồ sơ nguồn ({spec_display}):**\n"
+                doctors_text = f"\n\n👨‍⚕️ **Bác sĩ chuyên khoa ({spec_display}):**\n"
                 for idx, doc in enumerate(available_docs, 1):
                     exp = doc.get("years_of_experience", 0)
                     exp_text = f" - {exp} năm kinh nghiệm" if exp else ""
@@ -618,9 +618,9 @@ async def respond_node(state: AgentState) -> dict:
                         doctors_text += f"   • Nơi làm việc: {doc['workplace']}\n"
                     for slot in doc.get("available_slots", []):
                         if slot.get("verified"):
-                            doctors_text += f"   • Lịch được database xác minh: `{slot['starts_at']}` (Mã slot: `{slot['schedule_id']}`)\n"
+                            doctors_text += f"   • Lịch khám: `{slot['starts_at']}`\n"
                     if doc.get("source_url") and enable_citation:
-                        doctors_text += f"   • [Hồ sơ nguồn Vinmec]({doc['source_url']})\n"
+                        doctors_text += f"   • [Hồ sơ bác sĩ Vinmec]({doc['source_url']})\n"
             if has_verified_slots:
                 matched_facility_name = state.get("facility_preference") or booking_intake.get("facility_preference") or meta.get("facility_preference")
                 facility_location_text = ""
@@ -630,9 +630,9 @@ async def respond_node(state: AgentState) -> dict:
                     facility_location_text = f"tại cơ sở **{matched_facility_name}** "
 
                 prefix = (
-                    f"Dạ, em đã kiểm tra lịch khám được database xác minh {facility_location_text}thuộc **Khoa {spec_display}** trong {max_days} ngày tới:"
+                    f"Dạ, em đã kiểm tra lịch khám còn trống {facility_location_text}thuộc **Khoa {spec_display}** trong {max_days} ngày tới:"
                     if lang == "vi"
-                    else f"I found database-verified availability {facility_location_text}at **{spec_display}** for the next {max_days} days:"
+                    else f"I found available appointments {facility_location_text}at **{spec_display}** for the next {max_days} days:"
                 )
                 quick_replies = []
             elif meta.get("is_doctor_inquiry"):

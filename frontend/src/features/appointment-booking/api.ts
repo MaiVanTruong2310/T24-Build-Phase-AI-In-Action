@@ -157,7 +157,7 @@ export interface Booking {
   facility_id: string;
   starts_at: string;
   ends_at: string;
-  booking_mode: 'group' | 'doctor_visit';
+  booking_mode: 'group' | 'doctor_visit' | 'package';
   encounter_type: 'in_person' | 'telehealth';
   reason: string;
   patient_note: string | null;
@@ -383,6 +383,23 @@ export async function fetchMyPackageRequests(): Promise<PackageRequest[]> {
   if (!res.ok) throw new Error('Failed to fetch my package requests');
   const json = await res.json();
   return json.data || [];
+}
+
+export async function reschedulePackageRequest(
+  requestId: string,
+  payload: { preferred_date: string; preferred_period: 'morning' | 'afternoon'; facility_id?: string; note?: string },
+): Promise<PackageRequest> {
+  const res = await fetchWithAuth(`/packages/requests/${requestId}/reschedule`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.message || 'Không thể đổi ngày gói khám');
+  }
+  const json = await res.json();
+  return json.data;
 }
 
 export async function fetchAvailability(doctorId: string, date: string, facilityId?: string, serviceId?: string): Promise<Schedule[]> {

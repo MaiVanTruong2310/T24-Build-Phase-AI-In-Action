@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.db.base import Base
 from src.models.booking import Booking
 from src.models.booking_hold import BookingHold
-from src.models.doctor import Doctor, DoctorFacility, DoctorService, DoctorSpecialty
+from src.models.doctor import Doctor, DoctorFacility, DoctorSpecialty
 from src.models.facility import Facility
 from src.models.notification import Notification
 from src.models.schedule import DoctorSchedule
@@ -121,7 +121,6 @@ async def seed(factory):
                 other_member,
                 DoctorSpecialty(doctor_id=doctor.id, specialty_id=specialty.id),
                 DoctorFacility(doctor_id=doctor.id, facility_id=facility.id),
-                DoctorService(doctor_id=doctor.id, service_id=service.id),
             ]
         )
         if not await db.get(Policy, 1):

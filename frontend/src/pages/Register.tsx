@@ -7,9 +7,9 @@ import { useDispatch, useSelector } from 'react-redux'
 
 import { AppDispatch, RootState } from '../app/store'
 
-import { registerUser, sendOtp, verifyOtp, resetRegisterSuccess } from '../features/auth/authSlice'
+import { registerUser, sendOtp, resetRegisterSuccess } from '../features/auth/authSlice'
 
-import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Phone, Mail, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, User, Lock, ShieldCheck, ArrowRight, Phone, Mail, AlertCircle, ExternalLink, CheckCircle2, RefreshCw } from 'lucide-react'
 import {
   birthDateError,
   citizenIdError,
@@ -68,7 +68,7 @@ export function Register() {
 
   const dispatch = useDispatch<AppDispatch>()
 
-  
+
 
   const { loading, error, registerSuccess } = useSelector((state: RootState) => state.auth)
 
@@ -283,51 +283,126 @@ export function Register() {
 
 
   if (registerSuccess) {
+    const isGmail = formData.email.trim().toLowerCase().endsWith('@gmail.com');
 
     return (
+      <div className="mx-auto w-full max-w-lg rounded-2xl border border-slate-200 light:border-app-border bg-white light:bg-app-surface p-6 sm:p-8 shadow-xl dark:border-slate-700/80 dark:bg-slate-900 transition-all">
+        {/* Header Icon */}
+        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 shadow-sm">
+          <Mail className="h-8 w-8 animate-pulse" />
+        </div>
 
-      <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-200 light:border-app-border bg-white light:bg-app-surface p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        {/* Title */}
+        <h2 className="text-center text-2xl font-bold text-slate-900 light:text-app-text dark:text-white">
+          Kiểm tra hộp thư của bạn
+        </h2>
 
-        <Mail className="mb-4 h-10 w-10 text-blue-600 light:text-app-primary" />
+        {/* Description & Email Tag */}
+        <p className="mt-2 text-center text-sm leading-relaxed text-slate-600 light:text-app-secondary dark:text-slate-300">
+          Chúng tôi đã gửi một liên kết xác thực (Magic Link) đến địa chỉ email:
+        </p>
 
-        <h2 className="text-xl font-bold text-slate-900 light:text-app-text dark:text-white">Xác nhận email của bạn</h2>
+        <div className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 px-4 py-2.5 text-center font-semibold text-cyan-600 dark:text-cyan-400 text-sm border border-slate-200/80 dark:border-slate-700 break-all">
+          <Mail className="h-4 w-4 flex-shrink-0" />
+          <span>{formData.email}</span>
+        </div>
 
-        <p className="mt-3 text-sm leading-relaxed text-slate-600 light:text-app-secondary dark:text-slate-300">{emailVerified ? 'Email đã được xác nhận. Bạn có thể đăng nhập bằng email và mật khẩu.' : <>Vui lòng nhập mã OTP 6 chữ số gửi đến <strong>{formData.email}</strong>, hoặc mở liên kết xác nhận trong email.</>}</p>
+        {/* Step-by-step Guide */}
+        <div className="mt-6 space-y-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 p-4 text-left">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Hướng dẫn kích hoạt tài khoản:
+          </div>
 
-        {!emailVerified && <form className="mt-5 space-y-3" onSubmit={async (event) => {
+          <div className="flex items-start gap-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white font-bold text-[11px]">
+              1
+            </span>
+            <span>Mở hộp thư đến (Inbox) của email trên (kiểm tra cả thư mục <b>Spam / Thư rác</b> nếu chưa thấy).</span>
+          </div>
 
-          event.preventDefault(); setValidationError(''); setConfirmationNotice('')
+          <div className="flex items-start gap-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white font-bold text-[11px]">
+              2
+            </span>
+            <span>Mở thư có tiêu đề <b>&ldquo;Xác thực tài khoản VCarePlus&rdquo;</b>.</span>
+          </div>
 
-          if (!/^\d{6}$/.test(otpCode)) { setValidationError('Vui lòng nhập đủ 6 chữ số OTP.'); return }
+          <div className="flex items-start gap-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white font-bold text-[11px]">
+              3
+            </span>
+            <span>Nhấn vào nút <b>&ldquo;Xác nhận tài khoản ngay&rdquo;</b> (Magic Link) để kích hoạt tài khoản ngay lập tức.</span>
+          </div>
 
-          const result = await dispatch(verifyOtp({ email: formData.email.trim().toLowerCase(), code: otpCode }))
+          <div className="flex items-start gap-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white font-bold text-[11px]">
+              4
+            </span>
+            <span>Sau khi trang thông báo kích hoạt thành công, quay lại đây bấm nút <b>Đến trang đăng nhập</b> bên dưới.</span>
+          </div>
+        </div>
 
-          if (verifyOtp.fulfilled.match(result)) { setEmailVerified(true); setOtpCode('') }
+        {/* Quick Gmail Button */}
+        {isGmail && (
+          <a
+            href="https://mail.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 flex items-center justify-center gap-2 w-full rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-300/80 dark:border-slate-600 px-4 py-2.5 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors"
+          >
+            <span>Mở hộp thư Gmail</span>
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        )}
 
-        }}>
+        {/* Feedback notices */}
+        {confirmationNotice && (
+          <div role="status" className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs sm:text-sm font-medium text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+            <span>{confirmationNotice}</span>
+          </div>
+        )}
 
-          <label htmlFor="email-otp" className="block text-sm font-medium text-slate-700 light:text-app-text dark:text-slate-200">Mã OTP email</label>
+        {(error || validationError) && (
+          <p role="alert" className="mt-3 text-center text-xs sm:text-sm text-red-600 dark:text-red-400">
+            {validationError || error}
+          </p>
+        )}
 
-          <input id="email-otp" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={otpCode} onChange={event => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Nhập 6 chữ số" disabled={loading} className="w-full rounded-xl border border-slate-300 light:border-app-border bg-white light:bg-app-surface px-4 py-3 text-center text-xl tracking-[0.3em] dark:border-slate-600 dark:bg-slate-950" />
+        {/* Action Buttons */}
+        <div className="mt-6 space-y-3">
+          <Link
+            to="/login"
+            onClick={() => dispatch(resetRegisterSuccess())}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 light:bg-app-primary px-4 py-3 text-center text-sm font-semibold text-white transition-all shadow-md hover:shadow-cyan-500/20"
+          >
+            <span>Đến trang đăng nhập</span>
+            <ArrowRight className="h-4 w-4" />
+          </Link>
 
-          <button type="submit" disabled={loading || otpCode.length !== 6} className="w-full rounded-xl bg-blue-600 light:bg-app-primary px-4 py-3 font-semibold text-white disabled:opacity-50">{loading ? 'Đang xác nhận…' : 'Xác nhận OTP'}</button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={async () => {
+              setValidationError('');
+              setConfirmationNotice('');
+              const result = await dispatch(sendOtp({ email: formData.email.trim().toLowerCase(), purpose: 'register' }));
+              if (sendOtp.fulfilled.match(result)) {
+                setConfirmationNotice('Đã gửi lại email xác thực. Vui lòng kiểm tra hộp thư của bạn.');
+              }
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2.5 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Đang gửi lại…' : 'Chưa nhận được? Gửi lại email xác nhận'}</span>
+          </button>
+        </div>
 
-        </form>}
-
-        {confirmationNotice && <p role="status" className="mt-3 text-sm text-green-700">{confirmationNotice}</p>}
-
-        <p className="mt-2 text-xs text-slate-500 light:text-app-secondary">Nếu chưa thấy thư, hãy kiểm tra mục Spam. Số điện thoại được giữ làm thông tin liên hệ.</p>
-
-        {(error || validationError) && <p role="alert" className="mt-3 text-sm text-red-600">{validationError || error}</p>}
-
-        <button type="button" disabled={loading || emailVerified} onClick={async () => { setValidationError(''); setConfirmationNotice(''); const result = await dispatch(sendOtp({ email: formData.email.trim().toLowerCase(), purpose: 'register' })); if (sendOtp.fulfilled.match(result)) setConfirmationNotice('Đã yêu cầu gửi lại email chứa mã OTP.'); }} className="mt-5 w-full rounded-xl border border-blue-200 light:border-app-border px-4 py-3 text-sm font-semibold text-blue-600 light:text-app-primary disabled:opacity-50">{loading ? 'Đang gửi…' : 'Gửi lại email xác nhận'}</button>
-
-        <Link to="/login" onClick={() => dispatch(resetRegisterSuccess())} className="mt-3 block rounded-xl bg-blue-600 light:bg-app-primary px-4 py-3 text-center text-sm font-semibold text-white">Đến trang đăng nhập</Link>
-
+        <p className="mt-4 text-center text-[11px] text-slate-400 dark:text-slate-500">
+          Liên kết xác thực có hiệu lực trong 24 giờ. Bảo mật tiêu chuẩn y tế HIPAA.
+        </p>
       </div>
-
-    )
-
+    );
   }
 
 
@@ -406,7 +481,7 @@ export function Register() {
 
             </h3>
 
-            
+
 
             <div className="space-y-4">
 
@@ -430,15 +505,13 @@ export function Register() {
 
                     placeholder="Nguyễn Văn A"
 
-                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.full_name
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.full_name
 
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
 
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary dark:placeholder:text-slate-500 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
 
-                    }`}
+                      }`}
 
                     disabled={loading}
 
@@ -460,7 +533,7 @@ export function Register() {
 
               </div>
 
-              
+
 
               <div className="space-y-1.5">
 
@@ -488,15 +561,13 @@ export function Register() {
 
                     placeholder="benhnhan@example.com"
 
-                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.email
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.email
 
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
 
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary dark:placeholder:text-slate-500 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
 
-                    }`}
+                      }`}
 
                     disabled={loading}
 
@@ -552,15 +623,13 @@ export function Register() {
 
                     placeholder="0912 345 678"
 
-                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.phone
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.phone
 
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
 
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary dark:placeholder:text-slate-500 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
 
-                    }`}
+                      }`}
 
                     disabled={loading}
 
@@ -603,11 +672,10 @@ export function Register() {
                     disabled={loading}
                     hasError={Boolean(fieldErrors.date_of_birth)}
                     placeholder="dd/mm/yyyy"
-                    className={`w-full px-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-                      fieldErrors.date_of_birth
+                    className={`w-full px-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.date_of_birth
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
-                    }`}
+                      }`}
                   />
 
                   {fieldErrors.date_of_birth && (
@@ -636,15 +704,13 @@ export function Register() {
 
                     onChange={handleChange}
 
-                    className={`w-full px-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.gender
+                    className={`w-full px-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.gender
 
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
 
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
 
-                    }`}
+                      }`}
 
                     disabled={loading}
 
@@ -698,7 +764,7 @@ export function Register() {
 
             </div>
 
-            
+
 
             <div className="space-y-4">
 
@@ -724,15 +790,13 @@ export function Register() {
 
                     placeholder="12 chữ số (VD: 001201012345)"
 
-                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.citizen_id
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.citizen_id
 
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
 
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900/60 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary dark:placeholder:text-slate-500 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
 
-                    }`}
+                      }`}
 
                     disabled={loading}
 
@@ -784,15 +848,13 @@ export function Register() {
 
                     placeholder="Gồm 10 đến 15 ký tự chữ và số"
 
-                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.health_insurance_code
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.health_insurance_code
 
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
 
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-white light:bg-app-surface dark:bg-slate-900/60 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary dark:placeholder:text-slate-500 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
 
-                    }`}
+                      }`}
 
                     disabled={loading}
 
@@ -832,7 +894,7 @@ export function Register() {
 
             </h3>
 
-            
+
 
             <div className="space-y-4">
 
@@ -848,9 +910,9 @@ export function Register() {
 
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 light:text-app-secondary" />
 
-                  <input 
+                  <input
 
-                    type={showPassword ? "text" : "password"} 
+                    type={showPassword ? "text" : "password"}
 
                     name="password"
 
@@ -858,17 +920,15 @@ export function Register() {
 
                     onChange={handleChange}
 
-                    placeholder="Nhập 8 đến 128 ký tự" 
+                    placeholder="Nhập 8 đến 128 ký tự"
 
-                    className={`w-full pl-10 pr-10 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.password
+                    className={`w-full pl-10 pr-10 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.password
 
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
 
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary dark:placeholder:text-slate-500 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
 
-                    }`}
+                      }`}
 
                     disabled={loading}
 
@@ -906,9 +966,9 @@ export function Register() {
 
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 light:text-app-secondary" />
 
-                  <input 
+                  <input
 
-                    type={showConfirmPassword ? "text" : "password"} 
+                    type={showConfirmPassword ? "text" : "password"}
 
                     name="confirm_password"
 
@@ -916,17 +976,15 @@ export function Register() {
 
                     onChange={handleChange}
 
-                    placeholder="Nhập lại mật khẩu vừa tạo" 
+                    placeholder="Nhập lại mật khẩu vừa tạo"
 
-                    className={`w-full pl-10 pr-10 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${
-
-                      fieldErrors.confirm_password
+                    className={`w-full pl-10 pr-10 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 ${fieldErrors.confirm_password
 
                         ? 'border-red-500 dark:border-red-500 bg-red-50/30 dark:bg-red-950/20 text-red-900 dark:text-red-100 focus:ring-red-500/20 focus:border-red-500'
 
                         : 'border-slate-200 light:border-app-border dark:border-slate-700/80 bg-slate-50/80 light:bg-app-page/80 dark:bg-slate-950/60 text-slate-900 light:text-app-text dark:text-slate-100 placeholder:text-slate-400 light:placeholder:text-app-secondary dark:placeholder:text-slate-500 focus:ring-blue-500/20 light:focus:ring-app-primary/20 focus:border-blue-500 light:focus:border-app-primary dark:focus:border-cyan-500/60'
 
-                    }`}
+                      }`}
 
                     disabled={loading}
 
@@ -963,7 +1021,7 @@ export function Register() {
           <div className="space-y-2">
 
             <label className="mb-4 block text-sm font-medium">Địa chỉ liên hệ (tùy chọn)<input name="address" maxLength={500} value={formData.address} onChange={e => setFormData(d => ({ ...d, address: e.target.value }))} className="mt-2 block w-full rounded-xl border p-3" /></label>
-              <label className="flex items-start gap-3 cursor-pointer">
+            <label className="flex items-start gap-3 cursor-pointer">
 
               <input
 
@@ -983,11 +1041,9 @@ export function Register() {
 
                 }}
 
-                className={`mt-1 rounded bg-white light:bg-app-surface dark:bg-slate-950 text-blue-600 light:text-app-primary focus:ring-blue-500/20 light:focus:ring-app-primary/20 cursor-pointer ${
+                className={`mt-1 rounded bg-white light:bg-app-surface dark:bg-slate-950 text-blue-600 light:text-app-primary focus:ring-blue-500/20 light:focus:ring-app-primary/20 cursor-pointer ${fieldErrors.agreeTerms ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300 light:border-app-border dark:border-slate-700'
 
-                  fieldErrors.agreeTerms ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300 light:border-app-border dark:border-slate-700'
-
-                }`}
+                  }`}
 
               />
 

@@ -18,34 +18,38 @@ const filters: Array<{ value: AppointmentFilter; label: string; icon: typeof Cal
 
 export function AppointmentFilters({ value, counts, onChange }: Props) {
   return (
-    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-      <div className="flex flex-wrap gap-2 rounded-2xl bg-slate-100 dark:bg-app-muted light:bg-app-muted p-1.5">
-        {filters.map((filter) => {
-          const Icon = filter.icon;
-          const isActive = filter.value === value;
-          return (
-            <button
-              key={filter.value}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => onChange(filter.value)}
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-slate-100 dark:bg-app-muted light:bg-app-muted p-1.5 border border-slate-200 dark:border-app-border light:border-app-border">
+      {filters.map((filter) => {
+        const Icon = filter.icon;
+        const isActive = filter.value === value;
+        return (
+          <button
+            key={filter.value}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onChange(filter.value)}
+            className={clsx(
+              'inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer',
+              isActive
+                ? 'bg-white dark:bg-app-surface light:bg-app-surface text-emerald-800 dark:text-emerald-300 light:text-app-primary shadow-xs'
+                : 'text-slate-600 dark:text-app-secondary light:text-app-secondary hover:bg-white/60 dark:hover:bg-app-surface/60 hover:text-emerald-700 dark:hover:text-emerald-300',
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {filter.label}
+            <span
               className={clsx(
-                'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition',
-                isActive ? 'bg-white dark:bg-app-surface light:bg-app-surface text-sky-700 dark:text-sky-300 light:text-app-primary shadow-sm' : 'text-slate-600 dark:text-app-secondary light:text-app-secondary hover:bg-white/70 dark:hover:bg-app-surface/70 light:hover:bg-app-surface/70 hover:text-sky-700 dark:hover:text-sky-300 light:hover:text-app-primary',
+                'rounded-full px-1.5 py-0.2 text-[10px] font-bold',
+                isActive
+                  ? 'bg-emerald-100 dark:bg-emerald-950/60 light:bg-app-tint text-emerald-800 dark:text-emerald-300 light:text-app-primary'
+                  : 'bg-white/80 dark:bg-app-surface light:bg-app-surface text-slate-500 dark:text-app-secondary',
               )}
             >
-              <Icon className="h-4 w-4" />
-              {filter.label}
-              <span className={clsx('rounded-full px-1.5 py-0.5 text-[11px]', isActive ? 'bg-sky-100 dark:bg-sky-950/50 light:bg-app-tint text-sky-700 dark:text-sky-300 light:text-app-primary' : 'bg-white dark:bg-app-surface light:bg-app-surface text-slate-500 dark:text-app-secondary light:text-app-secondary')}>
-                {counts[filter.value]}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="hidden items-center gap-2 text-sm font-semibold text-slate-500 dark:text-app-secondary light:text-app-secondary lg:flex">
-        <CalendarDays className="h-4 w-4" /> Chọn một lịch hẹn để xem chi tiết
-      </div>
+              {counts[filter.value]}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

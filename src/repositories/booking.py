@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from src.models.booking import Booking
 from src.models.booking_hold import BookingHold
 from src.models.catalog import DoctorSchedule, Service, Specialty
-from src.models.doctor import Doctor, DoctorService, DoctorSpecialty
+from src.models.doctor import Doctor, DoctorSpecialty
 from src.models.facility import Facility
 
 
@@ -60,13 +60,8 @@ class BookingRepository:
         return await self._one(select(Specialty).where(Specialty.id == specialty_id))
 
     async def has_doctor_service(self, doctor_id: UUID, service_id: UUID) -> bool:
-        """Check that the selected doctor offers the selected service."""
-        statement = select(DoctorService.id).where(
-            DoctorService.doctor_id == doctor_id,
-            DoctorService.service_id == service_id,
-            DoctorService.active.is_(True),
-        )
-        return (await self.session.execute(statement)).scalar_one_or_none() is not None
+        """Check that the selected doctor offers the selected service (deprecated)."""
+        return True
 
     async def has_doctor_specialty(self, doctor_id: UUID, specialty_id: UUID) -> bool:
         """Check that the selected doctor belongs to the selected specialty."""

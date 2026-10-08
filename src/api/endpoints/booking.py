@@ -283,6 +283,36 @@ async def cancel_booking(
     # 2. Otherwise, check and cancel as an owned CoordinationCase
     case = await _get_owned_case(service.session, booking_id, user_id, user_key, guest_token, for_update=True)
     if case is None:
+        from src.models.package_request import PackageRequest
+        package_req = await service.session.get(PackageRequest, booking_id, with_for_update=True)
+        if package_req and (package_req.patient_id == user_id or package_req.requested_by_user_id == user_id):
+            if package_req.status == "cancelled":
+                raise ConflictError("BOOKING_ALREADY_CANCELLED", "Yêu cầu gói khám đã được hủy trước đó")
+            if package_req.status == "completed":
+                raise ConflictError("BOOKING_NOT_CANCELLABLE", "Gói khám đã hoàn tất, không thể hủy")
+            package_req.status = "cancelled"
+            if reason:
+                package_req.staff_note = ((package_req.staff_note or "") + f" [Hủy: {reason.strip()}]").strip()
+            await service.session.commit()
+            dummy_resp = BookingResponse(
+                id=package_req.id,
+                user_id=package_req.patient_id or user_id,
+                doctor_id=package_req.facility_id,
+                facility_id=package_req.facility_id,
+                schedule_id=None,
+                hold_id=None,
+                service_id=package_req.service_id,
+                starts_at=datetime.combine(package_req.preferred_date, datetime.min.time()),
+                ends_at=datetime.combine(package_req.preferred_date, datetime.min.time()),
+                booking_mode="package",
+                status="cancelled",
+                cancellation_reason=reason.strip() if reason else None,
+                reason=package_req.note,
+                patient_note=None,
+                created_at=package_req.created_at,
+                updated_at=package_req.updated_at,
+            )
+            return success_response(dummy_resp, "Booking cancelled")
         raise NotFoundError("Booking not found")
 
     if case.status == "cancelled":

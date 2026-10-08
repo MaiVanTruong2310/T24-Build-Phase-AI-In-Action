@@ -9,8 +9,10 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException
 from sqlalchemy import or_, select
 
+from src.config import get_settings
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.logging import get_logger
+from src.models.conversation import Message as UnifiedMessage
 from src.models.workbench import CoordinationCase, CoordinationMessage
 from src.realtime.chat_takeover import chat_takeover_manager
 from src.services import workbench
@@ -138,6 +140,21 @@ class ChatTakeoverService:
         return case
 
     async def history(self, case, limit: int = 200) -> list[dict]:
+        if get_settings().use_unified_conversation:
+            messages = (
+                (
+                    await self.session.execute(
+                        select(UnifiedMessage)
+                        .where(UnifiedMessage.conversation_id == case.id)
+                        .order_by(UnifiedMessage.created_at, UnifiedMessage.id)
+                        .limit(limit)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [message_payload(message, case) for message in messages]
+
         messages = (
             (
                 await self.session.execute(
@@ -282,6 +299,48 @@ class ChatTakeoverService:
 
 
 async def workbench_message(session, case, client_id: str, content: str, actor_id, *, sender="coordinator"):
+    if get_settings().use_unified_conversation:
+        stmt = select(UnifiedMessage).where(UnifiedMessage.conversation_id == case.id)
+        candidates = (await session.execute(stmt)).scalars().all()
+        existing = next(
+            (m for m in candidates if (m.msg_metadata or {}).get("client_id") == client_id or str(m.id) == client_id),
+            None,
+        )
+        if existing is not None:
+            return existing
+
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from src.models.conversation import Conversation
+        now = datetime.now(UTC)
+        await session.execute(
+            pg_insert(Conversation).values(
+                id=case.id,
+                category="PATIENT_SUPPORT",
+                mode="HUMAN" if getattr(case, "control", "ai") == "human" else "AI",
+                status="ACTIVE" if getattr(case, "status", "new") not in ("completed", "cancelled") else "RESOLVED",
+                patient_id=case.patient_id,
+                created_by_type="PATIENT" if case.patient_id else "SYSTEM",
+                created_by_id=case.patient_id,
+                created_at=getattr(case, "created_at", None) or now,
+                updated_at=now,
+            ).on_conflict_do_nothing(index_elements=["id"])
+        )
+
+        sender_type = "STAFF" if sender in ("coordinator", "staff") else "PATIENT"
+        message = UnifiedMessage(
+            id=uuid4(),
+            conversation_id=case.id,
+            sender_type=sender_type,
+            sender_id=actor_id,
+            message_type="TEXT",
+            content=content,
+            msg_metadata={"client_id": client_id, "legacy_sender": sender},
+            created_at=now,
+        )
+        session.add(message)
+        await session.flush()
+        return message
+
     existing = (
         await session.execute(
             select(CoordinationMessage).where(
@@ -340,6 +399,30 @@ def case_payload(case) -> dict:
 
 
 def message_payload(message, case=None) -> dict:
+    if isinstance(message, UnifiedMessage):
+        author_type = {
+            "STAFF": "staff",
+            "PATIENT": "patient",
+            "AGENT": "assistant",
+            "SYSTEM": "system",
+        }.get(message.sender_type, (message.sender_type or "system").lower())
+        patient_id = None
+        if case and (case.owner_key or "").startswith("user:"):
+            try:
+                patient_id = UUID(case.owner_key[5:])
+            except ValueError:
+                patient_id = None
+        client_id = (message.msg_metadata or {}).get("client_id", str(message.id))
+        return {
+            "id": str(message.id),
+            "case_id": str(case.legacy_takeover_case_id or case.id) if case else str(message.conversation_id),
+            "author_type": author_type,
+            "author_user_id": str(message.sender_id or patient_id) if (message.sender_id or patient_id) else None,
+            "content": message.content or "",
+            "client_message_id": client_id,
+            "metadata": message.msg_metadata or {},
+            "created_at": message.created_at,
+        }
     author_type = {"coordinator": "staff", "ai": "assistant"}.get(message.sender, message.sender)
     patient_id = None
     if case and (case.owner_key or "").startswith("user:"):

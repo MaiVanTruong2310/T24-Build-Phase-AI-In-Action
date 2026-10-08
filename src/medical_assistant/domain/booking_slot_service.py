@@ -312,13 +312,16 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         "lịch hẹn", "lich hen", "khám bệnh", "kham benh"
     ]
     is_booking_intent = any(kw in lower_text for kw in booking_intent_keywords)
-    # If the user is specifically seeking specialty guidance (e.g. 'chưa biết chọn chuyên khoa nào', 'nên khám khoa nào'),
+    # If the user is specifically seeking specialty guidance (e.g. 'chưa biết chọn chuyên khoa nào', 'nên đi khám ở khoa nào', 'khám khoa gì'),
     # they are asking for clinical triage, not asking to execute an appointment booking!
     is_seeking_specialty = bool(
         re.search(
-            r"(?:chưa|chua|không|khong)\s+biết\s+(?:chọn|kham|khám|đi|di|vào|vao)?\s*(?:chuyên\s+)?khoa\s+nào|"
-            r"nên\s+(?:đi\s+)?khám\s+(?:chuyên\s+)?khoa\s+nào|"
-            r"(?:chọn|tư\s+vấn)\s+(?:chuyên\s+)?khoa\s+nào",
+            r"(?:chưa|chua|không|khong)\s+biết\s+(?:chọn|kham|khám|đi|di|vào|vao)?\s*(?:ở\s+|tai\s+|tại\s+)?(?:chuyên\s+)?khoa\s+(?:nào|gì|gi)|"
+            r"(?:nên|nen|cần|can|phải|phai|muốn|muon)?\s*(?:đi\s+|di\s+)?khám\s+(?:ở\s+|tai\s+|tại\s+|vào\s+)?(?:chuyên\s+)?khoa\s+(?:nào|gì|gi)|"
+            r"(?:khoa|chuyên\s+khoa)\s+(?:nào|gì|gi)|"
+            r"(?:chọn|tư\s+vấn)\s+(?:chuyên\s+)?khoa|"
+            r"khám\s+(?:ở\s+|tai\s+|tại\s+)đâu|"
+            r"(?:có\s+nên|co\s+nen|khi\s+nào|khi\s+nao|có\s+cần|co\s+can)\s+(?:đi\s+)?khám",
             lower_text,
         )
     )

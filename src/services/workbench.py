@@ -102,8 +102,35 @@ async def ensure_chat_case(db, request, user, token):
 
 
 async def add_message(db, case, client_id, sender, body, actor=None):
-    await db.execute(insert(Message).values(id=uuid4(), case_id=case.id, client_id=str(client_id), sender=sender, body=body, actor_id=actor.id if actor else None)
-                     .on_conflict_do_nothing(index_elements=['case_id', 'client_id']))
+    from datetime import datetime, timezone
+    from src.models.conversation import Conversation, Message as UnifiedMsg
+    sender_type = "PATIENT" if sender in ("patient", "user") else "STAFF" if sender in ("coordinator", "staff") else "AGENT" if sender in ("ai", "assistant", "bot") else "SYSTEM"
+    now = datetime.now(timezone.utc)
+    await db.execute(
+        insert(Conversation).values(
+            id=case.id,
+            category="PATIENT_SUPPORT",
+            mode="HUMAN" if getattr(case, "control", "ai") == "human" else "AI",
+            status="ACTIVE" if getattr(case, "status", "new") not in ("completed", "cancelled") else "RESOLVED",
+            patient_id=case.patient_id,
+            created_by_type="PATIENT" if case.patient_id else "SYSTEM",
+            created_by_id=case.patient_id,
+            created_at=getattr(case, "created_at", None) or now,
+            updated_at=now,
+        ).on_conflict_do_nothing(index_elements=["id"])
+    )
+    await db.execute(
+        insert(UnifiedMsg).values(
+            id=uuid4(),
+            conversation_id=case.id,
+            sender_type=sender_type,
+            sender_id=actor.id if actor else None,
+            message_type="TEXT",
+            content=body,
+            msg_metadata={"client_id": str(client_id), "legacy_sender": sender},
+            created_at=now,
+        )
+    )
 
 
 async def capture_chat(db, case, request, response, state):

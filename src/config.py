@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     zalo_bot_mode: Literal["disabled", "polling", "webhook"] = "disabled"
     zalo_webhook_url: str = ""
 
+    # Unified Conversation Engine
+    use_unified_conversation: bool = True
+
 
 def parse_cors_origins(value: str) -> list[str]:
     """Parse comma-separated origins into values browsers can match exactly."""

@@ -397,8 +397,6 @@ class BookingService:
         """Ensure selected catalog resources match the doctor and schedule."""
         resolved_doctor_id = doctor_id or schedule.doctor_id
         resolved_facility_id = facility_id or schedule.facility_id
-        if not await self.bookings.has_doctor_service(resolved_doctor_id, service.id):
-            raise ConflictError("SERVICE_NOT_AVAILABLE", "Service is not available for this doctor")
         if not await self.bookings.has_doctor_specialty(resolved_doctor_id, specialty.id):
             raise ConflictError("SPECIALTY_NOT_AVAILABLE", "Specialty is not available for this doctor")
         if schedule is not None and resolved_facility_id != schedule.facility_id:

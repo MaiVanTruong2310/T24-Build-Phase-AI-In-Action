@@ -89,6 +89,10 @@ def _rule_based_fallback_route(query: str, rule_hint: str | None) -> tuple[str, 
     if "mô tả thêm" in q_low or "mo ta them" in q_low:
         return "clinical_triage", 0.95
 
+    # Nhận diện hỏi chuyên khoa khám khi có triệu chứng / thắc mắc khoa khám (ưu tiên hơn booking)
+    if re.search(r"(?:khoa|chuyên\s+khoa)\s+(?:nào|gì|gi)|khám\s+(?:ở\s+|tại\s+)?(?:khoa|đâu)", q_low):
+        return "clinical_triage", 0.95
+
     # Nhận diện booking
     booking_terms = [
         "đặt lịch", "dat lich", "lịch khám", "lich kham", "khung giờ", "khung gio",

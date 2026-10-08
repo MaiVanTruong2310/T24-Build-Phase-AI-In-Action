@@ -70,7 +70,7 @@ async def end_duty(identity=Depends(access), db=Depends(get_db_session)):
 
 @router.get('/catalog')
 async def catalog(doctor_id: UUID | None = None, identity=Depends(access), db=Depends(get_db_session)):
-    from src.models.doctor import Doctor, DoctorSpecialty, DoctorService, DoctorFacility
+    from src.models.doctor import Doctor, DoctorSpecialty, DoctorFacility
     from src.models.facility import Facility
     from src.models.service import Service
     from src.models.specialty import Specialty
@@ -85,8 +85,6 @@ async def catalog(doctor_id: UUID | None = None, identity=Depends(access), db=De
             query = query.where(select(DoctorFacility.id).where(DoctorFacility.doctor_id == Doctor.id, DoctorFacility.facility_id.in_([UUID(x) for x in member.facility_ids])).exists())
         if doctor_id and model == Specialty:
             query = query.where(select(DoctorSpecialty.id).where(DoctorSpecialty.doctor_id == doctor_id, DoctorSpecialty.specialty_id == Specialty.id).exists())
-        if doctor_id and model == Service:
-            query = query.where(select(DoctorService.id).where(DoctorService.doctor_id == doctor_id, DoctorService.service_id == Service.id).exists())
         if doctor_id and model == Facility:
             query = query.where(select(DoctorFacility.id).where(DoctorFacility.doctor_id == doctor_id, DoctorFacility.facility_id == Facility.id).exists())
         if model == Facility and member.facility_ids:
@@ -381,14 +379,34 @@ async def updates(session_id: str, after: UUID | None = None, key=Depends(patien
     if not case:
         await db.commit()
         return success_response({'control': 'ai', 'messages': [], 'case': None})
-    query = select(Message).where(Message.case_id == case.id, Message.sender.in_(['coordinator', 'system']))
+    from src.models.conversation import Message as UnifiedMsg
+    query = select(UnifiedMsg).where(
+        UnifiedMsg.conversation_id == case.id,
+        UnifiedMsg.sender_type.in_(['STAFF', 'PATIENT', 'SYSTEM', 'coordinator', 'patient', 'system'])
+    )
     if after:
-        previous = await db.get(Message, after)
-        if not previous or previous.case_id != case.id:
+        previous = await db.get(UnifiedMsg, after)
+        if not previous or previous.conversation_id != case.id:
             raise HTTPException(422, 'Mốc tin nhắn không hợp lệ.')
-        query = query.where(or_(Message.created_at > previous.created_at, (Message.created_at == previous.created_at) & (Message.id > previous.id)))
-    messages = (await db.execute(query.order_by(Message.created_at, Message.id).limit(100))).scalars().all()
-    result = {'control': case.control, 'messages': [{'id': str(m.id), 'sender': m.sender, 'body': m.body, 'created_at': m.created_at.isoformat()} for m in messages], 'case': {'id': str(case.id), 'status': case.status, 'plan': {k: v for k, v in case.plan.items() if k not in {'hold_id', 'reason'}}, 'priority': case.priority}}
+        query = query.where(or_(UnifiedMsg.created_at > previous.created_at, (UnifiedMsg.created_at == previous.created_at) & (UnifiedMsg.id > previous.id)))
+    raw_messages = (await db.execute(query.order_by(UnifiedMsg.created_at, UnifiedMsg.id).limit(100))).scalars().all()
+    filtered_messages = []
+    for m in raw_messages:
+        meta = m.msg_metadata or {}
+        client_id = str(meta.get('client_id') or '')
+        legacy_sender = str(meta.get('legacy_sender') or '').lower()
+        sender_t = (m.sender_type or '').upper()
+        # Loại bỏ triệt để các tin nhắn do AI Bot sinh ra
+        if sender_t in ('AGENT', 'BOT', 'AI') or legacy_sender in ('ai', 'assistant', 'bot') or client_id.endswith(':ai'):
+            continue
+        sender = 'coordinator' if sender_t in ('STAFF', 'COORDINATOR') or legacy_sender in ('coordinator', 'staff') else 'patient' if sender_t in ('PATIENT', 'USER') or legacy_sender in ('patient', 'user') else 'system'
+        filtered_messages.append({
+            'id': str(m.id),
+            'sender': sender,
+            'body': m.content or '',
+            'created_at': m.created_at.isoformat()
+        })
+    result = {'control': case.control, 'messages': filtered_messages, 'case': {'id': str(case.id), 'status': case.status, 'plan': {k: v for k, v in case.plan.items() if k not in {'hold_id', 'reason'}}, 'priority': case.priority}}
     await db.commit()
     return success_response(result)
 

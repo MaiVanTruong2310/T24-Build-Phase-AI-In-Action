@@ -8,7 +8,6 @@ from src.models.catalog import (
     Doctor,
     DoctorFacility,
     DoctorSchedule,
-    DoctorService,
     DoctorSpecialty,
     Facility,
     Service,
@@ -21,6 +20,14 @@ from src.models.coordination import (
     ConsultationSession,
     ConsultationSlot,
     WeeklyShift,
+)
+from src.models.conversation import (
+    Conversation,
+    ConversationParticipant,
+    Handoff,
+    Message,
+    PatientChatContext,
+    StaffAgentContext,
 )
 from src.models.notification import Notification
 from src.models.package_request import PackageRequest
@@ -37,6 +44,12 @@ from src.models.workbench import (
 from src.models.zalo import ZaloUserMapping
 
 __all__ = [
+    "Conversation",
+    "ConversationParticipant",
+    "Message",
+    "Handoff",
+    "PatientChatContext",
+    "StaffAgentContext",
     "PackageRequest",
     "PatientProfile",
     "PatientRelationship",
@@ -50,7 +63,6 @@ __all__ = [
     "Doctor",
     "DoctorFacility",
     "DoctorSchedule",
-    "DoctorService",
     "DoctorSpecialty",
     "Facility",
     "OtpChallenge",

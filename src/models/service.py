@@ -12,9 +12,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.base import Base
 
-if TYPE_CHECKING:
-    from src.models.doctor import DoctorService
-
 
 class Service(Base):
     """Bookable medical service."""
@@ -40,4 +37,3 @@ class Service(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    doctors: Mapped[list[DoctorService]] = relationship(back_populates="service")

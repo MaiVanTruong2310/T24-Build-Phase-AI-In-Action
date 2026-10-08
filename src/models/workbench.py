@@ -138,7 +138,6 @@ WORKBENCH_TABLES = [
     CoordinatorMember.__table__,
     CoordinationCase.__table__,
     CoordinationEvent.__table__,
-    CoordinationMessage.__table__,
     CoordinationDeposit.__table__,
     CoordinationPolicy.__table__,
 ]

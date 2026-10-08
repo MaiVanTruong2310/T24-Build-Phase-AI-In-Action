@@ -21,7 +21,8 @@ class ClinicalNegationService:
             r"\bhết\b",
             r"\bhet\b",
             r"\bđâu\s+có\b",
-            r"\bdau\s+co\b",
+            # Tránh va chạm với 'đau cổ' (đau cổ vai gáy) và 'đau cơ': chỉ khớp 'đâu có' không dấu khi đi kèm vị từ
+            r"\bdau\s+co\s+(?:bi|thay|sot|phai|chua)\b",
             r"\bchẳng\b",
             r"\bchang\b",
             r"\bchả\b",
@@ -138,14 +139,21 @@ class ClinicalNegationService:
         scopes = self.extract_negated_scopes(full_text)
         for _, _, scope_str in scopes:
             scope_clean = self._normalize_ascii(scope_str)
+            # Chống va chạm từ đồng âm không dấu: 'hỗ trợ' (ho tro), 'hỏi' (hoi) không phải là 'ho' (cough)
+            if phrase_norm in {"ho", "bi ho"} and re.search(r"\bho\s+tro\b", scope_clean):
+                continue
             if re.search(rf"\b{re.escape(phrase_norm)}\b", scope_clean, re.IGNORECASE):
                 return True
 
-        # 2. Kiểm tra trên text không dấu (đối phó với trường hợp gõ teencode / thiếu dấu)
-        norm_scopes = self.extract_negated_scopes(text_norm)
-        for _, _, scope_str in norm_scopes:
-            if re.search(rf"\b{re.escape(phrase_norm)}\b", scope_str, re.IGNORECASE):
-                return True
+        # 2. Kiểm tra trên text không dấu (chỉ áp dụng khi text gốc không có dấu tiếng Việt)
+        has_accents = any(unicodedata.category(c) == "Mn" for c in unicodedata.normalize("NFD", full_text))
+        if not has_accents:
+            norm_scopes = self.extract_negated_scopes(text_norm)
+            for _, _, scope_str in norm_scopes:
+                if phrase_norm in {"ho", "bi ho"} and re.search(r"\bho\s+tro\b", scope_str):
+                    continue
+                if re.search(rf"\b{re.escape(phrase_norm)}\b", scope_str, re.IGNORECASE):
+                    return True
 
         return False
 

@@ -36,11 +36,13 @@ export function usePatientSelection() {
   };
 }
 
+import { type PatientSelection } from './usePatientSelection';
+
 export function PatientSelector({
   selection,
   disabled = false,
 }: {
-  selection: ReturnType<typeof usePatientSelection>;
+  selection: PatientSelection;
   disabled?: boolean;
 }) {
   const user = useSelector((state: RootState) => state.auth.user);

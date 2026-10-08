@@ -27,7 +27,7 @@ class ComplaintDelta(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    code: str
+    code: str | None = None
     system: str | None = None
     status: Literal["active", "denied", "resolved", "uncertain"] = "active"
     evidence: str
@@ -47,7 +47,7 @@ class FactsDelta(BaseModel):
     bowel_interval_days: int | None = Field(None, ge=0)
     onset: Literal["sudden", "gradual", "unknown"] = "unknown"
     location: str | None = None
-    severity: Literal["mild", "moderate", "severe", "null"] = "null"
+    severity: Literal["mild", "moderate", "severe", "unknown", "null"] = "unknown"
     pain_severity_0_10: int | None = Field(None, ge=0, le=10)
     qualifiers: list[str] = Field(default_factory=list)
     body_regions: list[str] = Field(default_factory=list)
@@ -62,8 +62,9 @@ class FactsDelta(BaseModel):
 class SafetyConcern(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    observation_indexes: list[int]
+    observation_indexes: list[int] = Field(default_factory=list)
     reason: str
+    evidence: str | None = None
 
 
 class MissingFact(BaseModel):
@@ -78,6 +79,7 @@ class ActionArgs(BaseModel):
 
     specialty_key: str | None = None
     slot_id: str | None = None
+    booking_id: str | None = None
     facility_id: str | None = None
     facility_name: str | None = None
     requested_days: int | None = Field(None, gt=0)
@@ -98,7 +100,7 @@ class CandidateSpecialty(BaseModel):
 class HybridDialogueResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    schema_version: str = "2.0"
+    schema_version: Literal["2.0"] = "2.0"
     language: str = "vi"
     primary_intent: str = "unclear"
     secondary_intents: list[str] = Field(default_factory=list)

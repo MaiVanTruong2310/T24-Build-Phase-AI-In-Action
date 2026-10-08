@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.models.catalog import Doctor, DoctorSchedule, Facility, Service
-from src.models.doctor import DoctorService
 
 
 class ScheduleRepositoryMixin:
@@ -98,18 +97,7 @@ class ScheduleRepositoryMixin:
         if facility_id:
             statement = statement.where(DoctorSchedule.facility_id == facility_id)
         if service_id:
-            statement = (
-                statement.join(
-                    DoctorService,
-                    DoctorService.doctor_id == DoctorSchedule.doctor_id,
-                )
-                .join(Service, Service.id == DoctorService.service_id)
-                .where(
-                    DoctorService.service_id == service_id,
-                    DoctorService.active.is_(True),
-                    Service.status == "active",
-                )
-            )
+            statement = statement.where(DoctorSchedule.service_id == service_id)
         if starts_from:
             statement = statement.where(DoctorSchedule.ends_at > starts_from)
         if starts_to:

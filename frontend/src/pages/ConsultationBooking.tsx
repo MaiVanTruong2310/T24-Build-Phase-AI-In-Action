@@ -261,8 +261,16 @@ export default function ConsultationBooking() {
           // Lọc bỏ dịch vụ khám chuyên khoa lẻ để chỉ hiển thị các gói
 
           const onlyPackages = items.filter((x) => x.code !== 'DV-KHAN-CHUYEN-KHOA')
-
           setPackages(onlyPackages)
+
+          const targetPackageId = preset.current.get('packageId') || preset.current.get('serviceId')
+          if (targetPackageId && !selectedPackage) {
+            const found = onlyPackages.find((p) => p.id === targetPackageId)
+            if (found) {
+              setSelectedPackage(found)
+              setBookingMode('package')
+            }
+          }
 
         }
 
@@ -713,32 +721,23 @@ export default function ConsultationBooking() {
 
 
 
+    const finalPhone = (patientPhone || patientSelection.selectedProfile?.contact_phone || user?.phone || '').replace(/[\s.()-]/g, '')
+    const finalName = (patientName || patientSelection.selectedProfile?.full_name || user?.full_name || '').trim()
+
+    if (finalName.length < 2) {
+      setError('Vui lòng nhập họ và tên người khám (tối thiểu 2 ký tự).')
+      return
+    }
+
+    if (!/^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$/.test(finalPhone)) {
+      setError('Vui lòng nhập số điện thoại hợp lệ (10 số theo chuẩn Việt Nam).')
+      return
+    }
+
     if (!user) {
-
-      if (!patientName.trim() || patientName.trim().length < 2) {
-
-        setError('Vui lòng nhập họ và tên người khám (tối thiểu 2 ký tự).')
-
-        return
-
-      }
-
-      const cleanPhone = patientPhone.replace(/[\s.()-]/g, '')
-
-      if (!/^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$/.test(cleanPhone)) {
-
-        setError('Vui lòng nhập số điện thoại hợp lệ (10 số theo chuẩn Việt Nam).')
-
-        return
-
-      }
-
       if (!gender) {
-
         setError('Vui lòng chọn giới tính.')
-
         return
-
       }
 
       const dobError = birthDateError(dateOfBirth)
@@ -746,7 +745,6 @@ export default function ConsultationBooking() {
         setError(dobError)
         return
       }
-
     }
 
 
@@ -761,30 +759,24 @@ export default function ConsultationBooking() {
 
     try {
 
+      const finalPhone = (patientPhone || patientSelection.selectedProfile?.contact_phone || user?.phone || '').replace(/[\s.()-]/g, '')
+      const finalName = (patientName || patientSelection.selectedProfile?.full_name || user?.full_name || '').trim()
+
       const created = await createPackageRequest({
         patient_profile_id: patientSelection.profileId || undefined,
-      consent_to_contact: contactConsent, guardian_name: guardianName || undefined, guardian_phone: guardianPhone || undefined,
-
+        consent_to_contact: true,
+        guardian_name: guardianName || undefined,
+        guardian_phone: guardianPhone || undefined,
         service_id: selectedPackage.id,
-
         facility_id: packageFacilityId,
-
         preferred_date: packageDate,
-
         preferred_period: packagePeriod,
-
         note: packageNote.trim() || undefined,
-
-        patient_name: !user ? patientName.trim() : undefined,
-
-        patient_phone: !user ? patientPhone.trim() : patientSelection.selectedProfile?.contact_phone || user.phone || undefined,
-
-        patient_email: !user ? patientEmail.trim() || undefined : user.email || undefined,
-
-        gender: !user ? gender : undefined,
-
-        date_of_birth: !user ? dateOfBirth : undefined,
-
+        patient_name: finalName || undefined,
+        patient_phone: finalPhone || undefined,
+        patient_email: (patientEmail || user?.email || '').trim() || undefined,
+        gender: gender || patientSelection.selectedProfile?.gender || (user?.gender as any) || 'prefer_not_to_say',
+        date_of_birth: dateOfBirth || patientSelection.selectedProfile?.date_of_birth || (user?.date_of_birth as any) || undefined,
       })
 
 
@@ -2333,9 +2325,9 @@ export default function ConsultationBooking() {
 
 
 
-                  {/* THÔNG TIN NGƯỜI ĐĂNG KÝ (NẾU CHƯA ĐĂNG NHẬP) */}
+                  {/* THÔNG TIN NGƯỜI ĐĂNG KÝ (NẾU CHƯA CÓ ĐỦ THÔNG TIN LIÊN HỆ) */}
 
-                  {!user && (
+                  {(!user || !user.phone) && (
 
                     <div className="space-y-2.5 border-t border-slate-100 dark:border-app-border light:border-app-border pt-3">
 

@@ -421,6 +421,29 @@ class DynamicProbingService:
         active = [item for item in probing_by_complaint.values() if item.get("status") == "active"]
         return len(active) >= 2 and any(int(item.get("questions_asked") or 0) == 0 for item in active)
 
+    def get_probing_candidates_for_context(
+        self,
+        chief_complaint: str | None,
+        language: str = "vi",
+        active_categories: list[str] | None = None,
+    ) -> list[str]:
+        """Return candidate probing questions for the active clinical complaint/categories."""
+        target_cats: list[str] = []
+        if chief_complaint and chief_complaint in self.COMPLAINT_CATEGORY_MAP:
+            target_cats.append(self.COMPLAINT_CATEGORY_MAP[chief_complaint])
+        if active_categories:
+            for cat in active_categories:
+                if cat not in target_cats:
+                    target_cats.append(cat)
+
+        candidates: list[str] = []
+        for tree in CLINICAL_PROBING_TREES:
+            if tree.category_key in target_cats:
+                q1 = tree.turn_1_question_en if language == "en" else tree.turn_1_question_vi
+                q2 = tree.turn_2_question_en if language == "en" else tree.turn_2_question_vi
+                candidates.extend([q1, q2])
+        return candidates
+
     def find_probing_tree(self, text: str) -> ProbingClarificationTree | None:
         matches = self.find_all_probing_trees(text)
         return matches[0] if matches else None

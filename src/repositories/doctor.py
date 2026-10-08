@@ -7,8 +7,7 @@ from uuid import UUID
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import selectinload
 
-from src.models.catalog import Doctor, DoctorFacility, DoctorService, DoctorSpecialty
-from src.models.service import Service
+from src.models.catalog import Doctor, DoctorFacility, DoctorSpecialty
 
 
 class DoctorRepositoryMixin:
@@ -21,7 +20,6 @@ class DoctorRepositoryMixin:
             .options(
                 selectinload(Doctor.specialties).selectinload(DoctorSpecialty.specialty),
                 selectinload(Doctor.facilities).selectinload(DoctorFacility.facility),
-                selectinload(Doctor.services).selectinload(DoctorService.service),
             )
             .where(Doctor.id == resource_id)
         )
@@ -56,7 +54,6 @@ class DoctorRepositoryMixin:
             .options(
                 selectinload(Doctor.specialties).selectinload(DoctorSpecialty.specialty),
                 selectinload(Doctor.facilities).selectinload(DoctorFacility.facility),
-                selectinload(Doctor.services).selectinload(DoctorService.service),
             )
             .order_by(Doctor.full_name)
             .offset(offset)
@@ -90,17 +87,7 @@ class DoctorRepositoryMixin:
             statement = statement.where(Doctor.degrees.contains([degree]))
         if language:
             statement = statement.where(Doctor.languages.contains([language]))
-        if service_id:
-            statement = (
-                statement.join(DoctorService)
-                .join(Service, Service.id == DoctorService.service_id)
-                .where(
-                    DoctorService.service_id == service_id,
-                    DoctorService.active.is_(True),
-                    Service.status == "active",
-                )
-            )
-        if specialty_id or facility_id or service_id:
+        if specialty_id or facility_id:
             statement = statement.distinct()
         return list((await self.session.execute(statement)).scalars().unique().all())
 
@@ -139,9 +126,4 @@ class DoctorRepositoryMixin:
                     is_primary=facility.is_primary,
                 )
                 for facility in unique_facilities
-            ]
-        if service_ids is not None:
-            await self.session.execute(delete(DoctorService).where(DoctorService.doctor_id == doctor.id))
-            doctor.services = [
-                DoctorService(doctor_id=doctor.id, service_id=value) for value in dict.fromkeys(service_ids)
             ]
