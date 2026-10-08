@@ -75,14 +75,17 @@ jobs:
         run: docker build --tag ai20k-agent:ci .
 
       - name: Push Docker Image to Registry
-        if: >-
-          github.event_name == 'push' &&
-          vars.DOCKERHUB_USERNAME != '' &&
-          secrets.DOCKERHUB_TOKEN != '' &&
-          vars.DOCKERHUB_REPO != ''
+        if: github.event_name == 'push' && vars.DOCKERHUB_USERNAME != '' && vars.DOCKERHUB_REPO != ''
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ vars.DOCKERHUB_USERNAME }}" --password-stdin
+          if [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "DOCKERHUB_TOKEN is not configured. Skipping push."
+            exit 0
+          fi
+          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
           if [ "$GITHUB_REF_NAME" = "main" ]; then ENV_TAG=production; else ENV_TAG=development; fi
           docker tag ai20k-agent:ci "$IMAGE:$GITHUB_SHA"
           docker tag ai20k-agent:ci "$IMAGE:$ENV_TAG"
@@ -134,11 +137,7 @@ jobs:
   frontend-deploy:
     name: Deploy Frontend to Vercel
     needs: [backend-ci, frontend-ci]
-    if: >-
-      github.event_name == 'push' &&
-      secrets.VERCEL_TOKEN != '' &&
-      secrets.VERCEL_ORG_ID != '' &&
-      secrets.VERCEL_PROJECT_ID != ''
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -154,7 +153,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check Vercel credentials
+        id: check_credentials
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "Vercel secrets not configured. Skipping deployment."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Node.js 20
+        if: steps.check_credentials.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -162,12 +172,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
+        if: steps.check_credentials.outputs.skip != 'true'
         run: npm ci
 
       - name: Pull Vercel environment
+        if: steps.check_credentials.outputs.skip != 'true'
         run: npx vercel@latest pull --yes --environment="$VERCEL_ENV" --token="$VERCEL_TOKEN"
 
       - name: Build Vercel deployment
+        if: steps.check_credentials.outputs.skip != 'true'
         shell: bash
         run: |
           if [[ "$GITHUB_REF_NAME" == "main" ]]; then
@@ -177,6 +190,7 @@ jobs:
           fi
 
       - name: Deploy prebuilt application
+        if: steps.check_credentials.outputs.skip != 'true'
         shell: bash
         run: |
           if [[ "$GITHUB_REF_NAME" == "main" ]]; then
@@ -193,11 +207,7 @@ jobs:
   observability-deploy:
     name: Deploy Observability Stack (EC2)
     needs: [backend-ci]
-    if: >-
-      github.event_name == 'push' &&
-      secrets.OBSERVABILITY_EC2_HOST != '' &&
-      secrets.OBSERVABILITY_EC2_USER != '' &&
-      secrets.OBSERVABILITY_EC2_SSH_KEY != ''
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -205,22 +215,25 @@ jobs:
       PROMETHEUS_DEV_TARGET: ${{ secrets.OBSERVABILITY_DEV_TARGET }}
       PROMETHEUS_PROD_TARGET: ${{ secrets.OBSERVABILITY_PROD_TARGET }}
       GRAFANA_ROOT_URL: ${{ secrets.OBSERVABILITY_GRAFANA_ROOT_URL }}
+      OBSERVABILITY_EC2_HOST: ${{ secrets.OBSERVABILITY_EC2_HOST }}
+      OBSERVABILITY_EC2_USER: ${{ secrets.OBSERVABILITY_EC2_USER }}
+      OBSERVABILITY_EC2_SSH_KEY: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate settings
-        shell: bash
+      - name: Check observability credentials
+        id: check_obs
         run: |
-          set -euo pipefail
-          for name in GRAFANA_ADMIN_PASSWORD PROMETHEUS_DEV_TARGET PROMETHEUS_PROD_TARGET GRAFANA_ROOT_URL; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "Missing required observability setting: $name"
-              exit 1
-            fi
-          done
+          if [ -z "$OBSERVABILITY_EC2_HOST" ] || [ -z "$OBSERVABILITY_EC2_SSH_KEY" ]; then
+            echo "Observability EC2 secrets not configured. Skipping deployment."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Copy observability files to EC2
+        if: steps.check_obs.outputs.skip != 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
@@ -231,6 +244,7 @@ jobs:
           strip_components: 1
 
       - name: Launch observability stack
+        if: steps.check_obs.outputs.skip != 'true'
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
@@ -265,35 +279,47 @@ jobs:
   backend-deploy:
     name: Deploy Backend to EC2
     needs: [backend-ci, frontend-ci]
-    if: >-
-      github.event_name == 'push' &&
-      secrets.EC2_USER != '' &&
-      secrets.EC2_SSH_KEY != '' &&
-      (secrets.EC2_HOST_PROD != '' || secrets.EC2_HOST_DEV != '')
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_HOST: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
+      EC2_USER: ${{ secrets.EC2_USER }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check EC2 credentials
+        id: check_ec2
+        run: |
+          if [ -z "$EC2_SSH_KEY" ] || [ -z "$EC2_HOST" ] || [ -z "$EC2_USER" ]; then
+            echo "EC2 deployment secrets not configured. Skipping deployment."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Copy docker-compose files to EC2
+        if: steps.check_ec2.outputs.skip != 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ env.EC2_HOST }}
+          username: ${{ env.EC2_USER }}
+          key: ${{ env.EC2_SSH_KEY }}
           source: "docker-compose.yml,docker-compose.prod.yml,docker-compose.dev.yml,docker-compose.observability.yml,observability/alloy/agent.alloy"
           target: "/opt/app"
 
       - name: Deploy containers on EC2
+        if: steps.check_ec2.outputs.skip != 'true'
         uses: appleboy/ssh-action@v1
         env:
           OBSERVABILITY_LOKI_URL: ${{ secrets.OBSERVABILITY_LOKI_URL }}
           OBSERVABILITY_TEMPO_OTLP_ENDPOINT: ${{ secrets.OBSERVABILITY_TEMPO_OTLP_ENDPOINT }}
         with:
-          host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ env.EC2_HOST }}
+          username: ${{ env.EC2_USER }}
+          key: ${{ env.EC2_SSH_KEY }}
           envs: GITHUB_SHA,GITHUB_REF_NAME,OBSERVABILITY_LOKI_URL,OBSERVABILITY_TEMPO_OTLP_ENDPOINT
           script: |
             set -euo pipefail
