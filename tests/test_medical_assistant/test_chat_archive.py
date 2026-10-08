@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.db import session as db_session
 from src.medical_assistant.api import routes
 from src.medical_assistant.domain.schemas import ChatRequest
 from src.services.chat_history import STATE_FIELDS, graph_thread, health_record
@@ -14,6 +15,7 @@ def profile():
         id=uuid4(),
         full_name="Account name",
         phone="0912345678",
+        role="patient",
         date_of_birth=None,
         gender=None,
         patient_details={
@@ -42,6 +44,18 @@ async def test_authenticated_turn_uses_verified_owner_and_restored_context(monke
         begin_turn=AsyncMock(return_value={"checkpoint": {"clinical_facts": {"duration": "two days"}}})
     )
     monkeypatch.setattr(routes, "ChatHistoryService", lambda session: service)
+    profile_db = AsyncMock()
+    profile_db.execute.return_value = SimpleNamespace(scalar_one_or_none=lambda: None)
+    profile_session = AsyncMock()
+    profile_session.__aenter__.return_value = profile_db
+    monkeypatch.setattr(db_session, "get_session_factory", lambda: lambda: profile_session)
+    memory = SimpleNamespace(
+        get_patient_profile=AsyncMock(return_value=[]),
+        get_active_open_loops=AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "src.medical_assistant.domain.patient_memory_service.get_patient_memory_service", lambda: memory
+    )
     user = profile()
     request = ChatRequest(
         message="Follow up",
@@ -54,6 +68,7 @@ async def test_authenticated_turn_uses_verified_owner_and_restored_context(monke
     assert payload["patient_profile"] == {"name": user.full_name, "phone": user.phone}
     assert payload["clinical_facts"] == {"duration": "two days"}
     assert payload["patient_health_record"]["allergies"] == "Test allergy"
+    profile_db.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
