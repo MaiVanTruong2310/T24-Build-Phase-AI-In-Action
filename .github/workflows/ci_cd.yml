@@ -326,7 +326,6 @@ jobs:
             docker compose "${COMPOSE_FILES[@]}" config >/dev/null
             docker compose "${COMPOSE_FILES[@]}" pull
             docker compose "${COMPOSE_FILES[@]}" up -d postgres
-            docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps backend alembic upgrade head
             docker compose "${COMPOSE_FILES[@]}" up -d --remove-orphans
 
             sleep 45
