@@ -46,8 +46,10 @@ assert.ok(
 
 // 5. Verify backend updates endpoint filters out AI bot messages
 const backendFile = fs.readFileSync(path.join(__dirname, '../../src/api/endpoints/workbench.py'), 'utf8');
+const rejectsAiSenderType = /sender_t\s+in\s+\(\s*["']AGENT["']\s*,\s*["']BOT["']\s*,\s*["']AI["']\s*\)/.test(backendFile);
+const rejectsLegacyAiSender = /legacy_sender\s+in\s+\(\s*["']ai["']\s*,\s*["']assistant["']\s*,\s*["']bot["']\s*\)/.test(backendFile);
 assert.ok(
-  backendFile.includes("sender_t in ('AGENT', 'BOT', 'AI')") || backendFile.includes("legacy_sender in ('ai', 'assistant', 'bot')"),
+  rejectsAiSenderType || rejectsLegacyAiSender,
   'Backend updates endpoint must reject AI bot messages'
 );
 

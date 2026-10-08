@@ -22,7 +22,6 @@ from src.models.user import User
 from src.models.workbench import CoordinationCase as Case
 from src.models.workbench import CoordinationDeposit as Deposit
 from src.models.workbench import CoordinationEvent as Event
-from src.models.workbench import CoordinationMessage as Message
 from src.models.workbench import CoordinationPolicy as Policy
 from src.models.workbench import CoordinatorMember as Member
 from src.services.notification import NotificationService
@@ -162,10 +161,11 @@ async def ensure_chat_case(db, request, user, token):
 
 
 async def add_message(db, case, client_id, sender, body, actor=None, channel: str | None = None):
-    from datetime import datetime, timezone
-    from src.models.conversation import Conversation, Message as UnifiedMsg
+    from src.models.conversation import Conversation
+    from src.models.conversation import Message as UnifiedMsg
+
     sender_type = "PATIENT" if sender in ("patient", "user") else "STAFF" if sender in ("coordinator", "staff") else "AGENT" if sender in ("ai", "assistant", "bot") else "SYSTEM"
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await db.execute(
         insert(Conversation)
         .values(
