@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { AlertCircle, Headset, LoaderCircle, Send, Stethoscope, UserCheck } from 'lucide-react'
 import { fetchWithAuth } from '../../app/apiClient'
 
-interface Update {
+export interface Update {
   id: string
   sender: 'coordinator' | 'patient' | 'system' | string
   body: string
@@ -17,6 +17,7 @@ export interface SupportRequestState {
 
 export interface PatientUpdatesHandle {
   requestHuman: () => void
+  sendMessage: (body: string) => Promise<void>
 }
 
 interface PatientUpdatesProps {
@@ -24,7 +25,9 @@ interface PatientUpdatesProps {
   owner: string
   canReply?: boolean
   showRequestButton?: boolean
+  mode?: 'standalone' | 'embedded'
   onSupportStateChange?: (state: SupportRequestState) => void
+  onCoordinatorMessages?: (messages: Update[]) => void
 }
 
 export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesProps>(function PatientUpdates(
@@ -33,12 +36,15 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
     owner,
     canReply = false,
     showRequestButton = true,
+    mode = 'standalone',
     onSupportStateChange,
+    onCoordinatorMessages,
   },
   ref
 ) {
   const [messages, setMessages] = useState<Update[]>([])
   const [control, setControl] = useState('ai')
+  const [caseStatus, setCaseStatus] = useState('observing')
   const [notice, setNotice] = useState('')
   const [reply, setReply] = useState('')
   const [busy, setBusy] = useState(false)
@@ -54,6 +60,7 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
     cursor.current = ''
     setMessages([])
     setControl('ai')
+    setCaseStatus('observing')
     setNotice('')
     setHumanRequested(false)
 
@@ -83,6 +90,9 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
         const currentCase = value.data?.case
 
         setControl(currentControl)
+        if (currentCase?.status) {
+          setCaseStatus(currentCase.status)
+        }
         if (updates.length > 0) {
           setMessages((previous) =>
             [...previous, ...updates].filter(
@@ -90,6 +100,7 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
             )
           )
           cursor.current = updates[updates.length - 1].id
+          onCoordinatorMessages?.(updates)
         }
         setNotice('')
 
@@ -153,18 +164,8 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
     }
   }
 
-  useImperativeHandle(ref, () => ({
-    requestHuman: () => {
-      void requestHuman()
-    },
-  }))
-
-  useEffect(() => {
-    onSupportStateChange?.({ busy, requested: humanRequested, control })
-  }, [busy, humanRequested, control, onSupportStateChange])
-
-  const send = async () => {
-    const trimmed = reply.trim()
+  const sendText = async (rawText: string) => {
+    const trimmed = rawText.trim()
     if (!trimmed || busy) return
 
     setBusy(true)
@@ -198,14 +199,45 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
       // Hoàn tác tin nhắn tạm nếu gửi thất bại
       setMessages((prev) => prev.filter((m) => m.id !== tempId))
       setReply(trimmed)
+      throw e
     } finally {
       setBusy(false)
     }
   }
 
-  // Khi chưa yêu cầu hỗ trợ, bác sĩ chưa tiếp nhận và không có tin nhắn điều phối nào
-  // Trong ChatbotWidget (showRequestButton === false), hoàn toàn ẩn để không làm bẩn giao diện AI bot
-  const isSessionActive = humanRequested || control === 'human' || messages.length > 0
+  useImperativeHandle(ref, () => ({
+    requestHuman: () => {
+      void requestHuman()
+    },
+    sendMessage: async (body: string) => {
+      await sendText(body)
+    },
+  }))
+
+  useEffect(() => {
+    onSupportStateChange?.({ busy, requested: humanRequested, control })
+  }, [busy, humanRequested, control, onSupportStateChange])
+
+  // Trong embedded mode (tích hợp trong ChatbotWidget):
+  // Toàn bộ trải nghiệm điều phối viên diễn ra ngay trong luồng chat chính (giống nhóm chat Messenger)
+  // Không render khung chat con thứ hai để tránh lặp 2 ô input và vỡ giao diện
+  if (mode === 'embedded') {
+    return null
+  }
+
+  // Phiên điều phối CHỈ kích hoạt khi:
+  // 1. Người dùng chủ động bấm yêu cầu hỗ trợ (humanRequested)
+  // 2. Bác sĩ điều phối đang trực tuyến tiếp quản (control === 'human')
+  // 3. Thực sự có tin nhắn từ Bác sĩ điều phối gửi cho bệnh nhân (hasCoordinatorMessages)
+  // 4. Ca điều phối đang ở trạng thái active (đã được tiếp nhận/chuyển ca/khẩn cấp, không phải chỉ quan sát ngầm)
+  const hasCoordinatorMessages = messages.some((m) => m.sender === 'coordinator')
+  const isCaseActive = Boolean(
+    caseStatus &&
+      caseStatus !== 'observing' &&
+      caseStatus !== 'completed' &&
+      caseStatus !== 'cancelled'
+  )
+  const isSessionActive = humanRequested || control === 'human' || hasCoordinatorMessages || isCaseActive
   if (!isSessionActive && !showRequestButton && !canReply) {
     return null
   }
@@ -371,7 +403,7 @@ export const PatientUpdates = forwardRef<PatientUpdatesHandle, PatientUpdatesPro
           className="mt-3 flex items-center gap-1.5"
           onSubmit={(e) => {
             e.preventDefault()
-            void send()
+            void sendText(reply)
           }}
         >
           <input

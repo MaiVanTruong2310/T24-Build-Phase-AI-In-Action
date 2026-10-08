@@ -23,7 +23,7 @@ async def before_turn(db, request, user, guest):
     async with db.begin():
         case = await svc.ensure_chat_case(db, request, user, guest)
         local_actor = await db.get(User, user.id) if user else None
-        await svc.add_message(db, case, request.request_id, "patient", request.message, local_actor)
+        await svc.add_message(db, case, request.request_id, "patient", request.message, local_actor, channel="ai_chat")
         # Safety rules still run during takeover; emergencies never wait for staff.
         from src.medical_assistant.domain.triage_service import get_triage_service
 

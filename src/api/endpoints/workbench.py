@@ -635,9 +635,10 @@ async def updates(
     filtered_messages = []
     for m in raw_messages:
         meta = m.msg_metadata or {}
-        client_id = str(meta.get("client_id") or "")
-        legacy_sender = str(meta.get("legacy_sender") or "").lower()
-        sender_t = (m.sender_type or "").upper()
+        client_id = str(meta.get('client_id') or '')
+        legacy_sender = str(meta.get('legacy_sender') or '').lower()
+        channel = str(meta.get('channel') or '')
+        sender_t = (m.sender_type or '').upper()
         # Loại bỏ triệt để các tin nhắn do AI Bot sinh ra
         if (
             sender_t in ("AGENT", "BOT", "AI")
@@ -645,26 +646,22 @@ async def updates(
             or client_id.endswith(":ai")
         ):
             continue
-        sender = (
-            "coordinator"
-            if sender_t in ("STAFF", "COORDINATOR") or legacy_sender in ("coordinator", "staff")
-            else "patient"
-            if sender_t in ("PATIENT", "USER") or legacy_sender in ("patient", "user")
-            else "system"
-        )
-        filtered_messages.append(
-            {"id": str(m.id), "sender": sender, "body": m.content or "", "created_at": m.created_at.isoformat()}
-        )
-    result = {
-        "control": case.control,
-        "messages": filtered_messages,
-        "case": {
-            "id": str(case.id),
-            "status": case.status,
-            "plan": {k: v for k, v in case.plan.items() if k not in {"hold_id", "reason"}},
-            "priority": case.priority,
-        },
-    }
+        # Bỏ qua tin nhắn người bệnh gửi trong luồng chat AI thông thường
+        if channel == 'ai_chat':
+            continue
+        is_patient = sender_t in ('PATIENT', 'USER') or legacy_sender in ('patient', 'user')
+        # Với dữ liệu chưa có gắn tag channel: nếu ca vẫn observing và control == 'ai',
+        # tin nhắn người bệnh hoàn toàn là chat với AI bot, không phải tin nhắn phiên điều phối
+        if is_patient and case.status == 'observing' and case.control == 'ai':
+            continue
+        sender = 'coordinator' if sender_t in ('STAFF', 'COORDINATOR') or legacy_sender in ('coordinator', 'staff') else 'patient' if is_patient else 'system'
+        filtered_messages.append({
+            'id': str(m.id),
+            'sender': sender,
+            'body': m.content or '',
+            'created_at': m.created_at.isoformat()
+        })
+    result = {'control': case.control, 'messages': filtered_messages, 'case': {'id': str(case.id), 'status': case.status, 'plan': {k: v for k, v in case.plan.items() if k not in {'hold_id', 'reason'}}, 'priority': case.priority}}
     await db.commit()
     return success_response(result)
 
@@ -696,10 +693,10 @@ async def patient_message(
             await db.execute(select(Case).where(Case.owner_key == key, Case.session_id == session_id).with_for_update())
         ).scalar_one_or_none()
         if not case:
-            raise HTTPException(404, "Không tìm thấy phiếu trong phiên này.")
-        if case.status in {"cancelled", "completed"}:
-            raise HTTPException(409, "Phiếu đã đóng. Vui lòng tạo yêu cầu mới.")
-        await svc.add_message(db, case, payload.client_id, "patient", payload.body)
+            raise HTTPException(404, 'Không tìm thấy phiếu trong phiên này.')
+        if case.status in {'cancelled', 'completed'}:
+            raise HTTPException(409, 'Phiếu đã đóng. Vui lòng tạo yêu cầu mới.')
+        await svc.add_message(db, case, payload.client_id, 'patient', payload.body, channel="coordinator_chat")
         from src.medical_assistant.domain.triage_service import get_triage_service
 
         triage = get_triage_service().evaluate_symptoms(payload.body)

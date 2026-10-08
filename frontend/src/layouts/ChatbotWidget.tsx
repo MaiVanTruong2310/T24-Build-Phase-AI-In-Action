@@ -1,6 +1,6 @@
 import { PatientSelector } from '../features/patient-profiles/PatientSelector';
 import { usePatientSelection } from '../features/patient-profiles/usePatientSelection';
-import { PatientUpdates, type PatientUpdatesHandle, type SupportRequestState } from '../features/coordinator/PatientUpdates';
+import { PatientUpdates, type PatientUpdatesHandle, type SupportRequestState, type Update } from '../features/coordinator/PatientUpdates';
 import '../components/ChatMessageInput.css';
 import '../components/ChatSendButton.css';
 import { AIIdentity } from '../components/AIIdentity';
@@ -186,6 +186,32 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const isNearBottomRef = useRef(true);
   const activeRequest = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleCoordinatorMessages = useCallback((updates: Update[]) => {
+    setMessages((prev) => {
+      const coordMsgs = updates.filter((u) => u.sender === 'coordinator');
+      if (coordMsgs.length === 0) return prev;
+
+      const newItems: Message[] = [];
+      for (const u of coordMsgs) {
+        const id = `coord-${u.id}`;
+        if (!prev.some((m) => m.id === id || m.id === `takeover-${u.id}`)) {
+          newItems.push({
+            id,
+            sender: 'bot',
+            staff: true,
+            text: u.body,
+            time: new Date(u.created_at).toLocaleTimeString('vi-VN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          });
+        }
+      }
+      if (newItems.length === 0) return prev;
+      return [...prev, ...newItems];
+    });
+  }, []);
 
   const scrollToBottom = useCallback((smooth = false) => {
     const container = messagesContainerRef.current;
@@ -399,6 +425,37 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
   const sendMessage = async (rawText: string) => {
     const text = rawText.trim();
     if (!text || isSending || historyDeleting || chatLocked || historyLoading || historyError) return;
+
+    if (supportState.control === 'human') {
+      const stamp = Date.now();
+      const userMsgId = `user-${stamp}`;
+      setMessages((current) => [
+        ...current,
+        { id: userMsgId, sender: 'user', text, time: displayTime() },
+      ]);
+      setInputText('');
+      isNearBottomRef.current = true;
+      setTimeout(() => {
+        scrollToBottom(true);
+        ensureChatVisibleInPage();
+      }, 40);
+
+      try {
+        await supportRef.current?.sendMessage(text);
+      } catch {
+        setMessages((current) => [
+          ...current,
+          {
+            id: `err-${Date.now()}`,
+            sender: 'bot',
+            text: 'Không thể gửi tin nhắn cho Bác sĩ điều phối. Vui lòng thử lại.',
+            time: displayTime(),
+            error: true,
+          },
+        ]);
+      }
+      return;
+    }
 
     const request = new AbortController();
     activeRequest.current = request;
@@ -646,6 +703,29 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
           <div inert={chatLocked} aria-hidden={chatLocked || undefined} className={`flex min-h-0 flex-1 flex-col ${chatLocked ? 'pointer-events-none select-none blur-sm' : ''}`}>
           {/* Message List */}
           <PatientSelector selection={patientSelection} disabled={isSending || historyLoading} />
+          {supportState.control === 'human' && (
+            <div className="flex items-center justify-between border-b border-emerald-500/20 bg-emerald-50/90 dark:bg-emerald-950/40 px-3.5 py-1.5 text-xs text-emerald-800 dark:text-emerald-200">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                </span>
+                <span className="font-semibold text-[11px]">Bác sĩ điều phối đang trực tiếp hỗ trợ</span>
+              </div>
+              <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
+                Trực tuyến
+              </span>
+            </div>
+          )}
+          {supportState.requested && supportState.control !== 'human' && (
+            <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-50/90 dark:bg-amber-950/40 px-3.5 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
+              </span>
+              <span className="font-medium text-[11px]">Đã gửi yêu cầu hỗ trợ. Đang chờ Bác sĩ điều phối tiếp nhận phiên…</span>
+            </div>
+          )}
           {authUser && historyOpen && <ChatHistoryPanel patientProfileId={patientSelection.profileId || undefined} key={authUser.id + patientSelection.profileId} activeSessionId={sessionId} onSelect={openConversation} busy={isSending || historyLoading} onDeletingChange={setHistoryDeleting} onDeleted={id => { if (id === sessionId) { historyRequest.current?.abort(); setHistoryError(''); setHistoryMore(false); setHistoryOffset(0); resetConversation(); } }} />}
           {historyError && <p role="alert" className="px-4 py-2 text-xs text-red-600">{historyError} <button type="button" onClick={() => setHistoryReload(value => value + 1)} className="underline">Thử tải lại</button></p>}
           {historyLoading && <p className="px-4 py-2 text-xs text-slate-500">Đang tải cuộc trò chuyện…</p>}
@@ -663,7 +743,15 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               return (
                 <div key={message.id} className={isUser ? 'flex justify-end' : 'flex items-start gap-2.5'}>
                   {!isUser && (
-                    <span className="mt-1 shrink-0"><AIIdentity avatarOnly /></span>
+                    <span className="mt-1 shrink-0">
+                      {message.staff ? (
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-[#176a52] dark:bg-emerald-900/60 dark:text-emerald-300 ring-2 ring-emerald-500/20 font-bold text-[10px]">
+                          BS
+                        </div>
+                      ) : (
+                        <AIIdentity avatarOnly />
+                      )}
+                    </span>
                   )}
 
                   <div
@@ -680,10 +768,18 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                     {/* Doctor Supervision Stamp on Bot Messages */}
                     {!isUser && (
                       <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-1.5">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                          {message.staff ? 'Nhân viên y tế' : 'Trợ lý AI'}
-                          VgreenAI
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          {message.staff ? (
+                            <>
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                              <span>Bác sĩ điều phối</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                              <span>Trợ lý AI VgreenAI</span>
+                            </>
+                          )}
                         </span>
                         <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                           {message.time || displayTime()}
@@ -760,14 +856,16 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               ref={supportRef}
               sessionId={sessionId}
               owner={ownerKey}
+              mode="embedded"
               showRequestButton={false}
               onSupportStateChange={setSupportState}
+              onCoordinatorMessages={handleCoordinatorMessages}
             />
             <div ref={messagesEndRef} />
           </div>
 
           {/* Quick Reply Suggestions */}
-          {latestQuickReplies.length > 0 && (
+          {latestQuickReplies.length > 0 && supportState.control !== 'human' && (
             <div className="flex gap-2 overflow-x-auto border-t border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-[#0B1329]/95 px-3.5 py-2.5 no-scrollbar">
               {latestQuickReplies.slice(0, 4).map((reply) => (
                 <button
@@ -804,9 +902,13 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                   disabled={isSending || historyDeleting || historyLoading || Boolean(historyError)}
                   onFocus={ensureChatVisibleInPage}
                   onChange={(event) => setInputText(event.target.value)}
-                  placeholder="Mô tả triệu chứng, vị trí và thời gian bắt đầu…"
+                  placeholder={
+                    supportState.control === 'human'
+                      ? 'Nhắn tin cho Bác sĩ điều phối…'
+                      : 'Mô tả triệu chứng, vị trí và thời gian bắt đầu…'
+                  }
                   aria-label="Nội dung tin nhắn"
-                    className="chat-message-input"
+                  className="chat-message-input"
                 />
               </div>
                 <button

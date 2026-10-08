@@ -161,22 +161,11 @@ async def ensure_chat_case(db, request, user, token):
     return case
 
 
-async def add_message(db, case, client_id, sender, body, actor=None):
-    from datetime import datetime
-
-    from src.models.conversation import Conversation
-    from src.models.conversation import Message as UnifiedMsg
-
-    sender_type = (
-        "PATIENT"
-        if sender in ("patient", "user")
-        else "STAFF"
-        if sender in ("coordinator", "staff")
-        else "AGENT"
-        if sender in ("ai", "assistant", "bot")
-        else "SYSTEM"
-    )
-    now = datetime.now(UTC)
+async def add_message(db, case, client_id, sender, body, actor=None, channel: str | None = None):
+    from datetime import datetime, timezone
+    from src.models.conversation import Conversation, Message as UnifiedMsg
+    sender_type = "PATIENT" if sender in ("patient", "user") else "STAFF" if sender in ("coordinator", "staff") else "AGENT" if sender in ("ai", "assistant", "bot") else "SYSTEM"
+    now = datetime.now(timezone.utc)
     await db.execute(
         insert(Conversation)
         .values(
@@ -189,9 +178,11 @@ async def add_message(db, case, client_id, sender, body, actor=None):
             created_by_id=case.patient_id,
             created_at=getattr(case, "created_at", None) or now,
             updated_at=now,
-        )
-        .on_conflict_do_nothing(index_elements=["id"])
+        ).on_conflict_do_nothing(index_elements=["id"])
     )
+    msg_meta = {"client_id": str(client_id), "legacy_sender": sender}
+    if channel:
+        msg_meta["channel"] = channel
     await db.execute(
         insert(UnifiedMsg).values(
             id=uuid4(),
@@ -200,7 +191,7 @@ async def add_message(db, case, client_id, sender, body, actor=None):
             sender_id=actor.id if actor else None,
             message_type="TEXT",
             content=body,
-            msg_metadata={"client_id": str(client_id), "legacy_sender": sender},
+            msg_metadata=msg_meta,
             created_at=now,
         )
     )
@@ -600,18 +591,33 @@ def case_dict(case):
 
 async def detail(db, case):
     value = case_dict(case)
-    for name, model in [("messages", Message), ("events", Event), ("deposits", Deposit)]:
-        rows = (
-            (await db.execute(select(model).where(model.case_id == case.id).order_by(model.created_at))).scalars().all()
+    for name, model in [('events', Event), ('deposits', Deposit)]:
+        rows = (await db.execute(select(model).where(model.case_id == case.id).order_by(model.created_at))).scalars().all()
+        value[name] = [{col.name: (str(v) if isinstance(v, UUID) else v.isoformat() if isinstance(v, datetime) else v) for col in model.__table__.columns for v in [getattr(row, col.name)]} for row in rows]
+
+    from src.models.conversation import Message as UnifiedMsg
+    msg_rows = (await db.execute(select(UnifiedMsg).where(UnifiedMsg.conversation_id == case.id).order_by(UnifiedMsg.created_at))).scalars().all()
+    messages_list = []
+    for m in msg_rows:
+        meta = m.msg_metadata or {}
+        legacy_sender = str(meta.get('legacy_sender') or '').lower()
+        sender_t = (m.sender_type or '').upper()
+        sender = (
+            'coordinator' if sender_t in ('STAFF', 'COORDINATOR') or legacy_sender in ('coordinator', 'staff')
+            else 'patient' if sender_t in ('PATIENT', 'USER') or legacy_sender in ('patient', 'user')
+            else 'ai' if sender_t in ('AGENT', 'BOT', 'AI') or legacy_sender in ('ai', 'assistant', 'bot')
+            else 'system'
         )
-        value[name] = [
-            {
-                col.name: (str(v) if isinstance(v, UUID) else v.isoformat() if isinstance(v, datetime) else v)
-                for col in model.__table__.columns
-                for v in [getattr(row, col.name)]
-            }
-            for row in rows
-        ]
+        messages_list.append({
+            'id': str(m.id),
+            'case_id': str(m.conversation_id),
+            'client_id': str(meta.get('client_id') or ''),
+            'sender': sender,
+            'actor_id': str(m.sender_id) if m.sender_id else None,
+            'body': m.content or '',
+            'created_at': m.created_at.isoformat() if m.created_at else now().isoformat(),
+        })
+    value['messages'] = messages_list
     return value
 
 

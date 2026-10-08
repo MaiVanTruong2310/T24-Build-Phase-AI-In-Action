@@ -17,7 +17,11 @@ assert.ok(
   'Must filter out AI bot / assistant senders in PatientUpdates'
 );
 
-// 2. Verify inactive state hides the element when not requested and no messages
+// 2. Verify inactive state hides the element when not requested and no coordinator intervention
+assert.ok(
+  file.includes('hasCoordinatorMessages') && file.includes('isCaseActive'),
+  'Must verify coordinator intervention or active case before showing coordinator session'
+);
 assert.ok(
   file.includes('if (!isSessionActive && !showRequestButton && !canReply)'),
   'Must hide component when session is inactive to prevent polluting chatbot widget'
@@ -47,10 +51,15 @@ assert.ok(
   'Backend updates endpoint must reject AI bot messages'
 );
 
-const serviceFile = fs.readFileSync(path.join(__dirname, '../../src/services/workbench.py'), 'utf8');
+// 6. Verify unified chatbot widget integration
+const widgetFile = fs.readFileSync(path.join(__dirname, '../src/layouts/ChatbotWidget.tsx'), 'utf8');
 assert.ok(
-  serviceFile.includes('"AGENT" if sender in ("ai", "assistant", "bot")'),
-  'Workbench service must categorize AI messages as AGENT sender type'
+  widgetFile.includes('mode="embedded"') && widgetFile.includes('handleCoordinatorMessages'),
+  'ChatbotWidget must mount PatientUpdates in embedded mode and handle coordinator messages directly'
+);
+assert.ok(
+  widgetFile.includes("supportState.control === 'human'") && widgetFile.includes('Nhắn tin cho Bác sĩ điều phối'),
+  'ChatbotWidget must provide single unified input bar switching to coordinator mode'
 );
 
 console.log('Coordinator session chat regression tests passed successfully!');
