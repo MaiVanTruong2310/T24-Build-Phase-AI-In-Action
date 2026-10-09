@@ -186,16 +186,21 @@ jobs:
           npx --version
 
       - name: Install frontend dependencies
+        working-directory: frontend
         run: npm ci
-
-      - name: Pull Vercel project settings
-        env:
-          npm_config_cache: /tmp/npm-cache-${{ github.run_id }}
+      
+      - name: Build Vercel deployment
+        working-directory: frontend
+        shell: bash
         run: |
-          npx --yes vercel@63.1.0 pull \
-            --yes \
-            --environment="$VERCEL_ENV" \
-            --token="$VERCEL_TOKEN"
+          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
+            npx vercel build \
+              --prod \
+              --token="$VERCEL_TOKEN"
+          else
+            npx vercel build \
+              --token="$VERCEL_TOKEN"
+          fi
 
       - name: Build Vercel deployment
         shell: bash
