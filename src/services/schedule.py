@@ -438,9 +438,7 @@ class ScheduleServiceMixin:
         if facility is None or facility.status != "active":
             raise ConflictError("FACILITY_INACTIVE", "Facility is not active")
 
-    async def _validate_schedule_service(
-        self, doctor_id: UUID, service_id: UUID | None, *, required: bool
-    ) -> None:
+    async def _validate_schedule_service(self, doctor_id: UUID, service_id: UUID | None, *, required: bool) -> None:
         """Ensure a schedule service is active and assigned to the selected doctor."""
         if service_id is None:
             if required:

@@ -23,7 +23,7 @@ class ScheduleRepositoryMixin:
             select(Booking.schedule_id, func.count(Booking.id))
             .where(
                 Booking.schedule_id.in_(schedule_ids),
-                Booking.status.notin__(("cancelled", "rejected")),
+                Booking.status.notin_(("cancelled", "rejected")),
             )
             .group_by(Booking.schedule_id)
         )

@@ -57,6 +57,14 @@ class FakeCatalog:
         del facility_id
         return SimpleNamespace(status="active")
 
+    async def get_service(self, service_id):
+        del service_id
+        return SimpleNamespace(status="active", booking_mode="group")
+
+    async def has_doctor_service(self, doctor_id, service_id):
+        del doctor_id, service_id
+        return True
+
     async def add_audit_event(self, event):
         del event
 
@@ -157,6 +165,7 @@ def test_schedule_update_rejects_stale_optimistic_lock_version():
                     expected_version=2,
                     starts_at=starts_at,
                     ends_at=starts_at + timedelta(hours=1),
+                    service_id=uuid4(),
                     capacity=4,
                     status="available",
                 ),
@@ -194,6 +203,7 @@ def test_schedule_update_rejects_update_when_owner_is_inactive():
                     expected_version=3,
                     starts_at=starts_at + timedelta(hours=2),
                     ends_at=starts_at + timedelta(hours=3),
+                    service_id=uuid4(),
                     capacity=4,
                     status="available",
                 ),
@@ -214,6 +224,7 @@ def test_schedule_create_rejects_overlapping_doctor_schedule():
                 DoctorScheduleCreate(
                     doctor_id=uuid4(),
                     facility_id=uuid4(),
+                    service_id=uuid4(),
                     starts_at=starts_at,
                     ends_at=starts_at + timedelta(hours=1),
                     capacity=5,

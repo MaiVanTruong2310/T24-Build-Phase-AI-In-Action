@@ -66,6 +66,7 @@ def test_schedule_update_accepts_version_and_capacity():
         expected_version=3,
         starts_at=starts_at,
         ends_at=starts_at + timedelta(hours=1),
+        service_id=uuid4(),
         capacity=4,
         status="available",
     )

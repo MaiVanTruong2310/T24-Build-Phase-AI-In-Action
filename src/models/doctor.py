@@ -107,9 +107,7 @@ class DoctorService(Base):
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     doctor_id: Mapped[UUID] = mapped_column(ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False, index=True)
-    service_id: Mapped[UUID] = mapped_column(
-        ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
+    service_id: Mapped[UUID] = mapped_column(ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     doctor: Mapped[Doctor] = relationship(back_populates="services")
