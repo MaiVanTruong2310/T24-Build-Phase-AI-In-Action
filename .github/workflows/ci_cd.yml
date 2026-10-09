@@ -198,18 +198,6 @@ jobs:
               --prod \
               --token="$VERCEL_TOKEN"
           else
-            npx vercel build \
-              --token="$VERCEL_TOKEN"
-          fi
-
-      - name: Build Vercel deployment
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
-            npx vercel@latest build \
-              --prod \
-              --token="$VERCEL_TOKEN"
-          else
             npx vercel@latest build \
               --token="$VERCEL_TOKEN"
           fi
