@@ -189,8 +189,10 @@ jobs:
         run: npm ci
 
       - name: Pull Vercel project settings
+        env:
+          npm_config_cache: /tmp/npm-cache-${{ github.run_id }}
         run: |
-          npx vercel@latest pull \
+          npx --yes vercel@63.1.0 pull \
             --yes \
             --environment="$VERCEL_ENV" \
             --token="$VERCEL_TOKEN"
