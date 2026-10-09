@@ -1,9 +1,13 @@
+"""Gateway tests for the single Supabase Auth identity provider."""
+
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from src.core.exceptions import AppError, AuthenticationError
 from src.schemas.auth import LoginRequest, RegisterRequest
@@ -36,11 +40,17 @@ async def test_concurrent_user_checks_share_one_provider_request(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_phone_login_never_calls_provider(monkeypatch):
+async def test_phone_login_is_rejected_before_calling_the_provider(monkeypatch):
+    """Phone sign-in was removed: the schema refuses it and the gateway refuses an empty email."""
     remote = AsyncMock()
     monkeypatch.setattr(gateway, "auth_call", remote)
+
+    with pytest.raises(ValidationError):
+        LoginRequest(phone="0900000000", password="example-password")
+
     with pytest.raises(AppError):
-        await gateway.login_email(LoginRequest(phone="0900000000", password="example-password"), AsyncMock())
+        await gateway.login_email(SimpleNamespace(email=None, password=None), AsyncMock())
+
     remote.assert_not_awaited()
 
 
@@ -108,10 +118,9 @@ async def test_recovery_uses_email_not_mock_otp(monkeypatch):
     from src.schemas.auth import ForgotPasswordRequest
 
     remote = AsyncMock(return_value={})
-    monkeypatch.setattr(auth, "native_auth_enabled", lambda: True)
     monkeypatch.setattr(auth, "auth_call", remote)
-    service = AsyncMock()
-    response = await auth.forgot_password(ForgotPasswordRequest(email="test@example.com"), service)
+
+    response = await auth.forgot_password(ForgotPasswordRequest(email="test@example.com"))
+
     assert response.data.otp is None
     assert remote.call_args.args[0] == "/recover"
-    service.request_password_reset.assert_not_awaited()

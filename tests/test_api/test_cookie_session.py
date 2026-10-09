@@ -18,8 +18,6 @@ HEADERS = {"Origin": "http://localhost:5173", "X-Auth-Transport": "cookie"}
 
 @pytest.fixture
 def cookie_auth(monkeypatch):
-    monkeypatch.setattr(auth, "native_auth_enabled", lambda: True)
-    monkeypatch.setattr(gateway, "native_auth_enabled", lambda: True)
     monkeypatch.setattr(
         cookie_session,
         "get_settings",

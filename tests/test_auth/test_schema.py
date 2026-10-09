@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from src.schemas.auth import (
     ForgotPasswordRequest,
+    LoginRequest,
     OtpSendResponse,
     RegisterRequest,
     ResetPasswordRequest,
@@ -45,6 +46,16 @@ def test_reset_password_validates_code_and_new_password():
 
     assert request.code == "123456"
     assert request.new_password == "new-password"
+
+
+def test_login_request_is_email_password_only():
+    """Supabase login accepts exactly email and password; removed fields are refused."""
+    request = LoginRequest(email=" User@Example.com ", password="example-password")
+
+    assert request.email == "user@example.com"
+
+    with pytest.raises(ValidationError):
+        LoginRequest(email="user@example.com", password="example-password", phone="0900000000")
 
 
 def test_profile_rejects_future_birth_date_and_invalid_citizen_id():

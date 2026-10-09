@@ -110,20 +110,20 @@ export const initializeAuth = createAsyncThunk(
 
 export const loginUser = createAsyncThunk(
   'auth/loginUser',
-  async (credentials: { username: string; password?: string; otp_code?: string }, { rejectWithValue }) => {
+  async (credentials: { username: string; password?: string }, { rejectWithValue }) => {
     let tokensSaved = false;
     try {
-      const isEmail = credentials.username.includes('@');
-      
+      // Supabase Auth owns credentials, so email is the only supported login
+      // identity. Phone numbers and coordinator usernames are no longer logins.
       const identity = credentials.username.trim();
-      const payload: Record<string, string> = {
-        [isEmail ? 'email' : /^\d+$/.test(identity) ? 'phone' : 'username']: identity,
-      };
+      if (!identity.includes('@')) {
+        return rejectWithValue('Vui lòng đăng nhập bằng email.')
+      }
+
+      const payload: Record<string, string> = { email: identity };
 
       if (credentials.password) {
         payload.password = credentials.password;
-      } else if (credentials.otp_code) {
-        payload.otp_code = credentials.otp_code;
       }
 
       const response = await fetchWithAuth('/auth/login', {
@@ -262,49 +262,6 @@ export const verifyOtp = createAsyncThunk(
   }
 )
 
-export const requestPasswordReset = createAsyncThunk(
-  'auth/requestPasswordReset',
-  async (username: string, { rejectWithValue }) => {
-    try {
-      const isEmail = username.includes('@');
-      const payload = isEmail ? { email: username } : { phone: username };
-      const response = await fetchWithAuth('/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(translateError(data.message) || 'Yêu cầu thất bại');
-      return data.data;
-    } catch (err: unknown) {
-      return rejectWithValue(getErrorMessage(err, 'Yêu cầu thất bại'));
-    }
-  }
-)
-
-export const resetPassword = createAsyncThunk(
-  'auth/resetPassword',
-  async (data: { username: string; code: string; new_password: string }, { rejectWithValue }) => {
-    try {
-      const isEmail = data.username.includes('@');
-      const payload: Record<string, string> = { code: data.code, new_password: data.new_password };
-      if (isEmail) payload.email = data.username;
-      else payload.phone = data.username;
-
-      const response = await fetchWithAuth('/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const resData = await response.json();
-      if (!response.ok) throw new Error(translateError(resData.message) || 'Đặt lại mật khẩu thất bại');
-      return resData.data;
-    } catch (err: unknown) {
-      return rejectWithValue(getErrorMessage(err, 'Đặt lại mật khẩu thất bại'));
-    }
-  }
-)
-
 export const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -400,30 +357,6 @@ export const authSlice = createSlice({
         state.loading = false
       })
       .addCase(verifyOtp.rejected, (state, action) => {
-        state.loading = false
-        state.error = action.payload as string
-      })
-      // Request Password Reset
-      .addCase(requestPasswordReset.pending, (state) => {
-        state.loading = true
-        state.error = null
-      })
-      .addCase(requestPasswordReset.fulfilled, (state) => {
-        state.loading = false
-      })
-      .addCase(requestPasswordReset.rejected, (state, action) => {
-        state.loading = false
-        state.error = action.payload as string
-      })
-      // Reset Password
-      .addCase(resetPassword.pending, (state) => {
-        state.loading = true
-        state.error = null
-      })
-      .addCase(resetPassword.fulfilled, (state) => {
-        state.loading = false
-      })
-      .addCase(resetPassword.rejected, (state, action) => {
         state.loading = false
         state.error = action.payload as string
       })

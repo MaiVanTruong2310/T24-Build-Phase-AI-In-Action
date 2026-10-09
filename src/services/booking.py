@@ -229,7 +229,6 @@ class BookingService:
                 full_name=guest_patient.full_name,
                 email=guest_patient.email,
                 phone=guest_patient.phone,
-                password_hash=None,
                 role="patient",
                 status="guest",
             )

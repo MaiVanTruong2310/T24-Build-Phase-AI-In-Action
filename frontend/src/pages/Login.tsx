@@ -93,7 +93,7 @@ export function Login() {
 
     if (!trimmedUsername) {
 
-      setValidationError('Vui lòng nhập email hoặc tài khoản điều phối.')
+      setValidationError('Vui lòng nhập email đăng nhập.')
 
       return
 
@@ -101,7 +101,7 @@ export function Login() {
 
 
 
-    if (trimmedUsername.includes('@') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedUsername)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedUsername)) {
 
       setValidationError('Vui lòng nhập email hợp lệ.')
 
@@ -191,7 +191,7 @@ export function Login() {
 
             <label className="text-xs sm:text-sm font-medium text-slate-700 light:text-app-text dark:text-slate-300 block" htmlFor="username">
 
-              Email hoặc tài khoản điều phối
+              Email
 
             </label>
 

@@ -33,7 +33,10 @@ class Settings(BaseSettings):
     database_url: str = ""
     auth_database_url: str = ""
     supabase_auth_redirect_url: str = "http://localhost:5173"
-    auth_provider: Literal["custom", "supabase"] = "custom"
+    # Supabase Auth is the only supported identity provider. The legacy value
+    # "custom" (local password_hash login) is intentionally rejected at startup
+    # so a misconfigured deployment fails loudly instead of silently.
+    auth_provider: Literal["supabase"] = "supabase"
     database_auto_create: bool = True
     booking_hold_cleanup_interval_seconds: int = Field(default=60, ge=5, le=3600)
     database_pool_size: int = Field(default=3, ge=1, le=100)
@@ -60,9 +63,6 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = Field(default=15, ge=1, le=1440)
     jwt_refresh_token_expire_days: int = Field(default=30, ge=1, le=365)
-    otp_expire_minutes: int = Field(default=5, ge=1, le=30)
-    otp_max_attempts: int = Field(default=5, ge=1, le=10)
-    mock_otp_code: str = ""
 
     # Vector Store
     chroma_persist_dir: str = "./data/chroma"

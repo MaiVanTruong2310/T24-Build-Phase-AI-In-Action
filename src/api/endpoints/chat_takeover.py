@@ -8,11 +8,10 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from src.api.dependencies import get_current_user, require_staff
 from src.api.response import success_response
-from src.core.security import create_access_token, decode_access_token
 from src.db.dependencies import get_db_session
 from src.db.session import get_auth_session_factory, get_session_factory
 from src.models.user import User
-from src.realtime.chat_takeover import chat_takeover_manager, user_id_from_payload
+from src.realtime.chat_takeover import chat_takeover_manager, takeover_tickets
 from src.repositories.user import UserRepository
 from src.schemas.chat_takeover import (
     ChatTakeoverCaseDetail,
@@ -23,6 +22,7 @@ from src.schemas.chat_takeover import (
 from src.schemas.common import ApiResponse
 from src.services.chat_takeover import ChatTakeoverService, case_payload, message_payload
 from src.services.cookie_session import ACCESS_COOKIE
+from src.services.supabase_auth import authenticated_profile
 
 router = APIRouter(prefix="/staff/chat-takeover", tags=["chat-takeover"])
 
@@ -43,8 +43,8 @@ def message_response(message_payload_value: dict) -> ChatTakeoverMessageResponse
 async def get_takeover_ticket(
     current_user: User = Depends(get_current_user),
 ) -> ApiResponse[dict[str, str]]:
-    token, _ = create_access_token(str(current_user.id), current_user.role)
-    return success_response({"token": token}, "Takeover ticket issued")
+    """Issue an opaque, short-lived ticket for the WebSocket handshake."""
+    return success_response({"token": takeover_tickets.issue(current_user.id)}, "Takeover ticket issued")
 
 
 @router.get("/cases", response_model=ApiResponse[list[ChatTakeoverCaseResponse]])
@@ -115,18 +115,30 @@ async def send_message(
 
 
 async def authenticate_socket(websocket: WebSocket) -> User | None:
-    token = websocket.query_params.get("token") or websocket.cookies.get(ACCESS_COOKIE)
-    if not token:
-        return None
-    try:
-        payload = decode_access_token(token)
-        user_id = user_id_from_payload(payload)
+    """Resolve the socket user from a takeover ticket or the Supabase session cookie.
+
+    ``?token=`` carries an opaque ticket minted by ``GET /staff/chat-takeover/ticket``;
+    the ``p124_access`` cookie carries the Supabase access token and is verified
+    against Supabase Auth like every HTTP request.
+    """
+    ticket = websocket.query_params.get("token")
+    if ticket:
+        user_id = takeover_tickets.redeem(ticket)
+        if user_id is None:
+            return None
         async with get_auth_session_factory()() as session:
             user = await UserRepository(session).get_by_id(user_id)
             await session.commit()
             if user is None or user.status != "active":
                 return None
             return user
+
+    access_token = websocket.cookies.get(ACCESS_COOKIE)
+    if not access_token:
+        return None
+    try:
+        async with get_auth_session_factory()() as session:
+            return await authenticated_profile(access_token, session)
     except Exception:
         return None
 

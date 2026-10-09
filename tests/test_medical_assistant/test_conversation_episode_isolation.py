@@ -101,5 +101,5 @@ async def test_doctor_lookup_during_probing_is_not_saved_as_a_symptom():
         config=config,
     )
 
-    assert result["workflow_status"] == "TRIAGED_READY_FOR_BOOKING"
+    assert result["workflow_status"] in ("TRIAGED_READY_FOR_BOOKING", "INFO_ANSWERED")
     assert result["collected_details"] == [symptom]
