@@ -33,12 +33,15 @@ class ScheduleServiceMixin:
         try:
             async with self.session.begin():
                 await self._validate_schedule_owners(request.doctor_id, request.facility_id, lock_doctor=True)
-                if request.source_system and request.external_schedule_id:
-                    existing = await self.catalog.get_schedule_by_external_identity(
-                        request.source_system, request.external_schedule_id
-                    )
-                    if existing:
-                        raise ConflictError("SCHEDULE_EXISTS", "Schedule already exists")
+                await self._validate_schedule_service(
+                    request.doctor_id,
+                    request.service_id,
+                    required=request.status == "available" or request.busy_reason == "consultation",
+                )
+                if request.status == "available" and request.service_id is not None:
+                    service = await self.catalog.get_service(request.service_id)
+                    if service and service.booking_mode == "doctor_visit" and request.capacity != 1:
+                        raise ConflictError("INVALID_CAPACITY", "Doctor visit schedules must have capacity one")
                 conflict = await self.catalog.find_schedule_conflict(
                     doctor_id=request.doctor_id,
                     starts_at=request.starts_at,
@@ -94,6 +97,15 @@ class ScheduleServiceMixin:
                 if value.status == "cancelled":
                     raise ConflictError("SCHEDULE_ALREADY_CANCELLED", "Cancelled schedule cannot be updated")
                 updates = request.model_dump(exclude={"expected_version"})
+                await self._validate_schedule_service(
+                    value.doctor_id,
+                    updates["service_id"],
+                    required=updates["status"] == "available" or updates["busy_reason"] == "consultation",
+                )
+                if updates["status"] == "available" and updates["service_id"] is not None:
+                    service = await self.catalog.get_service(updates["service_id"])
+                    if service and service.booking_mode == "doctor_visit" and updates["capacity"] != 1:
+                        raise ConflictError("INVALID_CAPACITY", "Doctor visit schedules must have capacity one")
                 if updates["ends_at"] <= updates["starts_at"]:
                     raise ConflictError("INVALID_SCHEDULE", "Schedule end must be after start")
                 conflict = await self.catalog.find_schedule_conflict(
@@ -364,6 +376,11 @@ class ScheduleServiceMixin:
     async def _upsert_schedule(self, record: ScheduleImportRecord, actor_id: UUID) -> tuple[DoctorSchedule, bool]:
         """Create or update one imported schedule within the caller transaction."""
         await self._validate_schedule_owners(record.doctor_id, record.facility_id, lock_doctor=True)
+        await self._validate_schedule_service(
+            record.doctor_id,
+            record.service_id,
+            required=record.service_id is not None,
+        )
         value = await self.catalog.get_schedule_by_external_identity(
             record.source_system, record.external_schedule_id, for_update=True
         )
@@ -392,7 +409,19 @@ class ScheduleServiceMixin:
             raise ConflictError("VERSION_MISMATCH", "Schedule version is stale")
         if value.status == "cancelled":
             raise ConflictError("SCHEDULE_ALREADY_CANCELLED", "Cancelled schedule cannot be imported")
-        for field in ("doctor_id", "facility_id", "starts_at", "ends_at", "capacity", "status"):
+        for field in (
+            "doctor_id",
+            "facility_id",
+            "service_id",
+            "starts_at",
+            "ends_at",
+            "capacity",
+            "status",
+            "busy_reason",
+            "note",
+        ):
+            if field in {"service_id", "busy_reason", "note"} and field not in record.model_fields_set:
+                continue
             setattr(value, field, getattr(record, field))
         value.updated_by = actor_id
         value.version += 1
@@ -408,6 +437,18 @@ class ScheduleServiceMixin:
             raise ConflictError("DOCTOR_INACTIVE", "Doctor is not active")
         if facility is None or facility.status != "active":
             raise ConflictError("FACILITY_INACTIVE", "Facility is not active")
+
+    async def _validate_schedule_service(self, doctor_id: UUID, service_id: UUID | None, *, required: bool) -> None:
+        """Ensure a schedule service is active and assigned to the selected doctor."""
+        if service_id is None:
+            if required:
+                raise ConflictError("SERVICE_REQUIRED", "An active service is required for this schedule")
+            return
+        service = await self.catalog.get_service(service_id)
+        if service is None or service.status != "active":
+            raise NotFoundError("Service not found")
+        if not await self.catalog.has_doctor_service(doctor_id, service_id):
+            raise ConflictError("SERVICE_NOT_AVAILABLE", "Service is not assigned to this doctor")
 
     @staticmethod
     def _raise_schedule_integrity_error(exc: IntegrityError) -> None:

@@ -2,17 +2,19 @@
 ETL Migration Script: Migrate legacy chat & coordination data to Unified Conversation Schema.
 Strict Zero Data Loss & Transactional Safety.
 """
+
 import asyncio
 import json
 import logging
 import os
 import sys
 from datetime import timedelta
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid5
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sqlalchemy import text
+
 from src.db.session import get_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -42,17 +44,25 @@ async def run_migration():
         logger.info(f"Target Expectation: conversations={expected_conversations}, messages={expected_messages}")
 
         logger.info("--- Step 2: Migrating chat_conversations -> conversations ---")
-        chat_conv_rows = (await conn.execute(text("""
+        chat_conv_rows = (
+            (
+                await conn.execute(
+                    text("""
             SELECT id, user_id, session_id, title, patient_profile_id, created_at, updated_at
             FROM chat_conversations
-        """))).mappings().all()
+        """)
+                )
+            )
+            .mappings()
+            .all()
+        )
 
         for c in chat_conv_rows:
             # Upsert into conversations
             await conn.execute(
                 text("""
                     INSERT INTO conversations (
-                        id, category, mode, status, patient_id, 
+                        id, category, mode, status, patient_id,
                         created_by_type, created_by_id, created_at, updated_at
                     ) VALUES (
                         :id, 'PATIENT_SUPPORT', 'AI', 'RESOLVED', :patient_id,
@@ -65,7 +75,7 @@ async def run_migration():
                     "created_by_id": c["user_id"],
                     "created_at": c["created_at"],
                     "updated_at": c["updated_at"],
-                }
+                },
             )
 
             # Insert participants
@@ -76,14 +86,14 @@ async def run_migration():
                             id, conversation_id, participant_type, participant_id, role, joined_at
                         ) VALUES (
                             :id, :conv_id, 'PATIENT', :user_id, 'patient', :joined_at
-                        )
+                        ) ON CONFLICT (id) DO NOTHING
                     """),
                     {
-                        "id": uuid4(),
+                        "id": uuid5(NAMESPACE_URL, f"p124:chat-conversation:{c['id']}:patient"),
                         "conv_id": c["id"],
                         "user_id": c["user_id"],
                         "joined_at": c["created_at"],
-                    }
+                    },
                 )
 
             await conn.execute(
@@ -92,13 +102,13 @@ async def run_migration():
                         id, conversation_id, participant_type, participant_id, role, joined_at
                     ) VALUES (
                         :id, :conv_id, 'AGENT', NULL, 'assistant', :joined_at
-                    )
+                    ) ON CONFLICT (id) DO NOTHING
                 """),
                 {
-                    "id": uuid4(),
+                    "id": uuid5(NAMESPACE_URL, f"p124:chat-conversation:{c['id']}:agent"),
                     "conv_id": c["id"],
                     "joined_at": c["created_at"],
-                }
+                },
             )
 
             # Insert patient_chat_context
@@ -120,17 +130,25 @@ async def run_migration():
                     "patient_id": c["user_id"],
                     "ctx_data": json.dumps(ctx_data),
                     "updated_at": c["updated_at"],
-                }
+                },
             )
 
         logger.info(f"Successfully migrated {len(chat_conv_rows)} chat_conversations")
 
         logger.info("--- Step 3: Migrating chat_turns -> messages ---")
-        chat_turn_rows = (await conn.execute(text("""
+        chat_turn_rows = (
+            (
+                await conn.execute(
+                    text("""
             SELECT id, conversation_id, request_id, user_text, assistant_text, result, status, created_at
             FROM chat_turns
             ORDER BY created_at ASC
-        """))).mappings().all()
+        """)
+                )
+            )
+            .mappings()
+            .all()
+        )
 
         # Map conv_id -> user_id
         user_id_map = {c["id"]: c["user_id"] for c in chat_conv_rows}
@@ -153,16 +171,16 @@ async def run_migration():
                     ) VALUES (
                         :id, :conv_id, 'PATIENT', :sender_id, 'TEXT',
                         :content, :meta, :created_at
-                    )
+                    ) ON CONFLICT (id) DO NOTHING
                 """),
                 {
-                    "id": uuid4(),
+                    "id": uuid5(NAMESPACE_URL, f"p124:chat-turn:{t['id']}:patient"),
                     "conv_id": conv_id,
                     "sender_id": user_id,
                     "content": t["user_text"] or "",
                     "meta": json.dumps(user_msg_meta),
                     "created_at": t["created_at"],
-                }
+                },
             )
 
             # Agent message
@@ -182,28 +200,36 @@ async def run_migration():
                     ) VALUES (
                         :id, :conv_id, 'AGENT', NULL, 'TEXT',
                         :content, :meta, :created_at
-                    )
+                    ) ON CONFLICT (id) DO NOTHING
                 """),
                 {
-                    "id": uuid4(),
+                    "id": uuid5(NAMESPACE_URL, f"p124:chat-turn:{t['id']}:agent"),
                     "conv_id": conv_id,
                     "content": t["assistant_text"] or "",
                     "meta": json.dumps(agent_msg_meta),
                     "created_at": agent_created_at,
-                }
+                },
             )
 
         logger.info(f"Successfully migrated {len(chat_turn_rows)} turns into {len(chat_turn_rows) * 2} messages")
 
         logger.info("--- Step 4: Migrating coordination_cases -> conversations & handoffs ---")
-        coord_case_rows = (await conn.execute(text("""
+        coord_case_rows = (
+            (
+                await conn.execute(
+                    text("""
             SELECT id, source, source_id, owner_key, session_id, patient_id, patient,
                    ai_snapshot, checkpoint, plan, facility_id, assigned_to, status,
                    priority, control, version, due_at, follow_up_at, booking_id,
                    patient_profile_id, requested_by_user_id, legacy_takeover_case_id,
                    created_at, updated_at
             FROM coordination_cases
-        """))).mappings().all()
+        """)
+                )
+            )
+            .mappings()
+            .all()
+        )
 
         for case in coord_case_rows:
             mode = "HUMAN" if case["control"] == "human" else "AI"
@@ -230,7 +256,7 @@ async def run_migration():
                     "created_by_id": creator_id,
                     "created_at": case["created_at"],
                     "updated_at": case["updated_at"],
-                }
+                },
             )
 
             # Insert patient_chat_context
@@ -263,7 +289,7 @@ async def run_migration():
                     "stage": stage,
                     "ctx_data": json.dumps(case_ctx),
                     "updated_at": case["updated_at"],
-                }
+                },
             )
 
             # Participants
@@ -274,14 +300,14 @@ async def run_migration():
                             id, conversation_id, participant_type, participant_id, role, joined_at
                         ) VALUES (
                             :id, :conv_id, 'PATIENT', :patient_id, 'patient', :joined_at
-                        )
+                        ) ON CONFLICT (id) DO NOTHING
                     """),
                     {
-                        "id": uuid4(),
+                        "id": uuid5(NAMESPACE_URL, f"p124:workbench-case:{case['id']}:patient"),
                         "conv_id": case["id"],
                         "patient_id": case["patient_id"],
                         "joined_at": case["created_at"],
-                    }
+                    },
                 )
 
             if case["assigned_to"]:
@@ -291,14 +317,14 @@ async def run_migration():
                             id, conversation_id, participant_type, participant_id, role, joined_at
                         ) VALUES (
                             :id, :conv_id, 'STAFF', :staff_id, 'coordinator', :joined_at
-                        )
+                        ) ON CONFLICT (id) DO NOTHING
                     """),
                     {
-                        "id": uuid4(),
+                        "id": uuid5(NAMESPACE_URL, f"p124:workbench-case:{case['id']}:staff:{case['assigned_to']}"),
                         "conv_id": case["id"],
                         "staff_id": case["assigned_to"],
                         "joined_at": case["updated_at"],
-                    }
+                    },
                 )
 
             # Record handoff if human took over
@@ -313,26 +339,34 @@ async def run_migration():
                             :id, :conv_id, 'AGENT', 'STAFF',
                             'MANUAL_REVIEW', 'SYSTEM', :assigned_staff_id,
                             :status, :req_at, :acc_at
-                        )
+                        ) ON CONFLICT (id) DO NOTHING
                     """),
                     {
-                        "id": uuid4(),
+                        "id": uuid5(NAMESPACE_URL, f"p124:workbench-case:{case['id']}:handoff"),
                         "conv_id": case["id"],
                         "assigned_staff_id": case["assigned_to"],
                         "status": "ACCEPTED" if case["assigned_to"] else "REQUESTED",
                         "req_at": case["created_at"],
                         "acc_at": case["updated_at"] if case["assigned_to"] else None,
-                    }
+                    },
                 )
 
         logger.info(f"Successfully migrated {len(coord_case_rows)} coordination_cases")
 
         logger.info("--- Step 5: Migrating coordination_messages -> messages ---")
-        coord_msg_rows = (await conn.execute(text("""
+        coord_msg_rows = (
+            (
+                await conn.execute(
+                    text("""
             SELECT id, case_id, client_id, sender, actor_id, body, created_at
             FROM coordination_messages
             ORDER BY created_at ASC
-        """))).mappings().all()
+        """)
+                )
+            )
+            .mappings()
+            .all()
+        )
 
         for m in coord_msg_rows:
             sender_lower = (m["sender"] or "").lower()
@@ -369,7 +403,7 @@ async def run_migration():
                     "content": m["body"],
                     "meta": json.dumps(meta),
                     "created_at": m["created_at"],
-                }
+                },
             )
 
         logger.info(f"Successfully migrated {len(coord_msg_rows)} coordination_messages")
@@ -381,7 +415,7 @@ async def run_migration():
         actual_contexts = (await conn.execute(text("SELECT COUNT(*) FROM patient_chat_context"))).scalar_one()
         actual_handoffs = (await conn.execute(text("SELECT COUNT(*) FROM handoffs"))).scalar_one()
 
-        logger.info(f"Audit Summary:")
+        logger.info("Audit Summary:")
         logger.info(f"  Conversations: {actual_conversations} (Expected: {expected_conversations})")
         logger.info(f"  Messages:      {actual_messages} (Expected: {expected_messages})")
         logger.info(f"  Participants:  {actual_participants}")

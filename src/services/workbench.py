@@ -2,7 +2,7 @@
 
 import hashlib
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import HTTPException
 from sqlalchemy import String, cast, func, or_, select, text
@@ -164,7 +164,15 @@ async def add_message(db, case, client_id, sender, body, actor=None, channel: st
     from src.models.conversation import Conversation
     from src.models.conversation import Message as UnifiedMsg
 
-    sender_type = "PATIENT" if sender in ("patient", "user") else "STAFF" if sender in ("coordinator", "staff") else "AGENT" if sender in ("ai", "assistant", "bot") else "SYSTEM"
+    sender_type = (
+        "PATIENT"
+        if sender in ("patient", "user")
+        else "STAFF"
+        if sender in ("coordinator", "staff")
+        else "AGENT"
+        if sender in ("ai", "assistant", "bot")
+        else "SYSTEM"
+    )
     now = datetime.now(UTC)
     await db.execute(
         insert(Conversation)
@@ -178,14 +186,17 @@ async def add_message(db, case, client_id, sender, body, actor=None, channel: st
             created_by_id=case.patient_id,
             created_at=getattr(case, "created_at", None) or now,
             updated_at=now,
-        ).on_conflict_do_nothing(index_elements=["id"])
+        )
+        .on_conflict_do_nothing(index_elements=["id"])
     )
     msg_meta = {"client_id": str(client_id), "legacy_sender": sender}
     if channel:
         msg_meta["channel"] = channel
-    await db.execute(
-        insert(UnifiedMsg).values(
-            id=uuid4(),
+    message_id = uuid5(NAMESPACE_URL, f"workbench-message:{case.id}:{client_id}")
+    result = await db.execute(
+        insert(UnifiedMsg)
+        .values(
+            id=message_id,
             conversation_id=case.id,
             sender_type=sender_type,
             sender_id=actor.id if actor else None,
@@ -194,7 +205,20 @@ async def add_message(db, case, client_id, sender, body, actor=None, channel: st
             msg_metadata=msg_meta,
             created_at=now,
         )
+        .on_conflict_do_nothing(index_elements=["id"])
     )
+    message = await db.get(UnifiedMsg, message_id, populate_existing=True)
+    if message is None:
+        raise HTTPException(409, "KhÃ´ng thá»ƒ lÆ°u tin nháº¯n. Vui lÃ²ng thá»­ láº¡i.")
+    if (
+        message.conversation_id != case.id
+        or message.sender_type != sender_type
+        or message.sender_id != (actor.id if actor else None)
+        or message.content != body
+    ):
+        raise HTTPException(409, "MÃ£ tin nháº¯n Ä‘Ã£ Ä‘Æ°á»£c dÃ¹ng vá»›i ná»™i dung khÃ¡c.")
+    message._created_by_request = result.rowcount == 1
+    return message
 
 
 async def capture_chat(db, case, request, response, state):
@@ -493,6 +517,7 @@ async def record_booking_review(db, booking, actor_id, status, note=""):
             details={"booking_id": source_id, "status": status},
         )
     )
+    return case
 
 
 async def create_source_case(db, source, item, patient, user, guest_token, payload, facility_id):
@@ -591,33 +616,56 @@ def case_dict(case):
 
 async def detail(db, case):
     value = case_dict(case)
-    for name, model in [('events', Event), ('deposits', Deposit)]:
-        rows = (await db.execute(select(model).where(model.case_id == case.id).order_by(model.created_at))).scalars().all()
-        value[name] = [{col.name: (str(v) if isinstance(v, UUID) else v.isoformat() if isinstance(v, datetime) else v) for col in model.__table__.columns for v in [getattr(row, col.name)]} for row in rows]
+    for name, model in [("events", Event), ("deposits", Deposit)]:
+        rows = (
+            (await db.execute(select(model).where(model.case_id == case.id).order_by(model.created_at))).scalars().all()
+        )
+        value[name] = [
+            {
+                col.name: (str(v) if isinstance(v, UUID) else v.isoformat() if isinstance(v, datetime) else v)
+                for col in model.__table__.columns
+                for v in [getattr(row, col.name)]
+            }
+            for row in rows
+        ]
 
     from src.models.conversation import Message as UnifiedMsg
-    msg_rows = (await db.execute(select(UnifiedMsg).where(UnifiedMsg.conversation_id == case.id).order_by(UnifiedMsg.created_at))).scalars().all()
+
+    msg_rows = (
+        (
+            await db.execute(
+                select(UnifiedMsg).where(UnifiedMsg.conversation_id == case.id).order_by(UnifiedMsg.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
     messages_list = []
     for m in msg_rows:
         meta = m.msg_metadata or {}
-        legacy_sender = str(meta.get('legacy_sender') or '').lower()
-        sender_t = (m.sender_type or '').upper()
+        legacy_sender = str(meta.get("legacy_sender") or "").lower()
+        sender_t = (m.sender_type or "").upper()
         sender = (
-            'coordinator' if sender_t in ('STAFF', 'COORDINATOR') or legacy_sender in ('coordinator', 'staff')
-            else 'patient' if sender_t in ('PATIENT', 'USER') or legacy_sender in ('patient', 'user')
-            else 'ai' if sender_t in ('AGENT', 'BOT', 'AI') or legacy_sender in ('ai', 'assistant', 'bot')
-            else 'system'
+            "coordinator"
+            if sender_t in ("STAFF", "COORDINATOR") or legacy_sender in ("coordinator", "staff")
+            else "patient"
+            if sender_t in ("PATIENT", "USER") or legacy_sender in ("patient", "user")
+            else "ai"
+            if sender_t in ("AGENT", "BOT", "AI") or legacy_sender in ("ai", "assistant", "bot")
+            else "system"
         )
-        messages_list.append({
-            'id': str(m.id),
-            'case_id': str(m.conversation_id),
-            'client_id': str(meta.get('client_id') or ''),
-            'sender': sender,
-            'actor_id': str(m.sender_id) if m.sender_id else None,
-            'body': m.content or '',
-            'created_at': m.created_at.isoformat() if m.created_at else now().isoformat(),
-        })
-    value['messages'] = messages_list
+        messages_list.append(
+            {
+                "id": str(m.id),
+                "case_id": str(m.conversation_id),
+                "client_id": str(meta.get("client_id") or ""),
+                "sender": sender,
+                "actor_id": str(m.sender_id) if m.sender_id else None,
+                "body": m.content or "",
+                "created_at": m.created_at.isoformat() if m.created_at else now().isoformat(),
+            }
+        )
+    value["messages"] = messages_list
     return value
 
 

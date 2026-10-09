@@ -52,6 +52,14 @@ function facilityLabel(schedule: Schedule, doctor: Doctor): string {
   return assignment?.room ? `${facilityName} • P.${assignment.room}` : facilityName;
 }
 
+function serviceLabel(schedule: Schedule, doctor: Doctor): string {
+  const service = doctor.services?.find((item) => item.service_id === schedule.service_id);
+  if (service) return `${service.name} · ${service.booking_mode === 'doctor_visit' ? 'Khám riêng' : 'Khám nhóm'}`;
+  if (schedule.busy_reason === 'consultation') return 'Bác sĩ đang khám';
+  if (schedule.busy_reason === 'other_commitment') return 'Có lịch khác';
+  return 'Chưa gán dịch vụ';
+}
+
 function cardStyle(schedule: Schedule) {
   const startsAt = localMinutes(schedule.starts_at);
   const duration = Math.max(
@@ -130,6 +138,7 @@ export function ScheduleMatrix({
                       >
                         <span className="block truncate text-[10px] font-extrabold">{timeLabel(schedule.starts_at)} - {timeLabel(schedule.ends_at)}</span>
                         <span className="block truncate text-[10px] font-semibold">{facilityLabel(schedule, doctor)}</span>
+                        <span className="block truncate text-[10px]">{serviceLabel(schedule, doctor)}</span>
                         <span className="block truncate text-[10px]">{statusLabel(schedule)}</span>
                       </button>
                     ))}

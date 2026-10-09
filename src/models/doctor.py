@@ -16,6 +16,7 @@ from src.db.base import Base
 if TYPE_CHECKING:
     from src.models.facility import Facility
     from src.models.schedule import DoctorSchedule
+    from src.models.service import Service
     from src.models.specialty import Specialty
 
 
@@ -50,6 +51,9 @@ class Doctor(Base):
 
     specialties: Mapped[list[DoctorSpecialty]] = relationship(back_populates="doctor", cascade="all, delete-orphan")
     facilities: Mapped[list[DoctorFacility]] = relationship(back_populates="doctor", cascade="all, delete-orphan")
+    services: Mapped[list[DoctorService]] = relationship(
+        "DoctorService", back_populates="doctor", cascade="all, delete-orphan"
+    )
     schedules: Mapped[list[DoctorSchedule]] = relationship(back_populates="doctor")
 
 
@@ -93,3 +97,18 @@ class DoctorFacility(Base):
 
     doctor: Mapped[Doctor] = relationship(back_populates="facilities")
     facility: Mapped[Facility] = relationship(back_populates="doctors")
+
+
+class DoctorService(Base):
+    """Doctor-to-service assignment."""
+
+    __tablename__ = "doctor_services"
+    __table_args__ = (UniqueConstraint("doctor_id", "service_id", name="uq_doctor_service"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    doctor_id: Mapped[UUID] = mapped_column(ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_id: Mapped[UUID] = mapped_column(ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    doctor: Mapped[Doctor] = relationship(back_populates="services")
+    service: Mapped[Service] = relationship("Service", back_populates="doctors")

@@ -19,10 +19,12 @@ import { RootLayout } from './layouts/RootLayout'
 const AuthLayout = lazy(() => import('./layouts/AuthLayout').then((module) => ({ default: module.AuthLayout })))
 const StaffLayout = lazy(() => import('./layouts/StaffLayout').then((module) => ({ default: module.StaffLayout })))
 const Landing = lazy(() => import('./pages/Landing').then((module) => ({ default: module.Landing })))
+const NotFound = lazy(() => import('./pages/NotFound'))
 const Login = lazy(() => import('./pages/Login').then((module) => ({ default: module.Login })))
 const Register = lazy(() => import('./pages/Register').then((module) => ({ default: module.Register })))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then((module) => ({ default: module.ForgotPassword })))
 const CoordinatorWorkbench = lazy(() => import('./pages/CoordinatorWorkbench'))
+const StaffDashboard = lazy(() => import('./pages/StaffDashboard'))
 const PatientCoordinationRequests = lazy(() => import('./pages/PatientCoordinationRequests'))
 const ConsultationBooking = lazy(() => import('./pages/ConsultationBooking'))
 const AppointmentBooking = lazy(() => import('./pages/AppointmentBooking'))
@@ -38,6 +40,7 @@ const DoctorManagement = lazy(() => import('./pages/DoctorManagement'))
 const CreateDoctor = lazy(() => import('./pages/DoctorManagement/Create'))
 const ServiceManagement = lazy(() => import('./pages/ServiceManagement'))
 const CreateService = lazy(() => import('./pages/ServiceManagement/Create'))
+const StaffPatients = lazy(() => import('./pages/StaffPatients'))
 
 
 const DoctorSchedule = lazy(() => import('./pages/DoctorSchedule'))
@@ -46,16 +49,6 @@ const PatientDepartments = lazy(() => import('./pages/PatientDepartments'))
 const PatientConsultation = lazy(() => import('./pages/PatientConsultation'))
 
 
-
-function Placeholder({ title, description }: { title: string; description: string }) {
-  return (
-    <section className="rounded-2xl border border-dashed border-slate-300 light:border-app-border bg-white light:bg-app-surface p-8 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-sky-600 light:text-app-primary">VCare+</p>
-      <h1 className="mt-2 text-2xl font-bold text-slate-900 light:text-app-text">{title}</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 light:text-app-secondary">{description}</p>
-    </section>
-  )
-}
 
 function PatientAppointmentRoute() {
   const [searchParams] = useSearchParams()
@@ -105,8 +98,8 @@ const router = createBrowserRouter([
     path: 'staff',
     element: <StaffGate />,
     children: [
-      { index: true, element: <CoordinatorWorkbench mode="dashboard" /> },
-      { path: 'overview', element: <CoordinatorWorkbench mode="dashboard" /> },
+      { index: true, element: <StaffDashboard /> },
+      { path: 'overview', element: <StaffDashboard /> },
       { path: 'coordination', element: <CoordinatorWorkbench /> },
       { path: 'dieu-phoi', element: <Navigate to="/staff/coordination" replace /> },
       { path: 'shifts', element: <StaffAdminGate><CoordinatorSchedule /></StaffAdminGate> },
@@ -122,11 +115,12 @@ const router = createBrowserRouter([
       { path: 'appointments', element: <CoordinatorWorkbench /> },
       { path: 'booking-approvals', element: <AppointmentApproval /> },
       { path: 'appointments/approve/:id', element: <ScheduleApprove /> },
-      { path: 'doctor-schedule', element: <StaffAdminGate><DoctorSchedule /></StaffAdminGate> },
-      { path: 'patients', element: <Placeholder title="Quản lý bệnh nhân" description="Page quản lý bệnh nhân sẽ được bổ sung sau." /> },
+      { path: 'doctor-schedule', element: <DoctorSchedule /> },
+      { path: 'patients', element: <StaffPatients /> },
       { path: 'monitoring', element: <CoordinatorWorkbench mode="emergency" /> }
     ]
-  }
+  },
+  { path: '*', element: <NotFound /> }
 ])
 
 function PatientAuthGate({ children }: { children: ReactNode }) {
@@ -141,7 +135,8 @@ function PatientAuthGate({ children }: { children: ReactNode }) {
 
 function StaffGate() {
   const user = useSelector((state: RootState) => state.auth.user)
-  return user?.role === 'staff' ? <StaffLayout /> : <Navigate to="/login" replace />
+  if (user?.role === 'staff') return <StaffLayout />
+  return <Navigate to="/" replace />
 }
 
 export function App() {

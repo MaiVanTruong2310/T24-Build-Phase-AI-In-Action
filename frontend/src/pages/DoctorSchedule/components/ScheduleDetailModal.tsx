@@ -31,18 +31,26 @@ function locationLabel(doctor: Doctor, schedule: Schedule): string {
 }
 
 export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: ScheduleDetailModalProps) {
+  const services = (doctor.services || []).filter((item) => item.active !== false);
   const [startsAt, setStartsAt] = useState(toDateTimeInput(schedule.starts_at));
   const [endsAt, setEndsAt] = useState(toDateTimeInput(schedule.ends_at));
+  const [serviceId, setServiceId] = useState(schedule.service_id || '');
   const [capacity, setCapacity] = useState(String(schedule.capacity));
   const [status, setStatus] = useState<'available' | 'blocked' | 'inactive'>(schedule.status === 'cancelled' ? 'inactive' : schedule.status);
+  const [busyReason, setBusyReason] = useState<'consultation' | 'other_commitment'>(schedule.busy_reason || 'other_commitment');
+  const [note, setNote] = useState(schedule.note || '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const selectedService = services.find((item) => item.service_id === serviceId);
 
   useEffect(() => {
     setStartsAt(toDateTimeInput(schedule.starts_at));
     setEndsAt(toDateTimeInput(schedule.ends_at));
+    setServiceId(schedule.service_id || '');
     setCapacity(String(schedule.capacity));
     setStatus(schedule.status === 'cancelled' ? 'inactive' : schedule.status);
+    setBusyReason(schedule.busy_reason || 'other_commitment');
+    setNote(schedule.note || '');
   }, [schedule]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -53,7 +61,7 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
       return;
     }
     const numericCapacity = Number(capacity);
-    if (!Number.isInteger(numericCapacity) || numericCapacity < 0) {
+    if (status === 'available' && (!Number.isInteger(numericCapacity) || numericCapacity < 1)) {
       setError('Sức chứa phải là số nguyên lớn hơn hoặc bằng 0.');
       return;
     }
@@ -63,8 +71,11 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
       const updated = await updateDoctorSchedule(schedule.id, {
         starts_at: toIsoString(startsAt),
         ends_at: toIsoString(endsAt),
-        capacity: numericCapacity,
+        service_id: serviceId || null,
+        capacity: status === 'blocked' || status === 'inactive' ? 0 : selectedService?.booking_mode === 'doctor_visit' ? 1 : numericCapacity,
         status,
+        busy_reason: status === 'blocked' ? busyReason : null,
+        note: note.trim() || undefined,
         expected_version: schedule.version,
       });
       onUpdated(updated);
@@ -110,8 +121,33 @@ export function ScheduleDetailModal({ doctor, schedule, onClose, onUpdated }: Sc
           </div>
 
           <div>
+            <label htmlFor="detail-service" className="mb-1 block text-xs font-bold text-slate-600">Dịch vụ khám</label>
+            <select id="detail-service" value={serviceId} onChange={(event) => setServiceId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" required={status === 'available' || (status === 'blocked' && busyReason === 'consultation')}>
+              <option value="">Chọn dịch vụ</option>
+              {services.map((item) => (
+                <option key={item.service_id} value={item.service_id}>{item.name} — {item.booking_mode === 'doctor_visit' ? 'Khám riêng với bác sĩ' : 'Khám nhóm'}</option>
+              ))}
+            </select>
+          </div>
+
+          {status === 'blocked' && (
+            <div>
+              <label htmlFor="detail-busy-reason" className="mb-1 block text-xs font-bold text-slate-600">Lý do bác sĩ bận</label>
+              <select id="detail-busy-reason" value={busyReason} onChange={(event) => setBusyReason(event.target.value as typeof busyReason)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+                <option value="other_commitment">Có lịch khác</option>
+                <option value="consultation">Bác sĩ đang khám</option>
+              </select>
+            </div>
+          )}
+
+          <div>
             <label htmlFor="detail-task" className="mb-1 block text-xs font-bold text-slate-600">Nhiệm vụ</label>
             <input id="detail-task" value="Khám bệnh và tiếp nhận bệnh nhân" readOnly className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600" />
+          </div>
+
+          <div>
+            <label htmlFor="detail-note" className="mb-1 block text-xs font-bold text-slate-600">Ghi chú</label>
+            <textarea id="detail-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={500} rows={3} className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500" />
           </div>
 
           <div>

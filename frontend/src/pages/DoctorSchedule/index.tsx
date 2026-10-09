@@ -178,7 +178,8 @@ export default function DoctorSchedule() {
 
   return (
     <div className="flex h-full flex-col bg-slate-50 font-sans">
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="mx-auto w-full max-w-[1900px]">
         <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-3">
@@ -214,13 +215,14 @@ export default function DoctorSchedule() {
         {pageError && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">{pageError}</div>}
         {notice && <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`} role="status">{notice.message}</div>}
 
-        <div className="flex flex-col gap-6 lg:flex-row">
+        <div className="grid grid-cols-1 gap-5 2xl:grid-cols-[19rem_minmax(0,1fr)]">
           <Sidebar specialties={specialties} selectedSpecialtyId={selectedSpecialtyId} onSelectSpecialty={setSelectedSpecialtyId} doctors={doctors} selectedDoctorId={selectedDoctorId} onSelectDoctor={setSelectedDoctorId} />
-          <div className="flex flex-1 flex-col gap-4">
+          <div className="min-w-0 flex flex-col gap-4">
             {loadingSchedules && <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-700">Đang tải lịch bác sĩ...</div>}
             <ScheduleMatrix doctor={selectedDoctor} schedules={schedules} weekDays={visibleDays} onAddSchedule={setModalDate} onScheduleClick={setSelectedSchedule} />
             <ActivityLog doctor={selectedDoctor} schedules={schedules} events={activityEvents} loading={loadingActivity} error={activityError} />
           </div>
+        </div>
         </div>
       </div>
       <div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4 text-xs text-slate-500"><span className="flex items-center gap-2"><ShieldAlert size={14} /> Lịch tạo mới được kiểm tra conflict ở backend trước khi lưu.</span><span>Audit lịch khám</span></div>

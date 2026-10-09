@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from src.models.booking import Booking
 from src.models.booking_hold import BookingHold
 from src.models.catalog import DoctorSchedule, Service, Specialty
-from src.models.doctor import Doctor, DoctorSpecialty
+from src.models.doctor import Doctor, DoctorService, DoctorSpecialty
 from src.models.facility import Facility
 
 
@@ -23,7 +23,11 @@ class BookingRepository:
         """Lock a schedule and load the resources needed by booking rules."""
         statement = (
             select(DoctorSchedule)
-            .options(selectinload(DoctorSchedule.doctor), selectinload(DoctorSchedule.facility))
+            .options(
+                selectinload(DoctorSchedule.doctor),
+                selectinload(DoctorSchedule.facility),
+                selectinload(DoctorSchedule.service),
+            )
             .where(DoctorSchedule.id == schedule_id)
             .with_for_update()
         )
@@ -35,7 +39,11 @@ class BookingRepository:
             return {}
         statement = (
             select(DoctorSchedule)
-            .options(selectinload(DoctorSchedule.doctor), selectinload(DoctorSchedule.facility))
+            .options(
+                selectinload(DoctorSchedule.doctor),
+                selectinload(DoctorSchedule.facility),
+                selectinload(DoctorSchedule.service),
+            )
             .where(DoctorSchedule.id.in_(schedule_ids))
             .order_by(DoctorSchedule.id)
             .with_for_update()
@@ -60,8 +68,13 @@ class BookingRepository:
         return await self._one(select(Specialty).where(Specialty.id == specialty_id))
 
     async def has_doctor_service(self, doctor_id: UUID, service_id: UUID) -> bool:
-        """Check that the selected doctor offers the selected service (deprecated)."""
-        return True
+        """Check that the selected doctor offers an active service."""
+        statement = select(DoctorService.id).where(
+            DoctorService.doctor_id == doctor_id,
+            DoctorService.service_id == service_id,
+            DoctorService.active.is_(True),
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none() is not None
 
     async def has_doctor_specialty(self, doctor_id: UUID, specialty_id: UUID) -> bool:
         """Check that the selected doctor belongs to the selected specialty."""

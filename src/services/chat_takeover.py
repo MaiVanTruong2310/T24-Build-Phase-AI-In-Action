@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -11,7 +12,7 @@ from sqlalchemy import or_, select
 
 from src.config import get_settings
 from src.core.exceptions import ConflictError, NotFoundError
-from src.core.logging import get_logger
+from src.core.logging import get_logger, log_event
 from src.models.conversation import Message as UnifiedMessage
 from src.models.workbench import CoordinationCase, CoordinationMessage
 from src.realtime.chat_takeover import chat_takeover_manager
@@ -444,6 +445,39 @@ def message_payload(message, case=None) -> dict:
         "metadata": {},
         "created_at": message.created_at,
     }
+
+
+async def publish_workbench_case_update(case) -> None:
+    try:
+        payload = {"type": "takeover.case_updated", "case": case_payload(case)}
+        if case.session_id:
+            await chat_takeover_manager.publish_session(case.session_id, payload)
+        await chat_takeover_manager.publish_staff(payload)
+    except Exception:
+        log_event(
+            logger,
+            logging.WARNING,
+            "workbench.websocket.publish_failed",
+            description="Committed case update was not broadcast",
+        )
+
+
+async def publish_workbench_message(case, message) -> None:
+    try:
+        message_event = {
+            "type": "takeover.message_created",
+            "message": message_payload(message, case),
+        }
+        if case.session_id:
+            await chat_takeover_manager.publish_session(case.session_id, message_event)
+        await chat_takeover_manager.publish_staff({**message_event, "case": case_payload(case)})
+    except Exception:
+        log_event(
+            logger,
+            logging.WARNING,
+            "workbench.websocket.publish_failed",
+            description="Committed chat message was not broadcast",
+        )
 
 
 def _age(birth_date):

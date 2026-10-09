@@ -76,11 +76,6 @@ async def isolated_db():
             await conn.execute(text(f"CREATE SCHEMA {schema}"))
             conn = await conn.execution_options(schema_translate_map={None: schema})
             await conn.run_sync(Base.metadata.create_all)
-            from src.models.workbench import WORKBENCH_TABLES
-
-            for table in WORKBENCH_TABLES:
-                await conn.execute(text(f"ALTER TABLE {schema}.{table.name} ENABLE ROW LEVEL SECURITY"))
-                await conn.execute(text(f"REVOKE ALL ON {schema}.{table.name} FROM anon, authenticated"))
         factory = async_sessionmaker(
             engine.execution_options(schema_translate_map={None: schema}), expire_on_commit=False
         )
@@ -279,6 +274,45 @@ async def test_concurrent_claim_and_scope(isolated_db):
         with pytest.raises(HTTPException) as err:
             await svc.locked_case(db, s.case_id, SimpleNamespace(facility_ids=[str(uuid4())]))
         assert err.value.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_message_client_id_replays_same_payload_and_rejects_reuse(isolated_db):
+    s = await seed(isolated_db)
+    client_id = uuid4()
+
+    async def submit_message():
+        async with isolated_db() as db, db.begin():
+            case = await db.get(Case, s.case_id)
+            message = await svc.add_message(db, case, client_id, "coordinator", "Hướng dẫn", s.actor)
+            return message.id, message._created_by_request
+
+    first, replay = await asyncio.gather(submit_message(), submit_message())
+    assert first[0] == replay[0]
+    assert sum([first[1], replay[1]]) == 1
+
+    async with isolated_db() as db, db.begin():
+        case = await db.get(Case, s.case_id)
+        replay = await svc.add_message(db, case, client_id, "coordinator", "Hướng dẫn", s.actor)
+        assert replay.id == first[0]
+        assert replay._created_by_request is False
+
+    async with isolated_db() as db, db.begin():
+        case = await db.get(Case, s.case_id)
+        with pytest.raises(HTTPException) as err:
+            await svc.add_message(db, case, client_id, "coordinator", "Nội dung khác", s.actor)
+        assert err.value.status_code == 409
+
+    async with isolated_db() as db:
+        with pytest.raises(HTTPException):
+            async with db.begin():
+                case = await db.get(Case, s.case_id)
+                original_status = case.status
+                case.status = "completed"
+                await svc.add_message(db, case, client_id, "coordinator", "Nội dung khác", s.actor)
+    async with isolated_db() as db, db.begin():
+        case = await db.get(Case, s.case_id)
+        assert case.status == original_status
 
 
 @pytest.mark.asyncio(loop_scope="module")

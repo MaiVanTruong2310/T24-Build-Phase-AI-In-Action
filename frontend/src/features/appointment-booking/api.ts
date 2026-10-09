@@ -55,7 +55,7 @@ export interface Doctor {
   facility_ids?: string[];
   service_ids?: string[];
   specialties?: Array<{ specialty_id: string; name: string }>;
-  services?: Array<{ service_id: string; name: string }>;
+  services?: Array<{ service_id: string; name: string; booking_mode?: 'group' | 'doctor_visit'; active?: boolean }>;
 }
 
 export interface DoctorFacility {
@@ -77,10 +77,13 @@ export interface Schedule {
   id: string;
   doctor_id: string;
   facility_id: string;
+  service_id: string | null;
   starts_at: string;
   ends_at: string;
   capacity: number;
   status: 'available' | 'inactive' | 'blocked' | 'cancelled';
+  busy_reason: 'consultation' | 'other_commitment' | null;
+  note: string | null;
   version: number;
   source_system?: string | null;
   external_schedule_id?: string | null;
@@ -101,19 +104,23 @@ export interface ScheduleAuditEvent {
 export interface CreateSchedulePayload {
   doctor_id: string;
   facility_id: string;
+  service_id: string | null;
   starts_at: string;
   ends_at: string;
   capacity: number;
   status: 'available' | 'inactive' | 'blocked';
-  source_system?: string;
-  external_schedule_id?: string;
+  busy_reason: 'consultation' | 'other_commitment' | null;
+  note?: string;
 }
 
 export interface UpdateSchedulePayload {
   starts_at: string;
   ends_at: string;
+  service_id: string | null;
   capacity: number;
   status: 'available' | 'inactive' | 'blocked';
+  busy_reason: 'consultation' | 'other_commitment' | null;
+  note?: string;
   expected_version: number;
 }
 
@@ -244,8 +251,10 @@ export async function fetchDoctors(
         specialty_id: item.specialty_id,
         name: item.specialty?.name || 'Chưa cập nhật',
       })),
-      services: ((doctor.services as Array<{ service_id: string; service?: { name: string } | null }> | undefined) || []).map((item) => ({
+      services: ((doctor.services as Array<{ service_id: string; active?: boolean; service?: { name: string; booking_mode?: 'group' | 'doctor_visit' } | null }> | undefined) || []).map((item) => ({
         service_id: item.service_id,
+        booking_mode: item.service?.booking_mode,
+        active: item.active,
         name: item.service?.name || 'Chưa cập nhật',
       })),
     })) as Doctor[];
@@ -259,7 +268,7 @@ export async function fetchDoctorDetail(doctorId: string): Promise<Doctor> {
     const json = await response.json()
     const doctor = json.data as Record<string, unknown>
     const rawSpecialties = (doctor.specialties as Array<{ specialty_id: string; specialty?: { name: string } | null; name?: string }> | undefined) || []
-    const rawServices = (doctor.services as Array<{ service_id: string; service?: { name: string } | null; name?: string }> | undefined) || []
+    const rawServices = (doctor.services as Array<{ service_id: string; active?: boolean; service?: { name: string; booking_mode?: 'group' | 'doctor_visit' } | null; name?: string }> | undefined) || []
     return {
       ...doctor,
       specialties: rawSpecialties.map(item => ({
@@ -268,6 +277,8 @@ export async function fetchDoctorDetail(doctorId: string): Promise<Doctor> {
       })),
       services: rawServices.map(item => ({
         service_id: item.service_id,
+        booking_mode: item.service?.booking_mode,
+        active: item.active,
         name: item.service?.name || item.name || 'Thông tin dịch vụ đang cập nhật',
       })),
     } as Doctor

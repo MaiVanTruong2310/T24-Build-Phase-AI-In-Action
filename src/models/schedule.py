@@ -16,6 +16,7 @@ from src.db.base import Base
 if TYPE_CHECKING:
     from src.models.doctor import Doctor
     from src.models.facility import Facility
+    from src.models.service import Service
 
 
 class DoctorSchedule(Base):
@@ -50,6 +51,9 @@ class DoctorSchedule(Base):
     created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     updated_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     cancellation_reason: Mapped[str | None] = mapped_column(Text)
+    service_id: Mapped[UUID | None] = mapped_column(ForeignKey("services.id", ondelete="RESTRICT"), index=True)
+    busy_reason: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -57,3 +61,4 @@ class DoctorSchedule(Base):
 
     doctor: Mapped[Doctor] = relationship(back_populates="schedules")
     facility: Mapped[Facility] = relationship(back_populates="schedules")
+    service: Mapped[Service | None] = relationship("Service")
