@@ -27,7 +27,7 @@ export const Sidebar = ({
   const selectedSpecialtyName = specialties.find(s => s.id === selectedSpecialtyId)?.name || "Khoa";
 
   return (
-    <div className="w-full lg:w-80 flex flex-col gap-4 flex-shrink-0">
+    <div className="flex w-full min-w-0 flex-col gap-4">
       <div className="bg-white rounded-2xl border border-slate-200 p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-slate-800">Danh Mục Chuyên Khoa</h3>

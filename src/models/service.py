@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, CheckConstraint, DateTime, Float, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.base import Base
+
+if TYPE_CHECKING:
+    from src.models.doctor import DoctorService
 
 
 class Service(Base):
@@ -35,3 +39,5 @@ class Service(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+    doctors: Mapped[list[DoctorService]] = relationship("DoctorService", back_populates="service")

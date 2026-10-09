@@ -31,6 +31,7 @@ from src.schemas.booking import (
     StaffBookingResponse,
     StaffBookingStatusUpdate,
 )
+from src.services.chat_takeover import publish_workbench_case_update
 from src.services.notification import NotificationService
 from src.services.workbench import record_booking_review
 
@@ -397,6 +398,8 @@ class BookingService:
         """Ensure selected catalog resources match the doctor and schedule."""
         resolved_doctor_id = doctor_id or schedule.doctor_id
         resolved_facility_id = facility_id or schedule.facility_id
+        if schedule is not None and getattr(schedule, "service_id", None) not in (None, service.id):
+            raise ConflictError("SERVICE_NOT_AVAILABLE", "Service does not match this schedule")
         if not await self.bookings.has_doctor_specialty(resolved_doctor_id, specialty.id):
             raise ConflictError("SPECIALTY_NOT_AVAILABLE", "Specialty is not available for this doctor")
         if schedule is not None and resolved_facility_id != schedule.facility_id:
@@ -697,6 +700,7 @@ class BookingService:
             requested_status=request.status,
         )
         expired = False
+        reviewed_case = None
         async with self.session.begin():
             booking = await self.bookings.get_for_staff(booking_id, for_update=True)
             if booking is None:
@@ -724,8 +728,12 @@ class BookingService:
                 booking.reviewed_by = actor_id
                 booking.reviewed_at = datetime.now(UTC)
                 await self.notifications.create_for_booking_review(booking, request.status)
-                await record_booking_review(self.session, booking, actor_id, request.status, request.note or "")
+                reviewed_case = await record_booking_review(
+                    self.session, booking, actor_id, request.status, request.note or ""
+                )
                 await self.session.flush()
+        if reviewed_case is not None:
+            await publish_workbench_case_update(reviewed_case)
         if expired:
             log_event(
                 logger,

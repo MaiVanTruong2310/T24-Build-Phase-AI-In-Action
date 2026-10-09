@@ -1,7 +1,7 @@
 """Doctor schedule request and response schemas."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -14,18 +14,32 @@ class DoctorScheduleCreate(BaseModel):
 
     doctor_id: UUID
     facility_id: UUID
+    service_id: UUID | None = None
     starts_at: datetime
     ends_at: datetime
     capacity: int = Field(ge=0)
     status: MutableScheduleStatus = "available"
-    source_system: str | None = Field(default=None, max_length=64)
-    external_schedule_id: str | None = Field(default=None, max_length=128)
+    busy_reason: Literal["consultation", "other_commitment"] | None = None
+    note: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def validate_time_range(self) -> "DoctorScheduleCreate":
         """Reject a slot whose end is not after its start."""
         if self.ends_at <= self.starts_at:
             raise ValueError("ends_at must be after starts_at")
+        if self.status == "available" and (self.service_id is None or self.capacity < 1):
+            raise ValueError("Available schedules require a service and positive capacity")
+        if self.status == "blocked":
+            if self.busy_reason is None:
+                raise ValueError("Blocked schedules require a busy reason")
+            if self.busy_reason == "consultation" and self.service_id is None:
+                raise ValueError("Consultation blocks require a service")
+            if self.capacity != 0:
+                raise ValueError("Blocked schedules must have zero capacity")
+        elif self.busy_reason is not None:
+            raise ValueError("busy_reason is only valid for blocked schedules")
+        if self.note is not None:
+            self.note = self.note.strip() or None
         return self
 
 
@@ -34,8 +48,11 @@ class DoctorScheduleUpdate(BaseModel):
 
     starts_at: datetime
     ends_at: datetime
+    service_id: UUID | None = None
     capacity: int = Field(ge=0)
     status: MutableScheduleStatus
+    busy_reason: Literal["consultation", "other_commitment"] | None = None
+    note: str | None = Field(default=None, max_length=500)
     expected_version: int = Field(ge=1)
 
     @model_validator(mode="after")
@@ -43,6 +60,19 @@ class DoctorScheduleUpdate(BaseModel):
         """Validate the complete replacement time range."""
         if self.ends_at <= self.starts_at:
             raise ValueError("ends_at must be after starts_at")
+        if self.status == "available" and (self.service_id is None or self.capacity < 1):
+            raise ValueError("Available schedules require a service and positive capacity")
+        if self.status == "blocked":
+            if self.busy_reason is None:
+                raise ValueError("Blocked schedules require a busy reason")
+            if self.busy_reason == "consultation" and self.service_id is None:
+                raise ValueError("Consultation blocks require a service")
+            if self.capacity != 0:
+                raise ValueError("Blocked schedules must have zero capacity")
+        elif self.busy_reason is not None:
+            raise ValueError("busy_reason is only valid for blocked schedules")
+        if self.note is not None:
+            self.note = self.note.strip() or None
         return self
 
 
@@ -54,10 +84,13 @@ class DoctorScheduleResponse(BaseModel):
     id: UUID
     doctor_id: UUID
     facility_id: UUID
+    service_id: UUID | None
     starts_at: datetime
     ends_at: datetime
     capacity: int
     status: str
+    busy_reason: str | None
+    note: str | None
     version: int
     source_system: str | None
     external_schedule_id: str | None
@@ -68,12 +101,28 @@ class DoctorScheduleResponse(BaseModel):
     updated_at: datetime
 
 
-class ScheduleImportRecord(DoctorScheduleCreate):
+class ScheduleImportRecord(BaseModel):
     """One idempotent schedule import record."""
 
+    doctor_id: UUID
+    facility_id: UUID
+    service_id: UUID | None = None
+    starts_at: datetime
+    ends_at: datetime
+    capacity: int = Field(ge=0)
+    status: MutableScheduleStatus = "available"
     source_system: str = Field(min_length=1, max_length=64)
     external_schedule_id: str = Field(min_length=1, max_length=128)
     expected_version: int | None = Field(default=None, ge=1)
+    busy_reason: Literal["consultation", "other_commitment"] | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> "ScheduleImportRecord":
+        """Reject malformed imported time intervals without breaking legacy payloads."""
+        if self.ends_at <= self.starts_at:
+            raise ValueError("ends_at must be after starts_at")
+        return self
 
 
 class BulkScheduleImportRequest(BaseModel):

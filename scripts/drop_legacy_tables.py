@@ -1,11 +1,9 @@
-"""
-Script to safely drop redundant legacy chat tables after successful migration:
-- chat_turns
-- chat_conversations
-- coordination_messages
+"""Audit legacy and unified chat tables without modifying the database.
 
-Core booking tables (bookings, booking_holds, weekly_shifts, package_requests) and coordination_cases are untouched.
+Legacy history is retained for compatibility and rollback. This command is
+intentionally read-only; cleanup requires a separately approved task.
 """
+
 import asyncio
 import logging
 import os
@@ -17,54 +15,33 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from sqlalchemy import text
+
 from src.db.session import get_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
-async def drop_legacy_tables():
-    backup_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backup_legacy_data.json"))
-    if not os.path.exists(backup_file):
-        raise RuntimeError(f"Backup file not found at {backup_file}! Aborting drop for safety.")
-
-    size_mb = os.path.getsize(backup_file) / (1024 * 1024)
-    logger.info(f"Verified backup exists at {backup_file} ({size_mb:.2f} MB)")
-
+async def audit_legacy_tables():
     engine = get_engine()
-    logger.info("Connecting to database...")
-
-    async with engine.begin() as conn:
-        logger.info("Dropping table chat_turns...")
-        await conn.execute(text("DROP TABLE IF EXISTS public.chat_turns CASCADE;"))
-
-        logger.info("Dropping table chat_conversations...")
-        await conn.execute(text("DROP TABLE IF EXISTS public.chat_conversations CASCADE;"))
-
-        logger.info("Dropping table coordination_messages...")
-        await conn.execute(text("DROP TABLE IF EXISTS public.coordination_messages CASCADE;"))
-
-        logger.info("Checking remaining tables...")
-        remaining = (await conn.execute(text("""
-            SELECT table_name FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-              AND table_name IN ('chat_turns', 'chat_conversations', 'coordination_messages');
-        """))).scalars().all()
-
-        if remaining:
-            raise RuntimeError(f"Tables still exist: {remaining}")
-        logger.info("SUCCESS: All redundant tables (chat_turns, chat_conversations, coordination_messages) have been dropped.")
-
-        # Verify unified tables
-        unified_stats = (await conn.execute(text("""
-            SELECT 
-                (SELECT COUNT(*) FROM public.conversations) AS conversations_count,
-                (SELECT COUNT(*) FROM public.messages) AS messages_count,
-                (SELECT COUNT(*) FROM public.patient_chat_context) AS patient_chat_context_count,
-                (SELECT COUNT(*) FROM public.conversation_participants) AS participants_count;
-        """))).mappings().one()
-        logger.info(f"Verified Unified Tables Healthy: {dict(unified_stats)}")
+    tables = (
+        "chat_conversations",
+        "chat_turns",
+        "coordination_messages",
+        "conversations",
+        "messages",
+        "patient_chat_context",
+        "conversation_participants",
+    )
+    async with engine.connect() as conn:
+        for table in tables:
+            exists = await conn.scalar(
+                text("SELECT to_regclass(:qualified_table)"), {"qualified_table": f"public.{table}"}
+            )
+            count = await conn.scalar(text(f"SELECT COUNT(*) FROM public.{table}")) if exists else None
+            logger.info("table=%s exists=%s rows=%s", table, bool(exists), count)
+    await engine.dispose()
 
 
 if __name__ == "__main__":
-    asyncio.run(drop_legacy_tables())
+    asyncio.run(audit_legacy_tables())

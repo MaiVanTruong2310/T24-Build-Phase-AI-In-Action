@@ -1,4 +1,4 @@
-"""Copy legacy Supabase takeover rows into EC2 coordination tables, idempotently."""
+"""Copy legacy takeover state into the Supabase-backed canonical workbench."""
 
 import argparse
 import asyncio
@@ -7,12 +7,14 @@ import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from src.config import get_settings
 from src.db.session import get_auth_session_factory, get_session_factory
 from src.models.chat_takeover import ChatTakeoverAuditEvent, ChatTakeoverCase, ChatTakeoverMessage
+from src.models.conversation import Conversation
+from src.models.conversation import Message as UnifiedMessage
 from src.models.user import User
-from src.models.workbench import CoordinationCase, CoordinationEvent, CoordinationMessage
+from src.models.workbench import CoordinationCase, CoordinationEvent
 
 logger = logging.getLogger("takeover_backfill")
 
@@ -70,23 +72,28 @@ async def copy_case(source, target, legacy_case) -> tuple[CoordinationCase, bool
     if case.legacy_takeover_case_id not in (None, legacy_case.id):
         raise RuntimeError("A coordination case already has a different legacy takeover alias")
     case.legacy_takeover_case_id = legacy_case.id
-    case.patient_id = patient.id if patient else None
-    case.requested_by_user_id = patient.id if patient else None
-    case.assigned_to = staff.id if staff and legacy_case.status == "taken_over" else None
-    case.status, case.control = status, control
-    case.priority = priority_number(legacy_case.priority)
-    case.ai_snapshot = {
-        **(case.ai_snapshot or {}),
-        "workflow_status": legacy_case.workflow_status,
-        "takeover_summary": summary,
-    }
-    case.checkpoint = {
-        **(case.checkpoint or {}),
-        "takeover_released": released,
-        "takeover_claimed_at": legacy_case.claimed_at.isoformat() if legacy_case.claimed_at else None,
-        "takeover_resolved_at": legacy_case.resolved_at.isoformat() if legacy_case.resolved_at else None,
-    }
-    case.updated_at = legacy_case.updated_at or datetime.now(UTC)
+    if patient and case.patient_id is None:
+        case.patient_id = patient.id
+        case.requested_by_user_id = patient.id
+    apply_legacy_state = created or (
+        case.status == "observing" and case.control == "ai" and legacy_case.status != "resolved"
+    )
+    if apply_legacy_state:
+        case.assigned_to = staff.id if staff and legacy_case.status == "taken_over" else None
+        case.status, case.control = status, control
+        case.priority = priority_number(legacy_case.priority)
+        case.updated_at = legacy_case.updated_at or datetime.now(UTC)
+    snapshot = dict(case.ai_snapshot or {})
+    snapshot.setdefault("workflow_status", legacy_case.workflow_status)
+    snapshot.setdefault("takeover_summary", summary)
+    case.ai_snapshot = snapshot
+    checkpoint = dict(case.checkpoint or {})
+    checkpoint.setdefault("takeover_released", released)
+    checkpoint.setdefault("takeover_claimed_at", legacy_case.claimed_at.isoformat() if legacy_case.claimed_at else None)
+    checkpoint.setdefault(
+        "takeover_resolved_at", legacy_case.resolved_at.isoformat() if legacy_case.resolved_at else None
+    )
+    case.checkpoint = checkpoint
 
     messages = (
         (
@@ -99,28 +106,49 @@ async def copy_case(source, target, legacy_case) -> tuple[CoordinationCase, bool
         .scalars()
         .all()
     )
+    await target.execute(
+        pg_insert(Conversation)
+        .values(
+            id=case.id,
+            category="PATIENT_SUPPORT",
+            mode="HUMAN" if case.control == "human" else "AI",
+            status="RESOLVED" if case.status in {"completed", "cancelled"} else "ACTIVE",
+            patient_id=case.patient_id,
+            created_by_type="PATIENT" if case.patient_id else "SYSTEM",
+            created_by_id=legacy_case.patient_user_id,
+            created_at=case.created_at,
+            updated_at=case.updated_at,
+        )
+        .on_conflict_do_nothing(index_elements=["id"])
+    )
     for old_message in messages:
         client_id = old_message.client_message_id or f"legacy:{old_message.id}"
-        existing = (
-            await target.execute(
-                select(CoordinationMessage).where(
-                    CoordinationMessage.case_id == case.id,
-                    CoordinationMessage.client_id == client_id,
-                )
-            )
-        ).scalar_one_or_none()
+        existing = await target.get(UnifiedMessage, old_message.id)
         if existing is not None:
+            if existing.conversation_id != case.id:
+                raise RuntimeError("A legacy message ID is already linked to another conversation")
             continue
-        actor = await target.get(User, old_message.author_user_id) if old_message.author_user_id else None
-        sender = {"staff": "coordinator", "assistant": "ai"}.get(old_message.author_type, old_message.author_type)
         target.add(
-            CoordinationMessage(
+            UnifiedMessage(
                 id=old_message.id,
-                case_id=case.id,
-                client_id=client_id,
-                sender=sender,
-                actor_id=actor.id if actor else None,
-                body=old_message.content,
+                conversation_id=case.id,
+                sender_type={
+                    "staff": "STAFF",
+                    "coordinator": "STAFF",
+                    "assistant": "AGENT",
+                    "ai": "AGENT",
+                    "patient": "PATIENT",
+                    "user": "PATIENT",
+                }.get((old_message.author_type or "").lower(), "SYSTEM"),
+                sender_id=old_message.author_user_id,
+                message_type="TEXT",
+                content=old_message.content,
+                msg_metadata={
+                    **(old_message.message_metadata or {}),
+                    "client_id": client_id,
+                    "legacy_sender": old_message.author_type,
+                    "legacy_source": "chat_takeover_messages",
+                },
                 created_at=old_message.created_at,
             )
         )
@@ -159,8 +187,6 @@ def priority_number(priority: str) -> int:
 
 
 async def backfill(apply_changes: bool) -> dict[str, int]:
-    if not get_settings().auth_database_url:
-        raise RuntimeError("AUTH_DATABASE_URL is required to read legacy takeover data")
     source_factory = get_auth_session_factory()
     target_factory = get_session_factory()
     totals = {"cases": 0, "created": 0, "messages": 0, "events": 0, "missing_patient_profiles": 0}

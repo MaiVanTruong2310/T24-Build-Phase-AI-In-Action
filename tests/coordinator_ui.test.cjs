@@ -56,10 +56,20 @@ test('mutation invalidates the detail request already in flight', async () => {
   scenario.resolve({ id: 'B', version: 1 }); await tick()
   assert.equal(scenario.state.selected.version, 5)
 })
-test('successful polling preserves action error', async () => {
-  let actionError = 'Validation failed'; let pollError = 'temporary'
-  effect(workbench, '[load]', { busyRef: { current: false }, load: async () => {}, setError: value => { actionError = value }, setPollError: value => { pollError = value }, setLoading: () => {}, setTimeout: () => 1, clearTimeout: () => {}, requestGeneration: { current: 0 } })
-  await tick(); assert.equal(actionError, 'Validation failed'); assert.equal(pollError, '')
+test('workbench refresh uses staff events and reconnect, not timed polling', () => {
+  const source = fs.readFileSync(path.join(root, workbench), 'utf8')
+  assert.match(source, /payload\.type === 'takeover\.case_updated' \|\| payload\.type === 'takeover\.message_created'/)
+  assert.match(source, /currentSocket\.addEventListener\('close', scheduleReconnect\)/)
+  assert.match(source, /if \(connected\) refresh\(\)/)
+  assert.doesNotMatch(source, /setInterval\s*\(/)
+})
+test('user and staff identities reload after auth token refresh', () => {
+  const app = fs.readFileSync(path.join(root, 'frontend/src/App.tsx'), 'utf8')
+  const layout = fs.readFileSync(path.join(root, 'frontend/src/layouts/StaffLayout.tsx'), 'utf8')
+  assert.match(app, /addEventListener\('auth:refreshed', handleTokenRefreshed\)/)
+  assert.match(app, /handleTokenRefreshed = \(\) => \{ void dispatch\(initializeAuth\(\)\) \}/)
+  assert.match(layout, /addEventListener\('auth:refreshed', refreshOnTokenRenewal\)/)
+  assert.match(layout, /api<Member>\('\/me'\)/)
 })
 const member = { user_id: 'staff' }
 const case_ = { id: 'B', assigned_to: 'staff', status: 'contacting', control: 'ai', session_id: 'session', priority: 3, deposits: [] }

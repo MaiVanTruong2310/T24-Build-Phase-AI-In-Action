@@ -24,6 +24,7 @@ from src.schemas.workbench import (
     VersionInput,
 )
 from src.services import workbench as svc
+from src.services.chat_takeover import publish_workbench_case_update, publish_workbench_message
 
 router = APIRouter(prefix="/staff/workbench", tags=["coordinator-workbench"])
 patient_router = APIRouter(prefix="/coordination/live", tags=["patient-coordination"])
@@ -123,6 +124,8 @@ async def handover_duty(payload: ShiftHandoverInput, identity=Depends(access), d
                 payload={"to": str(payload.assigned_to), "case_count": len(rows), "summary": payload.note},
             )
         )
+    for case in rows:
+        await publish_workbench_case_update(case)
     return success_response({"on_duty": False, "cases_transferred": len(rows)})
 
 
@@ -324,7 +327,7 @@ async def case_detail(case_id: UUID, identity=Depends(access), db=Depends(get_db
         return success_response(await svc.detail(db, case))
 
 
-async def mutate(case_id, identity, db, operation, additional_member_ids=()):
+async def mutate(case_id, identity, db, operation, additional_member_ids=(), *, message_event=False):
     try:
         async with db.begin():
             # Lock both sides of handover in stable order, before the case lock.
@@ -345,9 +348,14 @@ async def mutate(case_id, identity, db, operation, additional_member_ids=()):
             if not member or not member.enabled:
                 raise HTTPException(403, "Quyền điều phối đã bị thu hồi.")
             case = await svc.locked_case(db, case_id, member)
-            await operation(case)
+            message = await operation(case)
             await db.flush()
             value = await svc.detail(db, case)
+        if message_event:
+            if message is not None and getattr(message, "_created_by_request", True):
+                await publish_workbench_message(case, message)
+        else:
+            await publish_workbench_case_update(case)
         return success_response(value)
     except IntegrityError as exc:
         raise HTTPException(409, "Giao dịch hoặc lịch đã được sử dụng. Vui lòng tải lại.") from exc
@@ -373,6 +381,7 @@ async def bulk_case_actions(payload: BulkCaseAction, identity=Depends(access), d
         member.on_duty = True
 
     processed = []
+    changed_cases = []
     async with db.begin():
         if payload.action == "claim":
             db_member = await db.get(Member, user.id, with_for_update=True)
@@ -394,6 +403,7 @@ async def bulk_case_actions(payload: BulkCaseAction, identity=Depends(access), d
                 svc.bump(case)
                 svc.event(db, case, user, "claim", payload.note or "Nhận ca")
                 processed.append(str(case.id))
+                changed_cases.append(case)
             elif payload.action == "decline":
                 await svc.release_hold(db, case)
                 case.status = "cancelled"
@@ -410,6 +420,9 @@ async def bulk_case_actions(payload: BulkCaseAction, identity=Depends(access), d
                         "Bác sĩ điều phối hiện không thể tiếp nhận cuộc trò chuyện này. Nếu cần hỗ trợ khẩn cấp, vui lòng liên hệ hotline 1900 232 389.",
                     )
                 processed.append(str(case.id))
+                changed_cases.append(case)
+    for case in changed_cases:
+        await publish_workbench_case_update(case)
     return success_response({"processed": processed, "count": len(processed)})
 
 
@@ -444,10 +457,12 @@ async def message(case_id: UUID, payload: MessageInput, identity=Depends(access)
         from src.services.coordinator_chat import validate_guidance
 
         validate_guidance(payload.body)
-        await svc.add_message(db, case, payload.client_id, "coordinator", payload.body, identity[0])
-        svc.bump(case)
+        message = await svc.add_message(db, case, payload.client_id, "coordinator", payload.body, identity[0])
+        if getattr(message, "_created_by_request", True):
+            svc.bump(case)
+        return message
 
-    return await mutate(case_id, identity, db, send)
+    return await mutate(case_id, identity, db, send, message_event=True)
 
 
 @router.get("/members")
@@ -635,10 +650,10 @@ async def updates(
     filtered_messages = []
     for m in raw_messages:
         meta = m.msg_metadata or {}
-        client_id = str(meta.get('client_id') or '')
-        legacy_sender = str(meta.get('legacy_sender') or '').lower()
-        channel = str(meta.get('channel') or '')
-        sender_t = (m.sender_type or '').upper()
+        client_id = str(meta.get("client_id") or "")
+        legacy_sender = str(meta.get("legacy_sender") or "").lower()
+        channel = str(meta.get("channel") or "")
+        sender_t = (m.sender_type or "").upper()
         # Loại bỏ triệt để các tin nhắn do AI Bot sinh ra
         if (
             sender_t in ("AGENT", "BOT", "AI")
@@ -647,21 +662,33 @@ async def updates(
         ):
             continue
         # Bỏ qua tin nhắn người bệnh gửi trong luồng chat AI thông thường
-        if channel == 'ai_chat':
+        if channel == "ai_chat":
             continue
-        is_patient = sender_t in ('PATIENT', 'USER') or legacy_sender in ('patient', 'user')
+        is_patient = sender_t in ("PATIENT", "USER") or legacy_sender in ("patient", "user")
         # Với dữ liệu chưa có gắn tag channel: nếu ca vẫn observing và control == 'ai',
         # tin nhắn người bệnh hoàn toàn là chat với AI bot, không phải tin nhắn phiên điều phối
-        if is_patient and case.status == 'observing' and case.control == 'ai':
+        if is_patient and case.status == "observing" and case.control == "ai":
             continue
-        sender = 'coordinator' if sender_t in ('STAFF', 'COORDINATOR') or legacy_sender in ('coordinator', 'staff') else 'patient' if is_patient else 'system'
-        filtered_messages.append({
-            'id': str(m.id),
-            'sender': sender,
-            'body': m.content or '',
-            'created_at': m.created_at.isoformat()
-        })
-    result = {'control': case.control, 'messages': filtered_messages, 'case': {'id': str(case.id), 'status': case.status, 'plan': {k: v for k, v in case.plan.items() if k not in {'hold_id', 'reason'}}, 'priority': case.priority}}
+        sender = (
+            "coordinator"
+            if sender_t in ("STAFF", "COORDINATOR") or legacy_sender in ("coordinator", "staff")
+            else "patient"
+            if is_patient
+            else "system"
+        )
+        filtered_messages.append(
+            {"id": str(m.id), "sender": sender, "body": m.content or "", "created_at": m.created_at.isoformat()}
+        )
+    result = {
+        "control": case.control,
+        "messages": filtered_messages,
+        "case": {
+            "id": str(case.id),
+            "status": case.status,
+            "plan": {k: v for k, v in case.plan.items() if k not in {"hold_id", "reason"}},
+            "priority": case.priority,
+        },
+    }
     await db.commit()
     return success_response(result)
 
@@ -693,28 +720,32 @@ async def patient_message(
             await db.execute(select(Case).where(Case.owner_key == key, Case.session_id == session_id).with_for_update())
         ).scalar_one_or_none()
         if not case:
-            raise HTTPException(404, 'Không tìm thấy phiếu trong phiên này.')
-        if case.status in {'cancelled', 'completed'}:
-            raise HTTPException(409, 'Phiếu đã đóng. Vui lòng tạo yêu cầu mới.')
-        await svc.add_message(db, case, payload.client_id, 'patient', payload.body, channel="coordinator_chat")
-        from src.medical_assistant.domain.triage_service import get_triage_service
+            raise HTTPException(404, "Không tìm thấy phiếu trong phiên này.")
+        if case.status in {"cancelled", "completed"}:
+            raise HTTPException(409, "Phiếu đã đóng. Vui lòng tạo yêu cầu mới.")
+        message = await svc.add_message(
+            db, case, payload.client_id, "patient", payload.body, channel="coordinator_chat"
+        )
+        triage = None
+        if getattr(message, "_created_by_request", True):
+            from src.medical_assistant.domain.triage_service import get_triage_service
 
-        triage = get_triage_service().evaluate_symptoms(payload.body)
-        if triage.is_emergency:
-            case.priority = 0
-            case.ai_snapshot = {
-                **case.ai_snapshot,
-                "is_emergency": True,
-                "max_booking_days": 0,
-                "emergency_warning": triage.patient_guidance,
-            }
-            await svc.release_hold(db, case)
-            await svc.add_message(db, case, str(uuid4()), "system", triage.patient_guidance)
-            case.status = "emergency_active" if case.assigned_to else "new"
-            svc.event(db, case, None, "emergency_detected", payload.body)
-        elif case.status == "observing":
-            case.status, case.priority = "new", 1
-        svc.bump(case)
+            triage = get_triage_service().evaluate_symptoms(payload.body)
+            if triage.is_emergency:
+                case.priority = 0
+                case.ai_snapshot = {
+                    **case.ai_snapshot,
+                    "is_emergency": True,
+                    "max_booking_days": 0,
+                    "emergency_warning": triage.patient_guidance,
+                }
+                await svc.release_hold(db, case)
+                await svc.add_message(db, case, str(uuid4()), "system", triage.patient_guidance)
+                case.status = "emergency_active" if case.assigned_to else "new"
+                svc.event(db, case, None, "emergency_detected", payload.body)
+            elif case.status == "observing":
+                case.status, case.priority = "new", 1
+            svc.bump(case)
     return success_response(
-        {"saved": True, "emergency_guidance": triage.patient_guidance if triage.is_emergency else None}
+        {"saved": True, "emergency_guidance": triage.patient_guidance if triage and triage.is_emergency else None}
     )

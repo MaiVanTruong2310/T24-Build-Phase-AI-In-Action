@@ -30,8 +30,10 @@ async function test() {
     '../../components/TypewriterLoader':{TypewriterLoader:'TypewriterLoader'},
     '../../features/auth/authSlice':{initializeAuth:()=>({})},'../../features/auth/session':{readPublishedSession:()=>({id:'real-profile-id'})},
     '../../features/patient/api':{peekCurrentUser:()=>states[0]},
+    '../../features/appointment-booking/dateValidation':{formatDateVN:()=>'',birthDateError:()=>'',vietnamToday:()=> '2026-10-09'},
+    '../../components/DateInputVN':{DateInputVN:'DateInputVN'},
     './api':{fetchPatientProfile:async()=>states[0],updateCurrentUser:async update=>{patch=update;return {...states[0],...update,patient_details:{...states[0].patient_details,...update.patient_details}};}},
-    './MedicalHistory':{MedicalHistory:'MedicalHistory'}, './Header':{Header:'Header'}, './MedicalTabs':{MedicalTabs:'MedicalTabs'},
+    './MedicalHistory':{MedicalHistory:'MedicalHistory'}, './FamilyProfilesSection':{FamilyProfilesSection:'FamilyProfilesSection'}, './Header':{Header:'Header'}, './MedicalTabs':{MedicalTabs:'MedicalTabs'},
     './PortraitUploader':{PortraitUploader:'PortraitUploader'},
   });
   let tree=component();

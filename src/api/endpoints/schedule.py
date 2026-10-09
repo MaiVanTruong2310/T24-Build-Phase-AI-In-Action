@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException, Query, status
 
-from src.api.dependencies import require_coordination_admin as require_staff
+from src.api.dependencies import require_staff
 from src.api.endpoints.catalog_common import get_catalog_service, router, staff_router
 from src.api.response import success_response
 from src.models.user import User

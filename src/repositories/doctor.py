@@ -7,11 +7,20 @@ from uuid import UUID
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import selectinload
 
-from src.models.catalog import Doctor, DoctorFacility, DoctorSpecialty
+from src.models.catalog import Doctor, DoctorFacility, DoctorService, DoctorSpecialty
 
 
 class DoctorRepositoryMixin:
     """Doctor queries composed into the catalog repository."""
+
+    async def has_doctor_service(self, doctor_id: UUID, service_id: UUID) -> bool:
+        """Check that an active service is assigned to a doctor."""
+        statement = select(DoctorService.id).where(
+            DoctorService.doctor_id == doctor_id,
+            DoctorService.service_id == service_id,
+            DoctorService.active.is_(True),
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none() is not None
 
     async def get_doctor(self, resource_id: UUID, *, public_only: bool = False) -> Doctor | None:
         """Fetch a doctor and assignment collections."""
@@ -20,6 +29,7 @@ class DoctorRepositoryMixin:
             .options(
                 selectinload(Doctor.specialties).selectinload(DoctorSpecialty.specialty),
                 selectinload(Doctor.facilities).selectinload(DoctorFacility.facility),
+                selectinload(Doctor.services).selectinload(DoctorService.service),
             )
             .where(Doctor.id == resource_id)
         )
@@ -54,6 +64,7 @@ class DoctorRepositoryMixin:
             .options(
                 selectinload(Doctor.specialties).selectinload(DoctorSpecialty.specialty),
                 selectinload(Doctor.facilities).selectinload(DoctorFacility.facility),
+                selectinload(Doctor.services).selectinload(DoctorService.service),
             )
             .order_by(Doctor.full_name)
             .offset(offset)
@@ -72,6 +83,11 @@ class DoctorRepositoryMixin:
             statement = statement.where(Doctor.full_name.ilike(f"%{name.strip()}%"))
         if specialty_id:
             statement = statement.join(DoctorSpecialty).where(DoctorSpecialty.specialty_id == specialty_id)
+        if service_id:
+            statement = statement.join(DoctorService).where(
+                DoctorService.service_id == service_id,
+                DoctorService.active.is_(True),
+            )
         if facility_id:
             day = on_date or date.today()
             statement = statement.join(DoctorFacility).where(
@@ -87,7 +103,7 @@ class DoctorRepositoryMixin:
             statement = statement.where(Doctor.degrees.contains([degree]))
         if language:
             statement = statement.where(Doctor.languages.contains([language]))
-        if specialty_id or facility_id:
+        if specialty_id or facility_id or service_id:
             statement = statement.distinct()
         return list((await self.session.execute(statement)).scalars().unique().all())
 
@@ -105,6 +121,12 @@ class DoctorRepositoryMixin:
             doctor.specialties = [
                 DoctorSpecialty(doctor_id=doctor.id, specialty_id=value, is_primary=index == 0)
                 for index, value in enumerate(dict.fromkeys(specialty_ids))
+            ]
+        if service_ids is not None:
+            await self.session.execute(delete(DoctorService).where(DoctorService.doctor_id == doctor.id))
+            doctor.services = [
+                DoctorService(doctor_id=doctor.id, service_id=value, active=True)
+                for value in dict.fromkeys(service_ids)
             ]
         if facilities is not None:
             await self.session.execute(delete(DoctorFacility).where(DoctorFacility.doctor_id == doctor.id))

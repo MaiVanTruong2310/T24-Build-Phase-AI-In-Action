@@ -35,6 +35,7 @@ const mocks = {
   './components/TypewriterLoader': { TypewriterLoader: 'TypewriterLoader' },
   './app/store': {},
   './features/auth/authSlice': { initializeAuth() {}, logout() {}, sessionChanged() {} },
+  './features/auth/staffReturnTo': { staffReturnTo: value => value || '/staff/coordination' },
   './features/auth/session': {
     ACCESS_TOKEN_KEY: 'access', AUTH_SESSION_KEY: 'session',
     AUTH_TOKENS_UPDATED_EVENT: 'updated', REFRESH_TOKEN_KEY: 'refresh',
@@ -83,7 +84,24 @@ const legacyCoordinationRoute = findRoute(routes, 'dieu-phoi');
 assert.equal(legacyCoordinationRoute.element.type, 'Navigate');
 assert.equal(legacyCoordinationRoute.element.props.to, '/staff/coordination');
 const loginPage = fs.readFileSync(path.resolve(__dirname, '../src/pages/Login.tsx'), 'utf8');
-assert(loginPage.includes("navigate('/staff/coordination')"), 'Staff login must use the English coordination route');
+assert(loginPage.includes('navigate(staffReturnTo(new URLSearchParams(location.search).get(\'returnTo\')))'), 'Staff login must validate and restore its return target');
+const staffRoute = findRoute(routes, 'staff');
+assert(staffRoute, 'Staff route guard must be registered');
+assert.match(staffRoute.children[0].element.type.load.toString(), /pages\/StaffDashboard/, 'The staff landing route must use the live dashboard');
+for (const pathname of ['/staff', '/staff/queue']) {
+  location = { pathname, search: '?mine=true' };
+  user = null;
+  assert.equal(staffRoute.element.type().props.to, '/', `Signed-out visit to ${pathname} returns to landing`);
+  user = { role: 'patient' };
+  assert.equal(staffRoute.element.type().props.to, '/', `Patient visit to ${pathname} returns to landing`);
+}
+user = { role: 'staff' };
+assert.match(staffRoute.element.type().type.load.toString(), /layouts\/StaffLayout/);
+const notFoundRoute = findRoute(routes, '*');
+assert(notFoundRoute, 'Unknown URLs must match the not-found route');
+assert.match(notFoundRoute.element.type.load.toString(), /pages\/NotFound/);
+const notFoundPage = fs.readFileSync(path.resolve(__dirname, '../src/pages/NotFound.tsx'), 'utf8');
+assert.match(notFoundPage, /<Link to="\/"/, 'The 404 page must link back to home');
 
 const approvalRoute = findRoute(routes, 'appointments/approve/:id');
 assert(approvalRoute, 'Staff booking approval detail route must be registered');

@@ -1,22 +1,56 @@
 """Doctor schedule persistence queries."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from src.models.booking import Booking
+from src.models.booking_hold import BookingHold
 from src.models.catalog import Doctor, DoctorSchedule, Facility
 
 
 class ScheduleRepositoryMixin:
     """Schedule queries composed into the catalog repository."""
 
+    async def count_active_bookings_for_schedules(self, schedule_ids: list[UUID]) -> dict[UUID, int]:
+        """Count bookings and unexpired holds for each schedule in one batch."""
+        if not schedule_ids:
+            return {}
+
+        booking_counts = await self.session.execute(
+            select(Booking.schedule_id, func.count(Booking.id))
+            .where(
+                Booking.schedule_id.in_(schedule_ids),
+                Booking.status.notin__(("cancelled", "rejected")),
+            )
+            .group_by(Booking.schedule_id)
+        )
+        counts = {schedule_id: int(count) for schedule_id, count in booking_counts}
+
+        hold_counts = await self.session.execute(
+            select(BookingHold.schedule_id, func.count(BookingHold.id))
+            .where(
+                BookingHold.schedule_id.in_(schedule_ids),
+                BookingHold.status == "active",
+                BookingHold.expires_at > datetime.now(UTC),
+            )
+            .group_by(BookingHold.schedule_id)
+        )
+        for schedule_id, count in hold_counts:
+            counts[schedule_id] = counts.get(schedule_id, 0) + int(count)
+        return counts
+
     async def get_schedule(self, schedule_id: UUID, *, for_update: bool = False) -> DoctorSchedule | None:
         """Fetch a schedule with its doctor and facility."""
         statement = (
             select(DoctorSchedule)
-            .options(selectinload(DoctorSchedule.doctor), selectinload(DoctorSchedule.facility))
+            .options(
+                selectinload(DoctorSchedule.doctor),
+                selectinload(DoctorSchedule.facility),
+                selectinload(DoctorSchedule.service),
+            )
             .where(DoctorSchedule.id == schedule_id)
         )
         if for_update:
@@ -87,7 +121,11 @@ class ScheduleRepositoryMixin:
             select(DoctorSchedule)
             .join(Doctor)
             .join(Facility)
-            .options(selectinload(DoctorSchedule.doctor), selectinload(DoctorSchedule.facility))
+            .options(
+                selectinload(DoctorSchedule.doctor),
+                selectinload(DoctorSchedule.facility),
+                selectinload(DoctorSchedule.service),
+            )
             .order_by(DoctorSchedule.starts_at)
             .offset(offset)
             .limit(limit)

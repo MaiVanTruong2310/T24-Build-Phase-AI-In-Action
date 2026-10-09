@@ -4,7 +4,7 @@ import type { StaffContext } from '../layouts/StaffLayout'
 import { saveAndRefresh } from '../features/coordinator/mutations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, canAdminister, dateTime, priorities, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
+import { api, canAdminister, dateTime, priorities, resolveStaffWorkbenchWebSocketUrl, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
 import './CoordinatorWorkbench.css'
 
 const sourceNames: Record<string, string> = { chat: 'Hội thoại', consultation: 'Phiếu khám', package: 'Gói khám', booking: 'Lịch chờ duyệt' }
@@ -99,16 +99,66 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
     }
     setLoading(false)
   }, [offset, status, search, mine, mode, setMe])
+  const loadRef = useRef(load)
+  loadRef.current = load
+  useEffect(() => {
+    let active = true
+    void load().then(() => { if (active) setPollError('') }).catch(e => {
+      if (active) { setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.'); setLoading(false) }
+    })
+    return () => { active = false; requestGeneration.current += 1 }
+  }, [load])
   useEffect(() => {
     let stopped = false
-    let timer: ReturnType<typeof setTimeout>
-    const poll = async () => {
-      if (!busyRef.current) try { await load(); if (!stopped) setPollError('') } catch (e) { if (!stopped) { setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.'); setLoading(false) } }
-      if (!stopped) timer = setTimeout(poll, 5000)
+    let socket: WebSocket | undefined
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+    let reconnectAttempt = 0
+    let connected = false
+    const refresh = () => {
+      if (stopped || busyRef.current) return
+      statsAt.current = 0
+      void loadRef.current().then(() => setPollError('')).catch(e => {
+        setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.')
+      })
     }
-    void poll()
-    return () => { stopped = true; clearTimeout(timer); requestGeneration.current += 1 }
-  }, [load])
+    const connect = () => {
+      if (stopped) return
+      try {
+        socket = new WebSocket(resolveStaffWorkbenchWebSocketUrl())
+      } catch {
+        scheduleReconnect()
+        return
+      }
+      const currentSocket = socket
+      currentSocket.addEventListener('open', () => {
+        if (connected) refresh()
+        connected = true
+        reconnectAttempt = 0
+      })
+      currentSocket.addEventListener('message', event => {
+        try {
+          const payload = JSON.parse(String(event.data)) as { type?: string }
+          if (payload.type === 'takeover.case_updated' || payload.type === 'takeover.message_created') refresh()
+        } catch {
+          return
+        }
+      })
+      currentSocket.addEventListener('close', scheduleReconnect)
+      currentSocket.addEventListener('error', () => currentSocket.close())
+    }
+    function scheduleReconnect() {
+      if (stopped || reconnectTimer !== undefined) return
+      const delay = Math.min(1000 * 2 ** reconnectAttempt, 30000)
+      reconnectAttempt += 1
+      reconnectTimer = setTimeout(() => { reconnectTimer = undefined; connect() }, delay)
+    }
+    connect()
+    return () => {
+      stopped = true
+      if (reconnectTimer !== undefined) clearTimeout(reconnectTimer)
+      socket?.close()
+    }
+  }, [])
   useEffect(() => {
     let active = true
     const detailRequest = ++detailGeneration.current

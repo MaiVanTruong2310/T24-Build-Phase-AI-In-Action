@@ -30,6 +30,8 @@ from src.api.endpoints.notification import router as notification_router
 from src.api.endpoints.package import router as package_router
 from src.api.endpoints.package import staff_router as staff_package_router
 from src.api.endpoints.patient_profiles import router as patient_profiles_router
+from src.api.endpoints.staff_dashboard import router as staff_dashboard_router
+from src.api.endpoints.staff_patient import router as staff_patient_router
 from src.api.endpoints.workbench import patient_router as live_coordination_router
 from src.api.endpoints.workbench import router as workbench_router
 from src.api.endpoints.zalo import router as zalo_router
@@ -251,6 +253,8 @@ app.include_router(patient_profiles_router, prefix="/api/v1")
 app.include_router(workbench_router, prefix="/api/v1")
 app.include_router(live_coordination_router, prefix="/api/v1")
 app.include_router(user_router, prefix="/api/v1")
+app.include_router(staff_patient_router, prefix="/api/v1")
+app.include_router(staff_dashboard_router, prefix="/api/v1")
 app.include_router(patient_router, prefix="/api/v1")
 app.include_router(booking_router, prefix="/api/v1")
 app.include_router(staff_booking_router, prefix="/api/v1")

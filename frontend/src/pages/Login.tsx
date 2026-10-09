@@ -8,6 +8,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '../app/store'
 
 import { loginUser } from '../features/auth/authSlice'
+import { staffReturnTo } from '../features/auth/staffReturnTo'
 
 import { Eye, EyeOff, User, ArrowRight, Lock, MessageSquare } from 'lucide-react'
 
@@ -64,8 +65,7 @@ export function Login() {
     if (user) {
 
       if (user.role === 'staff') {
-
-        navigate('/staff/coordination')
+        navigate(staffReturnTo(new URLSearchParams(location.search).get('returnTo')))
 
       } else {
 
