@@ -1,4 +1,12 @@
-"""Password, JWT and refresh-token security helpers."""
+"""Password, JWT and refresh-token security helpers.
+
+.. warning::
+   **No authentication path uses this module.** Supabase Auth owns credentials,
+   email confirmation and sessions; every request is verified against
+   ``SUPABASE_URL/auth/v1/user``. The helpers below are kept only so the
+   regression tests can mint a locally signed token and prove that the
+   application rejects it. Do not wire them back into a request path.
+"""
 
 import base64
 import hashlib

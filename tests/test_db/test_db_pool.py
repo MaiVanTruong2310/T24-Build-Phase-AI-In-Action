@@ -20,6 +20,8 @@ async def test_matching_database_urls_share_one_bounded_pool(monkeypatch):
         _env_file=None,
         database_url=base,
         auth_database_url=base + "?sslmode=require",
+        database_pool_size=3,
+        database_max_overflow=1,
     )
     monkeypatch.setattr(database, "get_settings", lambda: settings)
     database.get_engine.cache_clear()

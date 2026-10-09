@@ -84,7 +84,7 @@ flowchart TB
     BIZ -->|"SQLAlchemy async"| PG
     CHAT -->|"chat_conversations<br/>chat_turns"| PG
     AGT -.->|"PostgREST: doctors,<br/>doctor_schedules, booking_requests"| SB
-    AUTHC -.->|"Auth API khi<br/>AUTH_PROVIDER=supabase"| SB
+    AUTHC -.->|"Auth API<br/>/auth/v1/*"| SB
     AGT -->|"đọc file"| DL
     AGT -->|"OpenAI-compatible API"| LLM
     NTC -->|"SMTP :587"| SMTP
@@ -298,7 +298,7 @@ flowchart TB
 | Notification | Bell đang mở | WebSocket push | `NotificationConnectionManager.publish(user_id, payload)` |
 | Backend nghiệp vụ, ChatHistory | PostgreSQL | SQLAlchemy async (psycopg 3) | `DATABASE_URL` |
 | Agent | Supabase | HTTP PostgREST | `SUPABASE_URL/rest/v1/{table}` (tùy chọn) |
-| Auth | Supabase | HTTP | `SUPABASE_URL/auth/v1/*` khi `AUTH_PROVIDER=supabase` |
+| Auth | Supabase | HTTP | `SUPABASE_URL/auth/v1/*` — nhà cung cấp danh tính duy nhất (đăng ký, đăng nhập, OTP email, khôi phục, refresh) |
 | Agent | LLM | HTTPS, OpenAI-compatible | Thứ tự dự phòng OpenRouter → Gemini → OpenAI |
 | Notification | Gmail | SMTP STARTTLS :587 | `GMAIL_SMTP_*` |
 

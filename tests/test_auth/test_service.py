@@ -1,19 +1,21 @@
-"""Unit tests for authentication business rules without a database."""
+"""Unit tests for the Supabase-backed profile service without a database.
+
+Supabase Auth owns credentials, email confirmation and sessions. ``AuthService``
+only reads and writes the application profile in ``public.users``, so these tests
+exercise ``get_user_by_id``, ``update_profile`` and ``update_portrait`` against
+lightweight in-memory fakes.
+"""
 
 import asyncio
-from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
-from src.config import Settings, get_settings
-from src.core.exceptions import AuthenticationError
-from src.core.security import hash_refresh_token, verify_password
-from src.models.auth import OtpChallenge, RefreshSession
+from src.core.exceptions import ConflictError, NotFoundError
 from src.models.user import User
-from src.schemas.auth import LoginRequest, RegisterRequest, UpdateProfileRequest
+from src.schemas.auth import UpdateProfileRequest
 from src.services.auth import AuthService
-from src.services.otp import MockOtpProvider
 
 
 class FakeTransaction:
@@ -30,8 +32,16 @@ class FakeTransaction:
 class FakeSession:
     """Minimal async session surface required by AuthService."""
 
+    def __init__(self, *, refreshed_details: dict | None = None, flush_error: Exception | None = None) -> None:
+        self.executed: list[object] = []
+        self.flush_count = 0
+        self.refresh_count = 0
+        self.refreshed_details = refreshed_details
+        self.flush_error = flush_error
+
     async def execute(self, statement):
-        """Accept the row lock used when applying profile updates."""
+        """Accept the per-row lock used when applying profile updates."""
+        self.executed.append(statement)
         return None
 
     def begin(self) -> FakeTransaction:
@@ -39,187 +49,83 @@ class FakeSession:
         return FakeTransaction()
 
     async def flush(self) -> None:
-        """Match the async session flush operation."""
+        """Count flushes, or fail like the database would on a unique violation."""
+        self.flush_count += 1
+        if self.flush_error is not None:
+            raise self.flush_error
+
+    async def refresh(self, instance, attribute_names=None) -> None:
+        """Simulate reloading a column from the database."""
+        del attribute_names
+        self.refresh_count += 1
+        if self.refreshed_details is not None:
+            instance.patient_details = self.refreshed_details
 
 
 class FakeUserRepository:
     """In-memory user repository for isolated service tests."""
 
-    def __init__(self) -> None:
-        self.users: list[User] = []
-
-    async def get_by_identity(self, email: str | None, phone: str | None) -> User | None:
-        """Find a user by either identity field."""
-        return next(
-            (user for user in self.users if (email and user.email == email) or (phone and user.phone == phone)),
-            None,
-        )
-
-    async def get_by_identifier(self, email: str | None, phone: str | None) -> User | None:
-        """Find a user by one identity field."""
-        return await self.get_by_identity(email, phone)
+    def __init__(self, users: list[User] | None = None) -> None:
+        self.users: list[User] = list(users or [])
 
     async def get_by_id(self, user_id: UUID) -> User | None:
         """Find a user by its identifier."""
         return next((user for user in self.users if user.id == user_id), None)
 
-    async def create(self, user: User) -> User:
-        """Store a user and assign its generated identifier."""
-        if user.id is None:
-            user.id = uuid4()
-        self.users.append(user)
-        return user
+    async def get_by_citizen_id(self, citizen_id: str | None) -> User | None:
+        """Find a user by citizen identifier."""
+        if not citizen_id:
+            return None
+        return next((user for user in self.users if user.citizen_id == citizen_id), None)
 
-
-class FakeAuthRepository:
-    """In-memory OTP and refresh-session repository for service tests."""
-
-    def __init__(self) -> None:
-        self.otp_challenges: list[OtpChallenge] = []
-        self.refresh_sessions: list[RefreshSession] = []
-
-    async def create_otp(self, challenge: OtpChallenge) -> OtpChallenge:
-        """Store an OTP challenge with test-time defaults."""
-        if challenge.id is None:
-            challenge.id = uuid4()
-        if challenge.created_at is None:
-            challenge.created_at = datetime.now(UTC)
-        if challenge.attempts is None:
-            challenge.attempts = 0
-        self.otp_challenges.append(challenge)
-        return challenge
-
-    async def get_latest_otp(
-        self,
-        target: str,
-        purpose: str,
-        *,
-        for_update: bool = False,
-    ) -> OtpChallenge | None:
-        """Return the newest unconsumed OTP challenge."""
-        del for_update
-        values = [
-            challenge
-            for challenge in self.otp_challenges
-            if challenge.target == target and challenge.purpose == purpose and challenge.consumed_at is None
-        ]
-        return max(values, key=lambda challenge: challenge.created_at) if values else None
-
-    async def create_refresh_session(self, session: RefreshSession) -> RefreshSession:
-        """Store a refresh session with a generated identifier."""
-        if session.id is None:
-            session.id = uuid4()
-        self.refresh_sessions.append(session)
-        return session
-
-    async def get_refresh_session(self, token_hash: str, *, for_update: bool = False) -> RefreshSession | None:
-        """Find a refresh session by its token hash."""
-        del for_update
-        return next((session for session in self.refresh_sessions if session.token_hash == token_hash), None)
-
-    async def revoke_session(
-        self,
-        session_id: UUID,
-        *,
-        revoked_at: datetime,
-        replaced_by: UUID | None = None,
-    ) -> None:
-        """Revoke one active refresh session."""
-        session = next(session for session in self.refresh_sessions if session.id == session_id)
-        if session.revoked_at is None:
-            session.revoked_at = revoked_at
-            session.last_used_at = revoked_at
-            session.replaced_by = replaced_by
-
-    async def revoke_user_sessions(self, user_id: UUID, *, revoked_at: datetime) -> None:
-        """Revoke every active session belonging to a user."""
-        for session in self.refresh_sessions:
-            if session.user_id == user_id and session.revoked_at is None:
-                session.revoked_at = revoked_at
-                session.last_used_at = revoked_at
-
-    async def list_user_sessions(self, user_id: UUID) -> list[RefreshSession]:
-        """List sessions belonging to a user."""
-        return [session for session in self.refresh_sessions if session.user_id == user_id]
-
-    async def get_session_by_id(self, session_id: UUID, *, for_update: bool = False) -> RefreshSession | None:
-        """Find a session by identifier."""
-        del for_update
-        return next((session for session in self.refresh_sessions if session.id == session_id), None)
+    async def get_by_health_insurance_code(self, health_insurance_code: str | None) -> User | None:
+        """Find a user by health-insurance card number."""
+        if not health_insurance_code:
+            return None
+        return next((user for user in self.users if user.health_insurance_code == health_insurance_code), None)
 
 
 def build_service(
-    mock_otp_code: str = "123456",
-) -> tuple[AuthService, FakeUserRepository, FakeAuthRepository, MockOtpProvider]:
+    users: list[User] | None = None,
+    session: FakeSession | None = None,
+) -> tuple[AuthService, FakeUserRepository, FakeSession]:
     """Build an AuthService wired to in-memory dependencies."""
-    settings = Settings(
-        database_url="postgresql+psycopg://test:test@localhost/test",
-        jwt_secret_key="test-secret-key-with-at-least-32-bytes",
-        mock_otp_code=mock_otp_code,
-    )
-    provider = MockOtpProvider(settings)
-    service = AuthService(FakeSession(), settings=settings, otp_provider=provider)
-    users = FakeUserRepository()
-    auth = FakeAuthRepository()
-    service.users = users
-    service.auth = auth
-    return service, users, auth, provider
+    session = session or FakeSession()
+    service = AuthService(session)
+    repository = FakeUserRepository(users)
+    service.users = repository
+    return service, repository, session
 
 
-def configure_security_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Configure deterministic JWT settings for token-related tests."""
-    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-with-at-least-32-bytes")
-    get_settings.cache_clear()
+def test_get_user_by_id_returns_the_stored_profile():
+    """Staff lookup flows return the persisted profile."""
+    user = User(id=uuid4(), email="patient@example.com", role="patient", status="active")
+    service, _, _ = build_service([user])
+
+    assert asyncio.run(service.get_user_by_id(user.id)) is user
 
 
-def test_register_creates_pending_user_and_safe_log(caplog):
-    """Registration creates a pending user and never logs the OTP value."""
-    service, users, _, provider = build_service()
+def test_get_user_by_id_raises_not_found_for_unknown_identifier():
+    """Unknown identifiers surface the public not-found error."""
+    service, _, _ = build_service()
 
-    with caplog.at_level("DEBUG"):
-        user = asyncio.run(service.register(RegisterRequest(email=" User@Example.com ", password="correct-password")))
+    with pytest.raises(NotFoundError) as error:
+        asyncio.run(service.get_user_by_id(uuid4()))
 
-    assert user.email == "user@example.com"
-    assert user.status == "pending_verification"
-    assert provider.sent_codes[("user@example.com", "register")] == "123456"
-    assert users.users == [user]
-    assert "AuthService.register account created" in caplog.text
-    assert "123456" not in caplog.text
-
-
-def test_register_persists_patient_personal_information():
-    """Registration stores optional demographic and healthcare identifiers."""
-    service, _, _, _ = build_service()
-    user = asyncio.run(
-        service.register(
-            RegisterRequest(
-                email="user@example.com",
-                password="correct-password",
-                date_of_birth=date(1990, 5, 20),
-                gender="female",
-                citizen_id="012345678901",
-                health_insurance_code="BH1234567890",
-            )
-        )
-    )
-
-    assert user.date_of_birth == date(1990, 5, 20)
-    assert user.gender == "female"
-    assert user.citizen_id == "012345678901"
-    assert user.health_insurance_code == "BH1234567890"
+    assert error.value.code == "NOT_FOUND"
 
 
 def test_update_profile_changes_only_patient_editable_fields():
     """Profile update persists the supplied demographic and insurance fields."""
-    service, _, _, _ = build_service()
     user = User(id=uuid4(), email="user@example.com", role="patient", status="active")
+    service, _, session = build_service([user])
 
     updated = asyncio.run(
         service.update_profile(
             user,
             UpdateProfileRequest(
                 full_name="  Nguyen Van A ",
-                date_of_birth=date(1990, 5, 20),
+                phone="0900000000",
                 gender="male",
                 citizen_id="012345678901",
                 health_insurance_code="BH1234567890",
@@ -227,160 +133,164 @@ def test_update_profile_changes_only_patient_editable_fields():
         )
     )
 
+    assert updated is user
     assert updated.full_name == "Nguyen Van A"
-    assert updated.date_of_birth == date(1990, 5, 20)
+    assert updated.phone == "0900000000"
     assert updated.gender == "male"
     assert updated.citizen_id == "012345678901"
     assert updated.health_insurance_code == "BH1234567890"
+    assert updated.role == "patient"
+    assert session.flush_count == 1
 
 
-def test_send_otp_returns_mock_code_for_existing_user():
-    """OTP sending returns the mock code without writing it to the logs."""
-    service, _, _, _ = build_service()
-    asyncio.run(service.register(RegisterRequest(email="user@example.com", password="correct-password")))
-
-    code = asyncio.run(service.send_otp("user@example.com", None, "login"))
-
-    assert code == "123456"
-
-
-def test_send_otp_generates_random_six_digit_code_when_not_configured():
-    """The default mock provider generates a six-digit numeric OTP."""
-    service, _, _, _ = build_service(mock_otp_code="")
-    asyncio.run(service.register(RegisterRequest(email="user@example.com", password="correct-password")))
-
-    code = asyncio.run(service.send_otp("user@example.com", None, "login"))
-
-    assert code is not None
-    assert len(code) == 6
-    assert code.isdigit()
-
-
-def test_password_reset_request_returns_mock_otp_for_existing_account():
-    """An existing account receives a reset OTP with the dedicated purpose."""
-    service, _, auth, _ = build_service()
-    user = asyncio.run(service.register(RegisterRequest(email="user@example.com", password="old-password")))
-    user.status = "active"
-
-    code = asyncio.run(service.request_password_reset("user@example.com", None))
-
-    assert code == "123456"
-    assert auth.otp_challenges[-1].purpose == "reset_password"
-
-
-def test_password_reset_request_hides_unknown_account():
-    """An unknown account gets the same empty result without an OTP challenge."""
-    service, _, auth, _ = build_service()
-
-    code = asyncio.run(service.request_password_reset("missing@example.com", None))
-
-    assert code is None
-    assert auth.otp_challenges == []
-
-
-def test_reset_password_changes_hash_and_revokes_sessions():
-    """A valid reset OTP changes the password and revokes active sessions."""
-    service, _, auth, _ = build_service()
-    user = asyncio.run(service.register(RegisterRequest(email="user@example.com", password="old-password")))
-    user.status = "active"
-    session = RefreshSession(
-        user_id=user.id,
-        token_hash=hash_refresh_token("refresh-token-for-test"),
-        expires_at=datetime.now(UTC) + timedelta(days=1),
+def test_update_profile_leaves_unsupplied_fields_untouched():
+    """A partial update never clears saved values that were not sent."""
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        full_name="Saved Name",
+        phone="0900000001",
+        role="patient",
+        status="active",
     )
-    asyncio.run(auth.create_refresh_session(session))
-    asyncio.run(service.request_password_reset("user@example.com", None))
+    service, _, _ = build_service([user])
 
-    asyncio.run(service.reset_password("user@example.com", None, "123456", "new-password"))
+    asyncio.run(service.update_profile(user, UpdateProfileRequest(gender="female")))
 
-    assert user.password_hash is not None
-    assert verify_password("new-password", user.password_hash)
-    assert not verify_password("old-password", user.password_hash)
-    assert session.revoked_at is not None
+    assert user.full_name == "Saved Name"
+    assert user.phone == "0900000001"
+    assert user.gender == "female"
 
 
-def test_verify_registration_otp_persists_failed_attempt_and_activates_user():
-    """An invalid OTP increments attempts before a valid OTP activates the user."""
-    service, _, auth, _ = build_service()
-    asyncio.run(service.register(RegisterRequest(email="user@example.com", password="correct-password")))
+def test_update_profile_clears_a_whitespace_only_full_name():
+    """A blank name is normalised to no name instead of an empty string."""
+    user = User(id=uuid4(), email="user@example.com", full_name="Saved Name", role="patient", status="active")
+    service, _, _ = build_service([user])
 
-    with pytest.raises(AuthenticationError) as error:
-        asyncio.run(service.verify_registration_otp("user@example.com", None, "000000"))
+    asyncio.run(service.update_profile(user, UpdateProfileRequest(full_name="   ")))
 
-    assert error.value.code == "INVALID_OTP"
-    assert auth.otp_challenges[0].attempts == 1
-    assert auth.otp_challenges[0].consumed_at is None
-
-    user = asyncio.run(service.verify_registration_otp("user@example.com", None, "123456"))
-
-    assert user.status == "active"
-    assert user.verified_at is not None
-    assert auth.otp_challenges[0].consumed_at is not None
+    assert user.full_name is None
 
 
-def test_login_issues_refresh_session_and_refresh_rotation(monkeypatch):
-    """Password login issues tokens and rotating a token revokes the original session."""
-    configure_security_environment(monkeypatch)
-    service, _, auth, _ = build_service()
-    user = asyncio.run(service.register(RegisterRequest(email="user@example.com", password="correct-password")))
-    user.status = "active"
+def test_update_profile_merges_patient_details_with_saved_values():
+    """A partial patient_details payload preserves the other saved details."""
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        role="patient",
+        status="active",
+        patient_details={"blood_type": "O+", "emergency_name": "Contact Test"},
+    )
+    service, _, _ = build_service([user])
 
-    try:
-        _, access_token, refresh_token, _, _ = asyncio.run(
-            service.login(LoginRequest(email="user@example.com", password="correct-password"))
-        )
-        _, rotated_access_token, rotated_refresh_token, _ = asyncio.run(service.refresh(refresh_token))
+    asyncio.run(service.update_profile(user, UpdateProfileRequest(patient_details={"allergies": "Pollen"})))
 
-        assert access_token
-        assert rotated_access_token
-        assert refresh_token != rotated_refresh_token
-        assert len(auth.refresh_sessions) == 2
-        assert auth.refresh_sessions[0].revoked_at is not None
-
-        with pytest.raises(AuthenticationError) as error:
-            asyncio.run(service.refresh(refresh_token))
-        assert error.value.code == "REFRESH_TOKEN_REUSE"
-        assert all(session.revoked_at is not None for session in auth.refresh_sessions)
-    finally:
-        get_settings.cache_clear()
+    assert user.patient_details == {
+        "blood_type": "O+",
+        "emergency_name": "Contact Test",
+        "allergies": "Pollen",
+    }
 
 
-def test_expired_refresh_token_is_rejected(monkeypatch):
-    """An expired refresh session is revoked and rejected."""
-    configure_security_environment(monkeypatch)
-    service, _, auth, _ = build_service()
-    user = asyncio.run(service.register(RegisterRequest(email="user@example.com", password="correct-password")))
-    user.status = "active"
+def test_update_profile_merges_against_details_reloaded_from_database():
+    """The merge uses the freshly locked row, not a stale in-memory copy."""
+    user = User(id=uuid4(), email="user@example.com", role="patient", status="active", patient_details={"stale": True})
+    session = FakeSession(refreshed_details={"blood_type": "O+"})
+    service, _, _ = build_service([user], session)
 
-    try:
-        _, _, refresh_token, _, _ = asyncio.run(
-            service.login(LoginRequest(email="user@example.com", password="correct-password"))
-        )
-        auth.refresh_sessions[0].expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    asyncio.run(service.update_profile(user, UpdateProfileRequest(patient_details={"allergies": "Pollen"})))
 
-        with pytest.raises(AuthenticationError) as error:
-            asyncio.run(service.refresh(refresh_token))
-
-        assert error.value.code == "REFRESH_TOKEN_EXPIRED"
-        assert auth.refresh_sessions[0].revoked_at is not None
-    finally:
-        get_settings.cache_clear()
+    assert user.patient_details == {"blood_type": "O+", "allergies": "Pollen"}
 
 
-def test_logout_revokes_session_by_refresh_token(monkeypatch):
-    """Logout revokes the session without requiring an access-token user lookup."""
-    configure_security_environment(monkeypatch)
-    service, _, auth, _ = build_service()
-    user = asyncio.run(service.register(RegisterRequest(email="user@example.com", password="correct-password")))
-    user.status = "active"
+def test_update_profile_rejects_citizen_id_owned_by_another_profile():
+    """A citizen_id that belongs to somebody else is refused and not applied."""
+    other = User(id=uuid4(), email="other@example.com", role="patient", status="active", citizen_id="012345678901")
+    user = User(id=uuid4(), email="user@example.com", role="patient", status="active")
+    service, _, session = build_service([user, other])
 
-    try:
-        _, _, refresh_token, _, _ = asyncio.run(
-            service.login(LoginRequest(email="user@example.com", password="correct-password"))
-        )
+    with pytest.raises(ConflictError) as error:
+        asyncio.run(service.update_profile(user, UpdateProfileRequest(citizen_id="012345678901")))
 
-        asyncio.run(service.logout(refresh_token))
+    assert error.value.code == "CITIZEN_ID_EXISTS"
+    assert user.citizen_id is None
+    assert session.flush_count == 0
 
-        assert auth.refresh_sessions[0].revoked_at is not None
-    finally:
-        get_settings.cache_clear()
+
+def test_update_profile_allows_resubmitting_the_same_citizen_id():
+    """A profile may keep re-submitting its own citizen_id."""
+    user = User(id=uuid4(), email="user@example.com", role="patient", status="active", citizen_id="012345678901")
+    service, _, session = build_service([user])
+
+    asyncio.run(service.update_profile(user, UpdateProfileRequest(citizen_id="012345678901")))
+
+    assert user.citizen_id == "012345678901"
+    assert session.flush_count == 1
+
+
+def test_update_profile_rejects_health_insurance_owned_by_another_profile():
+    """A health-insurance number that belongs to somebody else is refused."""
+    other = User(
+        id=uuid4(),
+        email="other@example.com",
+        role="patient",
+        status="active",
+        health_insurance_code="BH1234567890",
+    )
+    user = User(id=uuid4(), email="user@example.com", role="patient", status="active")
+    service, _, session = build_service([user, other])
+
+    with pytest.raises(ConflictError) as error:
+        asyncio.run(service.update_profile(user, UpdateProfileRequest(health_insurance_code="BH1234567890")))
+
+    assert error.value.code == "HEALTH_INSURANCE_EXISTS"
+    assert user.health_insurance_code is None
+    assert session.flush_count == 0
+
+
+def test_update_profile_converts_integrity_error_to_public_conflict():
+    """A database uniqueness violation becomes the stable public conflict error."""
+    user = User(id=uuid4(), email="user@example.com", role="patient", status="active")
+    session = FakeSession(flush_error=IntegrityError("UPDATE", {}, Exception("duplicate key value")))
+    service, _, _ = build_service([user], session)
+
+    with pytest.raises(ConflictError) as error:
+        asyncio.run(service.update_profile(user, UpdateProfileRequest(phone="0900000000")))
+
+    assert error.value.code == "PROFILE_CONFLICT"
+    assert error.value.status_code == 409
+
+
+def test_update_portrait_stores_the_image_and_keeps_other_details():
+    """Portrait updates live inside patient_details and preserve the rest."""
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        role="patient",
+        status="active",
+        patient_details={"blood_type": "O+", "portrait_image": "data:image/jpeg;base64,old"},
+    )
+    service, _, session = build_service([user])
+
+    asyncio.run(service.update_portrait(user, "data:image/jpeg;base64,new"))
+
+    assert user.patient_details == {"blood_type": "O+", "portrait_image": "data:image/jpeg;base64,new"}
+    assert session.refresh_count == 1
+    assert session.flush_count == 1
+
+
+def test_update_portrait_removes_the_image_when_none():
+    """Clearing the portrait removes only the portrait key."""
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        role="patient",
+        status="active",
+        patient_details={"blood_type": "O+", "portrait_image": "data:image/jpeg;base64,old"},
+    )
+    service, _, session = build_service([user])
+
+    asyncio.run(service.update_portrait(user, None))
+
+    assert user.patient_details == {"blood_type": "O+"}
+    assert session.flush_count == 1

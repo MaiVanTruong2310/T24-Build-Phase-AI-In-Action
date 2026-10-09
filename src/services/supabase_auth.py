@@ -2,7 +2,6 @@
 
 import asyncio
 import ssl
-from datetime import datetime
 from hashlib import sha256
 from uuid import UUID
 
@@ -13,11 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import get_settings
 from src.core.exceptions import AppError, AuthenticationError, ConflictError
 from src.models.user import User
-
-
-def native_auth_enabled() -> bool:
-    return get_settings().auth_provider == "supabase"
-
 
 # Share only concurrent checks. Completed results are discarded, so each later
 # request still asks Supabase whether the token is valid.
@@ -182,7 +176,6 @@ async def authenticated_profile(token: str, session: AsyncSession) -> User:
     if profile.status not in ("active", "pending_verification"):
         raise AuthenticationError("ACCOUNT_DISABLED", "Tài khoản không hoạt động.")
     profile.status = "active"
-    profile.verified_at = datetime.fromisoformat(identity["email_confirmed_at"].replace("Z", "+00:00"))
     await session.commit()
     return profile
 

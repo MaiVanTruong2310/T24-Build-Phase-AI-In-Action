@@ -119,20 +119,18 @@ class ResetPasswordRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str | None = Field(default=None, min_length=3, max_length=32)
-    email: str | None = Field(default=None, min_length=3, max_length=320)
-    phone: str | None = Field(default=None, min_length=7, max_length=32)
-    password: str | None = Field(default=None, min_length=8, max_length=128)
-    otp_code: str | None = Field(default=None, min_length=6, max_length=6)
+    """Email/password sign-in delegated to Supabase Auth."""
 
-    @model_validator(mode="after")
-    def validate_login(self) -> "LoginRequest":
-        """Require an identity and one supported authentication factor."""
-        if not self.email and not self.phone and not self.username:
-            raise ValueError("email, phone or username is required")
-        if not self.password and not self.otp_code:
-            raise ValueError("password or otp_code is required")
-        return self
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        """Store and compare the canonical lower-case email."""
+        return value.strip().lower()
 
 
 class RefreshTokenRequest(BaseModel):
@@ -214,7 +212,6 @@ class UserResponse(BaseModel):
     citizen_id: str | None
     health_insurance_code: str | None
     patient_details: PatientDetailsResponse | None = None
-    verified_at: datetime | None
 
 
 class SessionResponse(BaseModel):

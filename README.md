@@ -156,7 +156,7 @@ cp .env.example .env
 | `SUPABASE_SERVICE_ROLE_KEY` | Tùy chọn | `""` | Service Role Key cho quyền truy cập quản trị Supabase. |
 | **XÁC THỰC & BẢO MẬT (AUTH)** | | | |
 | `JWT_SECRET_KEY` | **Có** | `""` | Khóa bí mật ngẫu nhiên dùng để ký và xác minh JWT; thay giá trị mẫu trong `.env.example`. |
-| `AUTH_PROVIDER` | Tùy chọn | `custom` | Cơ chế xác thực: `custom` hoặc `supabase`. |
+| `AUTH_PROVIDER` | **Có** | `supabase` | Nhà cung cấp danh tính duy nhất. Chỉ nhận `supabase`; giá trị `custom` (đăng nhập bằng `public.users.password_hash`) đã bị gỡ và sẽ báo lỗi khi khởi động. |
 | `JWT_ALGORITHM` | Tùy chọn | `HS256` | Thuật toán băm JWT. |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Tùy chọn | `15` | Thời gian hết hạn của Access Token (phút). |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Tùy chọn | `30` | Thời gian hết hạn của Refresh Token (ngày). |
