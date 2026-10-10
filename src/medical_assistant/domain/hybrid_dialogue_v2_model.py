@@ -88,6 +88,8 @@ class ActionArgs(BaseModel):
     faq_key: str | None = None
     department_key: str | None = None
     comparison_requested: bool | None = False
+    doctor_name: str | None = None
+    doctor_title_hint: str | None = None
 
 
 class CandidateSpecialty(BaseModel):
@@ -164,6 +166,8 @@ class LeanActionArgs(BaseModel):
     preferred_period: Literal["morning", "afternoon", "evening", "null"] = "null"
     department_key: str | None = None
     comparison_requested: bool | None = False
+    doctor_name: str | None = None
+    doctor_title_hint: str | None = None
 
 
 class LeanDialogueOutput(BaseModel):
@@ -174,6 +178,7 @@ class LeanDialogueOutput(BaseModel):
     primary_intent: str
     proposed_action: str
     draft_response: str
+    topic_change: Literal["none", "new_topic", "reset"] = "none"
     extraction_confidence: float = Field(ge=0.0, le=1.0)
     action_confidence: float = Field(ge=0.0, le=1.0)
     facts_delta: LeanFactsDelta = Field(default_factory=LeanFactsDelta)

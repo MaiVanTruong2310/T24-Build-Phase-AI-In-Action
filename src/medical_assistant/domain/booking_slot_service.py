@@ -248,6 +248,61 @@ def parse_vietnamese_date(text: str, reference_date: date | None = None) -> date
     return None
 
 
+def remove_accents(text: str) -> str:
+    """Bỏ dấu tiếng Việt (giữ nguyên chữ hoa/thường) để so khớp với văn bản gõ thiếu dấu."""
+    import unicodedata
+
+    value = unicodedata.normalize("NFD", text or "")
+    return "".join(c for c in value if unicodedata.category(c) != "Mn").replace("đ", "d").replace("Đ", "D")
+
+
+# Chức danh đứng trước tên bác sĩ (đã bỏ dấu): "bác sĩ nội trú X", "BS CKII X", "thạc sĩ X".
+DOCTOR_TITLE_WORDS = {
+    "noi", "tru", "thac", "tien", "si", "chuyen", "khoa", "ck", "cki", "ckii", "ck1", "ck2", "i", "ii",
+    "pgs", "gs", "ts", "ths", "pho", "giao", "su", "truong", "bs",
+}  # fmt: skip
+
+_RESET_PATTERN = re.compile(
+    r"\b(?:quen|bo qua|khong tinh|xoa)\s+(?:het\s+|tat ca\s+|di\s+|nhung\s+|moi\s+|cac\s+)*"
+    r"(?:(?:tu van|thong tin|noi dung|cau hoi|hoi thoai|chuyen|nhung gi|cai|phan)\s+)?(?:o\s+)?"
+    r"(?:tren|truoc|cu|vua roi|vua noi|nay)\b"
+    r"|\b(?:bat dau lai|lam lai tu dau|hoi (?:chuyen|viec|van de) khac)\b"
+    r"|\b(?:forget (?:everything|that|all)|start over)\b"
+)
+
+
+def detect_context_reset(text: str) -> bool:
+    """Người dùng muốn bỏ chủ đề cũ: "quên tất cả tư vấn trên", "bỏ qua phần trước", "bắt đầu lại".
+
+    Không bắt "quên mật khẩu" (không có từ chỉ nội dung trước đó).
+    """
+    return bool(_RESET_PATTERN.search(remove_accents((text or "").lower())))
+
+
+_BOOKING_CONTEXT = re.compile(r"\b(?:kham|dat|lich|hen|gap|bac si|bs|dang ky)\b")
+_FOR_OTHER = re.compile(
+    r"\b(?:cho|ho)\s+(?:nguoi nha|nguoi than|me|bo|cha|ba|ong|vo|chong|chau|con)\b"
+    r"|\b(?:cho|ho)\s+(?:anh|chi|em)\s+(?:toi|minh|gai|trai|ruot|ho)\b"
+    r"|\bnguoi (?:kham|benh|di kham)\s+(?:khong|ko|k|chang)\s+phai\s+(?:la\s+)?(?:toi|minh|em)\b"
+    r"|\b(?:khong|ko)\s+phai\s+(?:toi|minh)\s+(?:kham|di kham|benh)\b"
+    r"|\b(?:dat|kham|dang ky)\s+ho\b"
+)
+_FOR_SELF = re.compile(r"\b(?:cho|ho)\s+(?:toi|minh|ban than)\b(?!\s+(?:hoi|xin|biet))|\b(?:toi|minh) (?:tu )?kham\b")
+
+
+def detect_booking_for(text: str) -> str | None:
+    """ "other" khi đặt lịch/khám cho người khác, "self" khi nói rõ cho bản thân, None khi không rõ.
+
+    Chỉ xét câu có ngữ cảnh khám/đặt lịch để "cho em hỏi" (xưng hô) không bị hiểu là đặt hộ em.
+    """
+    folded = remove_accents((text or "").lower())
+    if _FOR_OTHER.search(folded) and (_BOOKING_CONTEXT.search(folded) or "nguoi kham" in folded):
+        return "other"
+    if _FOR_SELF.search(folded) and _BOOKING_CONTEXT.search(folded):
+        return "self"
+    return None
+
+
 DOCTOR_STOPWORDS = {
     "chuyên",
     "khoa",
@@ -322,6 +377,9 @@ DOCTOR_STOPWORDS = {
     "là",
     "ai",
     "của",
+    "để",
+    "người",
+    "nhà",
     "đầu",
     "nhất",
     "số",
@@ -730,14 +788,29 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         entities["doctor_preference"] = "coordinator"
         entities["doctor_name"] = "Điều phối viên y tế sắp xếp bác sĩ phù hợp nhất"
     else:
+        # "bác si"/"bac si" (gõ thiếu dấu) cũng là bác sĩ.
         doc_match = re.search(
-            r"\b(?:bác\s+sĩ|bs\.?)\s+([A-Za-zÀ-ỹ\s]+?)(?:[,.\n]|(?:\s+(?:ở|tại|ngày|vào|buổi|khám))|$)",
+            r"\b(?:bác\s+s[ĩi]|bac\s+si|bs\.?)\s+([A-Za-zÀ-ỹ\s]+?)(?:[,.\n]|(?:\s+(?:ở|tại|ngày|vào|buổi|khám))|$)",
             text_clean,
             re.IGNORECASE,
         )
         if doc_match:
-            # Cắt tên tại từ dừng đầu tiên: "bác sĩ Nguyễn Vĩnh Toàn làm ở đâu" → "Nguyễn Vĩnh Toàn".
+            # Chức danh đứng trước tên ("nội trú", "thạc sĩ", "CKII") là gợi ý để lọc, không thuộc họ tên.
             raw_words = clean_name(doc_match.group(1)).split()
+            title_words: list[str] = []
+            while raw_words and remove_accents(raw_words[0].lower()) in DOCTOR_TITLE_WORDS:
+                title_words.append(raw_words.pop(0))
+            if title_words:
+                entities["doctor_title_hint"] = " ".join(w.lower() for w in title_words)
+            else:
+                # "khám khoa nội trú bác si X": chức danh đứng trước chữ "bác sĩ".
+                title_seen = re.search(
+                    r"\b(noi tru|thac si|tien si|ck ?ii|ck ?2|ck ?i|ck ?1|pgs|giao su)\b",
+                    remove_accents(text_clean.lower()),
+                )
+                if title_seen:
+                    entities["doctor_title_hint"] = title_seen.group(1)
+            # Cắt tên tại từ dừng đầu tiên: "bác sĩ Nguyễn Vĩnh Toàn làm ở đâu" → "Nguyễn Vĩnh Toàn".
             stop_at = next((i for i, w in enumerate(raw_words) if w.lower() in DOCTOR_STOPWORDS), len(raw_words))
             candidate_doc = " ".join(raw_words[:stop_at])
             cand_words = [w.lower() for w in candidate_doc.split()]
@@ -751,6 +824,15 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
             if 1 <= len(cand_words) <= 4 and not is_specialty_word:
                 entities["doctor_name"] = f"BS. {candidate_doc}"
                 entities["doctor_preference"] = candidate_doc
+
+    # Nêu tên bác sĩ kèm ý muốn gặp/khám/đặt ("tôi cần gặp bác si X", "khám cho người nhà với BS X") là đặt lịch;
+    # chỉ hỏi thông tin ("bác sĩ X làm ở đâu") thì không.
+    if (
+        entities.get("doctor_preference") not in (None, "coordinator")
+        and not entities.get("is_doctor_inquiry")
+        and re.search(r"\b(?:gap|kham|dat|hen|dang ky)\b", remove_accents(lower_text))
+    ):
+        entities["is_booking_intent"] = True
 
     # 11. Extract Package Inquiry
     entities["is_package_inquiry"] = detect_package_inquiry(text_clean)

@@ -54,6 +54,14 @@ STATE_FIELDS = {
     "durable_soap_note",
     "active_open_loops",
     "patient_memory_profile",
+    # Đặt lịch theo bác sĩ / đặt hộ người khác cần nhớ qua các lượt.
+    "doctor_preference",
+    "doctor_name",
+    "booking_intake",
+    "last_listed_doctors",
+    "booking_for",
+    "proxy_patient",
+    "awaiting_field",
 }
 
 

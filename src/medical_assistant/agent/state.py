@@ -57,6 +57,11 @@ class AgentState(TypedDict, total=False):
     recommended_doctor_id: str | None
     doctor_preference: str | None
     doctor_name: str | None
+    booking_for: str | None  # "self" | "other": người khám là người đang chat hay người khác
+    # Đặt hộ: thông tin người khám người dùng đã cung cấp, và câu đang chờ trả lời (giữ qua các lượt,
+    # không để trong metadata vì router ghi đè metadata mỗi lượt).
+    proxy_patient: dict[str, Any]
+    awaiting_field: str | None
     last_listed_doctors: list[dict[str, Any]]  # bác sĩ vừa liệt kê, cho "đặt với bác sĩ đầu tiên"
 
     # Slot khám & Giữ chỗ

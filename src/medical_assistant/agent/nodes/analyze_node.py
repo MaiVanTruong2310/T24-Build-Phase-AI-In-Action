@@ -6,11 +6,15 @@ from typing import Any
 from src.medical_assistant.agent.nodes.helpers import extract_facility_inquiry
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.domain.booking_slot_service import (
+    clean_name,
+    detect_booking_for,
+    detect_context_reset,
     extract_booking_entities,
 )
 from src.medical_assistant.domain.cache_service import get_cache_service
 from src.medical_assistant.domain.clinical_fact_service import get_clinical_fact_service
 from src.medical_assistant.domain.disease_triage import ATSLevel, UrgencyTier
+from src.medical_assistant.domain.doctor_resolution import name_supported_by_text, resolve_doctor
 from src.medical_assistant.domain.guardrail_service import remove_accents
 from src.medical_assistant.domain.hybrid_dialogue_service import get_hybrid_dialogue_service
 from src.medical_assistant.domain.language_service import (
@@ -356,6 +360,17 @@ def resolve_action(
         "TRIAGED_READY_FOR_BOOKING",  # đã hiện lịch trống, bệnh nhân gửi SĐT = muốn đặt
     }
     gave_contact = bool(booking_entities.get("patient_phone") or re.search(r"\d{4,}", query or ""))
+    # Đặt hộ: lượt trước đã hỏi tên/năm sinh/SĐT của người khám → câu trả lời tiếp tục luồng chốt phiếu.
+    answered_proxy = bool(
+        _proxy_answer(query, state.get("awaiting_field"))
+        or booking_entities.get("patient_name")
+        or booking_entities.get("date_of_birth")
+        or gave_contact
+    )
+    if state.get("awaiting_field") and state.get("booking_for") == "other" and answered_proxy and not is_emergency:
+        reason = "Người dùng trả lời thông tin người khám (đặt hộ)"
+        logger.info("RESOLVE_ACTION: action=confirm_booking_conversationally, reason=%s", reason)
+        return "confirm_booking_conversationally", reason, extra_args
     if awaiting_contact and gave_contact and not is_emergency:
         reason = "Bệnh nhân cung cấp liên hệ cho yêu cầu đặt lịch đang chờ"
         logger.info("RESOLVE_ACTION: action=confirm_booking_conversationally, reason=%s", reason)
@@ -463,16 +478,122 @@ def resolve_action(
     return action, reason, extra_args
 
 
+# Bỏ ngữ cảnh ("quên tất cả tư vấn trên"): xóa triệu chứng, khoa, lịch và phiếu đang giữ.
+# Giữ danh tính tài khoản và cờ cấp cứu (cổng cấp cứu vẫn chạy lại mỗi lượt, không phụ thuộc ngữ cảnh cũ).
+EPISODE_RESET_VALUES: dict[str, Any] = {
+    "suggested_department_name": None,
+    "suggested_department_code": None,
+    "ats_level": None,
+    "urgency_tier": None,
+    "max_booking_days": None,
+    "clinical_facts": {},
+    "collected_details": [],
+    "probing_turn": 0,
+    "active_probing_category": None,
+    "active_probing_categories": [],
+    "probing_by_complaint": {},
+    "booking_intake": {},
+    "preferred_date": None,
+    "preferred_period": None,
+    "facility_preference": None,
+    "doctor_preference": None,
+    "doctor_name": None,
+    "available_slots": [],
+    "candidate_specialties": [],
+    "routing_candidates": [],
+    "last_listed_doctors": [],
+    "booking_for": None,
+    "proxy_patient": {},
+    "awaiting_field": None,
+    "workflow_status": "IDLE",
+}
+_RESET_METADATA_KEYS = {
+    "booking_intake",
+    "clarification_question",
+    "facility_preference",
+    "time_preference",
+    "awaiting_field",
+}
+
+
+def _reset_episode(state: AgentState) -> AgentState:
+    metadata = {k: v for k, v in (state.get("metadata") or {}).items() if k not in _RESET_METADATA_KEYS}
+    return {**state, **EPISODE_RESET_VALUES, "metadata": metadata}  # type: ignore[return-value]
+
+
+def _short_turn_result(
+    state: AgentState,
+    lang: str,
+    workflow_status: str,
+    *,
+    context_reset: bool,
+    booking_for: str | None,
+    extra: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Kết quả lượt không qua phân tầng lâm sàng (chọn bác sĩ, không tìm thấy bác sĩ, chỉ bỏ ngữ cảnh)."""
+    result: dict[str, Any] = dict(EPISODE_RESET_VALUES) if context_reset else {}
+    result.update(
+        {
+            "analysis": f"Deterministic: {workflow_status}",
+            "is_emergency": False,
+            "emergency_warning": None,
+            "workflow_status": workflow_status,
+            "booking_for": booking_for,
+            "language": lang,
+            "messages": list(state.get("messages") or []),
+            "metadata": {
+                "needs_more_probing": False,
+                "llm_invoked": True,
+                "context_reset": context_reset,
+                **(metadata or {}),
+            },
+        }
+    )
+    result.update(extra or {})
+    return result
+
+
+def _proxy_answer(query: str, awaiting_field: str | None) -> dict[str, str]:
+    """Câu trả lời ngắn cho câu hỏi đang chờ khi đặt hộ: "Trần Văn Bình" → tên, "1960"/"65 tuổi" → năm sinh."""
+    text = (query or "").strip()
+    if awaiting_field == "patient_name":
+        words = text.replace(",", " ").split()
+        if 2 <= len(words) <= 5 and not re.search(r"\d", text):
+            return {"patient_name": clean_name(text)}
+    if awaiting_field == "date_of_birth":
+        from datetime import date
+
+        year = re.search(r"\b(19\d{2}|20[0-2]\d)\b", text)
+        if year:
+            return {"date_of_birth": f"{year.group(1)}-01-01"}
+        age = re.search(r"\b(\d{1,3})\s*tuổi\b", text.lower())
+        if age and 0 < int(age.group(1)) < 120:
+            return {"date_of_birth": f"{date.today().year - int(age.group(1))}-01-01"}
+    return {}
+
+
 _ORDINALS = {"dau tien": 0, "thu nhat": 0, "so 1": 0, "thu 2": 1, "thu hai": 1, "so 2": 1, "thu 3": 2, "thu ba": 2}
 _ORDINALS.update({"so 3": 2, "thu 4": 3, "thu tu": 3, "so 4": 3, "thu 5": 4, "thu nam": 4, "so 5": 4})
 
 
-def _pick_listed_doctor(query: str, listed: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """ "bác sĩ đầu tiên", "bác sĩ thứ 2", "bác sĩ đó" → bác sĩ tương ứng trong danh sách vừa liệt kê."""
+def _pick_listed_doctor(query: str, listed: list[dict[str, Any]], allow_bare: bool = False) -> dict[str, Any] | None:
+    """ "bác sĩ đầu tiên", "bác sĩ thứ 2", "bác sĩ đó" → bác sĩ tương ứng trong danh sách vừa liệt kê.
+
+    allow_bare: ngay sau câu hỏi chọn bác sĩ, chấp nhận câu ngắn "số 2", "người thứ 2", "2".
+    """
     if not listed:
         return None
-    folded = remove_accents((query or "").lower())
-    match = re.search(r"\b(?:bac si|bs)\s+(dau tien|thu nhat|thu \d|so \d|thu (?:hai|ba|tu|nam)|do|nay)\b", folded)
+    folded = remove_accents((query or "").lower()).strip()
+    if allow_bare:
+        bare = re.fullmatch(
+            r"(?:(?:chon|lay|dat)\s+)?(?:nguoi\s+|so\s+|thu\s+|bac si\s+(?:so\s+|thu\s+)?)?(\d)\.?", folded
+        )
+        if bare and 1 <= int(bare.group(1)) <= len(listed):
+            return listed[int(bare.group(1)) - 1]
+    match = re.search(
+        r"\b(?:bac si|bs|nguoi)\s+(dau tien|thu nhat|thu \d|so \d|thu (?:hai|ba|tu|nam)|do|nay)\b", folded
+    )
     if not match:
         return None
     ref = match.group(1)
@@ -498,6 +619,12 @@ async def analyze_node(state: AgentState) -> dict:
         lang = current_lang if is_contact_only else detected_lang
     else:
         lang = current_lang or detected_lang
+
+    # "Quên tất cả tư vấn trên…": bỏ triệu chứng/khoa/lịch cũ trước khi đọc ngữ cảnh.
+    # (LLM cũng có thể báo topic_change="reset"; xử lý sau khi gọi LLM.)
+    context_reset = detect_context_reset(query)
+    if context_reset:
+        state = _reset_episode(state)
 
     current_turn = state.get("probing_turn") or 0
     active_category = state.get("active_probing_category")
@@ -711,6 +838,23 @@ async def analyze_node(state: AgentState) -> dict:
     )
     skip_llm = False
 
+    # LLM hiểu được cách nói mà regex bỏ sót ("thôi bỏ qua mấy cái đó") → bỏ ngữ cảnh như trên.
+    if llm_succeeded and not context_reset and getattr(v2_response, "topic_change", "none") == "reset":
+        context_reset = True
+        state = _reset_episode(state)
+        current_turn = 0
+        active_category = None
+        active_categories = []
+        probing_by_complaint = {}
+        collected_details = []
+        current_dept = None
+        current_ats = 4
+        current_urgency = "STANDARD"
+        current_max_days = 7
+        clinical_facts = {}
+        facility_pref = None
+        time_pref = None
+
     department_query = (intent_check or {}).get("department_query")
     comparison_requested = bool((intent_check or {}).get("comparison_requested"))
     if intent_check and intent_check.get("department"):
@@ -746,7 +890,11 @@ async def analyze_node(state: AgentState) -> dict:
 
     booking_entities = extract_booking_entities(query, state)
     # "Đặt lịch với bác sĩ đầu tiên / thứ 2" → lấy từ danh sách bác sĩ vừa hiển thị ở lượt trước.
-    picked_doctor = _pick_listed_doctor(query, state.get("last_listed_doctors") or [])
+    picked_doctor = _pick_listed_doctor(
+        query,
+        state.get("last_listed_doctors") or [],
+        allow_bare=state.get("workflow_status") == "DOCTOR_CHOICE_REQUIRED",
+    )
     if picked_doctor and not booking_entities.get("doctor_preference"):
         booking_entities["doctor_preference"] = picked_doctor["full_name"]
         booking_entities["doctor_name"] = f"BS. {picked_doctor['full_name']}"
@@ -761,31 +909,140 @@ async def analyze_node(state: AgentState) -> dict:
                 picked_doctor["workplace"],
             )
     intake_state = state.get("booking_intake") or (state.get("metadata") or {}).get("booking_intake") or {}
-    patient_name = (
-        booking_entities.get("patient_name")
-        or (state.get("patient_profile") or {}).get("name")
-        or getattr(v2_response.facts_delta, "patient_name", None)
-        or state.get("patient_name")
-        or intake_state.get("patient_name")
+    awaiting_field = state.get("awaiting_field")
+
+    # Bác sĩ người dùng nêu tên: regex ("bác si"/"BS" + tên) hoặc LLM (chỉ khi tên có thật trong câu).
+    doctor_query = None
+    doctor_title_hint = booking_entities.get("doctor_title_hint")
+    if not picked_doctor and booking_entities.get("doctor_preference") not in (None, "", "coordinator"):
+        doctor_query = booking_entities["doctor_preference"]
+    llm_doctor = getattr(v2_response.action_args, "doctor_name", None) if llm_succeeded else None
+    if not picked_doctor and not doctor_query and llm_doctor and name_supported_by_text(llm_doctor, query):
+        doctor_query = llm_doctor.strip()
+        doctor_title_hint = doctor_title_hint or getattr(v2_response.action_args, "doctor_title_hint", None)
+
+    # Người khám: regex ("khám cho người nhà", "người khám không phải tôi") hoặc LLM subject=other
+    # trong ngữ cảnh đặt lịch; giữ nguyên lựa chọn ở các lượt sau cho tới khi người dùng đổi/bỏ ngữ cảnh.
+    booking_context = bool(
+        booking_entities.get("is_booking_intent")
+        or doctor_query
+        or picked_doctor
+        or awaiting_field
+        or state.get("workflow_status")
+        in {"TRIAGED_READY_FOR_BOOKING", "CONFIRM_BOOKING_CONVERSATIONALLY", "BOOKING_CONTACT_REQUIRED"}
     )
-    patient_phone = (
-        booking_entities.get("patient_phone")
-        or (state.get("patient_profile") or {}).get("phone")
-        or state.get("patient_phone")
-        or intake_state.get("patient_phone")
-    )
-    patient_dob = (
-        booking_entities.get("date_of_birth")
-        or (state.get("patient_profile") or {}).get("date_of_birth")
-        or state.get("patient_dob")
-        or intake_state.get("date_of_birth")
-    )
-    patient_gender = (
-        booking_entities.get("gender")
-        or (state.get("patient_profile") or {}).get("gender")
-        or state.get("patient_gender")
-        or intake_state.get("gender")
-    )
+    booking_for = detect_booking_for(query)
+    if (
+        booking_for is None
+        and llm_succeeded
+        and booking_context
+        and getattr(v2_response.facts_delta, "subject", "unknown") == "other"
+    ):
+        booking_for = "other"
+    booking_for = booking_for or state.get("booking_for")
+
+    explicit_doctor = False
+    if doctor_query:
+        resolution = await resolve_doctor(doctor_query, doctor_title_hint)
+        if not resolution.data_unavailable and not resolution.candidates:
+            return _short_turn_result(
+                state,
+                lang,
+                "DOCTOR_NOT_FOUND",
+                context_reset=context_reset,
+                booking_for=booking_for,
+                metadata={"doctor_query": doctor_query},
+            )
+        if len(resolution.candidates) > 1:
+            # Trùng tên: liệt kê để người dùng chọn, không tự chọn thay (kể cả khi chức danh gợi ý một người).
+            return _short_turn_result(
+                state,
+                lang,
+                "DOCTOR_CHOICE_REQUIRED",
+                context_reset=context_reset,
+                booking_for=booking_for,
+                extra={"last_listed_doctors": resolution.candidates},
+                metadata={
+                    "doctor_query": doctor_query,
+                    "doctor_candidates": resolution.candidates,
+                    "doctor_exact_match": resolution.exact,
+                    "doctor_title_hint": doctor_title_hint,
+                },
+            )
+        unique = resolution.unique
+        if unique:
+            explicit_doctor = True
+            booking_entities["doctor_preference"] = unique["full_name"]
+            booking_entities["doctor_name"] = f"BS. {unique['full_name']}"
+            if unique.get("specialty"):
+                booking_entities["specialty_preference"] = unique["specialty"]
+            if unique.get("workplace") and not booking_entities.get("facility_preference"):
+                from src.medical_assistant.domain.booking_slot_service import FACILITY_MAPPING
+
+                workplace = unique["workplace"].lower()
+                booking_entities["facility_preference"] = next(
+                    (FACILITY_MAPPING[k] for k in sorted(FACILITY_MAPPING, key=len, reverse=True) if k in workplace),
+                    unique["workplace"],
+                )
+    elif picked_doctor:
+        explicit_doctor = True
+
+    # Chỉ nói "quên hết/bắt đầu lại" mà không kèm yêu cầu mới → xác nhận ngắn, hỏi cần hỗ trợ gì.
+    if context_reset and not (
+        booking_entities.get("is_booking_intent")
+        or explicit_doctor
+        or booking_for == "other"
+        or rule_facts.get("chief_complaint")
+        or rule_facts.get("complaints")
+        or (llm_succeeded and v2_response.primary_intent in {"symptom_report", "schedule_request"})
+    ):
+        return _short_turn_result(state, lang, "CONTEXT_RESET", context_reset=True, booking_for=None)
+
+    if booking_for == "other":
+        # Đặt hộ: KHÔNG lấy họ tên/SĐT/ngày sinh/giới tính của chủ tài khoản (state.patient_* cũng nạp từ
+        # tài khoản mỗi lượt). Chỉ dùng điều người dùng nói về người khám; thiếu thì hỏi.
+        proxy_intake = state.get("proxy_patient") or {}
+        answer = _proxy_answer(query, awaiting_field)
+        llm_name = getattr(v2_response.facts_delta, "patient_name", None) if llm_succeeded else None
+        if llm_name and not name_supported_by_text(llm_name, query):
+            llm_name = None
+        patient_name = (
+            booking_entities.get("patient_name")
+            or answer.get("patient_name")
+            or llm_name
+            or proxy_intake.get("patient_name")
+        )
+        patient_phone = booking_entities.get("patient_phone") or proxy_intake.get("patient_phone")
+        patient_dob = (
+            booking_entities.get("date_of_birth") or answer.get("date_of_birth") or proxy_intake.get("date_of_birth")
+        )
+        patient_gender = booking_entities.get("gender") or proxy_intake.get("gender")
+    else:
+        patient_name = (
+            booking_entities.get("patient_name")
+            or (state.get("patient_profile") or {}).get("name")
+            or getattr(v2_response.facts_delta, "patient_name", None)
+            or state.get("patient_name")
+            or intake_state.get("patient_name")
+        )
+        patient_phone = (
+            booking_entities.get("patient_phone")
+            or (state.get("patient_profile") or {}).get("phone")
+            or state.get("patient_phone")
+            or intake_state.get("patient_phone")
+        )
+        patient_dob = (
+            booking_entities.get("date_of_birth")
+            or (state.get("patient_profile") or {}).get("date_of_birth")
+            or state.get("patient_dob")
+            or intake_state.get("date_of_birth")
+        )
+        patient_gender = (
+            booking_entities.get("gender")
+            or (state.get("patient_profile") or {}).get("gender")
+            or state.get("patient_gender")
+            or intake_state.get("gender")
+        )
     patient_email = state.get("patient_email") or intake_state.get("patient_email")
     facility_pref = (
         booking_entities.get("facility_preference")
@@ -950,7 +1207,10 @@ async def analyze_node(state: AgentState) -> dict:
         if triage_result.ats_level.value < current_query_triage.ats_level.value
         else department_query
     )
-    if booking_entities.get("specialty_preference") and (has_explicit_booking_request or not current_dept):
+    # Bác sĩ cụ thể người dùng chỉ định luôn thắng khoa đang nhớ từ ngữ cảnh cũ.
+    if booking_entities.get("specialty_preference") and (
+        has_explicit_booking_request or not current_dept or explicit_doctor
+    ):
         suggested_dept_code = booking_entities["specialty_preference"]
         current_dept = booking_entities["specialty_preference"]
     if not suggested_dept_code and triage_result.recommended_specialties:
@@ -981,6 +1241,7 @@ async def analyze_node(state: AgentState) -> dict:
     _general_codes = {"Sức khỏe tổng quát", "General Health", "TONG_QUAT"}
     if (
         booking_entities.get("doctor_preference")
+        and not explicit_doctor  # đã tra DB ở trên
         and (not suggested_dept_code or suggested_dept_code in _general_codes)
         and not (current_dept and current_dept not in _general_codes)
     ):
@@ -1042,6 +1303,16 @@ async def analyze_node(state: AgentState) -> dict:
         query=query,
         state=state,
     )
+
+    # Người dùng chỉ định một bác sĩ cụ thể để khám → đi luồng đặt lịch với bác sĩ đó (hỏi liên hệ / chốt phiếu),
+    # không in lại lịch của khoa cũ. Ca cấp cứu và kiểm tra an toàn vẫn được ưu tiên.
+    if (
+        explicit_doctor
+        and not is_emergency
+        and (booking_entities.get("is_booking_intent") or booking_for == "other" or picked_doctor)
+        and action in {"search_available_slot", "suggest_specialty", "ask_clarifying_question", "clarify_visit_purpose"}
+    ):
+        action, action_reason = "confirm_booking_conversationally", "Người dùng chỉ định bác sĩ cụ thể để đặt lịch"
 
     # Đồng bộ các tham số từ extra_args (từ VIEW_SCHEDULE, DEPARTMENT_INFO, FACILITY_*,...)
     if extra_args.get("requested_days"):
@@ -1351,6 +1622,17 @@ async def analyze_node(state: AgentState) -> dict:
         "preferred_period": preferred_period,
         "doctor_preference": doctor_pref,
         "doctor_name": doctor_name,
+        "booking_for": booking_for,
+        # Thông tin người khám khi đặt hộ, giữ qua các lượt (state.patient_* bị nạp lại từ tài khoản mỗi lượt).
+        "proxy_patient": {
+            "patient_name": patient_name,
+            "patient_phone": patient_phone,
+            "date_of_birth": patient_dob,
+            "gender": patient_gender,
+        }
+        if booking_for == "other"
+        else {},
+        **({"booking_intake": {}, "last_listed_doctors": []} if context_reset else {}),
         "is_authenticated": state.get("is_authenticated"),
         "workflow_status": workflow_status,
         "probing_turn": new_turn,

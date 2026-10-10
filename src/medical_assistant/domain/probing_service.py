@@ -40,16 +40,8 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "hard stool",
             "unable to pass stool",
         ],
-        turn_1_question_vi=(
-            "Dạ, để đánh giá tình trạng táo bón của bác, bác cho em biết thêm:\n"
-            "- Bác đã bị bao lâu và mấy ngày rồi chưa đi ngoài?\n"
-            "- Phân có khô cứng, phải rặn nhiều hoặc vẫn trung tiện được không ạ?"
-        ),
-        turn_1_question_en=(
-            "To assess the constipation more safely, could you clarify:\n"
-            "- How long has this been happening, and when was your last bowel movement?\n"
-            "- Are the stools hard, do you need to strain, and can you still pass gas?"
-        ),
+        turn_1_question_vi=("Dạ, bác đã mấy ngày chưa đi ngoài và hiện còn trung tiện (xì hơi) được không ạ?"),
+        turn_1_question_en=("How many days since your last bowel movement, and can you still pass gas?"),
         turn_1_quick_replies_vi=[
             "Mới bị 1-2 ngày",
             "Đã trên 3 ngày chưa đi ngoài",
@@ -92,16 +84,8 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "migraine",
             "head pain",
         ],
-        turn_1_question_vi=(
-            "Bác cho em hỏi cụ thể hơn một chút ạ:\n"
-            "- Cơn đau đầu của bác xuất hiện ở vị trí nào (đau nửa đầu bên trái/phải, sau gáy hay đau cả đầu)?\n"
-            "- Cơn đau này đã kéo dài bao lâu rồi ạ (mới bị vài giờ hay đau âm ỉ nhiều tuần)?"
-        ),
-        turn_1_question_en=(
-            "Could you provide a few more details regarding your headache:\n"
-            "- Where is the pain located (one-sided, back of the neck, or all over)?\n"
-            "- How long have you experienced this pain (sudden onset hours ago, or persistent for weeks)?"
-        ),
+        turn_1_question_vi=("Cơn đau đầu của bác ở vị trí nào ạ (nửa đầu, sau gáy hay cả đầu)?"),
+        turn_1_question_en=("Where is the headache located (one side, back of the neck, or all over)?"),
         turn_1_quick_replies_vi=[
             "Đau nửa đầu trái/phải",
             "Đau sau gáy vùng cổ",
@@ -117,14 +101,10 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "Persistent for weeks",
         ],
         turn_2_question_vi=(
-            "Dạ em đã ghi nhận vị trí đau. Bác có kèm theo dấu hiệu nào dưới đây không ạ:\n"
-            "- Buồn nôn, sợ ánh sáng/tiếng ồn?\n"
-            "- Mắt mờ, nhìn đôi hoặc tê yếu nửa mặt, tay chân không?"
+            "Dạ, bác có kèm buồn nôn, sợ ánh sáng, nhìn mờ/nhìn đôi hoặc tê yếu nửa mặt, tay chân không ạ?"
         ),
         turn_2_question_en=(
-            "Thank you. Are you experiencing any of the following accompanying symptoms:\n"
-            "- Nausea, vomiting, or sensitivity to light/sound?\n"
-            "- Blurred/double vision, facial numbness, or limb weakness?"
+            "Do you also have nausea, light sensitivity, blurred/double vision, or facial/limb weakness?"
         ),
         turn_2_quick_replies_vi=[
             "Có buồn nôn / sợ ánh sáng",
@@ -158,16 +138,8 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "indigestion",
             "cramping",
         ],
-        turn_1_question_vi=(
-            "Để hỗ trợ bác chuẩn xác nhất, bác có thể chia sẻ thêm:\n"
-            "- Bác đau ở vùng nào trên bụng (vùng trên rốn, quanh rốn, hay vùng bụng dưới bên phải/trái)?\n"
-            "- Cơn đau âm ỉ liên tục hay đau quặn thắt từng cơn ạ?"
-        ),
-        turn_1_question_en=(
-            "To better guide your appointment, could you clarify:\n"
-            "- Which area of the abdomen hurts (upper stomach, around navel, or lower right/left)?\n"
-            "- Is the pain constant and dull, or severe and cramping?"
-        ),
+        turn_1_question_vi=("Bác đau ở vùng nào trên bụng ạ (trên rốn, quanh rốn hay bụng dưới bên phải/trái)?"),
+        turn_1_question_en=("Which area of the abdomen hurts (upper, around the navel, or lower right/left)?"),
         turn_1_quick_replies_vi=[
             "Trên rốn (vùng dạ dày)",
             "Quanh rốn",
@@ -203,15 +175,9 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "angina",
         ],
         turn_1_question_vi=(
-            "Triệu chứng vùng ngực cần được theo dõi kỹ lưỡng ạ. Bác cho em hỏi:\n"
-            "- Cơn đau có cảm giác đè nặng, bóp nghẹt hay chỉ nhói nhẹ khi đổi tư thế?\n"
-            "- Cơn đau có lan ra cánh tay trái, sau lưng hoặc lên cằm không ạ?"
+            "Cơn đau ngực có cảm giác đè nặng, bóp nghẹt hoặc lan ra cánh tay trái, sau lưng hay lên cằm không ạ?"
         ),
-        turn_1_question_en=(
-            "Chest symptoms require careful evaluation. Could you describe:\n"
-            "- Is the pain a heavy crushing sensation, or a sharp pain when moving/breathing?\n"
-            "- Does the pain radiate to your left arm, back, or jaw?"
-        ),
+        turn_1_question_en=("Is the chest pain heavy or crushing, or does it spread to your left arm, back, or jaw?"),
         turn_1_quick_replies_vi=[
             "Đè nặng / bóp nghẹt",
             "Chỉ nhói nhẹ khi thở/xoay người",
@@ -281,30 +247,20 @@ CLINICAL_PROBING_TREES: list[ProbingClarificationTree] = [
             "sore muscles",
         ],
         turn_1_question_vi=(
-            "Bác có thể mô tả rõ hơn:\n"
-            "- Vị trí đau nhức nhiều nhất ở bắp đùi/cẳng chân, khớp gối, cổ vai gáy hay cột sống thắt lưng?\n"
-            "- Cơn đau có kèm cảm giác tê buốt lan dọc xuống cẳng tay hoặc bàn chân không ạ?"
+            "Bác đau nhiều nhất ở vị trí nào ạ (bắp đùi/cẳng chân, khớp gối, thắt lưng hay cổ vai gáy)?"
         ),
-        turn_1_question_en=(
-            "Could you specify:\n"
-            "- Where is the discomfort most pronounced (thigh/calf, knee joints, neck/shoulders, or spine)?\n"
-            "- Does the pain radiate with numbness down your arm or leg?"
-        ),
+        turn_1_question_en=("Where is the pain worst (thigh/calf, knee, lower back, or neck/shoulders)?"),
         turn_1_quick_replies_vi=[
             "Bắp đùi / Cẳng chân",
             "Khớp gối",
             "Cột sống thắt lưng",
             "Cổ vai gáy",
-            "Có tê lan xuống tay/chân",
-            "Không tê lan",
         ],
         turn_1_quick_replies_en=[
             "Thigh / Calf",
             "Knee joints",
             "Lower back (lumbar)",
             "Neck and shoulders",
-            "Radiating numbness to limbs",
-            "No numbness",
         ],
         turn_2_question_vi=(
             "Cơn đau của bác tăng nhiều khi ngồi lâu, làm việc hay lúc sáng sớm ngủ dậy bị cứng khớp ạ?"

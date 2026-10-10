@@ -75,6 +75,9 @@ def should_continue(state: AgentState) -> str:
         "OUT_OF_SCOPE",
         "SOCIAL_REDIRECT",
         "THIRD_PARTY_HEALTH_GUIDANCE",
+        "DOCTOR_CHOICE_REQUIRED",
+        "DOCTOR_NOT_FOUND",
+        "CONTEXT_RESET",
     ):
         return "respond"
     meta = state.get("metadata", {})

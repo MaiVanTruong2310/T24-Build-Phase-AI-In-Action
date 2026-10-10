@@ -354,12 +354,13 @@ def canonicalize_specialty_code(specialty_input: str) -> str:
         return "MAT"
     if any(k in clean for k in ["ranghammat", "nhakhoa", "dentist", "dental"]):
         return "RANG_HAM_MAT"
+    # Huyết học xét trước ung bướu: "Bệnh lý huyết học, ung thư huyết học" là khoa Huyết học.
+    if any(k in clean for k in ["huyethoc", "hematolog", "truyenmau"]):
+        return "HUYET_HOC"
     if any(k in clean for k in ["ungbuou", "ungthu", "oncolog"]):
         return "UNG_BUOU"
     if any(k in clean for k in ["noitiet", "endocrin", "daithaoduong", "tieuduong"]):
         return "NOI_TIET"
-    if any(k in clean for k in ["huyethoc", "hematolog", "truyenmau"]):
-        return "HUYET_HOC"
     if any(k in clean for k in ["namkhoa", "androlog"]):
         return "NAM_KHOA"
     if any(k in clean for k in ["capcuu", "emergency", "hoisuc"]):

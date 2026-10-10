@@ -20,6 +20,45 @@ from src.medical_assistant.domain.language_service import (
 logger = logging.getLogger(__name__)
 
 
+PROXY_QUESTIONS = {
+    "vi": {
+        "patient_name": "Người cần khám tên là gì ạ?",
+        "date_of_birth": "Người khám sinh năm bao nhiêu ạ?",
+        "patient_phone": "Cho em xin số điện thoại liên hệ để điều phối viên gọi xác nhận lịch ạ?",
+    },
+    "en": {
+        "patient_name": "What is the patient's full name?",
+        "date_of_birth": "What is the patient's year of birth?",
+        "patient_phone": "What phone number should our coordinator call to confirm?",
+    },
+}
+REPEAT_GUARD_STATUSES = {
+    "TRIAGED_READY_FOR_BOOKING",
+    "TRIAGED_AWAITING_SCHEDULE",
+    "PROBING_IN_PROGRESS",
+    "VISIT_PURPOSE_CLARIFICATION",
+    "FACILITY_DOCTORS",
+}
+
+
+def format_doctor_choice(query_name: str, candidates: list[dict], lang: str = "vi") -> tuple[str, list[str]]:
+    """Danh sách bác sĩ trùng tên để người dùng chọn (không tự chọn thay)."""
+    if lang == "vi":
+        lines = [f"Dạ, hệ thống có **{len(candidates)} bác sĩ** trùng tên **{query_name}**:"]
+    else:
+        lines = [f"There are **{len(candidates)} doctors** named **{query_name}**:"]
+    for idx, doc in enumerate(candidates, start=1):
+        details = " · ".join(x for x in (doc.get("title"), doc.get("specialty"), doc.get("workplace")) if x)
+        lines.append(f"{idx}. **{doc.get('full_name')}**" + (f" — {details}" if details else ""))
+    lines.append(
+        "Bác muốn đặt lịch với bác sĩ nào ạ? (nhắn số thứ tự, ví dụ “bác sĩ thứ 1”)"
+        if lang == "vi"
+        else "Which doctor would you like? (reply with the number, e.g. “doctor 1”)"
+    )
+    replies = [f"Bác sĩ thứ {i}" if lang == "vi" else f"Doctor {i}" for i in range(1, len(candidates) + 1)]
+    return "\n".join(lines), replies[:5]
+
+
 async def respond_node(state: AgentState) -> dict:
     meta = state.get("metadata", {})
     workflow_status = state.get("workflow_status", "")
@@ -40,27 +79,40 @@ async def respond_node(state: AgentState) -> dict:
     has_compound_question = bool(meta.get("has_compound_question") or meta.get("compound_question"))
     is_auth = bool(state.get("is_authenticated") or state.get("user_id"))
     existing_intake = state.get("booking_intake") or (state.get("metadata") or {}).get("booking_intake") or {}
+    booking_for = state.get("booking_for")
+    awaiting_field_out: str | None = None  # câu hỏi đặt hộ đang chờ người dùng trả lời
+    if booking_for == "other":
+        # Đặt hộ: chỉ dùng thông tin người dùng đã nói về người khám (analyze đã lọc), không lấy từ tài khoản.
+        proxy_intake = state.get("proxy_patient") or {}
+        existing_intake = {
+            k: v
+            for k, v in existing_intake.items()
+            if k not in {"patient_name", "patient_phone", "date_of_birth", "gender"}
+        }
+        existing_intake.update(
+            {k: proxy_intake.get(k) for k in ("patient_name", "patient_phone", "date_of_birth", "gender")}
+        )
     p_name = (
         state.get("patient_name")
-        or (state.get("patient_profile") or {}).get("name")
+        or (None if booking_for == "other" else (state.get("patient_profile") or {}).get("name"))
         or existing_intake.get("patient_name")
         or ""
     )
     p_phone = (
         state.get("patient_phone")
-        or (state.get("patient_profile") or {}).get("phone")
+        or (None if booking_for == "other" else (state.get("patient_profile") or {}).get("phone"))
         or existing_intake.get("patient_phone")
         or ""
     )
     p_dob = (
         state.get("patient_dob")
-        or (state.get("patient_profile") or {}).get("date_of_birth")
+        or (None if booking_for == "other" else (state.get("patient_profile") or {}).get("date_of_birth"))
         or existing_intake.get("date_of_birth")
         or ""
     )
     p_gender = (
         state.get("patient_gender")
-        or (state.get("patient_profile") or {}).get("gender")
+        or (None if booking_for == "other" else (state.get("patient_profile") or {}).get("gender"))
         or existing_intake.get("gender")
         or ""
     )
@@ -137,7 +189,24 @@ async def respond_node(state: AgentState) -> dict:
     clinical_notes = clinical_summary_result.get("summary") or " ".join(state.get("collected_details") or [])
     clinical_details = clinical_summary_result.get("details") or {}
 
-    missing_fields = [] if is_auth else evaluate_missing_fields(p_name, p_phone, p_dob, fac_pref, pref_date)
+    missing_fields = (
+        []
+        if is_auth and booking_for != "other"
+        else evaluate_missing_fields(p_name, p_phone, p_dob, fac_pref, pref_date)
+    )
+    # Đặt hộ: hỏi lần lượt từng thông tin của người khám (mỗi lượt 1 câu), không đoán, không điền bừa.
+    proxy_missing = (
+        [
+            field
+            for field, value in (("patient_name", p_name), ("date_of_birth", p_dob), ("patient_phone", p_phone))
+            if not value or (field == "patient_phone" and len(re.sub(r"\D", "", str(value))) < 9)
+        ]
+        if booking_for == "other"
+        else []
+    )
+    proxy_question = (
+        PROXY_QUESTIONS[lang if lang in PROXY_QUESTIONS else "vi"][proxy_missing[0]] if proxy_missing else None
+    )
 
     # Task 3: Phát hiện nhu cầu gói khám
     booking_mode = "package" if is_package_inquiry or meta.get("is_package_inquiry") else "doctor"
@@ -165,6 +234,7 @@ async def respond_node(state: AgentState) -> dict:
         "clinical_details": clinical_details,
         "missing_fields": missing_fields,
         "is_authenticated": is_auth,
+        "booking_for": booking_for,
         "selected_slot_id": meta.get("slot_id"),
         "doctors": [
             {
@@ -179,6 +249,49 @@ async def respond_node(state: AgentState) -> dict:
 
     if workflow_status == "SECURITY_BLOCKED":
         response = meta.get("security_response") or "Yêu cầu bị từ chối do vi phạm quy chuẩn an toàn thông tin."
+    elif workflow_status == "DOCTOR_CHOICE_REQUIRED":
+        response, quick_replies = format_doctor_choice(
+            meta.get("doctor_query") or "", meta.get("doctor_candidates") or [], lang
+        )
+    elif workflow_status == "DOCTOR_NOT_FOUND":
+        doctor_query = meta.get("doctor_query") or ""
+        response = (
+            f"Dạ, em chưa tìm thấy bác sĩ **{doctor_query}** trong danh sách bác sĩ Vinmec. "
+            "Bác kiểm tra lại họ tên giúp em, hoặc cho em biết chuyên khoa cần khám để em gợi ý bác sĩ phù hợp nhé ạ."
+            if lang == "vi"
+            else f"I couldn't find Dr. **{doctor_query}** in Vinmec's doctor list. "
+            "Please check the name, or tell me the specialty you need."
+        )
+        quick_replies = (
+            ["Tìm theo chuyên khoa", "Mô tả triệu chứng"]
+            if lang == "vi"
+            else ["Search by specialty", "Describe symptoms"]
+        )
+    elif workflow_status == "CONTEXT_RESET":
+        response = (
+            "Dạ, em đã bỏ các thông tin tư vấn trước đó. Bác cần em hỗ trợ việc gì tiếp theo ạ?"
+            if lang == "vi"
+            else "Okay, I've cleared our previous discussion. How can I help you next?"
+        )
+        quick_replies = (
+            ["Mô tả triệu chứng", "Đặt lịch khám", "Tìm bác sĩ"]
+            if lang == "vi"
+            else ["Describe symptoms", "Book an appointment", "Find a doctor"]
+        )
+    elif workflow_status == "CONFIRM_BOOKING_CONVERSATIONALLY" and proxy_question:
+        if lang == "vi":
+            intro = (
+                f"Dạ, em ghi nhận bác muốn đặt lịch với **{doc_name}** cho người nhà. "
+                if doc_name
+                else "Dạ, em ghi nhận bác đặt lịch khám cho người nhà. "
+            )
+        else:
+            intro = "Noted, this appointment is for your relative. "
+        if state.get("awaiting_field"):
+            intro = "Dạ. " if lang == "vi" else ""  # đã giới thiệu ở câu hỏi đầu, không lặp lại
+        response = intro + proxy_question
+        quick_replies = []
+        awaiting_field_out = proxy_missing[0]
     elif workflow_status == "CONFIRM_BOOKING_CONVERSATIONALLY":
         from src.medical_assistant.domain.booking_lookup_service import _format_vn_date_str, get_booking_lookup_service
 
@@ -296,8 +409,12 @@ async def respond_node(state: AgentState) -> dict:
 
                 response = (
                     f"🎉 **ĐÃ GIỮ CHỖ THÀNH CÔNG!**\n\n"
-                    f"Dạ bác **{p_name}**, em đã ghi nhận yêu cầu đặt lịch của bác lên hệ thống điều phối y tế Vinmec:\n\n"
-                    f"📋 **Thông tin phiếu hẹn:**\n"
+                    + (
+                        f"Dạ, em đã ghi nhận yêu cầu đặt lịch cho **{p_name}** lên hệ thống điều phối y tế Vinmec:\n\n"
+                        if booking_for == "other"
+                        else f"Dạ bác **{p_name}**, em đã ghi nhận yêu cầu đặt lịch của bác lên hệ thống điều phối y tế Vinmec:\n\n"
+                    )
+                    + f"📋 **Thông tin phiếu hẹn:**\n"
                     f"• 🔖 **Mã tiếp nhận / Mã phiếu hẹn:** `{request_code}`\n"
                     f"• 👤 **Bệnh nhân:** {p_name}\n"
                     f"• 📞 **Số điện thoại:** {p_phone}\n"
@@ -884,6 +1001,14 @@ async def respond_node(state: AgentState) -> dict:
                         "\n\n📋 *You can select your doctor directly from the dropdown on the Appointment Form, or let me know your preference!*"
                     )
                 )
+            elif proxy_question:
+                form_hint = (
+                    "\n\n📋 *Phiếu khám dành cho người nhà nên em chưa điền thông tin từ tài khoản của bác.* "
+                    + proxy_question
+                    if lang == "vi"
+                    else "\n\n📋 *This form is for your relative, so I haven't used your profile.* " + proxy_question
+                )
+                awaiting_field_out = proxy_missing[0]
             else:
                 form_hint = (
                     (
@@ -1147,6 +1272,25 @@ async def respond_node(state: AgentState) -> dict:
         "LANGUAGE_CHANGED",
     }
 
+    # Chống lặp: in lại y nguyên câu trả lời lượt trước nghĩa là em chưa hiểu yêu cầu mới → hỏi lại.
+    previous_response = str(state.get("response") or "")
+    if (
+        not is_emergency
+        and workflow_status in REPEAT_GUARD_STATUSES
+        and len(response.strip()) > 60
+        and previous_response.startswith(response.strip())
+    ):
+        response = (
+            "Dạ, có vẻ em chưa hiểu đúng yêu cầu của bác. Bác muốn em làm gì tiếp theo ạ?"
+            if lang == "vi"
+            else "Sorry, I may have misunderstood your request. What would you like me to do next?"
+        )
+        quick_replies = (
+            ["Đặt lịch với bác sĩ khác", "Đổi chuyên khoa", "Bắt đầu lại"]
+            if lang == "vi"
+            else ["Book with another doctor", "Change specialty", "Start over"]
+        )
+
     # Ca ưu tiên khám trong ngày (ATS 3) được hẹn sau → dặn dấu hiệu cần gọi cấp cứu khi chờ.
     safety_net = (
         get_same_day_safety_net(lang)
@@ -1282,4 +1426,5 @@ async def respond_node(state: AgentState) -> dict:
         "durable_soap_note": durable_soap_note,
         "last_assistant_response": full_response,
         "booking_intake": booking_intake,
+        "awaiting_field": awaiting_field_out,
     }

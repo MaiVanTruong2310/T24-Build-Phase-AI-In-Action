@@ -66,6 +66,8 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
             r"^(xin ch[aà]o|ch[aà]o (b[aạ]n|em|bot|b[aá]c)|b[aắ]t đ[aầ]u|alo)$",
             r"^(t[oô]i mu[oố]n kh[aá]m|mu[oố]n đ[aặ]t l[iị]ch|đ[aặ]t l[iị]ch kh[aá]m|đ[aặ]t h[eẹ]n|dat hen|dat lich|bat dau|alo)$",
             r"^(xin chao|chao ban|chao em|chao bot)$",
+            # Chào kiểu thân mật/tiếng lóng: "ê ku", "ê bạn ơi", "hế lô", "ơi em" — không phải chuyện cá nhân.
+            r"^(?:[eê]|[oơ]i|h[eế]\s*l[oô]|yo)\s*(?:ku|b[aạ]n|em|bot|ad|[oơ]i)?(?:\s+[oơ]i)?\s*[!.?]*$",
             r"^xin chao(?: tro ly| bot| ban| em)?(?:\s+nhe)?$",
             # English
             r"^(hello|hi|good morning|good afternoon|good evening|hey|start)$",

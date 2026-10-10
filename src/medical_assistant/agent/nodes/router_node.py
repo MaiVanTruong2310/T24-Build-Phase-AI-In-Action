@@ -390,6 +390,16 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
             "metadata": {"route": "booking_contact_capture"},
         }
 
+    # 1.2.2 Bot vừa hỏi chọn bác sĩ trùng tên / thông tin người khám khi đặt hộ: câu trả lời ("bác sĩ thứ 2",
+    # "Trần Văn Bình", "1960") thuộc luồng đặt lịch, không để info agent/FAQ bắt mất.
+    if state.get("workflow_status") == "DOCTOR_CHOICE_REQUIRED" or state.get("awaiting_field"):
+        return {
+            "intent_route": "booking",
+            "route_confidence": 1.0,
+            "route_destination": "analyze",
+            "metadata": {"route": "booking_followup_answer"},
+        }
+
     # 1.3 Zero-token FAQ Cache
     cache_check = get_cache_service().check_cache(query, language=language)
     if cache_check is not None:
