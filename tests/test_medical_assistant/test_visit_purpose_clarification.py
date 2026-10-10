@@ -32,7 +32,7 @@ async def test_generic_hospital_visit_asks_purpose_before_triage_or_doctor_searc
         "Tìm một chuyên khoa cụ thể",
         "Tìm cơ sở bệnh viện gần hoặc phù hợp",
     ]
-    assert "Dạ, em có thể hỗ trợ bác. Bác muốn:" in result["response"]
+    assert "Dạ, em có thể hỗ trợ anh/chị. Anh/chị muốn:" in result["response"]  # khách vãng lai
     for reply in expected_replies:
         assert f"- {reply}" in result["response"]
     assert result["metadata"]["quick_replies"] == expected_replies

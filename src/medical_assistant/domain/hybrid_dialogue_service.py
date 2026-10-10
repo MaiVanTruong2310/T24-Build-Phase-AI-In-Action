@@ -74,6 +74,11 @@ III. ĐIỀU PHỐI HỘI THOẠI & RA QUYẾT ĐỊNH (DIALOGUE MANAGEMENT)
     - Người dùng nêu tên một bác sĩ (kể cả gõ thiếu dấu "bác si", "bac si", "BS"): điền action_args.doctor_name = họ tên ĐÚNG như người dùng viết (không tự sửa, không đoán thêm tên); chức danh đi kèm ("nội trú", "thạc sĩ", "CKII", "PGS") đưa vào action_args.doctor_title_hint, không đưa vào tên. "Nội trú" là chức danh bác sĩ, KHÔNG phải tên khoa. Không nêu tên bác sĩ thì để trống.
     - facts_delta.subject = "other" khi người khám không phải người đang chat ("khám cho người nhà/mẹ/con", "người khám không phải tôi"); "self" khi khám cho bản thân. Không tự điền họ tên/SĐT của người khám nếu người dùng chưa nói.
     - topic_change = "reset" khi người dùng muốn bỏ nội dung trước ("quên tất cả tư vấn trên", "bỏ qua cái trên", "bắt đầu lại"); "new_topic" khi chuyển sang yêu cầu khác hẳn; ngược lại "none".
+12c. Tin nhắn lạc đề / vô nghĩa chen giữa cuộc tư vấn:
+    - turn_relevance = "off_topic" khi tin nhắn mới nhất không liên quan sức khỏe, khám bệnh, đặt lịch hay thông tin bệnh viện (ví dụ: "tôi muốn đi chơi", "tôi muốn ăn thanh long", "hôm nay trời đẹp").
+    - turn_relevance = "gibberish" khi tin nhắn là chuỗi ký tự vô nghĩa, gõ nhầm bàn phím (ví dụ: "asdkjh qwe").
+    - turn_relevance = "relevant" cho mọi thứ còn lại, kể cả câu trả lời ngắn cho câu hỏi trước ("3 ngày", "không", "bình thường"), lời chào, và câu hỏi đời thường có liên quan sức khỏe ("đang ho có ăn thanh long được không?").
+    - Lạc đề/vô nghĩa không phải triệu chứng: không trích dữ kiện lâm sàng từ câu đó.
 13. Xử lý câu hỏi ngoài phạm vi (Out of Scope):
     Khi người dùng hỏi về kiện tụng pháp lý, đòi hỏi mã nguồn/bí mật thuật toán hoặc can thiệp kỹ thuật ngoài phạm vi y tế:
     proposed_action = "out_of_scope_decline", từ chối lịch sự và hướng người dùng quay lại hỗ trợ y tế.
@@ -105,7 +110,9 @@ class HybridDialogueService:
         from src.medical_assistant.domain.triage_service import get_triage_service
 
         language = state.get("language") if state.get("language") in {"vi", "en"} else "vi"
-        facts = get_clinical_fact_service().extract(text)
+        facts = get_clinical_fact_service().extract(
+            text, in_episode=bool((state.get("clinical_facts") or {}).get("chief_complaint"))
+        )
         lower = text.lower()
         location = None
         location_match = re.search(
@@ -174,7 +181,8 @@ class HybridDialogueService:
         )
         action = action_map.get(guard_intent)
         if action is None:
-            action = "ask_clarifying_question" if has_symptoms else "clarify_visit_purpose"
+            in_episode = bool((state.get("clinical_facts") or {}).get("chief_complaint"))
+            action = "ask_clarifying_question" if (has_symptoms or in_episode) else "clarify_visit_purpose"
 
         current_department = guard.get("department_query") or state.get("suggested_department_name")
         if has_symptoms and guard_intent != "DEPARTMENT_INFO":
@@ -202,6 +210,14 @@ class HybridDialogueService:
                 else:
                     question = "Bác có kèm sốt hoặc dấu hiệu bất thường nào khác không ạ?"
                 draft = f"{prefix}em đã ghi nhận triệu chứng của bác. {question}"
+            elif (state.get("clinical_facts") or {}).get("chief_complaint"):
+                # Câu trả lời ngắn cho ca bệnh đang tư vấn ("3 ngày nay", "không"): hỏi tiếp 1 câu theo dữ kiện còn thiếu.
+                episode_facts = state.get("clinical_facts") or {}
+                if facts.get("duration_days") is None and episode_facts.get("duration_days") is None:
+                    question = "Triệu chứng bắt đầu từ khi nào ạ?"
+                else:
+                    question = "Bác có kèm sốt hoặc dấu hiệu bất thường nào khác không ạ?"
+                draft = f"Dạ, em đã ghi nhận. {question}"
             else:
                 draft = "Dạ, em có thể hỗ trợ bác làm rõ nhu cầu khám, tìm chuyên khoa, cơ sở hoặc lịch khám phù hợp."
 

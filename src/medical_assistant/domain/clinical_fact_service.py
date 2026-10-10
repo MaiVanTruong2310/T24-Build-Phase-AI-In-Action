@@ -514,7 +514,8 @@ def _normalize_complaint(value: Any) -> dict[str, Any] | None:
 
 
 class ClinicalFactService:
-    def extract(self, text: str, turn_index: int | None = None) -> dict[str, Any]:
+    def extract(self, text: str, turn_index: int | None = None, in_episode: bool = False) -> dict[str, Any]:
+        """in_episode: đang tư vấn một triệu chứng → câu trả lời ngắn "3 ngày nay" cũng là thời gian bệnh."""
         normalized = _normalize(text)
         positive: set[str] = set()
         negative: set[str] = set()
@@ -543,7 +544,8 @@ class ClinicalFactService:
         duration_days = None
         is_greeting_wish = bool(re.search(r"chuc(?:\s+\w+)?\s+\d*\s*ngay\s+(?:vui|tot|an|hanh|dep)", normalized))
         has_clinical_duration_context = bool(
-            positive
+            in_episode
+            or positive
             or re.search(r"\b(?:bi|dau|nhuc|moi|buot|te|sung|sot|kho tho|kho chiu|met|ho|non|oi)\b", normalized)
         )
         if not is_greeting_wish and has_clinical_duration_context:
@@ -557,8 +559,15 @@ class ClinicalFactService:
                 duration_days = 3
             else:
                 match = re.search(r"\b(\d+)\s+ngay\b", normalized)
+                weeks = re.search(r"\b(\d+|hai|ba)\s+tuan\b", normalized)
+                months = re.search(r"\b(\d+|mot|hai|ba)\s+thang\b(?!\s+tuoi)", normalized)
+                words = {"mot": 1, "hai": 2, "ba": 3}
                 if match:
                     duration_days = int(match.group(1))
+                elif weeks:
+                    duration_days = 7 * int(words.get(weeks.group(1), weeks.group(1)))
+                elif months:
+                    duration_days = 30 * int(words.get(months.group(1), months.group(1)))
 
         bowel_interval_days = None
         interval = re.search(r"(\d+)\s*(?:-|den)?\s*(\d+)?\s*ngay moi di (?:cau|ngoai)", normalized)

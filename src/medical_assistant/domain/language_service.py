@@ -371,6 +371,34 @@ def canonicalize_specialty_code(specialty_input: str) -> str:
     return "TONG_QUAT"
 
 
+def resolve_honorific(gender: str | None, is_authenticated: bool) -> str:
+    """Cách gọi người dùng: nam → "anh", nữ → "chị"; khách vãng lai hoặc không rõ giới tính → "anh/chị"."""
+    if not is_authenticated:
+        return "anh/chị"
+    value = unicodedata.normalize("NFD", str(gender or "")).encode("ascii", "ignore").decode().strip().lower()
+    if value in {"male", "nam", "m"}:
+        return "anh"
+    if value in {"female", "nu", "f"}:
+        return "chị"
+    return "anh/chị"
+
+
+# Đại từ gọi người dùng trong câu trả lời: "bác" (mẫu câu cũ) và "anh/chị" (LLM). Không đụng "bác sĩ", "bác bỏ".
+_HONORIFIC_PATTERN = re.compile(r"\b([Bb])ác\b(?!\s+(?:sĩ|si|bỏ)\b)|\b([Aa])nh\s*/\s*[Cc]hị\b")
+
+
+def apply_honorific(text: str, honorific: str, language: str = "vi") -> str:
+    """Thống nhất cách gọi người dùng trong câu trả lời tiếng Việt theo `resolve_honorific`."""
+    if language != "vi" or not text:
+        return text
+
+    def _swap(match: re.Match) -> str:
+        initial = match.group(1) or match.group(2)
+        return honorific[0].upper() + honorific[1:] if initial.isupper() else honorific
+
+    return _HONORIFIC_PATTERN.sub(_swap, text)
+
+
 def get_same_day_safety_net(language: str = "vi") -> str:
     """Dặn dò an toàn cho ca ưu tiên khám trong ngày (ATS 3): dấu hiệu nặng lên thì gọi cấp cứu."""
     if language == "en":

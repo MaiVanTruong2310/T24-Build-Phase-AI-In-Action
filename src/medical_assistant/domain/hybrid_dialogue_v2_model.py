@@ -107,6 +107,7 @@ class HybridDialogueResponse(BaseModel):
     primary_intent: str = "unclear"
     secondary_intents: list[str] = Field(default_factory=list)
     topic_change: str = "none"
+    turn_relevance: str = "relevant"
     facts_delta: FactsDelta = Field(default_factory=FactsDelta)
     safety_concerns: list[SafetyConcern] = Field(default_factory=list)
     missing_facts: list[MissingFact] = Field(default_factory=list)
@@ -179,6 +180,7 @@ class LeanDialogueOutput(BaseModel):
     proposed_action: str
     draft_response: str
     topic_change: Literal["none", "new_topic", "reset"] = "none"
+    turn_relevance: Literal["relevant", "off_topic", "gibberish"] = "relevant"
     extraction_confidence: float = Field(ge=0.0, le=1.0)
     action_confidence: float = Field(ge=0.0, le=1.0)
     facts_delta: LeanFactsDelta = Field(default_factory=LeanFactsDelta)

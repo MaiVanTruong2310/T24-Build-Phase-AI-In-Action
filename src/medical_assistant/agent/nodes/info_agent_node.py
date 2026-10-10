@@ -375,6 +375,16 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
     # Kiểm duyệt an toàn đầu ra qua DLPService
     dlp_service = get_dlp_service()
     sanitized_response = dlp_service.sanitize(final_text).sanitized_text
+    from src.medical_assistant.domain.language_service import apply_honorific, resolve_honorific
+
+    sanitized_response = apply_honorific(
+        sanitized_response,
+        resolve_honorific(
+            state.get("patient_gender") or (state.get("patient_profile") or {}).get("gender"),
+            bool(state.get("is_authenticated")),
+        ),
+        state.get("language") or "vi",
+    )
 
     # Yêu cầu 3: Đếm tokens và đọc usage_metadata của provider nếu có
     completion_tokens = token_counter.count_tokens(sanitized_response)

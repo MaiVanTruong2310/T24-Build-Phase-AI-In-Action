@@ -12,10 +12,13 @@ from src.medical_assistant.domain.booking_slot_service import (
 )
 from src.medical_assistant.domain.guardrail_service import get_guardrail_service
 from src.medical_assistant.domain.language_service import (
+    apply_honorific,
     get_medical_disclaimer,
     get_same_day_safety_net,
     get_specialty_display_name,
+    resolve_honorific,
 )
+from src.medical_assistant.domain.turn_relevance import last_question
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +250,37 @@ async def respond_node(state: AgentState) -> dict:
         ],
     }
 
-    if workflow_status == "SECURITY_BLOCKED":
+    if meta.get("off_topic"):
+        # Lạc đề / vô nghĩa: nhắc nhẹ rồi hỏi lại đúng câu đang chờ (1 câu hỏi), không coi là câu trả lời.
+        pending = meta.get("pending_question") or (
+            "Bác cần em hỗ trợ gì về sức khỏe hoặc đặt lịch khám ạ?"
+            if lang == "vi"
+            else "How can I help with your health or an appointment?"
+        )
+        if int(meta.get("off_topic_streak") or 0) >= 3:
+            topic = state.get("suggested_department_name")
+            response = (
+                f"Dạ, có vẻ bác đang muốn trao đổi chuyện khác. Bác muốn tiếp tục tư vấn"
+                f"{f' về {topic}' if topic else ''} hay bắt đầu lại ạ?"
+                if lang == "vi"
+                else "It seems you'd like to talk about something else. Continue the consultation or start over?"
+            )
+            quick_replies = ["Tiếp tục", "Bắt đầu lại"] if lang == "vi" else ["Continue", "Start over"]
+        elif meta.get("off_topic") == "gibberish":
+            response = (
+                f"Dạ, em chưa đọc được tin nhắn vừa rồi ạ. {pending}"
+                if lang == "vi"
+                else f"Sorry, I couldn't read that message. {pending}"
+            )
+            quick_replies = []
+        else:
+            response = (
+                f"Dạ, em chỉ hỗ trợ được các vấn đề sức khỏe và đặt lịch khám ạ. {pending}"
+                if lang == "vi"
+                else f"I can only help with health questions and appointments. {pending}"
+            )
+            quick_replies = []
+    elif workflow_status == "SECURITY_BLOCKED":
         response = meta.get("security_response") or "Yêu cầu bị từ chối do vi phạm quy chuẩn an toàn thông tin."
     elif workflow_status == "DOCTOR_CHOICE_REQUIRED":
         response, quick_replies = format_doctor_choice(
@@ -1271,11 +1304,14 @@ async def respond_node(state: AgentState) -> dict:
         "FAQ_ANSWERED",
         "LANGUAGE_CHANGED",
     }
+    if meta.get("off_topic"):
+        has_clinical_context = False
 
     # Chống lặp: in lại y nguyên câu trả lời lượt trước nghĩa là em chưa hiểu yêu cầu mới → hỏi lại.
     previous_response = str(state.get("response") or "")
     if (
         not is_emergency
+        and not meta.get("off_topic")
         and workflow_status in REPEAT_GUARD_STATUSES
         and len(response.strip()) > 60
         and previous_response.startswith(response.strip())
@@ -1325,6 +1361,13 @@ async def respond_node(state: AgentState) -> dict:
         full_response, allowed_user_id=state.get("user_id"), allowed_user_phone=p_phone_clean
     )
     full_response = dlp_scan.sanitized_text
+    # Xưng hô theo giới tính người khám (nam "anh", nữ "chị"), khách/không rõ "anh/chị".
+    honorific = resolve_honorific(
+        state.get("patient_gender") or (state.get("patient_profile") or {}).get("gender"),
+        bool(state.get("is_authenticated")),
+    )
+    full_response = apply_honorific(full_response, honorific, lang)
+    quick_replies = [apply_honorific(str(r), honorific, lang) for r in (quick_replies or [])]
 
     from src.medical_assistant.domain.token_counter import get_token_counter
 
@@ -1427,4 +1470,5 @@ async def respond_node(state: AgentState) -> dict:
         "last_assistant_response": full_response,
         "booking_intake": booking_intake,
         "awaiting_field": awaiting_field_out,
+        "pending_question": meta.get("pending_question") if meta.get("off_topic") else last_question(response),
     }

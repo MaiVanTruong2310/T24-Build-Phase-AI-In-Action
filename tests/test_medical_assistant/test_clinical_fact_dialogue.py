@@ -50,7 +50,7 @@ async def test_dialogue_does_not_repeat_already_known_constipation_facts_or_show
     assert third["workflow_status"] == "TRIAGED_AWAITING_SCHEDULE"
     assert third["suggested_department_name"] == "Tiêu hóa - Gan mật"
     assert not third.get("available_slots")
-    assert "Bác có muốn em tìm lịch khám" in third["response"]
+    assert "Anh/chị có muốn em tìm lịch khám" in third["response"]  # khách vãng lai
 
 
 def test_colloquial_abdominal_word_order_is_still_a_symptom_report():

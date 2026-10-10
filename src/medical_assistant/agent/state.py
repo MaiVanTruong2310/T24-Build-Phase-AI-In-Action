@@ -62,6 +62,9 @@ class AgentState(TypedDict, total=False):
     # không để trong metadata vì router ghi đè metadata mỗi lượt).
     proxy_patient: dict[str, Any]
     awaiting_field: str | None
+    # Câu hỏi bot vừa hỏi (để hỏi lại khi người dùng lạc đề) và số lượt lạc đề liên tiếp.
+    pending_question: str | None
+    off_topic_streak: int
     last_listed_doctors: list[dict[str, Any]]  # bác sĩ vừa liệt kê, cho "đặt với bác sĩ đầu tiên"
 
     # Slot khám & Giữ chỗ

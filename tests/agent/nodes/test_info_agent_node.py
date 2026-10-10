@@ -55,7 +55,8 @@ class TestInfoAgentNode(unittest.IsolatedAsyncioTestCase):
         result = await info_agent_node(state, llm=fake_llm)
 
         self.assertEqual(result["workflow_status"], "INFO_ANSWERED")
-        self.assertIn("Dạ, em gửi bác", result["response"])
+        # Khách vãng lai: xưng "anh/chị" (quy tắc xưng hô theo giới tính).
+        self.assertIn("Dạ, em gửi anh/chị", result["response"])
         self.assertNotIn(
             "Khuyến cáo y tế", result["response"]
         )  # Prompt F4: Chỉ gắn cho bệnh học, không gắn cho tra cứu bác sĩ

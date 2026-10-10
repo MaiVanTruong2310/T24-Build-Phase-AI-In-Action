@@ -62,6 +62,8 @@ STATE_FIELDS = {
     "booking_for",
     "proxy_patient",
     "awaiting_field",
+    "pending_question",
+    "off_topic_streak",
 }
 
 

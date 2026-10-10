@@ -82,6 +82,14 @@ def public_result(result, session_id, elapsed_ms: float | None = None):
         suggested_department=result.get("suggested_department_name"),
         candidate_specialties=result.get("candidate_specialties") or meta.get("candidate_specialties", []),
     )
+    if meta.get("off_topic"):
+        payload.update(
+            ats_level=None,
+            suggested_department=None,
+            candidate_specialties=[],
+            disposition=None,
+            acuity_status=None,
+        )
     return ChatResponse(**payload).model_dump(mode="json")
 
 

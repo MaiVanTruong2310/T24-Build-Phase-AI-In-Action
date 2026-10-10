@@ -25,6 +25,7 @@ from src.medical_assistant.domain.language_service import (
 from src.medical_assistant.domain.probing_service import get_probing_service
 from src.medical_assistant.domain.security.security_guardrail_service import get_security_guardrail_service
 from src.medical_assistant.domain.triage_service import get_triage_service
+from src.medical_assistant.domain.turn_relevance import is_gibberish, looks_off_topic
 
 logger = logging.getLogger(__name__)
 
@@ -687,7 +688,8 @@ async def analyze_node(state: AgentState) -> dict:
         state=state,
     )
 
-    last_assistant_question = state.get("metadata", {}).get("clarification_question")
+    # Câu hỏi bot vừa hỏi: lưu ở state.pending_question (metadata bị router ghi đè mỗi lượt).
+    last_assistant_question = state.get("pending_question") or state.get("metadata", {}).get("clarification_question")
 
     # HOOK 1: on_user_input (Security Audit & Intent Interception)
     intent_check, _ = middleware.execute_hook_1_user_input(
@@ -862,7 +864,9 @@ async def analyze_node(state: AgentState) -> dict:
 
     fact_service = get_clinical_fact_service()
     conversation_turn = 1 + sum(1 for message in (state.get("messages") or []) if message.get("role") == "user")
-    rule_facts = fact_service.extract(query, turn_index=conversation_turn)
+    rule_facts = fact_service.extract(
+        query, turn_index=conversation_turn, in_episode=bool(clinical_facts.get("chief_complaint"))
+    )
     if (
         rule_facts.get("primary_complaint")
         and intent_check
@@ -997,6 +1001,44 @@ async def analyze_node(state: AgentState) -> dict:
         or (llm_succeeded and v2_response.primary_intent in {"symptom_report", "schedule_request"})
     ):
         return _short_turn_result(state, lang, "CONTEXT_RESET", context_reset=True, booking_for=None)
+
+    # Lạc đề / vô nghĩa chen giữa cuộc tư vấn ("tôi muốn đi chơi", "asdkjh"): KHÔNG tính là câu trả lời,
+    # giữ nguyên triệu chứng/khoa/ATS/lượt thăm dò; respond hỏi lại đúng câu đang chờ.
+    # Cổng cấp cứu đã chạy trước nên câu có dấu hiệu nguy hiểm không bao giờ tới đây.
+    relevance = getattr(v2_response, "turn_relevance", "relevant") if llm_succeeded else "relevant"
+    if not llm_succeeded:
+        relevance = "gibberish" if is_gibberish(query) else ("off_topic" if looks_off_topic(query) else "relevant")
+    has_turn_content = bool(
+        booking_entities.get("is_booking_intent")
+        or booking_entities.get("patient_phone")
+        or booking_entities.get("preferred_date")
+        or explicit_doctor
+        or doctor_query
+        or context_reset
+        or rule_facts.get("chief_complaint")
+        or rule_facts.get("complaints")
+        or rule_facts.get("positive_facts")
+        or rule_facts.get("duration_days") is not None
+        or _proxy_answer(query, awaiting_field)
+    )
+    if relevance in {"off_topic", "gibberish"} and not has_turn_content:
+        streak = int(state.get("off_topic_streak") or 0) + 1
+        return {
+            "analysis": f"Turn relevance: {relevance} (streak {streak}) | clinical episode preserved",
+            "workflow_status": state.get("workflow_status") or "IDLE",
+            "off_topic_streak": streak,
+            "language": lang,
+            "messages": list(state.get("messages") or []),
+            "metadata": {
+                "off_topic": relevance,
+                "off_topic_streak": streak,
+                "pending_question": state.get("pending_question"),
+                "needs_more_probing": True,  # đi thẳng tới respond, không tìm bác sĩ/lịch
+                "llm_invoked": True,
+                "llm_succeeded": llm_succeeded,
+                "quick_replies": [],
+            },
+        }
 
     if booking_for == "other":
         # Đặt hộ: KHÔNG lấy họ tên/SĐT/ngày sinh/giới tính của chủ tài khoản (state.patient_* cũng nạp từ
@@ -1623,6 +1665,7 @@ async def analyze_node(state: AgentState) -> dict:
         "doctor_preference": doctor_pref,
         "doctor_name": doctor_name,
         "booking_for": booking_for,
+        "off_topic_streak": 0,
         # Thông tin người khám khi đặt hộ, giữ qua các lượt (state.patient_* bị nạp lại từ tài khoản mỗi lượt).
         "proxy_patient": {
             "patient_name": patient_name,
