@@ -35,6 +35,9 @@ export interface TokenUsage {
   completion_tokens?: number;
   total_tokens?: number;
   tokens_saved?: number;
+  cached_prompt_tokens?: number;
+  reasoning_tokens?: number;
+  llm_calls?: number;
   model?: string;
   execution_mode?: string;
   estimated_cost_usd?: number;
@@ -111,6 +114,7 @@ export interface ChatMetadata {
   acuity_status?: string | null;
   disposition?: string | null;
   elapsed_ms?: number | null;
+  timings_ms?: Record<string, number> | null;
 }
 
 interface ChatResponse extends ChatMetadata {

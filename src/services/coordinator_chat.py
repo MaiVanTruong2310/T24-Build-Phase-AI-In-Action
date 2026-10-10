@@ -2,9 +2,11 @@
 
 import json
 import re
+import time
 
 from fastapi import HTTPException
 
+from src.medical_assistant.infrastructure.turn_timing import record_ms
 from src.models.user import User
 from src.services import workbench as svc
 
@@ -21,13 +23,21 @@ def validate_guidance(body):
 
 async def before_turn(db, request, user, guest):
     async with db.begin():
+        step = time.perf_counter()
         case = await svc.ensure_chat_case(db, request, user, guest)
+        record_ms("db:ensure_chat_case", step)
+        step = time.perf_counter()
         local_actor = await db.get(User, user.id) if user else None
+        record_ms("db:get_user", step)
+        step = time.perf_counter()
         await svc.add_message(db, case, request.request_id, "patient", request.message, local_actor, channel="ai_chat")
+        record_ms("db:add_message", step)
         # Safety rules still run during takeover; emergencies never wait for staff.
         from src.medical_assistant.domain.triage_service import get_triage_service
 
+        step = time.perf_counter()
         triage = get_triage_service().evaluate_symptoms(request.message)
+        record_ms("cpu:triage_rules", step)
         emergency = getattr(triage, "is_emergency", False)
         if emergency:
             await svc.release_hold(db, case)

@@ -1,6 +1,7 @@
 import { memo } from 'react';
-import { AlertTriangle, PhoneCall } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { ChatbotWidget } from '../../layouts/ChatbotWidget';
+import { SosButton } from '../../features/chat/SosButton';
 
 export default memo(function PatientConsultationPage() {
   return (
@@ -9,14 +10,7 @@ export default memo(function PatientConsultationPage() {
         <h1 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">
           Tư vấn triệu chứng
         </h1>
-        <a
-          href="tel:115"
-          className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
-          aria-label="Gọi cấp cứu 115 khi có dấu hiệu nguy cấp"
-        >
-          <PhoneCall className="h-3.5 w-3.5" />
-          Cấp cứu 115
-        </a>
+        <SosButton variant="pill" />
       </div>
 
       <p className="flex items-start gap-1.5 px-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">

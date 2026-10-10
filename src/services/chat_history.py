@@ -444,10 +444,33 @@ class ChatHistoryService:
                     {"cid": turn["conversation_id"], "rid": turn["request_id"]},
                 )
 
+    async def _drop_checkpoint(self, session_id, user):
+        """Xóa checkpoint trong bộ nhớ; lỗi ở đây không được chặn việc xóa lịch sử trong DB."""
+        try:
+            from src.medical_assistant.agent.graph import checkpointer
+
+            await checkpointer.adelete_thread(graph_thread(session_id, user))
+        except Exception:
+            logger.warning("chat.delete.checkpoint_failed", exc_info=True)
+
     async def delete_conversation(self, user, session_id):
+        from sqlalchemy.exc import DBAPIError
+
+        try:
+            await self._delete_conversation(user, session_id)
+        except DBAPIError as exc:
+            # lock_timeout/statement_timeout: có giao dịch khác (lượt chat dang dở) đang giữ khóa dòng này.
+            logger.warning("chat.delete.db_error", exc_info=True)
+            raise HTTPException(409, "Cuộc trò chuyện đang bận. Vui lòng thử xóa lại sau ít giây.") from exc
+
+    async def _delete_conversation(self, user, session_id):
         if get_settings().use_unified_conversation:
             async with self.session.begin():
-                row = (
+                await self.session.execute(text("SET LOCAL lock_timeout = '5s'"))
+                await self.session.execute(text("SET LOCAL statement_timeout = '20s'"))
+                # Một session_id có thể có nhiều dòng conversations (hai lượt chat đầu tiên chạy song song cùng tạo mới).
+                # Phải xóa TẤT CẢ, nếu chỉ xóa một dòng thì dòng còn lại hiện lại ngay ở lần tải danh sách kế tiếp.
+                rows = (
                     (
                         await self.session.execute(
                             text("""SELECT c.id FROM public.conversations c
@@ -457,21 +480,23 @@ class ChatHistoryService:
                         )
                     )
                     .mappings()
-                    .first()
+                    .all()
                 )
-                if not row:
+                if not rows:
                     raise HTTPException(404, "Không tìm thấy cuộc trò chuyện.")
-                from src.medical_assistant.agent.graph import checkpointer
-
-                await checkpointer.adelete_thread(graph_thread(session_id, user))
-                await self.session.execute(
-                    text("DELETE FROM public.conversations WHERE id = :cid"),
-                    {"cid": row["id"]},
-                )
+                await self._drop_checkpoint(session_id, user)
+                for row in rows:
+                    await self.session.execute(
+                        text("DELETE FROM public.conversations WHERE id = :cid"),
+                        {"cid": row["id"]},
+                    )
             return
 
         async with self.session.begin():
-            row = (
+            await self.session.execute(text("SET LOCAL lock_timeout = '5s'"))
+            await self.session.execute(text("SET LOCAL statement_timeout = '20s'"))
+            # Cùng một session_id có thể có nhiều dòng (khác hồ sơ người khám): xóa tất cả, không chỉ dòng đầu tiên.
+            rows = (
                 (
                     await self.session.execute(
                         text("""SELECT id, busy_until > now() AS processing FROM public.chat_conversations
@@ -480,18 +505,16 @@ class ChatHistoryService:
                     )
                 )
                 .mappings()
-                .first()
+                .all()
             )
-            if not row:
+            if not rows:
                 raise HTTPException(404, "Không tìm thấy cuộc trò chuyện.")
-            if row["processing"]:
+            if any(r["processing"] for r in rows):
                 raise HTTPException(409, "Cuộc trò chuyện đang xử lý. Vui lòng chờ trước khi xóa.")
-            from src.medical_assistant.agent.graph import checkpointer
-
-            await checkpointer.adelete_thread(graph_thread(session_id, user))
+            await self._drop_checkpoint(session_id, user)
             await self.session.execute(
-                text("DELETE FROM public.chat_conversations WHERE id=:cid AND user_id=:uid"),
-                {"cid": row["id"], "uid": user.id},
+                text("DELETE FROM public.chat_conversations WHERE session_id=:sid AND user_id=:uid"),
+                {"sid": session_id, "uid": user.id},
             )
 
     async def list_conversations(self, user_id, limit=30, offset=0, patient_profile_id=None):
@@ -499,16 +522,19 @@ class ChatHistoryService:
             rows = (
                 (
                     await self.session.execute(
-                        text("""SELECT
-                    c.id,
-                    c.created_at,
-                    c.updated_at,
-                    ctx.context_data->>'session_id' as session_id,
-                    COALESCE(ctx.context_data->>'title', 'Cuộc trò chuyện') as title
-                  FROM public.conversations c
-                  JOIN public.patient_chat_context ctx ON ctx.conversation_id = c.id
-                  WHERE c.patient_id = :uid AND c.category = 'PATIENT_SUPPORT'
-                  ORDER BY c.updated_at DESC
+                        text("""SELECT id, created_at, updated_at, session_id, title FROM (
+                    SELECT DISTINCT ON (ctx.context_data->>'session_id')
+                      c.id,
+                      c.created_at,
+                      c.updated_at,
+                      ctx.context_data->>'session_id' as session_id,
+                      COALESCE(ctx.context_data->>'title', 'Cuộc trò chuyện') as title
+                    FROM public.conversations c
+                    JOIN public.patient_chat_context ctx ON ctx.conversation_id = c.id
+                    WHERE c.patient_id = :uid AND c.category = 'PATIENT_SUPPORT'
+                    ORDER BY ctx.context_data->>'session_id', c.updated_at DESC
+                  ) latest
+                  ORDER BY updated_at DESC
                   LIMIT :limit OFFSET :offset"""),
                         {"uid": user_id, "limit": limit + 1, "offset": offset},
                     )
@@ -525,11 +551,14 @@ class ChatHistoryService:
         rows = (
             (
                 await self.session.execute(
-                    text("""SELECT session_id,title,created_at,updated_at FROM public.chat_conversations
-          WHERE user_id=:uid AND (
-            (CAST(:pid AS uuid) IS NOT NULL AND patient_profile_id=CAST(:pid AS uuid)) OR
-            (CAST(:pid AS uuid) IS NULL AND (patient_profile_id IS NULL OR patient_profile_id IN
-              (SELECT id FROM public.patient_profiles WHERE linked_user_id=:uid))))
+                    text("""SELECT session_id,title,created_at,updated_at FROM (
+            SELECT DISTINCT ON (session_id) id,session_id,title,created_at,updated_at FROM public.chat_conversations
+            WHERE user_id=:uid AND (
+              (CAST(:pid AS uuid) IS NOT NULL AND patient_profile_id=CAST(:pid AS uuid)) OR
+              (CAST(:pid AS uuid) IS NULL AND (patient_profile_id IS NULL OR patient_profile_id IN
+                (SELECT id FROM public.patient_profiles WHERE linked_user_id=:uid))))
+            ORDER BY session_id, updated_at DESC, id DESC
+          ) latest
           ORDER BY updated_at DESC,id DESC LIMIT :limit OFFSET :offset"""),
                     {"uid": user_id, "limit": limit + 1, "offset": offset, "pid": patient_profile_id},
                 )

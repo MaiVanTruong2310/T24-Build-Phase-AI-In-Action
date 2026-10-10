@@ -10,6 +10,7 @@ import { ChatAccessGate } from '../features/chat/ChatAccessGate';
 import { GUEST_PROFILE_EVENT, readGuestProfile, saveGuestProfile, type ChatProfile } from '../features/chat/profile';
 import { AssistantMessage } from '../features/chat/AssistantMessage';
 import { AssistantTurnMetrics } from '../features/chat/AssistantTurnMetrics';
+import { SosButton } from '../features/chat/SosButton';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   History,
@@ -330,7 +331,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
       if (controller.signal.aborted) return;
       if (error.status === 404) { setMessages([WELCOME_MESSAGE]); setHistoryMore(false); setHistoryOffset(0); }
       else setHistoryError(error.message || 'Không thể tải lịch sử.');
-    }).finally(() => { if (!controller.signal.aborted) setHistoryLoading(false); });
+    }).finally(() => { if (historyRequest.current === controller) setHistoryLoading(false); });
     return () => controller.abort();
   }, [sessionId, ownerKey, authUser?.id, isChatOpen, historyReload]);
 
@@ -392,7 +393,9 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
       setMessages(current => [...savedMessages(data.turns), ...current.filter(message => message.id !== 'welcome')].filter((message,index,all) => all.findIndex(item => item.id === message.id) === index));
       setHistoryMore(data.has_more); setHistoryOffset(value => value + data.turns.length);
     } catch (error) { if (!controller.signal.aborted) setHistoryError(error instanceof Error ? error.message : 'Không thể tải lịch sử.'); }
-    finally { if (!controller.signal.aborted) setHistoryLoading(false); }
+    // Chỉ bỏ qua khi có request mới thay thế; nếu bị hủy mà không có request thay thế thì vẫn phải tắt "đang tải",
+    // nếu không cờ này kẹt true và khóa toàn bộ nút (xóa, gửi, mở lịch sử) cho tới khi F5.
+    finally { if (historyRequest.current === controller) setHistoryLoading(false); }
   };
 
   const openConversation = (id: string) => {
@@ -401,6 +404,11 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
     setHistoryOpen(false); setMessages([WELCOME_MESSAGE]); setHistoryError(''); setInputText('');
     if (id === sessionId) setHistoryReload(value => value + 1);
   };
+
+  // Chẩn đoán tạm thời: in các cờ khóa mỗi khi đổi, để biết cờ nào làm nút xóa/gửi bị "cấm".
+  useEffect(() => {
+    console.info('[chat-flags]', { isSending, historyLoading, historyDeleting, historyError: Boolean(historyError), chatLocked, sessionId });
+  }, [isSending, historyLoading, historyDeleting, historyError, chatLocked, sessionId]);
 
   const resetConversation = () => {
     activeRequest.current?.abort();
@@ -726,7 +734,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
               <span className="font-medium text-[11px]">Đã gửi yêu cầu hỗ trợ. Đang chờ Bác sĩ điều phối tiếp nhận phiên…</span>
             </div>
           )}
-          {authUser && historyOpen && <ChatHistoryPanel patientProfileId={patientSelection.profileId || undefined} key={authUser.id + patientSelection.profileId} activeSessionId={sessionId} onSelect={openConversation} busy={isSending || historyLoading} onDeletingChange={setHistoryDeleting} onDeleted={id => { if (id === sessionId) { historyRequest.current?.abort(); setHistoryError(''); setHistoryMore(false); setHistoryOffset(0); resetConversation(); } }} />}
+          {authUser && historyOpen && <ChatHistoryPanel patientProfileId={patientSelection.profileId || undefined} key={authUser.id + patientSelection.profileId} activeSessionId={sessionId} onSelect={openConversation} busy={isSending || historyLoading} onDeletingChange={setHistoryDeleting} onDeleted={id => { if (id === sessionId) { historyRequest.current?.abort(); setHistoryLoading(false); setHistoryError(''); setHistoryMore(false); setHistoryOffset(0); resetConversation(); } }} />}
           {historyError && <p role="alert" className="px-4 py-2 text-xs text-red-600">{historyError} <button type="button" onClick={() => setHistoryReload(value => value + 1)} className="underline">Thử tải lại</button></p>}
           {historyLoading && <p className="px-4 py-2 text-xs text-slate-500">Đang tải cuộc trò chuyện…</p>}
           {historyMore && <button disabled={historyLoading || isSending} type="button" onClick={loadOlderMessages} className="px-4 py-2 text-xs text-blue-600">Tải tin nhắn cũ hơn</button>}
@@ -790,6 +798,15 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                     {/* ATS Triage Badge */}
                     {!isUser && <AtsBadge metadata={message.metadata} />}
 
+                    {/* Số liệu thật: độ trễ + token (hiển thị phía trên nội dung) */}
+                    {!isUser && !message.pending && message.id !== 'welcome' && message.text && (
+                      <AssistantTurnMetrics
+                        tokenUsage={message.metadata?.token_usage}
+                        elapsedMs={message.elapsedMs ?? message.metadata?.elapsed_ms}
+                        timingsMs={message.metadata?.timings_ms}
+                      />
+                    )}
+
                     {/* Content */}
                     {message.pending && !message.text ? (
                       <div className="flex items-center gap-2.5 py-1 text-slate-500 dark:text-slate-400 font-medium">
@@ -800,15 +817,6 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                       <div className={`${isUser ? 'whitespace-pre-wrap' : ''} break-words leading-relaxed text-xs sm:text-[13px]`}>
                         {isUser ? message.text : <AssistantMessage text={message.text} />}
                       </div>
-                    )}
-
-                    {/* Small telemetry info under medical disclaimer */}
-                    {!isUser && !message.pending && message.id !== 'welcome' && message.text && (
-                      <AssistantTurnMetrics
-                        tokenUsage={message.metadata?.token_usage}
-                        elapsedMs={message.elapsedMs ?? message.metadata?.elapsed_ms}
-                        text={message.text}
-                      />
                     )}
 
                     {/* Candidate Specialties Card */}
@@ -943,9 +951,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
 
             <p className="mt-2 text-center text-[10px] text-slate-400 dark:text-slate-500">
               P-124 hỗ trợ tư vấn sơ bộ. Với triệu chứng nguy cấp, xin vui lòng gọi{' '}
-              <a href="tel:115" className="font-bold text-red-500 dark:text-red-400 hover:underline">
-                115
-              </a>{' '}
+              <SosButton variant="link" />{' '}
               ngay.
             </p>
           </div>

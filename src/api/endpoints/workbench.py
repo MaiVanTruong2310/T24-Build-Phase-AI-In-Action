@@ -1,6 +1,9 @@
+import logging
+import re
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -709,6 +712,98 @@ async def request_human(session_id: str, key=Depends(patient_identity), db=Depen
             svc.bump(case)
             svc.event(db, case, None, "human_requested")
     return success_response({"saved": True})
+
+
+class SosInput(BaseModel):
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    accuracy_m: float | None = Field(default=None, ge=0)
+    location_error: str | None = Field(default=None, max_length=120)
+    patient_name: str | None = Field(default=None, max_length=120)
+    patient_phone: str | None = Field(default=None, max_length=20)
+
+
+@patient_router.post("/{session_id}/sos")
+async def patient_sos(session_id: str, payload: SosInput, request: Request, db=Depends(get_db_session)):
+    """Bệnh nhân bấm SOS và không hủy trong 10 giây: tạo/nâng ca lên ưu tiên 0 kèm vị trí, tên, SĐT."""
+    from types import SimpleNamespace
+
+    from src.services.cookie_session import request_token
+
+    token = request_token(request)
+    user = None
+    if token:
+        try:
+            user = await get_current_user(token, db)
+        except Exception:
+            user = None
+
+    async with db.begin():
+        case = await svc.ensure_chat_case(
+            db,
+            SimpleNamespace(session_id=session_id, patient_profile=None, patient_profile_id=None),
+            user,
+            request.state.coordination_guest,
+        )
+        if case.status in {"completed", "cancelled"}:
+            raise HTTPException(409, "Phiếu đã đóng. Vui lòng tạo yêu cầu mới.")
+
+        patient = dict(case.patient or {})
+        name = (payload.patient_name or "").strip()
+        phone = re.sub(r"[\s.()-]", "", payload.patient_phone or "")
+        if name and not patient.get("name"):
+            patient["name"] = name
+        if phone and not patient.get("phone"):
+            patient["phone"] = phone
+        case.patient = patient
+
+        has_location = payload.latitude is not None and payload.longitude is not None
+        maps_url = (
+            f"https://www.google.com/maps?q={payload.latitude:.6f},{payload.longitude:.6f}" if has_location else None
+        )
+        sos = {
+            "triggered_at": svc.now().isoformat(),
+            "latitude": payload.latitude,
+            "longitude": payload.longitude,
+            "accuracy_m": payload.accuracy_m,
+            "maps_url": maps_url,
+            "location_error": None if has_location else (payload.location_error or "Không lấy được vị trí"),
+        }
+        case.priority = 0
+        case.ai_snapshot = {
+            **(case.ai_snapshot or {}),
+            "is_emergency": True,
+            "max_booking_days": 0,
+            "emergency_warning": "Bệnh nhân bấm SOS cấp cứu. Cần gọi lại ngay.",
+            "sos": sos,
+        }
+        case.status = "emergency_active" if case.assigned_to else "new"
+        policy = await db.get(Policy, 1)
+        if policy:
+            due = svc.now() + svc.timedelta(minutes=policy.emergency_response_minutes)
+            if not case.due_at or case.due_at > due:
+                case.due_at = due
+        await svc.release_hold(db, case)
+
+        shown_phone = patient.get("phone") or "chưa có"
+        location_text = (
+            f"{maps_url} (sai số ~{round(payload.accuracy_m)} m)"
+            if has_location and payload.accuracy_m is not None
+            else maps_url or f"không lấy được vị trí ({sos['location_error']})"
+        )
+        body = (
+            f"🚨 SOS cấp cứu từ bệnh nhân {patient.get('name') or 'chưa rõ tên'} | "
+            f"SĐT: {shown_phone} | Vị trí: {location_text}"
+        )
+        await svc.add_message(db, case, str(uuid4()), "system", body)
+        svc.event(db, case, None, "sos_triggered", body, details=sos)
+        svc.bump(case)
+
+    try:
+        await publish_workbench_case_update(case)
+    except Exception:
+        logging.getLogger(__name__).warning("sos.publish_failed", exc_info=True)
+    return success_response({"sent": True, "has_location": has_location, "case_id": str(case.id)})
 
 
 @patient_router.post("/{session_id}/messages")
