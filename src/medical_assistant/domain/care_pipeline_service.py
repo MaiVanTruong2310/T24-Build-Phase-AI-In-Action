@@ -42,7 +42,7 @@ ANATOMICAL_SYSTEMS = {
         "name": "Trung tâm Tim mạch",
         "organ_name": "Tim mạch & Tuần hoàn lồng ngực",
         "patterns": [
-            r"\b(?:tim|tuc\s+nguc|tuc\s+nghen\s+nguc|dau\s+nguc|nang\s+nguc|that\s+nguc|long\s+nguc.*de\s+nang|de\s+nang|nhip\s+tim|danh\s+trong\s+nguc|hoi\s+hop|loan\s+nhip|huyet\s+ap|1[6789]0\/|200\/|ke\s+cao\s+goi\s+moi\s+tho|suy\s+tim|mach\s+vanh)\b"
+            r"\b(?:trai\s+tim|dau\s+tim|nhoi\s+tim|benh\s+tim|tim\s+mach|khoa\s+tim|nhip\s+tim|danh\s+trong\s+nguc|tim\s+dap|suy\s+tim|van\s+tim|co\s+tim|mach\s+vanh|tuc\s+nguc|tuc\s+nghen\s+nguc|dau\s+nguc|nang\s+nguc|that\s+nguc|long\s+nguc.*de\s+nang|de\s+nang|hoi\s+hop|loan\s+nhip|huyet\s+ap|1[6789]0\/|200\/|ke\s+cao\s+goi\s+moi\s+tho)\b"
         ],
         "rationale": "Cơ quan tuần hoàn sinh tồn tối khẩn; cần thăm khám trước để loại trừ thiếu máu cơ tim, nhồi máu cơ tim hoặc cơn tăng huyết áp kịch phát đe dọa tính mạng.",
     },

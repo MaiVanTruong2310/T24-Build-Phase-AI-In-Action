@@ -86,4 +86,5 @@ async def test_negation_prevents_false_emergency_over_triage():
     assert res["is_emergency"] is False
     assert res["ats_level"] != 1
     assert "Tiêu hóa" in (res.get("suggested_department_name") or "")
-    assert "115" not in res["response"]
+    # Nội dung chính không báo cấp cứu; lời dặn dự phòng của ca ATS 3 ("Trong lúc chờ khám… gọi 115") được phép.
+    assert "115" not in res["response"].split("Trong lúc chờ khám")[0]

@@ -458,8 +458,11 @@ def build_compiled_fact_patterns() -> tuple[dict[str, list[re.Pattern]], dict[st
             norm = normalize_term(term)
             if not norm:
                 continue
-            # Bọc \b chặt chẽ ở 2 đầu từ
-            pat = re.compile(rf"\b{re.escape(norm)}\b", re.IGNORECASE)
+            # Bọc \b chặt chẽ ở 2 đầu từ (tránh nhầm "dau co" với "dau co hong")
+            if norm == "dau co":
+                pat = re.compile(rf"\b{re.escape(norm)}\b(?!\s*hong)", re.IGNORECASE)
+            else:
+                pat = re.compile(rf"\b{re.escape(norm)}\b", re.IGNORECASE)
             pos_list.append(pat)
             if item.is_red_flag:
                 red_flag_compiled.append(pat)

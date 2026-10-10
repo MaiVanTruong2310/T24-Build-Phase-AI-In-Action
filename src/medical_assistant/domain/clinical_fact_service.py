@@ -18,6 +18,12 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", value.replace("đ", "d")).strip()
 
 
+# Tuổi trẻ nhũ nhi trên văn bản đã bỏ dấu: "con tôi 9 tháng", "bé 6 tháng tuổi", "trẻ sơ sinh".
+INFANT_PATTERN = (
+    r"\b(?:con|be|chau)(?: (?:toi|em|minh|nha|trai|gai))? (?:[1-9]|1\d|2[0-4]) (?:thang|tuan)\b(?! nay| roi| qua)"
+    r"|\b(?:[1-9]|1\d|2[0-4]) (?:thang|tuan) tuoi\b|\bso sinh\b"
+)
+
 FACT_PATTERNS = {
     # Táo bón / Tiêu hóa
     "hard_stool": [r"phan (?:kho|cung|kho cung)"],
@@ -26,7 +32,15 @@ FACT_PATTERNS = {
     "passing_gas": [r"van (?:danh hoi|trung tien) duoc", r"van xa hoi duoc"],
     "unable_to_pass_gas": [r"khong (?:danh hoi|trung tien) duoc"],
     "vomiting": [r"\bnon oi\b", r"\bbi non\b", r"\bnon\b"],
-    "fever": [r"bi sot", r"sot cao", r"len con sot", r"nhiet do cao"],
+    "fever": [
+        r"bi sot",
+        r"sot cao",
+        r"len con sot",
+        r"nhiet do cao",
+        # "sốt" đứng trong liệt kê triệu chứng; không khớp "bỏ sót".
+        r"\bsot (?:nhe|vua|\d|ve (?:chieu|dem)|lien tuc|keo dai|nong)",
+        r"(?:^|[,;]|\bva\b|\bkem\b|\bthem\b)\s*sot\b(?=\s*(?:[,.;]|$|va\b|kem\b|\d))",
+    ],
     "weight_loss": [r"sut can", r"giam can khong chu y"],
     "blood_in_stool": [r"mau (?:do )?(?:tren giay|trong phan)", r"dinh (?:chut )?mau", r"di ngoai ra mau"],
     "severe_abdominal_pain": [r"dau bung (?:du doi|quan du doi|tang nhieu)", r"bung dau quan"],
@@ -41,6 +55,7 @@ FACT_PATTERNS = {
     "abdominal_pain": [
         r"dau bung",
         r"dau thuong vi",
+        r"dau (?:da day|bao tu)",
         r"bung dau",
         r"bung(?:\s+\w+){0,6}\s+dau",
         r"(?:dau|bi dau)\s+(?:them\s+(?:ca\s+)?)?bung",
@@ -84,6 +99,9 @@ FACT_PATTERNS = {
         r"dau mat",
         r"chay nuoc mat",
         r"do mat",
+        r"\bmat (?:bi )?(?:do|sung do)\b(?=\s*(?:[,.;]|$|ngua|chay|va\b|kem\b))",
+        r"ngua mat",
+        r"\bmat ngua\b",
         r"giam thi luc",
         r"loan thi",
         r"can thi",
@@ -120,7 +138,16 @@ FACT_PATTERNS = {
         r"chest (?:pain|tightness|pressure|heaviness|discomfort)",
     ],
     "shortness_of_breath": [r"kho tho", r"hut hoi", r"tho gap", r"shortness of breath", r"dyspnea"],
-    "cough": [r"\bho khan\b", r"\bho co dom\b", r"\bbi ho\b", r"\bcon ho\b", r"\bcough\b"],
+    "cough": [
+        r"\bho khan\b",
+        r"\bho co dom\b",
+        r"\bbi ho\b",
+        r"\bcon ho\b",
+        r"\bcough\b",
+        r"\bho (?:keo dai|nhieu|lien tuc|dai dang|ra dom|ra mau|\d)",
+        # "ho" đứng trong liệt kê triệu chứng (văn bản đã bỏ dấu nên phải tránh "và họ", "hồ").
+        r"(?:^|[,;]|\bva\b|\bkem\b|\bthem\b)\s*ho\b(?=\s*(?:[,.;]|$|va\b|kem\b|\d))",
+    ],
     # Cơ xương khớp
     "joint_pain": [
         r"dau khop",
@@ -146,7 +173,7 @@ FACT_PATTERNS = {
         r"dau bap chan",
         r"dau cang chan",
         r"cang chan",
-        r"dau co\b",
+        r"dau co\b(?!\s*hong)",
         r"dau co bap",
         r"dau bap tay",
         r"dau chan",
@@ -186,6 +213,8 @@ FACT_PATTERNS = {
         r"man ngua",
         r"viem da",
         r"phat ban",
+        r"noi (?:man|ban)",
+        r"ban do\b",
         r"noi me day",
         r"bi me day",
         r"man me day",
@@ -194,6 +223,87 @@ FACT_PATTERNS = {
         r"skin peeling",
         r"peeling skin",
         r"rash",
+    ],
+    # Nhóm trước đây không có complaint code → không bao giờ được gợi ý chuyên khoa.
+    "urinary_symptoms": [
+        r"tieu buot",
+        r"tieu rat",
+        r"tieu ra mau",
+        r"tieu dem nhieu",
+        r"(?:di |hay |thuc day )tieu dem",
+        r"tieu nhieu lan",
+        r"tieu gat",
+        r"tieu khong het",
+        r"tieu (?:ri|nho) giot",
+        r"tieu kho",
+        r"buot khi (?:di )?tieu",
+        r"dau khi (?:di )?tieu",
+        r"nuoc tieu (?:duc|co mau|do)",
+        r"painful urination",
+        r"dysuria",
+    ],
+    # Khối/u vùng cổ: "sờ thấy cục ở cổ", "nổi hạch cổ", "bướu cổ".
+    "neck_lump": [
+        r"\b(?:cuc|khoi|u|hach)\s+(?:cung\s+)?(?:o|tren|duoi|vung|ben)?\s*co\b(?! the| duoc| khong| ai| gi)",
+        r"noi hach",
+        r"buou co",
+        r"nhan giap",
+        r"neck lump",
+    ],
+    # Khám thai định kỳ (ca bất thường thai kỳ đã có cổng cấp cứu sản khoa bắt trước).
+    "pregnancy_care": [
+        r"mang thai",
+        r"co thai",
+        r"kham thai",
+        r"thai \d+ tuan",
+        r"bau \d+ (?:tuan|thang)",
+        r"pregnan",
+    ],
+    # Khí sắc trầm / lo âu (ý nghĩ tự hại đã có cổng cấp cứu bắt trước).
+    "low_mood": [
+        r"buon chan",
+        r"tram cam",
+        r"chan nan",
+        r"khong muon lam gi",
+        r"mat hung thu",
+        r"lo au",
+        r"hay lo lang",
+        r"depress",
+    ],
+    "gynecologic_symptoms": [
+        r"tre kinh",
+        r"cham kinh",
+        r"rong kinh",
+        r"mat kinh",
+        r"dau bung kinh",
+        r"kinh nguyet (?:khong deu|bat thuong)",
+        r"khi hu",
+        r"ngua vung kin",
+        r"ra mau (?:am dao|bat thuong)",
+        r"missed period",
+    ],
+    "ear_nose_symptoms": [
+        r"\bu tai\b",
+        r"dau tai",
+        r"nghe kem",
+        r"chay mu tai",
+        r"ngua tai",
+        r"nghet mui",
+        r"chay nuoc mui",
+        r"so mui",
+        r"ear ?ache",
+        r"tinnitus",
+    ],
+    "dental_pain": [
+        r"dau rang",
+        r"nhuc rang",
+        r"sau rang",
+        r"e buot rang",
+        r"rang (?:bi )?e buot",
+        r"chay mau chan rang",
+        r"sung loi",
+        r"rang khon",
+        r"toothache",
     ],
 }
 
@@ -260,6 +370,9 @@ NEGATION_PATTERNS = {
         r"khong con chong mat",
         r"khong chong mat",
     ],
+    "urinary_symptoms": [r"khong (?:bi )?tieu buot", r"het tieu buot", r"tieu binh thuong"],
+    "ear_nose_symptoms": [r"khong (?:bi )?(?:u tai|dau tai)", r"het (?:u tai|dau tai)"],
+    "dental_pain": [r"khong (?:bi )?dau rang", r"het dau rang"],
 }
 
 
@@ -281,6 +394,13 @@ COMPLAINT_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("hair_loss", "dermatology", tuple(FACT_PATTERNS["hair_loss"])),
     ("insomnia", "psychiatry", tuple(FACT_PATTERNS["insomnia"])),
     ("skin_lesion", "dermatology", tuple(FACT_PATTERNS["skin_lesion"])),
+    ("urinary_symptoms", "urology", tuple(FACT_PATTERNS["urinary_symptoms"])),
+    ("gynecologic_symptoms", "gynecology", tuple(FACT_PATTERNS["gynecologic_symptoms"])),
+    ("ear_nose_symptoms", "ear_nose_throat", tuple(FACT_PATTERNS["ear_nose_symptoms"])),
+    ("dental_pain", "dentistry", tuple(FACT_PATTERNS["dental_pain"])),
+    ("neck_lump", "ear_nose_throat", tuple(FACT_PATTERNS["neck_lump"])),
+    ("pregnancy_care", "obstetrics", tuple(FACT_PATTERNS["pregnancy_care"])),
+    ("low_mood", "psychiatry", tuple(FACT_PATTERNS["low_mood"])),
 )
 
 COMPLAINT_SYSTEMS = {code: system for code, system, _ in COMPLAINT_RULES}
@@ -351,6 +471,9 @@ def _is_resolution(text: str, code: str) -> bool:
             "hair_loss",
             "insomnia",
             "skin_lesion",
+            "urinary_symptoms",
+            "ear_nose_symptoms",
+            "dental_pain",
         }
     )
 
@@ -522,8 +645,11 @@ class ClinicalFactService:
                     "evidence": [matched.group(0) if matched else text.strip()[:240]],
                     "confidence": 1.0 if matched else 0.95,
                     "source": "deterministic",
+                    "_pos": matched.start() if matched else len(normalized),
                 }
             )
+        # Triệu chứng chính = triệu chứng bệnh nhân nhắc trước, không phải thứ tự khai báo COMPLAINT_RULES.
+        complaints.sort(key=lambda item: item.pop("_pos"))
 
         active_complaints = [item["code"] for item in complaints if item["status"] == "active"]
         chief_complaint = active_complaints[0] if active_complaints else None
@@ -540,7 +666,21 @@ class ClinicalFactService:
                     break
             explicit_primary = explicit_primary or chief_complaint
 
+        # Bệnh nhi → triệu chứng chung đi Nhi khoa. "be" cần ngữ cảnh để không khớp "bê đồ nặng".
+        is_child = bool(
+            re.search(
+                r"\bbe (?:nha|toi|con|bi|so sinh|trai|gai|\d)|\bem be\b|\btre (?:em|nho|so sinh)\b"
+                r"|\b(?:[0-9]|1[0-5]) tuoi\b|\b\d+ thang tuoi\b",
+                normalized,
+            )
+        )
+        # Trẻ nhũ nhi (≤ 24 tháng / sơ sinh): mọi vấn đề không cấp cứu khám Nhi trước.
+        # "con tôi 9 tháng" là tuổi; "ho 2 tháng nay" là thời gian bệnh → cần chủ ngữ trẻ đứng ngay trước.
+        is_infant = bool(re.search(INFANT_PATTERN, normalized))
+
         return {
+            "patient_is_child": True if (is_child or is_infant) else None,
+            "patient_is_infant": True if is_infant else None,
             "chief_complaint": chief_complaint,
             "primary_complaint": explicit_primary or chief_complaint,
             "primary_complaint_explicit": explicit_primary is not None,
@@ -635,6 +775,8 @@ class ClinicalFactService:
             "severity",
             "pain_severity_0_10",
             "onset",
+            "patient_is_child",
+            "patient_is_infant",
         ):
             if new.get(key) is not None:
                 merged[key] = new[key]
