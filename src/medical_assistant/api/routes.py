@@ -105,7 +105,28 @@ async def prepare_turn(request, user, session):
     elif request.patient_profile_id:
         raise HTTPException(403, "Cần đăng nhập để chọn hồ sơ người thân.")
     service = ChatHistoryService(session)
-    turn = await service.begin_turn(user, request) if user else None
+    memory_profile: list = []
+    open_loops: list = []
+    if user:
+        # begin_turn (phiên auth của request) và 2 truy vấn bộ nhớ dài hạn (mỗi cái tự mở phiên riêng) độc lập
+        # nhau → chạy song song thay vì nối tiếp, bớt vài vòng truy vấn DB mỗi lượt.
+        from src.medical_assistant.domain.patient_memory_service import get_patient_memory_service
+
+        async def load_memory() -> tuple[list, list]:
+            try:
+                mem_svc = get_patient_memory_service()
+                return tuple(  # type: ignore[return-value]
+                    await asyncio.gather(
+                        mem_svc.get_patient_profile(subject.id), mem_svc.get_active_open_loops(subject.id)
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Could not load cross-session memory: %s", exc)
+                return [], []
+
+        turn, (memory_profile, open_loops) = await asyncio.gather(service.begin_turn(user, request), load_memory())
+    else:
+        turn = None
     payload = chat_agent_input(request)
     payload["user_id"] = str(user.id) if user else None
     payload["session_id"] = request.session_id
@@ -150,17 +171,9 @@ async def prepare_turn(request, user, session):
             is_authenticated=True,
             patient_health_record=health_record(subject),
         )
-        # Nạp Cross-session Memory (Hồ sơ dài hạn & Open Loops)
-        from src.medical_assistant.domain.patient_memory_service import get_patient_memory_service
-
-        try:
-            mem_svc = get_patient_memory_service()
-            payload["patient_memory_profile"] = await mem_svc.get_patient_profile(subject.id)
-            payload["active_open_loops"] = await mem_svc.get_active_open_loops(subject.id)
-        except Exception as exc:
-            logger.warning("Could not load cross-session memory: %s", exc)
-            payload["patient_memory_profile"] = []
-            payload["active_open_loops"] = []
+        # Cross-session Memory (Hồ sơ dài hạn & Open Loops) đã nạp song song ở trên.
+        payload["patient_memory_profile"] = memory_profile
+        payload["active_open_loops"] = open_loops
     else:
         payload["patient_health_record"] = None
         payload["is_authenticated"] = False
