@@ -2,6 +2,8 @@
 
 Chạy tất định, không gọi LLM, đo `ClinicalTriageService` (cổng cấp cứu + chọn chuyên khoa).
 
+Kết quả đã kiểm chứng (dùng cho slide/báo cáo): xem [RESULTS.md](RESULTS.md).
+
 ## Quy tắc để kết quả đáng tin
 1. **dev** được xem và chỉnh ngưỡng; **test** khóa, chỉ chạy trước release (`--confirm-test`). Không sửa luật/ngưỡng dựa trên ca trong test.
 2. Nhãn (`gold_ats`, `gold_specialty`) do người có chuyên môn gán **trước khi xem output hệ thống**. Ghi tên vào `annotator`, đổi `label_status` thành `reviewed`. 2 người gán thì ghi thêm `annotator2` và tính Cohen's κ.
