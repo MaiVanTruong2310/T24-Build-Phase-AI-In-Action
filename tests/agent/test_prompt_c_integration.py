@@ -85,7 +85,9 @@ class TestPromptCIntegration(unittest.IsolatedAsyncioTestCase):
             "query": "Bệnh viện Vinmec Times City ở đâu?",
             "metadata": {"session_id": "sess_preserved"},
         }
-        res = await info_agent_node(state, llm=mock_llm)
+        # Tra thẳng DB cũng không được → báo trung thực "trục trặc tạm thời".
+        with patch("src.medical_assistant.agent.nodes.info_agent_node.answer_info_without_llm", return_value=None):
+            res = await info_agent_node(state, llm=mock_llm)
 
         self.assertEqual(res["workflow_status"], "INFO_UNAVAILABLE")
         self.assertIn("trục trặc tạm thời", res["response"])

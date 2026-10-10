@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from typing import Any
@@ -117,8 +118,79 @@ async def cache_gate(query: str, lang: str, state: AgentState) -> dict[str, Any]
 
     cache_service = get_cache_service()
     cached = None
+    folded_query = remove_accents(query.lower())
+    is_cancel = bool(re.search(r"\bhuy\s+(?:lich|hen|yeu cau|phieu|dat)|\bcancel\b", folded_query))
+    code_match = re.search(r"\bYC-?([0-9A-F]{8})\b", query, re.IGNORECASE)
 
-    if detect_appointment_query(query):
+    if is_cancel and code_match:
+        from src.medical_assistant.domain.booking_lookup_service import get_booking_lookup_service
+
+        code = f"YC-{code_match.group(1).upper()}"
+        try:
+            res = await get_booking_lookup_service().cancel_patient_request(
+                code,
+                user_id=state.get("user_id") or (state.get("metadata") or {}).get("user_id"),
+                guest_token=state.get("guest_token") or "",
+            )
+        except Exception as exc:  # noqa: BLE001 - lỗi DB không được làm hỏng hội thoại
+            logger.warning("Patient cancel failed: %s", exc)
+            res = {"result": "error"}
+        cancel_texts = {
+            "cancelled": f"✅ Dạ, em đã **hủy yêu cầu đặt lịch `{code}`** cho bác. Khi cần, bác nhắn em để đặt lịch mới nhé ạ.",
+            "handoff": (
+                f"Dạ, yêu cầu `{code}` đang được điều phối viên xử lý nên em chưa tự hủy được. Em đã ghi nhận "
+                "mong muốn hủy của bác; điều phối viên sẽ liên hệ xác nhận trong thời gian sớm nhất ạ."
+            ),
+            "not_found": (
+                f"Dạ, em không tìm thấy yêu cầu `{code}` đang hoạt động trong tài khoản/phiên chat này. "
+                "Bác kiểm tra lại mã phiếu, hoặc gọi tổng đài cơ sở để được hỗ trợ ạ."
+            ),
+        }
+        text = cancel_texts.get(
+            res.get("result"), "Dạ, hệ thống chưa xử lý được yêu cầu hủy lúc này. Bác vui lòng thử lại sau ít phút ạ."
+        )
+        cached = (text, ["Đặt lịch mới", "Tiến trình điều trị"], "PATIENT_CANCEL")
+    elif code_match and re.search(r"\bdoi\s+(?:lich|hen|ngay|gio|buoi)|\breschedule\b", folded_query):
+        from src.medical_assistant.domain.booking_lookup_service import _format_vn_date_str, get_booking_lookup_service
+        from src.medical_assistant.domain.booking_slot_service import extract_booking_entities
+
+        code = f"YC-{code_match.group(1).upper()}"
+        wanted = extract_booking_entities(query, {})
+        new_date, new_period = wanted.get("preferred_date"), wanted.get("preferred_period")
+        if not new_date and not new_period:
+            text = f"Dạ, bác muốn đổi lịch `{code}` sang ngày/buổi nào ạ? (ví dụ: *đổi lịch {code} sang sáng thứ 7*)"
+        else:
+            try:
+                res = await get_booking_lookup_service().reschedule_patient_request(
+                    code,
+                    new_date,
+                    new_period,
+                    user_id=state.get("user_id") or (state.get("metadata") or {}).get("user_id"),
+                    guest_token=state.get("guest_token") or "",
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Patient reschedule failed: %s", exc)
+                res = {"result": "error"}
+            when = " ".join(
+                x
+                for x in [
+                    {"morning": "buổi sáng", "afternoon": "buổi chiều", "evening": "buổi tối"}.get(new_period or ""),
+                    _format_vn_date_str(new_date) if new_date else "",
+                ]
+                if x
+            )
+            text = {
+                "updated": f"✅ Dạ, em đã cập nhật yêu cầu `{code}` sang **{when}**. Điều phối viên sẽ liên hệ xác nhận giờ khám cụ thể ạ.",
+                "handoff": (
+                    f"Dạ, yêu cầu `{code}` đã được điều phối viên tiếp nhận nên em chưa tự đổi được. Em đã ghi nhận "
+                    f"mong muốn đổi sang **{when}**; điều phối viên sẽ liên hệ bác để sắp xếp lại ạ."
+                ),
+                "not_found": f"Dạ, em không tìm thấy yêu cầu `{code}` đang hoạt động trong tài khoản/phiên chat này ạ.",
+            }.get(
+                res.get("result"), "Dạ, hệ thống chưa xử lý được yêu cầu đổi lịch lúc này. Bác thử lại sau ít phút ạ."
+            )
+        cached = (text, ["Tiến trình điều trị", "Cần tư vấn thêm"], "PATIENT_RESCHEDULE")
+    elif detect_appointment_query(query):
         from src.medical_assistant.domain.booking_lookup_service import get_booking_lookup_service
 
         lookup_svc = get_booking_lookup_service()
@@ -151,7 +223,17 @@ async def cache_gate(query: str, lang: str, state: AgentState) -> dict[str, Any]
             r"(?:hien thi|xem|kiem tra|cho biet)\s+(?:thong tin(?: ca nhan)?|ho so|ten|sdt|so dien thoai)\s+(?:cua\s+)?(?:toi|minh)\b|"
             r"\bmy\s+(?:name|phone|address|profile|info|contact)\b"
         )
-        is_identity_query = bool(re.search(id_pattern, identity_query)) and not has_clinical
+        # "Tên tôi là X, sđt 09..." là CUNG CẤP thông tin (trả lời câu hỏi liên hệ), không phải hỏi hồ sơ.
+        is_providing_identity = bool(
+            re.search(r"(?<!\d)0\d{9}(?!\d)", re.sub(r"[\s.-]", "", query))
+            or re.search(
+                r"(?:ten|so dien thoai|sdt)\s+(?:cua\s+)?(?:toi|minh)\s+la\s+(?!gi\b|j\b|bao nhieu\b|the nao\b|so may\b)\w",
+                identity_query,
+            )
+        )
+        is_identity_query = (
+            bool(re.search(id_pattern, identity_query)) and not has_clinical and not is_providing_identity
+        )
         profile = state.get("patient_profile") or {}
         if is_identity_query:
             name = profile.get("name") or state.get("patient_name") or "Chưa cung cấp"
@@ -267,6 +349,18 @@ def resolve_action(
         return "hold_slot", reason, extra_args
 
     # --- ƯU TIÊN 1: Thao tác đặt khám trực tiếp & Đặt hẹn ---
+    # Lượt trước đã hỏi họ tên + SĐT để chốt lịch, lượt này bệnh nhân gửi SĐT → chốt yêu cầu đặt lịch.
+    awaiting_contact = state.get("workflow_status") in {
+        "CONFIRM_BOOKING_CONVERSATIONALLY",
+        "BOOKING_CONTACT_REQUIRED",
+        "TRIAGED_READY_FOR_BOOKING",  # đã hiện lịch trống, bệnh nhân gửi SĐT = muốn đặt
+    }
+    gave_contact = bool(booking_entities.get("patient_phone") or re.search(r"\d{4,}", query or ""))
+    if awaiting_contact and gave_contact and not is_emergency:
+        reason = "Bệnh nhân cung cấp liên hệ cho yêu cầu đặt lịch đang chờ"
+        logger.info("RESOLVE_ACTION: action=confirm_booking_conversationally, reason=%s", reason)
+        return "confirm_booking_conversationally", reason, extra_args
+
     if booking_entities.get("is_booking_confirmation") and not is_emergency:
         reason = "Bệnh nhân xác nhận thông tin đặt khám qua hội thoại"
         logger.info("RESOLVE_ACTION: action=confirm_booking_conversationally, reason=%s", reason)
@@ -369,6 +463,25 @@ def resolve_action(
     return action, reason, extra_args
 
 
+_ORDINALS = {"dau tien": 0, "thu nhat": 0, "so 1": 0, "thu 2": 1, "thu hai": 1, "so 2": 1, "thu 3": 2, "thu ba": 2}
+_ORDINALS.update({"so 3": 2, "thu 4": 3, "thu tu": 3, "so 4": 3, "thu 5": 4, "thu nam": 4, "so 5": 4})
+
+
+def _pick_listed_doctor(query: str, listed: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """ "bác sĩ đầu tiên", "bác sĩ thứ 2", "bác sĩ đó" → bác sĩ tương ứng trong danh sách vừa liệt kê."""
+    if not listed:
+        return None
+    folded = remove_accents((query or "").lower())
+    match = re.search(r"\b(?:bac si|bs)\s+(dau tien|thu nhat|thu \d|so \d|thu (?:hai|ba|tu|nam)|do|nay)\b", folded)
+    if not match:
+        return None
+    ref = match.group(1)
+    idx = 0 if ref in {"do", "nay"} and len(listed) == 1 else _ORDINALS.get(ref)
+    if idx is None or idx >= len(listed) or not listed[idx].get("full_name"):
+        return None
+    return listed[idx]
+
+
 async def analyze_node(state: AgentState) -> dict:
     query = state.get("query") or state.get("user_input", "")
     current_lang = state.get("language")
@@ -380,7 +493,9 @@ async def analyze_node(state: AgentState) -> dict:
     elif any(p in lower_query for p in ["english", "in english", "speak english"]):
         lang = "en"
     elif current_lang and current_lang != detected_lang and len(query.strip().split()) >= 3:
-        lang = detected_lang
+        # "John Smith, 0912888777" (tên + SĐT, không dấu) không phải tín hiệu đổi ngôn ngữ.
+        is_contact_only = re.search(r"\d{6,}", query) and remove_accents(query.lower()) == query.lower()
+        lang = current_lang if is_contact_only else detected_lang
     else:
         lang = current_lang or detected_lang
 
@@ -630,6 +745,21 @@ async def analyze_node(state: AgentState) -> dict:
         clinical_facts = fact_service.merge(clinical_facts, extracted_facts)
 
     booking_entities = extract_booking_entities(query, state)
+    # "Đặt lịch với bác sĩ đầu tiên / thứ 2" → lấy từ danh sách bác sĩ vừa hiển thị ở lượt trước.
+    picked_doctor = _pick_listed_doctor(query, state.get("last_listed_doctors") or [])
+    if picked_doctor and not booking_entities.get("doctor_preference"):
+        booking_entities["doctor_preference"] = picked_doctor["full_name"]
+        booking_entities["doctor_name"] = f"BS. {picked_doctor['full_name']}"
+        if picked_doctor.get("specialty") and not booking_entities.get("specialty_preference"):
+            booking_entities["specialty_preference"] = picked_doctor["specialty"]
+        if picked_doctor.get("workplace") and not booking_entities.get("facility_preference"):
+            from src.medical_assistant.domain.booking_slot_service import FACILITY_MAPPING
+
+            workplace = picked_doctor["workplace"].lower()
+            booking_entities["facility_preference"] = next(
+                (FACILITY_MAPPING[k] for k in sorted(FACILITY_MAPPING, key=len, reverse=True) if k in workplace),
+                picked_doctor["workplace"],
+            )
     intake_state = state.get("booking_intake") or (state.get("metadata") or {}).get("booking_intake") or {}
     patient_name = (
         booking_entities.get("patient_name")
@@ -847,6 +977,36 @@ async def analyze_node(state: AgentState) -> dict:
         ]
         if v2_spec_candidates:
             suggested_dept_code = v2_spec_candidates[0]
+    # Đặt lịch đích danh bác sĩ mà chưa có chuyên khoa: lấy chuyên khoa thật của bác sĩ đó từ dữ liệu.
+    _general_codes = {"Sức khỏe tổng quát", "General Health", "TONG_QUAT"}
+    if (
+        booking_entities.get("doctor_preference")
+        and (not suggested_dept_code or suggested_dept_code in _general_codes)
+        and not (current_dept and current_dept not in _general_codes)
+    ):
+        try:
+            from src.medical_assistant.agent.tools.doctor_tools import search_doctors
+
+            found = await asyncio.to_thread(
+                search_doctors.invoke, {"name": booking_entities["doctor_preference"], "limit": 1}
+            )
+            doc_specs = ((found or {}).get("doctors") or [{}])[0].get("specialties") or []
+            if doc_specs:
+                suggested_dept_code = doc_specs[0]
+                current_dept = doc_specs[0]
+        except Exception as exc:
+            logger.warning("Doctor specialty lookup failed: %s", exc)
+    # Hướng khám DỰ KIẾN: ứng viên top-1 bị loại chỉ vì điểm thấp (below_primary_threshold) vẫn tốt hơn
+    # việc rơi về "Sức khỏe tổng quát". Không áp dụng khi đã có khoa hiện tại hoặc ca khẩn cấp.
+    tentative_routing = False
+    _general_codes = {"Sức khỏe tổng quát", "General Health", "TONG_QUAT"}
+    if (not suggested_dept_code or suggested_dept_code in _general_codes) and not (
+        current_dept and current_dept not in _general_codes
+    ):
+        for cand in triage_result.candidate_specialties[:1]:
+            if cand.suppression_reason == "below_primary_threshold" and cand.code not in _general_codes:
+                suggested_dept_code = cand.code
+                tentative_routing = True
     if not suggested_dept_code or suggested_dept_code in {"Sức khỏe tổng quát", "General Health", "TONG_QUAT"}:
         if current_dept and current_dept not in {"Sức khỏe tổng quát", "General Health", "TONG_QUAT"}:
             suggested_dept_code = current_dept
@@ -1246,6 +1406,7 @@ async def analyze_node(state: AgentState) -> dict:
             "fallback_used": not llm_succeeded,
             "action": action,
             "action_reason": action_reason,
+            "tentative_routing": tentative_routing,
             "candidate_specialties": candidate_specialties,
             "conflict_reason": triage_result.conflict_reason,
             "acuity_status": triage_result.acuity_status,

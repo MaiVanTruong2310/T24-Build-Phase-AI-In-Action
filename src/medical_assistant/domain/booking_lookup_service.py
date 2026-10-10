@@ -47,6 +47,116 @@ class BookingLookupService:
     def __init__(self):
         self.session_factory = get_session_factory()
 
+    async def cancel_patient_request(
+        self, code: str, user_id: str | UUID | None = None, guest_token: str | None = None
+    ) -> dict[str, Any]:
+        """Bệnh nhân tự hủy yêu cầu đặt lịch (mã YC-xxxx) qua chat.
+
+        Chỉ tìm trong các yêu cầu thuộc chính tài khoản / phiên khách (cùng phạm vi với tra cứu lịch).
+        Yêu cầu còn "new" (chưa ai xử lý, chưa chốt lịch) → hủy luôn. Đã có điều phối viên xử lý hoặc đã
+        chốt lịch → không tự hủy, chỉ ghi nhận để điều phối viên liên hệ (tránh lệch giữ chỗ / đặt cọc).
+        Trả về {"result": "cancelled" | "handoff" | "not_found", "code": ...}.
+        """
+        import hashlib
+
+        from src.services.workbench import bump, event
+
+        suffix = code.upper().removeprefix("YC-").lower()
+        owners = []
+        if user_id:
+            owners.append(Case.patient_id == UUID(str(user_id)))
+            owners.append(Case.owner_key == f"user:{user_id}")
+        if guest_token:
+            owners.append(Case.owner_key == "guest:" + hashlib.sha256(guest_token.encode()).hexdigest())
+        if not owners or not re.fullmatch(r"[0-9a-f]{8}", suffix):
+            return {"result": "not_found", "code": code}
+
+        async with self.session_factory() as db, db.begin():
+            rows = (
+                (
+                    await db.execute(
+                        select(Case)
+                        .where(or_(*owners), Case.status.notin_(["cancelled", "completed"]))
+                        .order_by(Case.created_at.desc())
+                        .limit(20)
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            case = next((c for c in rows if str(c.id).startswith(suffix)), None)
+            if case is None:
+                return {"result": "not_found", "code": code}
+            if case.status == "new" and not case.booking_id and not case.assigned_to:
+                case.status = "cancelled"
+                case.follow_up_at = None
+                event(db, case, None, "patient_cancelled", "Bệnh nhân tự hủy yêu cầu qua chat")
+                bump(case)
+                return {"result": "cancelled", "code": code}
+            event(db, case, None, "patient_cancel_requested", "Bệnh nhân yêu cầu hủy lịch qua chat")
+            bump(case)
+            return {"result": "handoff", "code": code}
+
+    async def reschedule_patient_request(
+        self,
+        code: str,
+        new_date: str | None,
+        new_period: str | None,
+        user_id: str | UUID | None = None,
+        guest_token: str | None = None,
+    ) -> dict[str, Any]:
+        """Bệnh nhân xin đổi ngày/buổi khám cho yêu cầu YC-xxxx (cùng phạm vi sở hữu như hủy).
+
+        Yêu cầu còn "new" → cập nhật ngày/buổi mong muốn ngay. Đã có người xử lý / đã chốt lịch → chỉ ghi
+        nhận để điều phối viên đổi lịch (đổi lịch đã chốt cần giữ chỗ mới, không tự làm được).
+        """
+        import hashlib
+
+        from src.services.workbench import bump, event
+
+        suffix = code.upper().removeprefix("YC-").lower()
+        owners = []
+        if user_id:
+            owners.append(Case.patient_id == UUID(str(user_id)))
+            owners.append(Case.owner_key == f"user:{user_id}")
+        if guest_token:
+            owners.append(Case.owner_key == "guest:" + hashlib.sha256(guest_token.encode()).hexdigest())
+        if not owners or not re.fullmatch(r"[0-9a-f]{8}", suffix):
+            return {"result": "not_found", "code": code}
+
+        async with self.session_factory() as db, db.begin():
+            rows = (
+                (
+                    await db.execute(
+                        select(Case)
+                        .where(or_(*owners), Case.status.notin_(["cancelled", "completed"]))
+                        .order_by(Case.created_at.desc())
+                        .limit(20)
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            case = next((c for c in rows if str(c.id).startswith(suffix)), None)
+            if case is None:
+                return {"result": "not_found", "code": code}
+            details = {"preferred_date": new_date, "preferred_period": new_period}
+            if case.status == "new" and not case.booking_id and not case.assigned_to:
+                patient = dict(case.patient or {})
+                if new_date:
+                    patient["preferred_date"] = new_date
+                if new_period:
+                    patient["preferred_period"] = new_period
+                case.patient = patient
+                event(db, case, None, "patient_rescheduled", "Bệnh nhân đổi ngày khám mong muốn qua chat", details)
+                bump(case)
+                return {"result": "updated", "code": code}
+            event(db, case, None, "patient_reschedule_requested", "Bệnh nhân xin đổi lịch qua chat", details)
+            bump(case)
+            return {"result": "handoff", "code": code}
+
     async def lookup_patient_appointments(
         self,
         user_id: str | UUID | None = None,
@@ -239,14 +349,15 @@ class BookingLookupService:
             consent_to_contact=True,
             preferred_date=pref_date,
             preferred_period=intake_data.get("preferred_period") or "morning",
-            facility_preference=intake_data.get("facility_preference") or "Bệnh viện ĐKQT Vinmec Riverside",
+            facility_preference=intake_data.get("facility_preference")
+            or "Chưa chọn cơ sở (điều phối viên tư vấn cơ sở phù hợp)",
             contact_time_preference=None,
             patient_notes=intake_data.get("patient_notes")
             or intake_data.get("clinical_summary")
             or "Đăng ký khám qua Trợ lý AI",
             specialty_name=intake_data.get("specialty_name")
             or state.get("suggested_department_name")
-            or "Chấn thương chỉnh hình & Cột sống",
+            or "Chưa xác định chuyên khoa (điều phối viên tư vấn)",
             specialty_code=intake_data.get("specialty_code") or state.get("suggested_department_code") or "",
         )
 

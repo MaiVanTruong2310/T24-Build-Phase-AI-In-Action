@@ -10,7 +10,7 @@ Covers requirements from context_agent/plan2.md (Prompt F4):
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -101,12 +101,29 @@ async def test_workflow_status_sets_info_unavailable_on_llm_failure():
         "messages": [],
     }
 
-    output = await info_agent_node(state, llm=mock_failing_llm)
+    # Không tra thẳng DB được (vd DB cũng lỗi) → INFO_UNAVAILABLE.
+    with patch("src.medical_assistant.agent.nodes.info_agent_node.answer_info_without_llm", return_value=None):
+        output = await info_agent_node(state, llm=mock_failing_llm)
 
     assert output["workflow_status"] == "INFO_UNAVAILABLE"
     assert output["metadata"]["workflow_status"] == "INFO_UNAVAILABLE"
     assert output["metadata"]["llm_succeeded"] is False
     assert output["metadata"]["data_unavailable"] is True
+
+
+@pytest.mark.asyncio
+async def test_llm_failure_answers_facility_or_doctor_from_db():
+    """LLM lỗi nhưng câu hỏi cơ sở/bác sĩ tra thẳng DB được → INFO_ANSWERED, llm_succeeded vẫn False."""
+    mock_failing_llm = MagicMock()
+    mock_failing_llm.bind_tools.return_value.ainvoke = AsyncMock(side_effect=RuntimeError("down"))
+    direct = ("Dạ, Vinmec Times City ở Số 458 Minh Khai.", "list_facilities", {"found": True, "facilities": []})
+    with patch("src.medical_assistant.agent.nodes.info_agent_node.answer_info_without_llm", return_value=direct):
+        output = await info_agent_node({"query": "Vinmec Times City ở đâu?", "messages": []}, llm=mock_failing_llm)
+
+    assert output["workflow_status"] == "INFO_ANSWERED"
+    assert "458 Minh Khai" in output["response"]
+    assert output["metadata"]["llm_succeeded"] is False
+    assert output["metadata"]["data_unavailable"] is False
 
 
 @pytest.mark.asyncio

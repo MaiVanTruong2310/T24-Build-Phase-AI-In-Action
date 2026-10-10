@@ -57,6 +57,7 @@ class AgentState(TypedDict, total=False):
     recommended_doctor_id: str | None
     doctor_preference: str | None
     doctor_name: str | None
+    last_listed_doctors: list[dict[str, Any]]  # bác sĩ vừa liệt kê, cho "đặt với bác sĩ đầu tiên"
 
     # Slot khám & Giữ chỗ
     available_slots: list[dict[str, Any]]

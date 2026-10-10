@@ -11,6 +11,7 @@ from src.medical_assistant.domain.hybrid_dialogue_v2_model import (
     FactObservation,
     FactsDelta,
     HybridDialogueResponse,
+    LeanDialogueOutput,
 )
 from src.medical_assistant.infrastructure.llm import get_llm
 
@@ -45,8 +46,7 @@ II. TRÍCH XUẤT DỮ KIỆN LÂM SÀNG (CLINICAL EXTRACTION)
    - Khi có nghi ngờ nguy hiểm hoặc safety_concerns có phần tử, BẮT BUỘC đề xuất proposed_action = "request_safety_review"; không tìm/giữ lịch thường và không trấn an trong draft_response.
 7. Chi tiết bổ trợ lâm sàng:
    - subject: "self" (bản thân), "other" (người khác), "unknown". Khi đổi người (ví dụ sang mẹ/con), đánh dấu patient_changed.
-   - onset: "sudden" (đột ngột), "gradual" (từ từ), "unknown". Không suy diễn đột ngột nếu chỉ thiếu thời gian.
-   - duration_days: Chỉ điền khi có số ngày xác định hoặc quy đổi rõ ràng (1 tuần = 7 ngày); "mấy hôm", "hơn tuần" -> duration_days = null và giữ duration_text.
+   - duration_days: Chỉ điền khi có số ngày xác định hoặc quy đổi rõ ràng (1 tuần = 7 ngày); "mấy hôm", "hơn tuần" -> duration_days = null.
    - functional_impairment: true nếu người bệnh nhắc đến khó đi lại, không đứng được, không ngủ được, hạn chế sinh hoạt.
    - body_regions và primary_system: Điền vùng giải phẫu và hệ cơ quan chính dựa trên dữ kiện. Mỗi triệu chứng phải giữ đúng hệ (khó thở thuộc hô hấp, đau ngực thuộc tim mạch, đau bắp đùi/khớp gối thuộc cơ xương khớp).
 
@@ -82,7 +82,7 @@ IV. VĂN PHONG VÀ ĐỊNH DẠNG ĐẦU RA (OUTPUT FORMAT)
 16. draft_response:
     2–4 câu ngắn gọn, ghi nhận ý nghĩa, đồng cảm. Không hiển thị các mã nội bộ (JSON, SAF-02, ATS, TTL, database, confidence).
 17. Định dạng JSON bắt buộc:
-    - schema_version luôn là "2.0".
+    - Chỉ điền trường có dữ kiện; bỏ qua trường rỗng/null/mặc định (không ghi null, [] hay false). Luôn điền primary_intent, proposed_action, draft_response, extraction_confidence, action_confidence.
     - facts_delta.severity: một trong các giá trị "mild", "moderate", "severe", "unknown".
     - extraction_confidence và action_confidence: số thực từ 0.0 đến 1.0 đánh giá trung thực độ tin cậy. Backend sẽ tự động chuyển hướng hỗ trợ nếu độ tin cậy dưới ngưỡng an toàn.
 """
@@ -182,19 +182,22 @@ class HybridDialogueService:
             )
         else:
             prefix = f"Dạ {patient_name}, " if patient_name else "Dạ, "
+            # Mỗi lượt chỉ hỏi MỘT câu ngắn, ưu tiên thông tin còn thiếu: thời gian → mức độ → dấu hiệu kèm.
             if facts.get("chief_complaint") == "abdominal_pain":
                 known_location = f" {location}" if location else ""
-                draft = (
-                    f"{prefix}em đã ghi nhận bác đang đau{known_location}. "
-                    "Cơn đau bắt đầu từ bao lâu, mức độ khoảng bao nhiêu trên thang 0–10; bác có kèm sốt, nôn ói hoặc đi ngoài ra máu không ạ?"
-                )
+                if facts.get("duration_days") is None:
+                    question = "Cơn đau bắt đầu từ khi nào ạ?"
+                elif facts.get("pain_severity_0_10") is None:
+                    question = "Mức đau khoảng bao nhiêu trên thang 0–10 ạ?"
+                else:
+                    question = "Bác có kèm sốt, nôn ói hoặc đi ngoài ra máu không ạ?"
+                draft = f"{prefix}em đã ghi nhận bác đang đau{known_location}. {question}"
             elif has_symptoms:
-                dept_str = f" tại Khoa {current_department}" if current_department else ""
-                draft = (
-                    f"{prefix}em đã ghi nhận triệu chứng của bác. "
-                    f"Để gợi ý hướng thăm khám{dept_str} phù hợp nhất, bác cho em biết triệu chứng bắt đầu từ bao lâu, "
-                    "mức độ ảnh hưởng và có dấu hiệu bất thường nào đi kèm (như đau rát, ngứa, sưng đỏ hay sốt) không ạ?"
-                )
+                if facts.get("duration_days") is None:
+                    question = "Triệu chứng bắt đầu từ khi nào ạ?"
+                else:
+                    question = "Bác có kèm sốt hoặc dấu hiệu bất thường nào khác không ạ?"
+                draft = f"{prefix}em đã ghi nhận triệu chứng của bác. {question}"
             else:
                 draft = "Dạ, em có thể hỗ trợ bác làm rõ nhu cầu khám, tìm chuyên khoa, cơ sở hoặc lịch khám phù hợp."
 
@@ -291,9 +294,16 @@ class HybridDialogueService:
             active_categories=state.get("active_probing_categories", []),
         )
 
+        # Bỏ trường kỹ thuật (id, source) khỏi hồ sơ: LLM không cần, chỉ tốn token.
+        health_record = dict(state.get("patient_health_record") or {})
+        health_record.pop("source", None)
+        health_record["medical_history"] = [
+            {k: v for k, v in item.items() if k != "id"} if isinstance(item, dict) else item
+            for item in health_record.get("medical_history") or []
+        ]
         context_obj = {
             "patient_name": state.get("patient_name"),
-            "patient_health_record": state.get("patient_health_record") or {},
+            "patient_health_record": health_record,
             "language": state.get("language", "vi"),
             "current_department": state.get("suggested_department_name"),
             "clinical_facts": state.get("clinical_facts", {}),
@@ -314,7 +324,6 @@ class HybridDialogueService:
                 ]
                 or [max(0, 2 - int(state.get("probing_turn", 0) or 0))]
             ),
-            "current_time": current_time,
             "verified_data": state.get("metadata", {}).get("verified_data", []),
         }
 
@@ -328,6 +337,8 @@ class HybridDialogueService:
                 content_snippet = content_snippet[:280] + "..."
             history_lines.append(f"- {role_tag}: {content_snippet}")
         context_obj["conversation_history"] = history_lines
+        # Phần thay đổi mỗi lượt đặt cuối cùng để giữ nguyên prefix cho cache của provider (bỏ giây).
+        context_obj["current_time"] = current_time[:16] + current_time[19:]
 
         # Tích hợp Reflection Memory
         reflection_lessons = ""
@@ -340,7 +351,7 @@ class HybridDialogueService:
             try:
                 from src.medical_assistant.domain.reflection_memory_service import get_reflection_memory_service
 
-                past_reflections = get_reflection_memory_service().retrieve_relevant_reflections(text, limit=1)
+                past_reflections = await get_reflection_memory_service().aretrieve_relevant_reflections(text, limit=1)
                 if past_reflections:
                     reflection_lessons = get_reflection_memory_service().format_reflections_for_prompt(past_reflections)
             except Exception:
@@ -365,8 +376,11 @@ class HybridDialogueService:
 
         try:
             llm = get_llm()
-            structured_llm = llm.with_structured_output(HybridDialogueResponse, method="function_calling")
-            llm_result: HybridDialogueResponse = await structured_llm.ainvoke(prompt_messages)
+            structured_llm = llm.with_structured_output(LeanDialogueOutput, method="function_calling")
+            raw_result = await structured_llm.ainvoke(prompt_messages)
+            llm_result: HybridDialogueResponse = (
+                raw_result if isinstance(raw_result, HybridDialogueResponse) else raw_result.to_full(lang)
+            )
 
             # Backend Defense-in-Depth Guard:
             # 1. Nếu có safety_concerns (kể cả code=null), cưỡng chế chuyển proposed_action sang request_safety_review
