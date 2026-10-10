@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from contextlib import suppress
 
@@ -21,7 +22,7 @@ from src.medical_assistant.domain.schemas import (
     ChatResponse,
 )
 from src.medical_assistant.infrastructure.llm import llm_usage_sink
-from src.medical_assistant.infrastructure.turn_timing import turn_timings
+from src.medical_assistant.infrastructure.turn_timing import notify_progress, turn_progress, turn_timings
 from src.models.user import User
 from src.services.chat_history import STATE_FIELDS, ChatHistoryService, graph_thread, health_record
 
@@ -170,8 +171,10 @@ async def prepare_turn(request, user, session):
     return payload, turn, service
 
 
-async def run_turn(request, user, payload, turn, service, guest_token=""):
+async def run_turn(request, user, payload, turn, service, guest_token="", request_started: float | None = None):
+    # request_started: mốc nhận request (gồm cả prepare_turn) để độ trễ hiển thị khớp thời gian người dùng chờ.
     started = time.perf_counter()
+    request_started = request_started or started
     if turn and turn.get("cached"):
         return turn["cached"]
     step_timings: dict[str, float] = {}
@@ -218,7 +221,7 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
                 payload, config={"configurable": {"thread_id": graph_thread(request.session_id, user, guest_token)}}
             )
             graph_ms = round((time.perf_counter() - graph_started) * 1000, 1)
-        elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+        elapsed_ms = round((time.perf_counter() - request_started) * 1000, 1)
         result["elapsed_ms"] = elapsed_ms
         # Tách thời gian: ghi DB đầu lượt (before_turn) vs chạy graph (LLM + node) để biết chậm ở đâu.
         result["timings_ms"] = {"db_before_turn": before_ms, "agent_graph": graph_ms, **step_timings}
@@ -226,11 +229,17 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
         response = public_result(result, request.session_id, elapsed_ms=elapsed_ms)
         if not response["response"].strip():
             raise RuntimeError("Empty agent response")
+        notify_progress("saving")
+        after_started = time.perf_counter()
         async with get_session_factory()() as coordination_db:
             response = await after_turn(coordination_db, case_id, request, response, result)
+        step_timings["db:after_turn"] = round((time.perf_counter() - after_started) * 1000, 1)
         if user:
+            complete_started = time.perf_counter()
             await service.complete(turn, response, result)
+            step_timings["db:complete_turn"] = round((time.perf_counter() - complete_started) * 1000, 1)
             # Tự động đồng bộ hóa Cross-session Memory & Open Loops
+            memory_started = time.perf_counter()
             try:
                 from src.medical_assistant.domain.patient_memory_service import get_patient_memory_service
 
@@ -254,6 +263,11 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
                     )
             except Exception as exc:
                 logger.warning("Could not persist cross-session memory after turn: %s", exc)
+            step_timings["db:memory"] = round((time.perf_counter() - memory_started) * 1000, 1)
+        total_ms = round((time.perf_counter() - request_started) * 1000, 1)
+        if isinstance(response, dict) and "elapsed_ms" in response:
+            response["elapsed_ms"] = total_ms  # thời gian thật tới khi câu trả lời sẵn sàng gửi
+        logger.info("chat.timing_total total_ms=%.0f %s", total_ms, step_timings)
         return response
     except BaseException:
         if turn and not turn.get("cached"):
@@ -286,34 +300,74 @@ async def chat_stream(
     user=Depends(optional_chat_user),
     session: AsyncSession = Depends(get_auth_db_session),
 ):
-    payload, turn, service = await prepare_turn(request, user, session)
+    request_started = time.perf_counter()
+
+    def sse(event: dict) -> str:
+        return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
     async def event_generator():
         task = None
+        turn = service = None
+        # Gửi tín hiệu ngay (trước cả prepare_turn) để người dùng thấy phản hồi tức thì thay vì màn hình chờ trống.
+        yield sse({"type": "init", "session_id": request.session_id})
+        yield sse({"type": "status", "stage": "preparing"})
         try:
-            yield f"data: {json.dumps({'type': 'init', 'session_id': request.session_id})}\n\n"
+            payload, turn, service = await prepare_turn(request, user, session)
+        except HTTPException as exc:
+            yield sse({"type": "error", "message": str(exc.detail)})
+            return
+        except Exception:
+            logger.exception("medical_assistant.chat_stream prepare failed")
+            yield sse({"type": "error", "message": "Không thể hoàn tất hoặc lưu hội thoại. Vui lòng thử lại."})
+            return
+
+        # Các node graph báo giai đoạn qua turn_progress → đẩy ra client dưới dạng sự kiện "status".
+        progress: asyncio.Queue[str] = asyncio.Queue()
+        turn_progress.set(progress.put_nowait)
+        try:
             task = asyncio.create_task(
-                run_turn(request, user, payload, turn, service, http_request.state.coordination_guest)
+                run_turn(
+                    request,
+                    user,
+                    payload,
+                    turn,
+                    service,
+                    http_request.state.coordination_guest,
+                    request_started=request_started,
+                )
             )
+            last_beat = time.perf_counter()
             while not task.done():
                 if await http_request.is_disconnected():
                     task.cancel()
                     with suppress(asyncio.CancelledError):
                         await task
                     return
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=5)
-                except TimeoutError:
-                    yield ": keep-alive\n\n"
+                getter = asyncio.ensure_future(progress.get())
+                await asyncio.wait({task, getter}, timeout=1, return_when=asyncio.FIRST_COMPLETED)
+                if getter.done():
+                    yield sse({"type": "status", "stage": getter.result()})
+                    last_beat = time.perf_counter()
+                else:
+                    getter.cancel()
+                    if time.perf_counter() - last_beat >= 5:
+                        yield ": keep-alive\n\n"
+                        last_beat = time.perf_counter()
             result = await task
-            # The complete turn is durable before any answer is sent to the client.
-            for word in result["response"].splitlines(keepends=True):
-                yield f"data: {json.dumps({'type': 'token', 'content': word}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'metadata', **{k: v for k, v in result.items() if k not in ('response', 'analysis', 'session_id')}}, ensure_ascii=False)}\n\n"
+            # Câu trả lời chỉ được gửi sau khi đã qua critic (an toàn lâm sàng) và after_turn (điều phối viên
+            # có thể đã tiếp quản) và đã lưu bền vững — không stream thẳng token chưa kiểm duyệt từ LLM.
+            for chunk in re.findall(r"\S+\s*|\s+", result["response"]):
+                yield sse({"type": "token", "content": chunk})
+            yield sse(
+                {
+                    "type": "metadata",
+                    **{k: v for k, v in result.items() if k not in ("response", "analysis", "session_id")},
+                }
+            )
             yield "data: [DONE]\n\n"
         except Exception:
             logger.exception("medical_assistant.chat_stream failed")
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Không thể hoàn tất hoặc lưu hội thoại. Vui lòng thử lại.'}, ensure_ascii=False)}\n\n"
+            yield sse({"type": "error", "message": "Không thể hoàn tất hoặc lưu hội thoại. Vui lòng thử lại."})
         finally:
             if task and not task.done():
                 task.cancel()

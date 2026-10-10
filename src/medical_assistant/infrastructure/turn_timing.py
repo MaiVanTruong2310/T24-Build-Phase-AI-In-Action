@@ -26,6 +26,19 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 turn_timings: ContextVar[dict[str, float] | None] = ContextVar("turn_timings", default=None)
+# Kênh báo tiến trình cho /chat/stream: nhận tên giai đoạn ("node:analyze", "saving"...) ngay khi bắt đầu.
+turn_progress: ContextVar[Callable[[str], None] | None] = ContextVar("turn_progress", default=None)
+
+
+def notify_progress(stage: str) -> None:
+    callback = turn_progress.get()
+    if callback is None:
+        return
+    try:
+        callback(stage)
+    except Exception as exc:  # báo tiến trình không bao giờ được làm hỏng lượt chat
+        logger.debug("turn progress callback failed: %s", exc)
+
 
 PROFILE_ENABLED = os.getenv("PROFILE_SLOW_STEPS", "0") in {"1", "true", "True"}
 PROFILE_THRESHOLD_MS = 1000.0
@@ -140,6 +153,7 @@ def timed_node(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
 
         @wraps(fn)
         async def _async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            notify_progress(f"node:{name}")
             with profiled(f"node:{name}"):
                 return await fn(*args, **kwargs)
 
@@ -147,6 +161,7 @@ def timed_node(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
 
     @wraps(fn)
     def _sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+        notify_progress(f"node:{name}")
         with profiled(f"node:{name}"):
             return fn(*args, **kwargs)
 

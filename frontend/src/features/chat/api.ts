@@ -130,6 +130,8 @@ interface StreamChatOptions {
   profile?: ChatProfile;
   onToken: (token: string) => void;
   onMetadata: (metadata: ChatMetadata) => void;
+  /** Giai đoạn xử lý server báo về (preparing, node:analyze, saving...) trước khi có câu trả lời. */
+  onStatus?: (stage: string) => void;
 }
 
 function parseServerEvent(rawEvent: string): string | null {
@@ -148,6 +150,7 @@ export async function streamChat({
   signal,
   onToken,
   onMetadata,
+  onStatus,
   profile,
   patientProfileId,
 }: StreamChatOptions): Promise<void> {
@@ -183,6 +186,8 @@ export async function streamChat({
     if (event.type === 'token' && typeof event.content === 'string') {
       content += event.content;
       onToken(event.content);
+    } else if (event.type === 'status' && typeof (event as { stage?: unknown }).stage === 'string') {
+      onStatus?.((event as { stage: string }).stage);
     } else if (event.type === 'metadata') {
       onMetadata(event);
     } else if (event.type === 'error') {

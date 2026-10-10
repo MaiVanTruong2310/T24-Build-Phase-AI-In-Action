@@ -52,11 +52,24 @@ interface Message {
   text: string;
   time: string;
   pending?: boolean;
+  /** Dòng trạng thái khi đang chờ (Đang phân tích triệu chứng…). */
+  statusText?: string;
   error?: boolean;
   metadata?: ChatMetadata;
   staff?: boolean;
   elapsedMs?: number | null;
 }
+
+const STREAM_STAGE_LABELS: Record<string, string> = {
+  preparing: 'Đang tải hồ sơ và lịch sử trò chuyện…',
+  'node:route_intent': 'Đang xác định nhu cầu của bạn…',
+  'node:analyze': 'Đang phân tích triệu chứng…',
+  'node:critic': 'Đang kiểm tra an toàn y khoa…',
+  'node:find_doctors': 'Đang tìm bác sĩ và lịch khám phù hợp…',
+  'node:info_agent': 'Đang tra cứu thông tin…',
+  'node:respond': 'Đang soạn câu trả lời…',
+  saving: 'Đang lưu hội thoại…',
+};
 
 const DEFAULT_QUICK_REPLIES = [
   'Đau đầu, chóng mặt kéo dài',
@@ -509,6 +522,10 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         profile: profile || undefined,
         sessionId,
         signal: request.signal,
+        onStatus: (stage) => {
+          const label = STREAM_STAGE_LABELS[stage];
+          if (label) updateBot(botId, { statusText: label });
+        },
         onToken: (token) => {
           streamedText += token;
           updateBot(botId, { text: streamedText, pending: false });
@@ -518,7 +535,8 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
         },
         onMetadata: (metadata) => {
           receivedMetadata = true;
-          const currentElapsed = metadata.elapsed_ms ?? (Date.now() - sendStartTime);
+          // Đo phía trình duyệt (gồm mạng/proxy) = thời gian người dùng thực sự chờ; số của server nằm trong metadata.
+          const currentElapsed = Date.now() - sendStartTime;
           recordedElapsedMs = currentElapsed;
           updateBot(botId, {
             metadata: {
@@ -811,7 +829,7 @@ export function ChatbotWidget({ embedded = false }: ChatbotWidgetProps) {
                     {message.pending && !message.text ? (
                       <div className="flex items-center gap-2.5 py-1 text-slate-500 dark:text-slate-400 font-medium">
                         <LoaderCircle className="h-4 w-4 animate-spin text-blue-500 dark:text-cyan-400" />
-                        <span>Đang chờ phản hồi từ trợ lý…</span>
+                        <span>{message.statusText || 'Đang chờ phản hồi từ trợ lý…'}</span>
                       </div>
                     ) : (
                       <div className={`${isUser ? 'whitespace-pre-wrap' : ''} break-words leading-relaxed text-xs sm:text-[13px]`}>
