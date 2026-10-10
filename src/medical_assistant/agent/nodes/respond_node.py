@@ -408,7 +408,7 @@ async def respond_node(state: AgentState) -> dict:
                 )
 
                 response = (
-                    f"🎉 **ĐÃ GIỮ CHỖ THÀNH CÔNG!**\n\n"
+                    "🎉 **ĐÃ GIỮ CHỖ THÀNH CÔNG!**\n\n"
                     + (
                         f"Dạ, em đã ghi nhận yêu cầu đặt lịch cho **{p_name}** lên hệ thống điều phối y tế Vinmec:\n\n"
                         if booking_for == "other"
