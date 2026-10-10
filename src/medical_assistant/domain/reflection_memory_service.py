@@ -13,10 +13,18 @@ BỎ GÌ:
 
 from __future__ import annotations
 
+import asyncio
 import datetime
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+# supabase_client dùng httpx.Client ĐỒNG BỘ. Gọi thẳng trong node async sẽ chặn cả event loop (đo được ~450ms
+# mỗi lượt), nên mọi truy cập Supabase của service này đi qua luồng nền.
+_REFLECTION_CACHE_TTL_SECONDS = 60.0
+_reflection_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="reflection")
 
 
 class ReflectionMemoryItem(BaseModel):
@@ -31,7 +39,8 @@ class ReflectionMemoryItem(BaseModel):
 
 class ReflectionMemoryService:
     def __init__(self):
-        pass
+        # (rubric_id, limit) -> (thời điểm hết hạn, kết quả). Truy vấn không phụ thuộc nội dung câu hỏi nên cache được.
+        self._retrieve_cache: dict[tuple[str | None, int], tuple[float, list[ReflectionMemoryItem]]] = {}
 
     def create_memory_item(
         self,
@@ -274,6 +283,36 @@ class ReflectionMemoryService:
             except Exception:
                 pass
             return []
+
+    async def aretrieve_relevant_reflections(
+        self,
+        query: str,
+        rubric_id: str | None = None,
+        limit: int = 5,
+    ) -> list[ReflectionMemoryItem]:
+        """Bản async của retrieve_relevant_reflections: không chặn event loop, có cache TTL để bỏ vòng mạng mỗi lượt."""
+        key = (rubric_id, limit)
+        cached = self._retrieve_cache.get(key)
+        now = time.monotonic()
+        if cached and cached[0] > now:
+            return list(cached[1])
+        loop = asyncio.get_running_loop()
+        items = await loop.run_in_executor(
+            _reflection_executor, lambda: self.retrieve_relevant_reflections(query, rubric_id=rubric_id, limit=limit)
+        )
+        # Lưu cả kết quả rỗng/lỗi: khi Supabase chậm hoặc chết, không bắt mọi lượt chat phải chờ timeout lại.
+        self._retrieve_cache[key] = (now + _REFLECTION_CACHE_TTL_SECONDS, list(items))
+        return items
+
+    def persist_in_background(
+        self,
+        item: ReflectionMemoryItem,
+        session_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        """Ghi long-term memory ở luồng nền (fire-and-forget), không chờ và không chặn lượt chat."""
+        _reflection_executor.submit(self.persist_reflection_to_db, item, session_id, user_id)
+        self._retrieve_cache.clear()  # bài học mới -> lần đọc kế tiếp phải lấy dữ liệu mới
 
 
 _reflection_memory_service_instance: ReflectionMemoryService | None = None

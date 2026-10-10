@@ -11,9 +11,28 @@ Tuân thủ nguyên tắc:
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Ghi telemetry ở luồng nền: supabase_client dùng httpx.Client đồng bộ, nếu gọi thẳng trong
+# async node sẽ chặn event loop (và cộng nguyên thời gian mạng/timeout vào độ trễ của lượt chat).
+_telemetry_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="telemetry")
+
+
+def _insert_background(table: str, row: dict[str, Any]) -> None:
+    try:
+        from src.medical_assistant.db.supabase_client import get_supabase_client
+
+        get_supabase_client().insert_minimal(table, row)
+    except Exception as exc:
+        logger.debug("[TelemetryService] Failed to write %s: %s", table, exc)
+
+
+def _submit_insert(table: str, row: dict[str, Any]) -> None:
+    _telemetry_executor.submit(_insert_background, table, row)
+
 
 # Tỷ giá quy đổi cố định USD -> VNĐ cho mục đích ước tính telemetry chi phí
 USD_TO_VND_RATE = 25400.0
@@ -37,9 +56,6 @@ class TelemetryService:
         Hook 1 Middleware: Ghi vết sự kiện vi phạm an toàn & an ninh vào Supabase.
         """
         try:
-            from src.medical_assistant.db.supabase_client import get_supabase_client
-
-            client = get_supabase_client()
             row = {
                 "session_id": session_id or "session_unknown",
                 "user_id": user_id,
@@ -49,7 +65,7 @@ class TelemetryService:
                 "blocked_reason": blocked_reason,
                 "metadata": metadata or {},
             }
-            client.insert_minimal("security_audit_logs", row)
+            _submit_insert("security_audit_logs", row)
             return True
         except Exception as exc:
             logger.debug(f"[TelemetryService] Failed to record security event: {exc}")
@@ -71,9 +87,6 @@ class TelemetryService:
         Hook 6 Middleware: Ghi nhận số liệu tài nguyên, chi phí vận hành và độ trễ vào Supabase.
         """
         try:
-            from src.medical_assistant.db.supabase_client import get_supabase_client
-
-            client = get_supabase_client()
             total_tokens = prompt_tokens + completion_tokens
             cost_vnd = round(cost_usd * USD_TO_VND_RATE, 2)
 
@@ -90,7 +103,7 @@ class TelemetryService:
                 "workflow_status": workflow_status,
                 "metadata": metadata or {},
             }
-            client.insert_minimal("session_telemetry_logs", row)
+            _submit_insert("session_telemetry_logs", row)
             return True
         except Exception as exc:
             logger.debug(f"[TelemetryService] Failed to record session telemetry: {exc}")

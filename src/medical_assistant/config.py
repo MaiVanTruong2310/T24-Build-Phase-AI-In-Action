@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model_name: str = "deepseek-chat"
+    deepseek_disable_thinking: bool = Field(
+        default=True, description="Tắt chế độ thinking của DeepSeek (tiết kiệm token output, giảm độ trễ)"
+    )
+    llm_max_output_tokens: int = Field(default=800, ge=64, le=8192, description="Trần token output mỗi lần gọi LLM")
     enable_llm_fallbacks: bool = Field(
         default=False, description="Tự động fallback sang các provider khác nếu có cấu hình"
     )

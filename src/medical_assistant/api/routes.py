@@ -20,6 +20,8 @@ from src.medical_assistant.domain.schemas import (
     ChatRequest,
     ChatResponse,
 )
+from src.medical_assistant.infrastructure.llm import llm_usage_sink
+from src.medical_assistant.infrastructure.turn_timing import turn_timings
 from src.models.user import User
 from src.services.chat_history import STATE_FIELDS, ChatHistoryService, graph_thread, health_record
 
@@ -73,6 +75,7 @@ def public_result(result, session_id, elapsed_ms: float | None = None):
         is_emergency=bool(result.get("is_emergency")),
         token_usage=result.get("token_usage") or meta.get("token_usage"),
         elapsed_ms=elapsed_ms or result.get("elapsed_ms") or meta.get("elapsed_ms"),
+        timings_ms=result.get("timings_ms"),
         quick_replies=meta.get("quick_replies", []),
         booking_intake=meta.get("booking_intake"),
         suggested_department=result.get("suggested_department_name"),
@@ -171,12 +174,16 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
     started = time.perf_counter()
     if turn and turn.get("cached"):
         return turn["cached"]
+    step_timings: dict[str, float] = {}
+    turn_timings.set(step_timings)  # before_turn và các node cộng dồn thời gian từng bước vào đây
     from src.db.session import get_session_factory
     from src.services.coordinator_chat import after_turn, before_turn, waiting_response
 
     try:
         async with get_session_factory()() as coordination_db:
             case_id, control, emergency, state_context = await before_turn(coordination_db, request, user, guest_token)
+        before_ms = round((time.perf_counter() - started) * 1000, 1)
+        graph_ms = 0.0
         if not user:
             payload = {**(state_context.get("checkpoint") or {}), **payload, "error": None}
         payload["guest_token"] = guest_token
@@ -205,11 +212,17 @@ async def run_turn(request, user, payload, turn, service, guest_token=""):
                     **(payload.get("metadata") or {}),
                     "coordinator_handover_summary": state_context["handover_summary"],
                 }
+            llm_usage_sink.set([])  # gom usage thật của lượt này (xem respond_node)
+            graph_started = time.perf_counter()
             result = await agent.ainvoke(
                 payload, config={"configurable": {"thread_id": graph_thread(request.session_id, user, guest_token)}}
             )
+            graph_ms = round((time.perf_counter() - graph_started) * 1000, 1)
         elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
         result["elapsed_ms"] = elapsed_ms
+        # Tách thời gian: ghi DB đầu lượt (before_turn) vs chạy graph (LLM + node) để biết chậm ở đâu.
+        result["timings_ms"] = {"db_before_turn": before_ms, "agent_graph": graph_ms, **step_timings}
+        logger.info("chat.timing elapsed_ms=%.0f %s", elapsed_ms, result["timings_ms"])
         response = public_result(result, request.session_id, elapsed_ms=elapsed_ms)
         if not response["response"].strip():
             raise RuntimeError("Empty agent response")

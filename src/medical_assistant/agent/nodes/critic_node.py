@@ -32,6 +32,32 @@ async def critic_node(state: AgentState) -> dict[str, Any]:
             "reflection_count": reflection_count,
         }
 
+    # 2.1 Kiểm toán có điều kiện (Conditional Audit):
+    # Tiết kiệm token: Chỉ kích hoạt vòng lặp phản tư (Reflexion Critic) khi:
+    # - Ca bệnh có nguy cơ cấp cứu (ATS Level 1, 2, 3 hoặc is_emergency = True)
+    # - HOẶC Độ tin cậy của bước phân tích trước đó dưới ngưỡng an toàn (confidence < 0.7)
+    ats_level = state.get("ats_level")
+    is_emergency = bool(state.get("is_emergency"))
+
+    meta = state.get("metadata") or {}
+    conf_candidates = [
+        state.get("route_confidence"),
+        meta.get("action_confidence"),
+        meta.get("extraction_confidence"),
+        meta.get("routing_confidence"),
+    ]
+    valid_confs = [float(c) for c in conf_candidates if c is not None]
+    min_confidence = min(valid_confs) if valid_confs else 1.0
+
+    needs_audit = is_emergency or (ats_level is not None and ats_level in (1, 2, 3)) or (min_confidence < 0.7)
+
+    if not needs_audit:
+        return {
+            "critic_status": "APPROVED",
+            "critic_critique": None,
+            "reflection_count": reflection_count,
+        }
+
     # 3. Chuyển giao việc thẩm định độc lập (Blind Audit) cho ClinicalCriticService (Domain Layer)
     critic_service = get_clinical_critic_service()
     verdict = critic_service.audit_analysis(query=query, current_state=state, language=language)
@@ -59,7 +85,7 @@ async def critic_node(state: AgentState) -> dict[str, Any]:
 
             try:
                 item_obj = ReflectionMemoryItem(**verdict.reflection_item)
-                get_reflection_memory_service().persist_reflection_to_db(
+                get_reflection_memory_service().persist_in_background(
                     item=item_obj,
                     session_id=str(state.get("booking_id") or state.get("thread_id") or "session_default"),
                     user_id=state.get("user_id"),
