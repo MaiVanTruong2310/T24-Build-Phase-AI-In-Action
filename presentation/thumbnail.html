@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>VCare+ · Thumbnail</title>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+    background: linear-gradient(135deg, #0f2b3d 0%, #0e5f63 100%);
+    color: #fff; display: grid; grid-template-columns: 1.15fr 1fr; align-items: center;
+    padding: 72px 80px; gap: 48px; position: relative;
+  }
+  .left { display: flex; flex-direction: column; gap: 22px; }
+  .kicker { font-size: 20px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #8fe0d8; }
+  h1 { font-size: 132px; font-weight: 800; line-height: .95; letter-spacing: -.03em; }
+  h1 span { color: #5fd3c8; }
+  p { font-size: 34px; font-weight: 500; line-height: 1.3; color: #d3e8ee; }
+  .tags { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+  .tag { font-size: 20px; font-weight: 700; padding: 10px 18px; border-radius: 999px; background: rgba(255,255,255,.12); }
+  .tag.red { background: #d64545; }
+
+  .phone { background: #fff; border-radius: 28px; padding: 26px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+  .head { display: flex; align-items: center; gap: 12px; color: #0f2b3d; font-weight: 800; font-size: 22px; padding-bottom: 12px; border-bottom: 1px solid #e3ecf1; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: #22c55e; }
+  .me, .bot { font-size: 21px; line-height: 1.35; padding: 14px 18px; border-radius: 18px; max-width: 90%; font-weight: 500; }
+  .me { align-self: flex-end; background: #eef4f7; color: #0f2b3d; }
+  .bot { background: #0e7c7b; color: #fff; }
+  .bot.red { background: #d64545; }
+  .team { position: absolute; left: 80px; bottom: 34px; font-size: 18px; color: #9fc4cc; font-weight: 500; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="kicker">AI20K · Team P-124</div>
+    <h1>VCare<span>+</span></h1>
+    <p>Trợ lý AI đặt lịch khám &amp; điều hướng chuyên khoa</p>
+    <div class="tags">
+      <span class="tag">LangGraph Agent</span>
+      <span class="tag">Người thật duyệt lịch</span>
+      <span class="tag red">Cấp cứu → 115</span>
+    </div>
+  </div>
+  <div class="phone">
+    <div class="head"><span class="dot"></span>Trợ lý VCare+</div>
+    <div class="me">Tôi đau khớp gối, nên khám khoa nào?</div>
+    <div class="bot">Khoa Chấn thương chỉnh hình. Em tìm lịch trống cho bác nhé?</div>
+    <div class="me">tức ngực, khó thở, vã mồ hôi</div>
+    <div class="bot red">🚨 Dấu hiệu cấp cứu. Gọi 115 ngay!</div>
+  </div>
+  <div class="team">VMEC-01 · ai20k-build-phase.vercel.app</div>
+</body>
+</html>
