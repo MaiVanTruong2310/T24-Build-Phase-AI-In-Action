@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { resolveTakeoverWebSocketUrl, claimTakeoverCase, fetchTakeoverCase, fetchTakeoverCases, releaseTakeoverCase, resolveTakeoverCase, sendTakeoverMessage, type TakeoverCase, type TakeoverCaseDetail } from './api';
+import { websocketNeedsTicket } from '../../app/apiClient';
+import { fetchTakeoverTicket } from '../../features/chat/api';
 import { PatientQueueItem, ChatMessage, HITLMetrics } from './types';
 import { TopAlertBanner } from './components/TopAlertBanner';
 import { QueueSidebar } from './components/QueueSidebar';
@@ -137,15 +139,24 @@ export default function ChatTakeover() {
   }, [loadQueue]);
 
   useEffect(() => {
-    const socket = new WebSocket(resolveTakeoverWebSocketUrl());
-    const keepalive = window.setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) socket.send('keepalive');
-    }, 20_000);
-    socket.onmessage = () => void loadQueue();
-    socket.onerror = () => socket.close();
+    let cancelled = false;
+    let socket: WebSocket | undefined;
+    let keepalive: number | undefined;
+    // WebSocket khác domain (proxy same-origin) không mang cookie → xác thực bằng ticket.
+    void (websocketNeedsTicket ? fetchTakeoverTicket() : Promise.resolve(null)).then((ticket) => {
+      if (cancelled) return;
+      const current = new WebSocket(resolveTakeoverWebSocketUrl(undefined, ticket));
+      socket = current;
+      keepalive = window.setInterval(() => {
+        if (current.readyState === WebSocket.OPEN) current.send('keepalive');
+      }, 20_000);
+      current.onmessage = () => void loadQueue();
+      current.onerror = () => current.close();
+    });
     return () => {
+      cancelled = true;
       window.clearInterval(keepalive);
-      socket.close();
+      socket?.close();
     };
   }, [loadQueue]);
 
@@ -167,10 +178,19 @@ export default function ChatTakeover() {
 
   useEffect(() => {
     if (!activeCaseId || !activeSessionId) return;
-    const socket = new WebSocket(resolveTakeoverWebSocketUrl(activeSessionId));
-    socket.onmessage = () => void loadDetail(activeCaseId);
-    socket.onerror = () => socket.close();
-    return () => socket.close();
+    let cancelled = false;
+    let socket: WebSocket | undefined;
+    void (websocketNeedsTicket ? fetchTakeoverTicket() : Promise.resolve(null)).then((ticket) => {
+      if (cancelled) return;
+      const current = new WebSocket(resolveTakeoverWebSocketUrl(activeSessionId, ticket));
+      socket = current;
+      current.onmessage = () => void loadDetail(activeCaseId);
+      current.onerror = () => current.close();
+    });
+    return () => {
+      cancelled = true;
+      socket?.close();
+    };
   }, [activeCaseId, activeSessionId, loadDetail]);
 
   const handleToggleTakeover = async () => {

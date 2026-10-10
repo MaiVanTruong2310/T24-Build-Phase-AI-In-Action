@@ -74,9 +74,10 @@ export const sendTakeoverMessage = (id: string, content: string, clientMessageId
     body: JSON.stringify({ content, client_message_id: clientMessageId }),
   });
 
-export function resolveTakeoverWebSocketUrl(sessionId?: string): string {
+export function resolveTakeoverWebSocketUrl(sessionId?: string, ticket?: string | null): string {
   const path = sessionId
     ? `/staff/chat-takeover/ws/${encodeURIComponent(sessionId)}`
     : '/staff/chat-takeover/ws/staff';
-  return resolveWebSocketUrl(path);
+  const query = ticket ? `?${new URLSearchParams({ token: ticket }).toString()}` : '';
+  return resolveWebSocketUrl(`${path}${query}`);
 }

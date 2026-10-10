@@ -28,8 +28,8 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
   return data.data as T
 }
 
-export function resolveStaffWorkbenchWebSocketUrl(): string {
-  const token = readAccessToken()
+export function resolveStaffWorkbenchWebSocketUrl(ticket?: string | null): string {
+  const token = ticket ?? readAccessToken()
   const query = token ? `?${new URLSearchParams({ token }).toString()}` : ''
   return resolveWebSocketUrl(`/staff/chat-takeover/ws/staff${query}`)
 }

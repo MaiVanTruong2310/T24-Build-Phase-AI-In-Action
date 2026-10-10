@@ -8,7 +8,10 @@ function normalizeApiOrigin(value: string): string {
   return origin.replace(/\/api\/v1$/, '');
 }
 const RAILWAY_FRONTEND_HOST = 'creative-enjoyment-production-e3d9.up.railway.app';
-const API_ORIGIN = typeof window !== 'undefined' && window.location.hostname === RAILWAY_FRONTEND_HOST
+// VITE_API_BASE_URL=same-origin: gọi API qua chính domain trang (proxy /api, vd frontend/api trên Vercel),
+// để cookie đăng nhập là cookie cùng trang, không bị trình duyệt chặn như cookie bên thứ ba.
+const SAME_ORIGIN_API = import.meta.env.VITE_API_BASE_URL === 'same-origin';
+const API_ORIGIN = typeof window !== 'undefined' && (SAME_ORIGIN_API || window.location.hostname === RAILWAY_FRONTEND_HOST)
   ? window.location.origin
   : normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL || LOCAL_API_ORIGIN);
 const API_BASE = `${API_ORIGIN}/api/v1`;
@@ -80,8 +83,16 @@ export function resolveApiUrl(url: string): string {
   return `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`;
 }
 
+// Proxy HTTP (vd Vercel) không chuyển tiếp được WebSocket: ở chế độ same-origin, WebSocket nối thẳng
+// tới backend qua VITE_WS_ORIGIN. Kết nối khác domain không mang cookie nên cần ?token=<ticket>.
+const WS_ORIGIN = SAME_ORIGIN_API && import.meta.env.VITE_WS_ORIGIN
+  ? normalizeApiOrigin(import.meta.env.VITE_WS_ORIGIN)
+  : null;
+export const websocketNeedsTicket = WS_ORIGIN !== null;
+
 export function resolveWebSocketUrl(path: string): string {
-  const url = new URL(resolveApiUrl(path));
+  const httpUrl = resolveApiUrl(path);
+  const url = new URL(WS_ORIGIN ? httpUrl.replace(API_ORIGIN, WS_ORIGIN) : httpUrl);
   if (url.protocol === 'https:') url.protocol = 'wss:';
   else if (url.protocol === 'http:') url.protocol = 'ws:';
   else throw new TypeError(`Unsupported API protocol for WebSocket: ${url.protocol}`);

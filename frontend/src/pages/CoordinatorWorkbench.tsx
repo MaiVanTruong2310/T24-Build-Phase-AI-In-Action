@@ -6,6 +6,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { SosCard } from '../features/coordinator/SosCard'
 import { api, canAdminister, dateTime, priorities, resolveStaffWorkbenchWebSocketUrl, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
+import { websocketNeedsTicket } from '../app/apiClient'
+import { fetchTakeoverTicket } from '../features/chat/api'
 import './CoordinatorWorkbench.css'
 
 const sourceNames: Record<string, string> = { chat: 'Hội thoại', consultation: 'Phiếu khám', package: 'Gói khám', booking: 'Lịch chờ duyệt' }
@@ -129,10 +131,13 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
         setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.')
       })
     }
-    const connect = () => {
+    const connect = async () => {
+      if (stopped) return
+      // WebSocket khác domain (proxy same-origin) không mang cookie → xác thực bằng ticket.
+      const ticket = websocketNeedsTicket ? await fetchTakeoverTicket() : null
       if (stopped) return
       try {
-        socket = new WebSocket(resolveStaffWorkbenchWebSocketUrl())
+        socket = new WebSocket(resolveStaffWorkbenchWebSocketUrl(ticket))
       } catch {
         scheduleReconnect()
         return
@@ -160,9 +165,9 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
       if (stopped || reconnectTimer !== undefined) return
       const delay = Math.min(1000 * 2 ** reconnectAttempt, 30000)
       reconnectAttempt += 1
-      reconnectTimer = setTimeout(() => { reconnectTimer = undefined; connect() }, delay)
+      reconnectTimer = setTimeout(() => { reconnectTimer = undefined; void connect() }, delay)
     }
-    connect()
+    void connect()
     return () => {
       stopped = true
       if (reconnectTimer !== undefined) clearTimeout(reconnectTimer)
