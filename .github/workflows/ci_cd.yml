@@ -185,6 +185,12 @@ jobs:
           npm --version
           npx --version
 
+      - name: Configure npm cache
+        run: |
+          echo "npm_config_cache=${RUNNER_TEMP}/npm-cache" >> "$GITHUB_ENV"
+          rm -rf "${RUNNER_TEMP}/npm-cache"
+          mkdir -p "${RUNNER_TEMP}/npm-cache"
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -193,6 +199,8 @@ jobs:
         working-directory: frontend
         shell: bash
         run: |
+          echo "npm cache:"
+          npm config get cache
           if [[ "$GITHUB_REF_NAME" == "main" ]]; then
             npx vercel build \
               --prod \
