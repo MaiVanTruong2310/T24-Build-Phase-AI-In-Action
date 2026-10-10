@@ -5,120 +5,124 @@ import type { TokenUsage } from './api';
 export interface AssistantTurnMetricsProps {
   tokenUsage?: TokenUsage | null;
   elapsedMs?: number | null;
-  text?: string;
+  timingsMs?: Record<string, number> | null;
 }
 
+const TIMING_LABELS: Record<string, string> = {
+  db_before_turn: 'Ghi DB đầu lượt',
+  agent_graph: 'Agent graph (tổng)',
+  'db:ensure_chat_case': '  · DB: tìm/tạo case',
+  'db:get_user': '  · DB: đọc user',
+  'db:add_message': '  · DB: ghi tin nhắn',
+  'cpu:triage_rules': '  · CPU: luật cấp cứu',
+  'node:route_intent': '  · Node route_intent',
+  'node:analyze': '  · Node analyze',
+  'node:critic': '  · Node critic',
+  'node:find_doctors': '  · Node find_doctors',
+  'node:info_agent': '  · Node info_agent',
+  'node:respond': '  · Node respond',
+};
+
 const EXCHANGE_RATE_USD_VND = 25500;
+const fmt = (n: number) => n.toLocaleString('vi-VN');
 
-export function AssistantTurnMetrics({ tokenUsage, elapsedMs, text }: AssistantTurnMetricsProps) {
-  // 1. Calculate tokens
-  let totalTokens: number;
-  let promptTokens: number | undefined;
-  let completionTokens: number | undefined;
-  let tokensSaved = 0;
+/**
+ * Hiển thị số liệu THẬT của lượt chat: token do provider trả về và độ trễ đo ở backend.
+ * Không tự ước lượng: thiếu số liệu thì ẩn mục đó thay vì hiện số giả.
+ */
+export function AssistantTurnMetrics({ tokenUsage, elapsedMs, timingsMs }: AssistantTurnMetricsProps) {
+  const hasTokens = tokenUsage?.total_tokens !== undefined && tokenUsage?.total_tokens !== null;
+  const hasTime = typeof elapsedMs === 'number' && elapsedMs > 0;
+  if (!hasTokens && !hasTime) return null;
 
-  if (tokenUsage && tokenUsage.total_tokens !== undefined && tokenUsage.total_tokens !== null) {
-    totalTokens = tokenUsage.total_tokens;
-    promptTokens = tokenUsage.prompt_tokens;
-    completionTokens = tokenUsage.completion_tokens;
-    tokensSaved = tokenUsage.tokens_saved || 0;
-  } else if (text) {
-    // Graceful estimation for legacy turns or offline responses
-    const estimatedCompletion = Math.max(10, Math.round(text.length / 3.6));
-    const estimatedPrompt = 45;
-    totalTokens = estimatedPrompt + estimatedCompletion;
-    promptTokens = estimatedPrompt;
-    completionTokens = estimatedCompletion;
-  } else {
-    return null;
-  }
+  const total = tokenUsage?.total_tokens ?? 0;
+  const prompt = tokenUsage?.prompt_tokens ?? 0;
+  const output = tokenUsage?.completion_tokens ?? 0;
+  const cached = tokenUsage?.cached_prompt_tokens ?? 0;
+  const reasoning = tokenUsage?.reasoning_tokens ?? 0;
+  const calls = tokenUsage?.llm_calls ?? 0;
+  const saved = tokenUsage?.tokens_saved ?? 0;
+  const isReal = tokenUsage?.execution_mode === 'provider_usage';
+  const cacheRate = prompt > 0 ? Math.round((cached / prompt) * 100) : 0;
 
-  // 2. Calculate cost
-  let costUsd: number;
-  if (tokenUsage && tokenUsage.estimated_cost_usd !== undefined && tokenUsage.estimated_cost_usd !== null) {
-    costUsd = tokenUsage.estimated_cost_usd;
-  } else {
-    // gpt-4o-mini baseline: ~$0.15/1M prompt, $0.60/1M completion
-    const pTok = promptTokens ?? 40;
-    const cTok = completionTokens ?? (totalTokens - pTok);
-    costUsd = (pTok * 0.15 + cTok * 0.60) / 1_000_000;
-  }
-
-  // Format tokens string
-  let tokenDisplay: string;
-  let tokenTooltip: string;
-  if (totalTokens === 0 && tokensSaved > 0) {
-    tokenDisplay = `0 tokens (tiết kiệm ${tokensSaved.toLocaleString()})`;
-    tokenTooltip = `Được xử lý tức thì qua Zero-Token Cache/Fast-Path (Tiết kiệm ${tokensSaved.toLocaleString()} tokens)`;
-  } else {
-    tokenDisplay = `${totalTokens.toLocaleString()} tokens`;
-    tokenTooltip = promptTokens !== undefined && completionTokens !== undefined
-      ? `Tổng tokens: ${totalTokens.toLocaleString()} (Prompt: ${promptTokens.toLocaleString()} / Output: ${completionTokens.toLocaleString()})`
-      : `Tổng số tokens: ${totalTokens.toLocaleString()}`;
-  }
-
-  // Format cost string
-  let costDisplay: string;
-  let costTooltip: string;
-  if (costUsd === 0) {
-    costDisplay = '$0.00';
-    costTooltip = 'Chi phí: $0.00 (Miễn phí qua Fast-Path/Cache)';
-  } else {
-    const usdFormatted = costUsd < 0.0001 ? `$${costUsd.toFixed(5)}` : `$${costUsd.toFixed(4)}`;
-    const costVnd = costUsd * EXCHANGE_RATE_USD_VND;
-    const vndFormatted = costVnd < 1 ? `${costVnd.toFixed(1)} đ` : `${Math.round(costVnd).toLocaleString('vi-VN')} đ`;
-    costDisplay = `~${usdFormatted} (~${vndFormatted})`;
-    costTooltip = `Ước tính chi phí: ${usdFormatted} (~${costVnd.toFixed(2)} VNĐ)`;
-  }
-
-  // 3. Format response time (Thời gian phản hồi)
-  let timeDisplay: string | null = null;
-  let timeTooltip = 'Thời gian xử lý và phản hồi';
-  if (elapsedMs !== undefined && elapsedMs !== null && elapsedMs > 0) {
-    if (elapsedMs >= 1000) {
-      timeDisplay = `${(elapsedMs / 1000).toFixed(2)}s`;
-      timeTooltip = `Thời gian phản hồi: ${(elapsedMs / 1000).toFixed(2)} giây (${Math.round(elapsedMs).toLocaleString('vi-VN')} ms)`;
+  let tokenDisplay = '';
+  let tokenTooltip = '';
+  if (hasTokens) {
+    if (total === 0 && saved > 0) {
+      tokenDisplay = `0 tokens (tiết kiệm ${fmt(saved)})`;
+      tokenTooltip = `Xử lý bằng rule/cache, không gọi LLM (tiết kiệm ${fmt(saved)} tokens)`;
     } else {
-      timeDisplay = `${(elapsedMs / 1000).toFixed(2)}s`;
-      timeTooltip = `Thời gian phản hồi: ${Math.round(elapsedMs)} ms (${(elapsedMs / 1000).toFixed(2)}s)`;
+      tokenDisplay = `${fmt(total)} tokens · vào ${fmt(prompt)}${cached > 0 ? ` (cache ${cacheRate}%)` : ''} · ra ${fmt(output)}`;
+      tokenTooltip = [
+        `${isReal ? 'Số liệu thật từ provider' : 'Số liệu ước tính (không phải usage thật)'}`,
+        `Tổng: ${fmt(total)} tokens`,
+        `Đầu vào: ${fmt(prompt)} (trúng cache: ${fmt(cached)}, chưa cache: ${fmt(Math.max(prompt - cached, 0))})`,
+        `Đầu ra: ${fmt(output)}${reasoning > 0 ? ` (trong đó thinking: ${fmt(reasoning)})` : ''}`,
+        calls > 0 ? `Số lần gọi LLM: ${calls}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
     }
   }
+
+  let costDisplay = '';
+  let costTooltip = '';
+  const costUsd = tokenUsage?.estimated_cost_usd;
+  if (hasTokens && typeof costUsd === 'number') {
+    if (costUsd === 0) {
+      costDisplay = '$0.00';
+      costTooltip = 'Chi phí: $0.00';
+    } else {
+      const usd = costUsd < 0.0001 ? `$${costUsd.toFixed(5)}` : `$${costUsd.toFixed(4)}`;
+      const vnd = costUsd * EXCHANGE_RATE_USD_VND;
+      costDisplay = `~${usd}`;
+      costTooltip = `Chi phí quy đổi theo giá DeepSeek (cache hit/miss/output): ${usd} ≈ ${vnd.toFixed(1)} đ`;
+    }
+  }
+
+  const timeDisplay = hasTime ? `${((elapsedMs as number) / 1000).toFixed(2)}s` : '';
+  const breakdown = timingsMs
+    ? Object.entries(timingsMs)
+        .map(([key, ms]) => `${TIMING_LABELS[key] ?? key}: ${Math.round(ms).toLocaleString('vi-VN')} ms`)
+        .join('\n')
+    : '';
+  const timeTooltip = hasTime
+    ? [
+        `Độ trễ cả lượt (backend, từ lúc nhận đến lúc có câu trả lời): ${Math.round(elapsedMs as number).toLocaleString('vi-VN')} ms`,
+        breakdown,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : '';
+
+  const itemClass =
+    'inline-flex items-center gap-1 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-help';
+  const dot = <span className="text-slate-300 dark:text-slate-700">·</span>;
 
   return (
     <div
       aria-label="Thông số kỹ thuật lượt hội thoại"
-      className="mt-2.5 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] sm:text-[10.5px] text-slate-400 dark:text-slate-400 font-mono tracking-tight select-none"
+      className="mb-2 pb-1.5 border-b border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] sm:text-[10.5px] text-slate-400 dark:text-slate-400 font-mono tracking-tight select-none"
     >
-      {/* Tokens */}
-      <span
-        className="inline-flex items-center gap-1 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-help"
-        title={tokenTooltip}
-      >
-        <Zap className="h-2.5 w-2.5 text-amber-500/80 dark:text-amber-400/80" />
-        <span>{tokenDisplay}</span>
-      </span>
-
-      <span className="text-slate-300 dark:text-slate-700">·</span>
-
-      {/* Cost */}
-      <span
-        className="inline-flex items-center gap-1 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-help"
-        title={costTooltip}
-      >
-        <Coins className="h-2.5 w-2.5 text-emerald-500/80 dark:text-emerald-400/80" />
-        <span>{costDisplay}</span>
-      </span>
-
-      {/* Response time */}
-      {timeDisplay && (
+      {hasTime && (
+        <span className={itemClass} title={timeTooltip}>
+          <Clock className="h-2.5 w-2.5 text-blue-500/80 dark:text-cyan-400/80" />
+          <span>{timeDisplay}</span>
+        </span>
+      )}
+      {hasTime && hasTokens && dot}
+      {hasTokens && (
+        <span className={itemClass} title={tokenTooltip}>
+          <Zap className="h-2.5 w-2.5 text-amber-500/80 dark:text-amber-400/80" />
+          <span>{tokenDisplay}</span>
+        </span>
+      )}
+      {costDisplay && (
         <>
-          <span className="text-slate-300 dark:text-slate-700">·</span>
-          <span
-            className="inline-flex items-center gap-1 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-help"
-            title={timeTooltip}
-          >
-            <Clock className="h-2.5 w-2.5 text-blue-500/80 dark:text-cyan-400/80" />
-            <span>{timeDisplay}</span>
+          {dot}
+          <span className={itemClass} title={costTooltip}>
+            <Coins className="h-2.5 w-2.5 text-emerald-500/80 dark:text-emerald-400/80" />
+            <span>{costDisplay}</span>
           </span>
         </>
       )}

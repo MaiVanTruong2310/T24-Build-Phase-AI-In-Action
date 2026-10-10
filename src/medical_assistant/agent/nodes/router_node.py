@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.config import is_info_agent_enabled
 from src.medical_assistant.domain.cache_service import get_cache_service
-from src.medical_assistant.domain.guardrail_service import get_guardrail_service
+from src.medical_assistant.domain.guardrail_service import get_guardrail_service, remove_accents
 from src.medical_assistant.domain.security.security_guardrail_service import get_security_guardrail_service
 from src.medical_assistant.domain.triage_service import get_triage_service
 from src.medical_assistant.infrastructure.llm import get_llm
@@ -68,6 +68,15 @@ QUY TẮC PHÂN LOẠI:
 - Nếu câu hỏi mơ hồ hoặc vừa hỏi thông tin vừa có thắc mắc chung, hãy ưu tiên 'info_lookup' để tra cứu dữ liệu thực tế.
 - Nếu người dùng có triệu chứng rõ rệt ("tôi bị đau bụng", "sốt 3 ngày"), ĐÓ LÀ 'clinical_triage'.
 """
+
+
+AWAITING_CONTACT_STATUSES = {
+    "CONFIRM_BOOKING_CONVERSATIONALLY",
+    "BOOKING_CONTACT_REQUIRED",
+    "TRIAGED_READY_FOR_BOOKING",
+}
+# Số di động VN 10 số (0/+84), cho phép dấu cách/chấm/gạch giữa các nhóm.
+PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+?84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-9]|9\d)[\s.-]?\d{3}[\s.-]?\d{3,4}(?!\d)")
 
 
 def _rule_based_fallback_route(query: str, rule_hint: str | None) -> tuple[str, float]:
@@ -120,9 +129,27 @@ def _rule_based_fallback_route(query: str, rule_hint: str | None) -> tuple[str, 
         "ca chiều",
         "ca chieu",
         "ngày mai ca",
+        "tái khám",
+        "tai kham",
+        "khám lại",
+        "kham lai",
+        "khám định kỳ",
+        "kham dinh ky",
+        "lịch trống",
+        "lich trong",
+        "còn trống",
+        "con trong",
     ]
     if any(t in q_low for t in booking_terms):
         return "booking", 0.85
+
+    # Người bệnh tự kể bệnh đang mắc ("tôi bị tăng huyết áp", "mẹ tôi mắc tiểu đường") → phân loại lâm sàng.
+    if re.search(
+        r"\b(?:tôi|toi|em|mình|minh|tui|(?:con|mẹ|me|bố|bo|vợ|vo|chồng|chong)\s+(?:tôi|toi|em|mình|minh))"
+        r"\s+(?:bị|bi|mắc|mac|đang bị|dang bi)\b",
+        q_low,
+    ):
+        return "clinical_triage", 0.85
 
     # Nhận diện info lookup (bác sĩ, cơ sở, chuyên khoa, bệnh học, thông tin tổng quát)
     info_terms = [
@@ -168,6 +195,20 @@ def _rule_based_fallback_route(query: str, rule_hint: str | None) -> tuple[str, 
         "nhung trieu chung",
         "biểu hiện của",
         "bieu hien cua",
+        "bảo hiểm",
+        "bao hiem",
+        "số điện thoại",
+        "so dien thoai",
+        "tổng đài",
+        "tong dai",
+        "giá khám",
+        "gia kham",
+        "bao nhiêu tiền",
+        "bao nhieu tien",
+        "mấy giờ",
+        "may gio",
+        "làm việc",
+        "lam viec",
     ]
     if any(t in q_low for t in info_terms):
         return "info_lookup", 0.85
@@ -204,8 +245,20 @@ def _rule_based_fallback_route(query: str, rule_hint: str | None) -> tuple[str, 
         "bi benh",
         "khám bệnh",
         "kham benh",
+        "buồn chán",
+        "buon chan",
+        "chán nản",
+        "trầm cảm",
+        "lo âu",
+        "mất ngủ",
+        "mat ngu",
     ]
-    if any(t in q_low for t in clinical_terms):
+
+    # Khớp nguyên từ: "ho" không được khớp "thoại", "hi" không khớp "bảo hiểm".
+    def has_word(terms: list[str]) -> bool:
+        return any(re.search(rf"(?<!\w){re.escape(t)}(?!\w)", q_low) for t in terms)
+
+    if has_word(clinical_terms):
         return "clinical_triage", 0.8
 
     # Nhận diện xã giao / chào hỏi / chúc tụng
@@ -227,11 +280,65 @@ def _rule_based_fallback_route(query: str, rule_hint: str | None) -> tuple[str, 
         "chúc",
         "chuc",
     ]
-    if any(t in q_low for t in chitchat_terms):
+    if has_word(chitchat_terms):
         return "chitchat", 0.9
 
     # Mặc định nghiêng về tra cứu thông tin
     return "info_lookup", 0.55
+
+
+def detect_explicit_clinical_symptoms(query: str) -> tuple[bool, str | None]:
+    """Phát hiện triệu chứng lâm sàng rõ ràng để short-circuit trực tiếp vào analyze_node (0 tokens)."""
+    raw_lower = query.lower().strip()
+    norm_lower = remove_accents(raw_lower)
+
+    # Tránh nhầm lẫn với tra cứu thông tin / giá / cơ sở / bệnh viện gần nhất
+    is_pure_info = bool(
+        re.search(
+            r"\b(?:gia\s+kham|chi\s+phi|bang\s+gia|o\s+dau|dia\s+chi|so\s+dien\s+thoai|gio\s+lam\s+viec|gan\s+nhat|gan\s+day|o\s+gan)\b",
+            norm_lower,
+        )
+    ) and not any(kw in norm_lower for kw in ["toi bi", "em bi", "minh bi", "dang bi", "bi dau", "bi sot", "bi ho"])
+    if is_pure_info:
+        return False, None
+
+    # Phát hiện triệu chứng ho an toàn (tránh va chạm với Hồ Hoàn Kiếm, Hồ Tây, họ tên, ủng hộ...)
+    has_cough = False
+    if re.search(
+        r"\b(?:bi\s+ho|ho\s+nhieu|ho\s+khan|ho\s+dom|ho\s+co\s+dom|ho\s+ra\s+mau|con\s+ho|tieng\s+ho|ho\s+lau|ho\s+keo\s+dai|ho\s+dai\s+dang|ho\s+sot|ho\s+rat\s+hong)\b",
+        norm_lower,
+    ):
+        has_cough = True
+    elif re.search(r"(?<!khoa\s)(?<!noi\s)\bho\b(?!\s+(?:hap|hoan|tay|guom|chi|boi|nuoc|soi|ga))", raw_lower):
+        # Kiểm tra thêm không nằm trong cụm địa danh hoặc từ ghép không phải ho
+        if not re.search(
+            r"\b(?:ho\s+(?:hoan\s+kiem|tay|guom|chi\s+minh|boi|nuoc)|dong\s+ho|giup\s+ho|lam\s+ho|ung\s+ho|ho\s+ten|ho\s+va\s+ten)\b",
+            norm_lower,
+        ):
+            has_cough = True
+
+    if has_cough:
+        return True, "ho"
+
+    symptom_patterns = [
+        r"\b(?:dau|nhuc|buot|e am)\b",
+        r"\b(?:rat\s+co|rat\s+hong|rat\s+da)\b",
+        r"\b(?:tuc\s+nguc|kho\s+tho|hut\s+hoi|tho\s+doc)\b",
+        r"\b(?:nghet\s+mui|so\s+mui|chay\s+nuoc\s+mui|khac\s+dom|dom)\b",
+        r"\b(?:chong\s+mat|choang\s+vang|hoa\s+mat|met\s+moi|mat\s+ngu|co\s+giat|te\s+bi)\b",
+        r"\b(?:buon\s+non|tieu\s+chay|di\s+ngoai|tao\s+bon|chuong\s+bung|day\s+bung|o\s+chua)\b",
+        r"\b(?:phat\s+ban|noi\s+me\s+day|ngua|di\s+ung)\b",
+        r"\b(?:danh\s+trong\s+nguc|tim\s+dap\s+nhanh|hoi\s+hop)\b",
+        r"\b(?:sot|sot\s+cao)\b",
+        r"\b(?:sore\s+throat|chest\s+pain|headache|stomach\s+ache|stomachache|backache|fever|cough|dizziness|nausea|vomiting|diarrhea)\b",
+    ]
+
+    for pat in symptom_patterns:
+        match = re.search(pat, norm_lower)
+        if match:
+            return True, match.group(0)
+
+    return False, None
 
 
 async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
@@ -270,6 +377,19 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
             },
         }
 
+    # 1.2.1 Đang chờ thông tin liên hệ để chốt đặt lịch: tin nhắn có số điện thoại là câu trả lời,
+    # không được để FAQ / tra cứu hồ sơ / info agent bắt mất ("Nguyễn Văn An, 0912345678").
+    # Dãy số ≥ 4 chữ số (kể cả SĐT gõ sai) cũng là câu trả lời liên hệ → luồng đặt lịch hỏi lại cho đúng.
+    if state.get("workflow_status") in AWAITING_CONTACT_STATUSES and (
+        PHONE_PATTERN.search(query) or re.search(r"\d{4,}", query)
+    ):
+        return {
+            "intent_route": "booking",
+            "route_confidence": 1.0,
+            "route_destination": "analyze",
+            "metadata": {"route": "booking_contact_capture"},
+        }
+
     # 1.3 Zero-token FAQ Cache
     cache_check = get_cache_service().check_cache(query, language=language)
     if cache_check is not None:
@@ -303,8 +423,18 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
         r"(?:hien thi|xem|kiem tra|cho biet)\s+(?:thong tin(?: ca nhan)?|ho so|ten|sdt|so dien thoai)\s+(?:cua\s+)?(?:toi|minh)\b|"
         r"\bmy\s+(?:name|phone|address|profile|info|contact)\b"
     )
-    if re.search(id_pattern, norm_q) and not any(
-        re.search(rf"\b{kw}\b", norm_q) for kw in ["dau", "sot", "ho", "benh", "kham"]
+    # "Tên tôi là X, sđt 09..." là CUNG CẤP thông tin, không phải hỏi "tên của tôi là gì".
+    is_providing_identity = bool(
+        PHONE_PATTERN.search(query)
+        or re.search(
+            r"(?:ten|so dien thoai|sdt)\s+(?:cua\s+)?(?:toi|minh)\s+la\s+(?!gi\b|j\b|bao nhieu\b|the nao\b|so may\b)\w",
+            norm_q,
+        )
+    )
+    if (
+        re.search(id_pattern, norm_q)
+        and not is_providing_identity
+        and not any(re.search(rf"\b{kw}\b", norm_q) for kw in ["dau", "sot", "ho", "benh", "kham"])
     ):
         return {
             "intent_route": "info_lookup",
@@ -392,7 +522,7 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
                     "guardrail_intent": hint_intent,
                 },
             }
-        if hint_intent == "HOLD_BOOKING":
+        if hint_intent in {"HOLD_BOOKING", "VIEW_SCHEDULE"}:
             return {
                 "intent_route": "booking",
                 "route_confidence": 1.0,
@@ -432,6 +562,25 @@ async def route_intent_node(state: AgentState, llm: Any = None) -> dict[str, Any
             "route_confidence": 1.0,
             "route_destination": "analyze",
             "metadata": {"info_agent_enabled": False},
+        }
+
+    # 1.6 CỔNG TẮT TRIỆU CHỨNG LÂM SÀNG RÕ RÀNG (Rule-first Short-circuit - 0 Tokens)
+    # Nếu tin nhắn có triệu chứng y tế hiển nhiên của người bệnh, chuyển thẳng vào analyze_node
+    # mà không cần tốn ~800 - 1000 tokens gọi LLM Router.
+    has_explicit_symptom, matched_symptom = detect_explicit_clinical_symptoms(query)
+    if has_explicit_symptom:
+        hint_str = str(intent_hint.get("intent")) if intent_hint else "None"
+        return {
+            "intent_route": "clinical_triage",
+            "route_confidence": 0.98,
+            "route_destination": "analyze",
+            "metadata": {
+                "route": "clinical_symptom_fast_path",
+                "matched_symptom": matched_symptom,
+                "tokens_saved": True,
+                "reasoning": f"Phát hiện triệu chứng lâm sàng rõ ràng ('{matched_symptom}'), chuyển thẳng sang analyze_node (0 token LLM router).",
+                "rule_hint": hint_str,
+            },
         }
 
     # =========================================================================

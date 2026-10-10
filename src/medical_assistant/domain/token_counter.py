@@ -93,6 +93,37 @@ class TokenCounter:
             "estimated_cost_saved_usd": round(cost_saved_usd, 6),
         }
 
+    # Giá tham chiếu USD / 1M token (deepseek-flash, giờ thấp điểm) để quy đổi usage thật ra chi phí.
+    _PRICE_CACHE_HIT = 0.003
+    _PRICE_CACHE_MISS = 0.15
+    _PRICE_OUTPUT = 0.60
+
+    def apply_provider_usage(
+        self, metrics: dict[str, Any], usage_records: list[dict[str, int]] | None
+    ) -> dict[str, Any]:
+        """Ghi đè số ước tính bằng usage thật do provider trả về (cộng dồn mọi lần gọi LLM trong lượt)."""
+        if not usage_records:
+            return metrics
+        prompt = sum(u["input_tokens"] for u in usage_records)
+        completion = sum(u["output_tokens"] for u in usage_records)
+        cached = sum(u["cache_read"] for u in usage_records)
+        cost = (
+            (prompt - cached) * self._PRICE_CACHE_MISS
+            + cached * self._PRICE_CACHE_HIT
+            + completion * self._PRICE_OUTPUT
+        ) / 1_000_000
+        metrics.update(
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            total_tokens=prompt + completion,
+            cached_prompt_tokens=cached,
+            reasoning_tokens=sum(u["reasoning"] for u in usage_records),
+            llm_calls=len(usage_records),
+            execution_mode="provider_usage",
+            estimated_cost_usd=round(cost, 6),
+        )
+        return metrics
+
 
 _token_counter: TokenCounter | None = None
 

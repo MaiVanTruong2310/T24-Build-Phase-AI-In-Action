@@ -225,7 +225,11 @@ async def capture_chat(db, case, request, response, state):
     from src.services.chat_history import STATE_FIELDS
 
     case.checkpoint = {k: state[k] for k in STATE_FIELDS if k in state}
+    previous_sos = (case.ai_snapshot or {}).get("sos")
     case.ai_snapshot = snapshot(state)
+    if previous_sos:
+        # Thông tin SOS (vị trí, giờ bấm) không được mất khi AI ghi đè snapshot ở lượt chat tiếp theo.
+        case.ai_snapshot = {**case.ai_snapshot, "sos": previous_sos, "is_emergency": True}
     emergency = state.get("is_emergency")
     needs_human = (
         emergency

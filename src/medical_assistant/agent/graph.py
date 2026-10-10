@@ -10,6 +10,7 @@ from src.medical_assistant.agent.nodes.respond_node import respond_node
 from src.medical_assistant.agent.nodes.router_node import route_intent_node
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.config import is_info_agent_enabled
+from src.medical_assistant.infrastructure.turn_timing import timed_node
 
 
 def route_after_intent(state: AgentState) -> str:
@@ -98,12 +99,12 @@ def build_graph():
     graph = StateGraph(AgentState)
 
     # Thêm các nodes vào đồ thị
-    graph.add_node("route_intent", route_intent_node)
-    graph.add_node("analyze", analyze_node)
-    graph.add_node("critic", critic_node)
-    graph.add_node("find_doctors", find_doctors_node)
-    graph.add_node("info_agent", info_agent_node)
-    graph.add_node("respond", respond_node)
+    graph.add_node("route_intent", timed_node("route_intent", route_intent_node))
+    graph.add_node("analyze", timed_node("analyze", analyze_node))
+    graph.add_node("critic", timed_node("critic", critic_node))
+    graph.add_node("find_doctors", timed_node("find_doctors", find_doctors_node))
+    graph.add_node("info_agent", timed_node("info_agent", info_agent_node))
+    graph.add_node("respond", timed_node("respond", respond_node))
 
     # Cấu hình điểm khởi đầu và rẽ nhánh thông minh
     graph.set_entry_point("route_intent")

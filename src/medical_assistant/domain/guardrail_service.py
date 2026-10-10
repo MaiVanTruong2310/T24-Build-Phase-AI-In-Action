@@ -12,7 +12,7 @@ import re
 import unicodedata
 from typing import Any
 
-from src.medical_assistant.domain.language_service import get_specialty_display_name
+from src.medical_assistant.domain.language_service import canonicalize_specialty_code, get_specialty_display_name
 from src.medical_assistant.domain.security.deobfuscator import get_deobfuscator
 from src.medical_assistant.domain.security.security_guardrail_service import get_security_guardrail_service
 
@@ -262,6 +262,21 @@ class ClinicalGuardrailService:
         if is_first_person_complaint and not re.search(
             r"\b(?:chi|anh|em|ban|me|bo|ba|cha|con|vo|chong)\s+toi\s+bi\b", cleaned_for_tp
         ):
+            third_party_health = None
+        # Người giám hộ / người nhà chủ động đặt lịch là trường hợp hợp lệ (đặc biệt khoa Nhi):
+        # "đặt lịch khám cho con tôi 3 tuổi bị sốt" phải vào luồng phân loại, không bị coi là hỏi hộ.
+        is_proxy_booking = bool(
+            re.search(
+                r"\b(?:dat lich|dat kham|dang ky kham|hen kham|book|kham cho|cho (?:\w+\s+){0,3}di kham)\b",
+                cleaned_for_tp,
+            )
+        )
+        is_dependent_child = bool(
+            re.search(
+                r"\b(?:con (?:toi|em|minh|nha)|be (?:nha|toi|con)|chau (?:toi|nha)|con (?:gai|trai))\b", cleaned_for_tp
+            )
+        )
+        if is_proxy_booking or is_dependent_child:
             third_party_health = None
 
         if third_party_health:
@@ -701,20 +716,25 @@ class ClinicalGuardrailService:
         if any(sk in query_normalized for sk in schedule_keywords):
             # Trích xuất chuyên khoa trong câu hỏi nếu có
             detected_spec = current_department
-            for sp_k, sp_v in [
-                ("tieu hoa", "Tiêu hóa - Gan mật"),
-                ("tim mach", "Tim mạch"),
-                ("than kinh", "Thần kinh"),
-                ("nhi", "Nhi"),
-                ("san", "Sản - Phụ khoa"),
-                ("co xuong khop", "Cơ xương khớp"),
-                ("tai mui hong", "Tai - Mũi - Họng"),
-                ("mat", "Mắt"),
-                ("da lieu", "Da liễu"),
-                ("ho hap", "Hô hấp"),
-                ("tong quat", "Sức khỏe tổng quát"),
-            ]:
-                if sp_k in query_normalized:
+            # Khớp nguyên từ, cụm dài trước: "san" không được khớp "sáng", "nhi" không khớp "nhiều", "mat" ≠ "gan mật".
+            for sp_k, sp_v in sorted(
+                [
+                    ("tieu hoa", "Tiêu hóa - Gan mật"),
+                    ("tim mach", "Tim mạch"),
+                    ("than kinh", "Thần kinh"),
+                    ("nhi", "Nhi"),
+                    ("san", "Sản - Phụ khoa"),
+                    ("co xuong khop", "Cơ xương khớp"),
+                    ("tai mui hong", "Tai - Mũi - Họng"),
+                    ("mat", "Mắt"),
+                    ("da lieu", "Da liễu"),
+                    ("ho hap", "Hô hấp"),
+                    ("tong quat", "Sức khỏe tổng quát"),
+                ],
+                key=lambda kv: len(kv[0]),
+                reverse=True,
+            ):
+                if re.search(rf"\b{re.escape(sp_k)}\b", query_normalized):
                     detected_spec = sp_v
                     break
 
@@ -1103,12 +1123,22 @@ class ClinicalGuardrailService:
                 )
             )
         else:
+            disease_names = _common_diseases_for_specialty(dept_title)
+            disease_block = (
+                "\n\nMột số bệnh lý thường được thăm khám tại chuyên khoa này: " + ", ".join(disease_names) + "."
+                if disease_names
+                else ""
+            )
             desc = (
-                (f"**Thông tin chuyên khoa: {dept_heading}**\n\n{verified_text}")
+                (f"**Thông tin chuyên khoa: {dept_heading}**\n\n{verified_text}{disease_block}")
                 if verified_text
                 else (
-                    f"**Thông tin chuyên khoa: {dept_heading}**\n\n"
-                    "Em chưa tìm thấy hồ sơ đã xác minh cho chuyên khoa này trong kho dữ liệu hiện tại."
+                    f"**Thông tin chuyên khoa: {dept_heading}**{disease_block}"
+                    if disease_block
+                    else (
+                        f"**Thông tin chuyên khoa: {dept_heading}**\n\n"
+                        "Em chưa tìm thấy hồ sơ đã xác minh cho chuyên khoa này trong kho dữ liệu hiện tại."
+                    )
                 )
             )
 
@@ -1120,6 +1150,26 @@ class ClinicalGuardrailService:
             "Quay lại triệu chứng ban đầu",
         ]
         return response, quick_replies
+
+
+def _common_diseases_for_specialty(specialty_name: str, limit: int = 8) -> list[str]:
+    """Tên bệnh thường gặp thuộc chuyên khoa, lấy từ kho disease_triage (chuyên khoa đã gán lại 2026-10-10)."""
+    try:
+        from src.medical_assistant.domain.triage_service import get_triage_service
+
+        code = canonicalize_specialty_code(specialty_name)
+        if code == "TONG_QUAT":
+            return []
+        names = [
+            re.sub(r"\s*\(.*?\)", "", rec.name).strip()
+            for rec in get_triage_service().diseases.values()
+            if canonicalize_specialty_code(rec.primary_specialty_name) == code
+        ]
+    except Exception:  # noqa: BLE001 - phần bổ sung, không được làm hỏng câu trả lời chính
+        return []
+    # Ưu tiên tên bệnh ngắn, quen thuộc; bỏ "Tổng quan …" và hội chứng hiếm mang tên riêng.
+    names = [n for n in dict.fromkeys(names) if len(n) >= 6 and not n.lower().startswith(("tổng quan", "hội chứng"))]
+    return sorted(names, key=len)[:limit]
 
 
 _guardrail_service: ClinicalGuardrailService | None = None

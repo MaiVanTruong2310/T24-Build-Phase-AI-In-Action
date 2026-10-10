@@ -106,6 +106,11 @@ def parse_vietnamese_date(text: str, reference_date: date | None = None) -> date
     t = text.lower().strip()
     # Strip duration/interval patterns (e.g. '3-4 ngày', '2-3 hôm') so they aren't parsed as dates
     t_clean = re.sub(r"\b\d{1,2}\s*[-–]\s*\d{1,2}\s*(?:ngày|hôm|bữa|tuần|tháng|tiếng|giờ|lần|nam|năm)\b", " ", t)
+    # Thang điểm đau "6/10", "đau 7 / 10" và nhiệt độ "37.8 độ" không phải ngày.
+    t_clean = re.sub(
+        r"(\b(?:đau|mức|điểm|khoảng|tầm|cỡ|thang)\b[^.?!/\d]{0,15})\d{1,2}\s*/\s*10\b(?!\s*/)", r"\1 ", t_clean
+    )
+    t_clean = re.sub(r"\b\d{2}[.,]\d\s*(?:độ|°)", " ", t_clean)
 
     # 1. Exact date: DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY or DD/MM, DD.MM
     dm_match = re.search(r"\b(\d{1,2})([/.-])(\d{1,2})(?:[/.-](\d{4}))?\b", t_clean)
@@ -141,12 +146,22 @@ def parse_vietnamese_date(text: str, reference_date: date | None = None) -> date
     # 3. Relative today/tomorrow/after tomorrow
     if "hôm nay" in t:
         return ref
+    # "khám chiều nay" là ngày khám; "sốt từ chiều nay" là thời điểm khởi phát → bỏ qua.
+    if re.search(r"(?<!từ )\b(?:sáng|chiều|tối) nay\b", t) and re.search(r"khám|đặt|hẹn|lịch|gặp", t):
+        return ref
     if any(k in t for k in ["ngày mai", "sáng mai", "chiều mai", "tối mai"]) or "mai" in t.split():
         return ref + timedelta(days=1)
     if "ngày mốt" in t or "ngày kia" in t:
         return ref + timedelta(days=2)
     if "ngày kìa" in t:
         return ref + timedelta(days=3)
+    # Tiếng Anh (bệnh nhân nước ngoài)
+    if re.search(r"\bday after tomorrow\b", t):
+        return ref + timedelta(days=2)
+    if re.search(r"\btomorrow\b", t):
+        return ref + timedelta(days=1)
+    if re.search(r"\btoday\b|\bthis (?:morning|afternoon|evening)\b", t):
+        return ref
 
     # 4. Weekdays mapping (Monday = 0, Sunday = 6)
     weekday_map = {
@@ -184,6 +199,13 @@ def parse_vietnamese_date(text: str, reference_date: date | None = None) -> date
         "chủ nhật": 6,
         "chu nhat": 6,
         "cn": 6,
+        "monday": 0,
+        "tuesday": 1,
+        "wednesday": 2,
+        "thursday": 3,
+        "friday": 4,
+        "saturday": 5,
+        "sunday": 6,
     }
 
     found_weekday = None
@@ -192,7 +214,9 @@ def parse_vietnamese_date(text: str, reference_date: date | None = None) -> date
             found_weekday = weekday_map[wk_name]
             break
 
-    is_next_week = any(k in t for k in ["tuần sau", "tuan sau", "tuần tới", "tuan toi", "tuần kế", "kế tiếp"])
+    is_next_week = any(
+        k in t for k in ["tuần sau", "tuan sau", "tuần tới", "tuan toi", "tuần kế", "kế tiếp", "next week"]
+    )
     is_this_week = any(k in t for k in ["tuần này", "tuan nay"])
 
     if found_weekday is not None:
@@ -286,6 +310,22 @@ DOCTOR_STOPWORDS = {
     "xếp",
     "này",
     "kia",
+    "làm",
+    "công",
+    "tác",
+    "đang",
+    "hiện",
+    "thuộc",
+    "bao",
+    "thứ",
+    "mấy",
+    "là",
+    "ai",
+    "của",
+    "đầu",
+    "nhất",
+    "số",
+    "cuối",
 }
 
 
@@ -345,6 +385,9 @@ def detect_booking_confirmation(text: str) -> bool:
         r"\b(?:tiến\s+hành|tiếp\s+tục)\s+(?:đặt\s+lịch|đặt\s+hẹn|đặt\s+khám|chốt\s+lịch)\b",
         # Match "ok đặt lịch", "ok chốt lịch"
         r"\bok[,\s]+(?:hãy\s+)?(?:đặt|chốt)(?:\s+lịch)?\b",
+        # English: "I want to book ...", "please book me ...", "could you schedule an appointment"
+        r"\b(?:i\s+(?:want|would\s+like|need|'d\s+like)\s+to|i'd\s+like\s+to|please|can\s+you|could\s+you)\s+"
+        r"(?:book|schedule|make|arrange)\b",
     ]
     for pat in confirm_patterns:
         if re.search(pat, lower):
@@ -453,8 +496,21 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         "lich hen",
         "khám bệnh",
         "kham benh",
+        # Bệnh nhân mạn tính tái khám / khám định kỳ là yêu cầu đặt lịch, không cần hỏi thêm triệu chứng.
+        "tái khám",
+        "tai kham",
+        "khám lại",
+        "kham lai",
+        "khám định kỳ",
+        "kham dinh ky",
     ]
-    is_booking_intent = any(kw in lower_text for kw in booking_intent_keywords)
+    is_booking_intent = any(kw in lower_text for kw in booking_intent_keywords) or bool(
+        re.search(
+            r"\b(?:book|make|schedule|arrange|need|want)\b[^.?!]{0,30}\b(?:appointment|consultation|check-?up)\b"
+            r"|\bbook\s+(?:a|an|me)\b",
+            lower_text,
+        )
+    )
     # If the user is specifically seeking specialty guidance (e.g. 'chưa biết chọn chuyên khoa nào', 'nên đi khám ở khoa nào', 'khám khoa gì'),
     # they are asking for clinical triage, not asking to execute an appointment booking!
     is_seeking_specialty = bool(
@@ -507,6 +563,22 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
                 entities["patient_name"] = candidate
                 break
 
+    # 3b. Trả lời ngắn khi được hỏi liên hệ: "Nguyễn Văn An, 0912345678", "Bé tên Lê Minh Khôi, số của mẹ là ..."
+    # → lấy cụm 2-5 từ viết hoa chữ cái đầu làm họ tên (chỉ khi câu có số điện thoại).
+    if "patient_name" not in entities and entities.get("patient_phone"):
+        # Duyệt theo từ: khoảng ký tự À-Ỹ trong regex gồm cả chữ thường có dấu nên không dùng được.
+        stop_words = {"bé", "tôi", "em", "vinmec", "bệnh", "con", "mẹ", "bố", "anh", "chị", "times", "city"}
+        run: list[str] = []
+        for token in [*re.findall(r"[^\W\d_]+", text_clean), ""]:
+            is_cap = bool(token) and token[0].isupper() and token[1:] == token[1:].lower()
+            if is_cap and token.lower() not in stop_words:
+                run.append(token)
+                continue
+            if 2 <= len(run) <= 5:
+                entities["patient_name"] = " ".join(run)
+                break
+            run = []
+
     # 4. Extract Date of Birth / Year / Age
     today = _get_vn_today()
     dob_match = re.search(r"sinh\s+ngày\s+(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text_clean, re.IGNORECASE)
@@ -546,7 +618,11 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
             break
 
     # 7. Extract Preferred Date using Vietnamese date parser
-    parsed_date = parse_vietnamese_date(text_clean, reference_date=today)
+    # Bỏ họ tên trước khi đọc ngày: tên "Hoàng Thị Mai" không được hiểu là "ngày mai".
+    date_text = text_clean
+    if entities.get("patient_name"):
+        date_text = re.sub(re.escape(entities["patient_name"]), " ", text_clean, flags=re.IGNORECASE)
+    parsed_date = parse_vietnamese_date(date_text, reference_date=today)
     if parsed_date:
         entities["preferred_date"] = parsed_date.isoformat()
 
@@ -555,12 +631,16 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         re.search(r"\b(ca\s+sáng|buổi\s+sáng|buoi\s+sang|sáng\s+mai|sáng\s+nay|buổi\s+sớm|ban\s+sáng)\b", lower_text)
         or "ca sáng" in lower_text
         or "buổi sáng" in lower_text
+        # "sáng thứ 2", "sáng 15/10", "sáng chủ nhật"
+        or re.search(r"\bsáng\s+(?:thứ|t\d|chủ\s+nhật|cn\b|ngày|\d)", lower_text)
     ):
         entities["preferred_period"] = "morning"
     elif (
         re.search(r"\b(ca\s+chiều|buổi\s+chiều|buoi\s+chieu|chiều\s+mai|chiều\s+nay|ban\s+chiều)\b", lower_text)
         or "ca chiều" in lower_text
         or "buổi chiều" in lower_text
+        # "chiều thứ 6", "chiều 15/10", "chiều chủ nhật"
+        or re.search(r"\bchiều\s+(?:thứ|t\d|chủ\s+nhật|cn\b|ngày|\d)", lower_text)
     ):
         entities["preferred_period"] = "afternoon"
     elif (
@@ -568,6 +648,12 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         or "ca tối" in lower_text
         or "buổi tối" in lower_text
     ):
+        entities["preferred_period"] = "evening"
+    elif re.search(r"\bmorning\b", lower_text):
+        entities["preferred_period"] = "morning"
+    elif re.search(r"\bafternoon\b", lower_text):
+        entities["preferred_period"] = "afternoon"
+    elif re.search(r"\bevening\b", lower_text):
         entities["preferred_period"] = "evening"
 
     # 9. Extract Explicit Specialty Preference
@@ -586,6 +672,28 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
         "mắt": "Mắt",
         "sản phụ khoa": "Sản phụ khoa",
         "ung bướu": "Ung bướu",
+        # Tiếng Anh
+        "dermatology": "Da liễu",
+        "dermatologist": "Da liễu",
+        "cardiology": "Tim mạch",
+        "cardiologist": "Tim mạch",
+        "neurology": "Thần kinh",
+        "neurologist": "Thần kinh",
+        "gastroenterology": "Tiêu hóa",
+        "gastroenterologist": "Tiêu hóa",
+        "orthopedics": "Cơ xương khớp",
+        "orthopedic": "Cơ xương khớp",
+        "ophthalmology": "Mắt",
+        "ophthalmologist": "Mắt",
+        "pediatrics": "Nhi",
+        "pediatrician": "Nhi",
+        "obstetrics": "Sản phụ khoa",
+        "gynecology": "Sản phụ khoa",
+        "gynecologist": "Sản phụ khoa",
+        "oncology": "Ung bướu",
+        "pulmonology": "Hô hấp",
+        "otolaryngology": "Tai Mũi Họng",
+        "ent specialist": "Tai Mũi Họng",
     }
     for skw in sorted(specialty_lookup.keys(), key=len, reverse=True):
         sval = specialty_lookup[skw]
@@ -628,9 +736,19 @@ def extract_booking_entities(text: str, current_state: dict[str, Any] | None = N
             re.IGNORECASE,
         )
         if doc_match:
-            candidate_doc = clean_name(doc_match.group(1))
+            # Cắt tên tại từ dừng đầu tiên: "bác sĩ Nguyễn Vĩnh Toàn làm ở đâu" → "Nguyễn Vĩnh Toàn".
+            raw_words = clean_name(doc_match.group(1)).split()
+            stop_at = next((i for i, w in enumerate(raw_words) if w.lower() in DOCTOR_STOPWORDS), len(raw_words))
+            candidate_doc = " ".join(raw_words[:stop_at])
             cand_words = [w.lower() for w in candidate_doc.split()]
-            if 1 <= len(cand_words) <= 4 and not any(w in DOCTOR_STOPWORDS for w in cand_words):
+            from src.medical_assistant.domain.language_service import canonicalize_specialty_code
+
+            # "bác sĩ tim mạch" là chuyên khoa, không phải tên người.
+            is_specialty_word = canonicalize_specialty_code(candidate_doc) != "TONG_QUAT" or bool(
+                cand_words
+                and cand_words[0] in {"nhi", "mắt", "da", "tim", "răng", "sản", "xương", "khớp", "phụ", "nam"}
+            )
+            if 1 <= len(cand_words) <= 4 and not is_specialty_word:
                 entities["doctor_name"] = f"BS. {candidate_doc}"
                 entities["doctor_preference"] = candidate_doc
 
@@ -654,8 +772,6 @@ def detect_package_inquiry(text: str) -> bool:
         "kham tong quat",
         "khám sức khỏe tổng quát",
         "kham suc khoe tong quat",
-        "khám định kỳ",
-        "kham dinh ky",
         "tầm soát",
         "tam soat",
         "gói tầm soát",
@@ -676,7 +792,13 @@ def detect_package_inquiry(text: str) -> bool:
         "danh mục gói",
         "các gói khám",
     ]
-    return any(kw in lower for kw in package_keywords)
+    if any(kw in lower for kw in package_keywords):
+        return True
+    # "Khám định kỳ" chỉ là gói khám khi KHÔNG nhắc bệnh đang mắc; "bị tiểu đường muốn khám định kỳ"
+    # là tái khám chuyên khoa (Nội tiết), không phải gói tầm soát.
+    if any(kw in lower for kw in ("khám định kỳ", "kham dinh ky")):
+        return not re.search(r"\b(?:bị|bi|mắc|mac|bệnh|benh|đang điều trị|dang dieu tri|tái khám|tai kham)\b", lower)
+    return False
 
 
 def extract_clinical_details(

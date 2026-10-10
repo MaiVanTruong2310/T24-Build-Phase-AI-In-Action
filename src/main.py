@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 import uuid
 from contextlib import asynccontextmanager
@@ -7,6 +8,13 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Production: trace LangSmith không được chứa dữ liệu bệnh nhân (họ tên, SĐT, ngày sinh, hồ sơ sức khỏe).
+# Ẩn toàn bộ input/output của run (vẫn giữ thời gian, trạng thái, lỗi để quan sát). Dev giữ nguyên để debug;
+# đặt LANGSMITH_HIDE_INPUTS/OUTPUTS=false rõ ràng nếu thật sự muốn ghi đè.
+if os.getenv("APP_ENV", "development").strip().lower() == "production":
+    for _name in ("LANGSMITH_HIDE_INPUTS", "LANGSMITH_HIDE_OUTPUTS", "LANGCHAIN_HIDE_INPUTS", "LANGCHAIN_HIDE_OUTPUTS"):
+        os.environ.setdefault(_name, "true")
 
 # Environment variables must load before application imports initialize settings.
 # ruff: noqa: E402
@@ -159,6 +167,15 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("LLM health check on startup encountered error: %s", exc)
         app.state.llm_health = {"error": str(exc)}
+
+    # Làm nóng các dịch vụ khởi tạo lười + mở sẵn kết nối DB để request đầu tiên không bị chậm hàng giây.
+    try:
+        from src.medical_assistant.infrastructure.warmup import warmup_sync
+
+        app.state.warmup_ms = await asyncio.to_thread(warmup_sync)
+        await check_database_connection()
+    except Exception as exc:
+        logger.warning("Startup warmup encountered error: %s", exc)
 
     try:
         cleanup_task = asyncio.create_task(

@@ -4,11 +4,12 @@ import type { StaffContext } from '../layouts/StaffLayout'
 import { saveAndRefresh } from '../features/coordinator/mutations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { SosCard } from '../features/coordinator/SosCard'
 import { api, canAdminister, dateTime, priorities, resolveStaffWorkbenchWebSocketUrl, statuses, type Case, type CaseDetail, type Catalog, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
 import './CoordinatorWorkbench.css'
 
 const sourceNames: Record<string, string> = { chat: 'Hội thoại', consultation: 'Phiếu khám', package: 'Gói khám', booking: 'Lịch chờ duyệt' }
-const eventNames: Record<string, string> = { claim: 'Nhận ca', decline: 'Từ chối nhận ca', handover: 'Bàn giao', takeover: 'Tiếp quản chat', resume: 'Trả về AI', contact: 'Liên hệ', follow_up: 'Hẹn liên hệ', emergency_detected: 'Phát hiện cảnh báo', emergency_ack: 'Tiếp nhận khẩn', emergency_transfer: 'Bàn giao cấp cứu', complete: 'Hoàn tất', cancel: 'Hủy', plan_updated: 'Đổi phương án khám', deposit_requested: 'Yêu cầu cọc', deposit_verified: 'Xác minh cọc', deposit_expired: 'Hết hạn cọc', booking_confirmed: 'Chốt lịch', refund_request: 'Yêu cầu hoàn cọc', refund_confirm: 'Xác nhận hoàn cọc', intake_submitted: 'Nhận phiếu', human_requested: 'Yêu cầu người hỗ trợ' }
+const eventNames: Record<string, string> = { claim: 'Nhận ca', decline: 'Từ chối nhận ca', handover: 'Bàn giao', takeover: 'Tiếp quản chat', resume: 'Trả về AI', contact: 'Liên hệ', follow_up: 'Hẹn liên hệ', emergency_detected: 'Phát hiện cảnh báo', emergency_ack: 'Tiếp nhận khẩn', emergency_transfer: 'Bàn giao cấp cứu', complete: 'Hoàn tất', cancel: 'Hủy', plan_updated: 'Đổi phương án khám', deposit_requested: 'Yêu cầu cọc', deposit_verified: 'Xác minh cọc', deposit_expired: 'Hết hạn cọc', booking_confirmed: 'Chốt lịch', refund_request: 'Yêu cầu hoàn cọc', refund_confirm: 'Xác nhận hoàn cọc', intake_submitted: 'Nhận phiếu', human_requested: 'Yêu cầu người hỗ trợ', patient_cancelled: 'Bệnh nhân tự hủy', patient_cancel_requested: 'Bệnh nhân xin hủy lịch', patient_rescheduled: 'Bệnh nhân đổi ngày khám', patient_reschedule_requested: 'Bệnh nhân xin đổi lịch' }
 const depositNames: Record<string, string> = { requested: 'Chờ chuyển cọc', verified: 'Đã xác minh', expired: 'Hết hạn', voided: 'Đã thay phương án', refund_pending: 'Chờ hoàn cọc', refunded: 'Đã hoàn cọc' }
 
 type CarePipelineStep = {
@@ -76,28 +77,35 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
     if (mode === 'chat') query.set('conversations', 'true')
     const generation = ++requestGeneration.current
     const refreshStats = Date.now() - statsAt.current >= 30000
-    const list = await api<{ items: Case[]; total: number }>('/cases?' + query)
+    const needResources = !resourcesReady.current && mode !== 'chat'
+    const id = selectedRef.current
+    // Bắn song song mọi request (trước đây chạy nối đuôi nhau: danh sách -> thống kê -> danh mục -> chi tiết).
+    const listPromise = api<{ items: Case[]; total: number }>('/cases?' + query)
+    const statsPromise = refreshStats ? Promise.all([api<Dashboard>('/dashboard'), api<Member[]>('/members'), api<Member>('/me')]) : null
+    const detailRequest = id ? ++detailGeneration.current : 0
+    const detailPromise = id ? api<CaseDetail>('/cases/' + id) : null
+    // Tránh cảnh báo unhandled rejection khi một promise lỗi trong lúc ta còn đang await cái khác.
+    for (const p of [statsPromise, detailPromise]) p?.catch(() => undefined)
+    if (needResources) {
+      // Danh mục + chính sách chỉ cần khi mở form thao tác, không chặn việc hiện danh sách.
+      resourcesReady.current = true
+      void Promise.all([api<Catalog>('/catalog'), api<Policy | null>('/policy')]).then(([options, p]) => {
+        setCatalog(options); setPolicy(p)
+        if (p) setPolicyForm({ hold_minutes: String(p.hold_minutes), response_minutes: String(p.response_minutes), emergency_response_minutes: String(p.emergency_response_minutes), payment_instructions: p.payment_instructions, refund_policy: p.refund_policy })
+      }).catch(() => { resourcesReady.current = false })
+    }
+    const list = await listPromise
     if (generation !== requestGeneration.current) return
-    setItems(list.items); setTotal(list.total)
-    if (refreshStats) {
-      const [stats, people, identity] = await Promise.all([api<Dashboard>('/dashboard'), api<Member[]>('/members'), api<Member>('/me')])
+    setItems(list.items); setTotal(list.total); setLoading(false)
+    if (statsPromise) {
+      const [stats, people, identity] = await statsPromise
       if (generation !== requestGeneration.current) return
       setDashboard(stats); setMembers(people); setMe(identity); statsAt.current = Date.now()
     }
-    if (!resourcesReady.current && mode !== 'chat') {
-      const [options, p] = await Promise.all([api<Catalog>('/catalog'), api<Policy | null>('/policy')])
-      if (generation !== requestGeneration.current) return
-      setCatalog(options); setPolicy(p)
-      if (p) setPolicyForm({ hold_minutes: String(p.hold_minutes), response_minutes: String(p.response_minutes), emergency_response_minutes: String(p.emergency_response_minutes), payment_instructions: p.payment_instructions, refund_policy: p.refund_policy })
-      resourcesReady.current = true
-    }
-    const id = selectedRef.current
-    if (id) {
-      const detailRequest = ++detailGeneration.current
-      const value = await api<CaseDetail>('/cases/' + id)
+    if (detailPromise) {
+      const value = await detailPromise
       if (generation === requestGeneration.current && detailRequest === detailGeneration.current) setSelected(current => acceptCaseDetail(current, value, selectedRef.current))
     }
-    setLoading(false)
   }, [offset, status, search, mine, mode, setMe])
   const loadRef = useRef(load)
   loadRef.current = load
@@ -114,9 +122,9 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined
     let reconnectAttempt = 0
     let connected = false
-    const refresh = () => {
+    const refresh = (forceStats = true) => {
       if (stopped || busyRef.current) return
-      statsAt.current = 0
+      if (forceStats) statsAt.current = 0
       void loadRef.current().then(() => setPollError('')).catch(e => {
         setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.')
       })
@@ -138,7 +146,9 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
       currentSocket.addEventListener('message', event => {
         try {
           const payload = JSON.parse(String(event.data)) as { type?: string }
-          if (payload.type === 'takeover.case_updated' || payload.type === 'takeover.message_created') refresh()
+          // Tin nhắn mới không đổi thống kê/nhân sự, nên không ép tải lại 3 API đó.
+          if (payload.type === 'takeover.case_updated') refresh(true)
+          else if (payload.type === 'takeover.message_created') refresh(false)
         } catch {
           return
         }
@@ -350,6 +360,7 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
       <section className="cw-panel cw-conversation-thread" aria-label="Nội dung hội thoại">
         {!selectedId ? <div className="cw-chat-placeholder"><h2>Chọn một hội thoại để xem tin nhắn</h2><p>Tiếp nhận ca yêu cầu hỗ trợ hoặc khẩn cấp để xử lý và tư vấn trực tiếp cho bệnh nhân.</p></div> : !selected ? <p role="status">Đang tải hội thoại…</p> : <>
           <header className="cw-heading"><div><h2>{selected.patient.name || 'Hội thoại bệnh nhân'}</h2><small>{selected.patient.phone || 'Chưa có điện thoại'} · {person(selected.assigned_to)}</small><p>{selected.priority === 0 ? '🚨 Tình trạng cấp cứu - Cần can thiệp khẩn cấp.' : selected.control === 'human' ? 'Bác sĩ điều phối đang trả lời; AI tạm dừng.' : 'Bệnh nhân đang chờ bác sĩ / điều phối viên tiếp quản.'}</p></div><button onClick={() => setParams({})}>Đóng hội thoại</button></header>
+          <SosCard snapshot={selected.ai_snapshot} patient={selected.patient} />
           {selected.priority === 0 && <div className="cw-emergency"><strong>Hội thoại có cảnh báo cấp cứu</strong><p>Tiếp nhận và ghi diễn biến trong trang xử lý cấp cứu.</p><Link to={'/staff/emergency?case=' + encodeURIComponent(selected.id)}>Mở ca cấp cứu</Link></div>}
           <div className="cw-thread-action-bar">
             {owned ? (
@@ -433,6 +444,7 @@ export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue
       <div className={'cw-grid' + (selectedId ? ' cw-with-detail' : '')}><section className="cw-panel cw-queue"><div className="cw-table-wrap"><table><thead><tr><th>Bệnh nhân / mã</th><th>Ưu tiên</th><th>Trạng thái</th><th>Phụ trách</th><th>Tạo lúc</th></tr></thead><tbody>{items.map(c => <tr key={c.id} className={c.id === selectedId ? 'cw-selected' : ''}><td><button onClick={() => choose(c.id)} className="cw-link">{c.patient.name || 'Chưa có tên'}</button><small>{c.patient.phone || 'Chưa có điện thoại'} · {sourceNames[c.source] || c.source}</small><small>{c.id.slice(0, 8).toUpperCase()}</small></td><td className={c.priority === 0 ? 'cw-critical' : ''}>{priorities[c.priority]}</td><td>{statuses[c.status] || c.status}</td><td>{person(c.assigned_to)}</td><td>{dateTime(c.created_at)}</td></tr>)}</tbody></table></div>{!loading && !items.length && <p className="cw-empty">Không có ca phù hợp.</p>}<footer className="cw-pagination"><span>{total} ca</span><button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 30))}>Trước</button><button disabled={offset + 30 >= total} onClick={() => setOffset(offset + 30)}>Sau</button></footer></section>
       {selectedId && <aside className="cw-detail"><button onClick={() => setParams({})}>Đóng hồ sơ</button>{!selected ? <p>Đang tải hồ sơ…</p> : <>
         <section className="cw-panel"><h2>{selected.patient.name || 'Hồ sơ ca'}</h2><small>Mã {selected.id} · phiên bản {selected.version}</small><p>{statuses[selected.status]} · {priorities[selected.priority]} · {person(selected.assigned_to)}</p><dl>{Object.entries(selected.patient).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{{ name: 'Họ tên', phone: 'Điện thoại', email: 'Email', date_of_birth: 'Ngày sinh', gender: 'Giới tính', guardian_name: 'Người giám hộ', guardian_phone: 'Liên hệ giám hộ', preferred_date: 'Ngày mong muốn', preferred_period: 'Buổi mong muốn', facility_preference: 'Cơ sở mong muốn', contact_time_preference: 'Thời gian liên hệ', notes: 'Nội dung yêu cầu', consent_to_contact: 'Đồng ý liên hệ' }[k] || k}</dt><dd>{String(v)}</dd></div>)}</dl><p>Hạn xử lý: {dateTime(selected.due_at)}. Nhắc việc: {dateTime(selected.follow_up_at)}</p><button className="cw-btn-primary-claim" disabled={busy || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned)} onClick={() => void act('claim')}>📥 Nhận ca</button></section>
+        <SosCard snapshot={selected.ai_snapshot} patient={selected.patient} />
         <section className="cw-panel cw-ai-panel">
           <h2>Kết quả Định hướng Lâm sàng (AI Triage & Care Pipeline)</h2>
           {Object.keys(selected.ai_snapshot).length ? (

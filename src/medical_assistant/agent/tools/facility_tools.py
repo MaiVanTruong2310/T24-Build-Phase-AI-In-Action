@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 REGION_ALIASES: dict[str, list[str]] = {
     "hà nội": ["ha noi", "hanoi", "mien bac", "miền bắc"],
-    "hồ chí minh": ["ho chi minh", "tp hcm", "tphcm", "sai gon", "sài gòn", "mien nam", "miền nam"],
+    "hồ chí minh": ["ho chi minh", "tp hcm", "tphcm", "hcm", "sai gon", "sài gòn", "saigon", "mien nam", "miền nam"],
     "đà nẵng": ["da nang", "mien trung", "miền trung"],
     "quảng ninh": ["quang ninh", "ha long", "hạ long"],
     "hải phòng": ["hai phong"],
@@ -61,7 +61,8 @@ def list_facilities(
 
         norm_name = normalize_fold(name) if name else None
         norm_district = normalize_fold(district) if district else None
-        norm_region = normalize_fold(region) if region else None
+        # "TP.HCM" → "tp hcm": bỏ dấu chấm để khớp alias.
+        norm_region = " ".join(normalize_fold(region).replace(".", " ").split()) if region else None
 
         # Mở rộng alias vùng miền nếu có
         region_keywords = [norm_region] if norm_region else []

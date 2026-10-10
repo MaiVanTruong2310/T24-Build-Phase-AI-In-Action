@@ -51,6 +51,9 @@ class TokenUsage(BaseModel):
     total_tokens: int = Field(default=0, description="Tổng số token thực tế sử dụng")
     tokens_saved: int = Field(default=0, description="Số token tiết kiệm được nhờ Cache/Zero-token rules")
     model: str = Field(default="gpt-4o-mini", description="Model tokenizer dùng để tính toán")
+    cached_prompt_tokens: int = Field(default=0, description="Số token đầu vào trúng prefix cache của provider")
+    reasoning_tokens: int = Field(default=0, description="Số token thinking (nằm trong completion)")
+    llm_calls: int = Field(default=0, description="Số lần gọi LLM thật trong lượt")
     estimated_cost_usd: float = Field(default=0.0, description="Ước tính chi phí USD")
     execution_mode: str = Field(default="llm_or_estimated", description="Cơ chế thực thi thực tế")
 
@@ -75,6 +78,7 @@ class ChatResponse(BaseModel):
     acuity_status: str | None = Field(default=None, description="Độ chắc chắn của mức khẩn cấp")
     disposition: str | None = Field(default=None, description="Hướng xử lý an toàn hiện tại")
     elapsed_ms: float | None = Field(default=None, description="Thời gian phản hồi (ms)")
+    timings_ms: dict[str, float] | None = Field(default=None, description="Tách thời gian: DB đầu lượt vs agent graph")
 
 
 class BookingIntakeRequest(BaseModel):

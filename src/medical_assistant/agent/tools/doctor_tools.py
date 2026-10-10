@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -21,6 +22,7 @@ from src.medical_assistant.domain.doctor_schedule_service import (
     _load_crawled_doctors,
     _specialty_terms,
     get_doctor_schedule_service,
+    is_physician,
 )
 from src.medical_assistant.domain.facility_linking import facility_key
 
@@ -103,6 +105,7 @@ def search_doctors(
         req_fac_key = facility_key(facility) if facility else None
 
         matched_doctors: list[dict[str, Any]] = []
+        matched_spec_names: set[str] = set()
         db_unavailable = False
         db_error_message = ""
 
@@ -111,19 +114,16 @@ def search_doctors(
             try:
                 # 1.1 Tìm các chuyên khoa khớp trong DB nếu người dùng lọc theo specialty
                 target_doc_ids: set[str] | None = None
+                matched_spec_names: set[str] = set()
                 if specialty_terms:
-                    all_db_specs = (
-                        doctor_service.client.select(
-                            "specialties",
-                            params={"select": "id,name", "limit": 300},
-                        )
-                        or []
-                    )
-                    matched_spec_ids = [
-                        str(s["id"])
-                        for s in all_db_specs
-                        if any(term in normalize_fold(str(s.get("name") or "")) for term in specialty_terms)
-                    ]
+                    # Dùng bộ xếp hạng chuyên khoa chung (khớp đúng tên, loại khoa nhi cho người lớn...).
+                    # Không so chuỗi con không dấu: "mắt" và "mặt" (Răng - Hàm - Mặt) cùng thành "mat".
+                    candidates = list(doctor_service.find_candidate_specialties(specialty))[:3]
+                    if not candidates:
+                        # find_candidate_specialties nuốt lỗi kết nối → kiểm tra lại để DB sập vẫn báo data_unavailable.
+                        doctor_service.client.select("specialties", params={"select": "id", "limit": 1})
+                    matched_spec_ids = [str(s["id"]) for s in candidates]
+                    matched_spec_names = {str(s.get("name") or "") for s in candidates}
                     if matched_spec_ids:
                         ds_rows = (
                             doctor_service.client.select(
@@ -174,6 +174,9 @@ def search_doctors(
 
                 if sb_rows:
                     for doc in sb_rows:
+                        # Gợi ý khám chỉ gồm bác sĩ; tìm đích danh theo tên thì vẫn trả về mọi nhân sự.
+                        if not name_query and not is_physician(doc.get("title")):
+                            continue
                         doc_name = str(doc.get("full_name") or "")
                         # Kiểm tra lọc theo tên không dấu
                         if name_query and name_query not in normalize_fold(doc_name):
@@ -193,10 +196,8 @@ def search_doctors(
                                     doc_specialties.append(s_name)
 
                         # Bắt buộc lọc lại ở Python: Tuyệt đối không gán nhãn chuyên khoa suy ra!
-                        if specialty_terms:
-                            norm_doc_specs = normalize_fold(" ".join(doc_specialties))
-                            if not any(term in norm_doc_specs for term in specialty_terms):
-                                continue
+                        if specialty_terms and not (set(doc_specialties) & matched_spec_names):
+                            continue
 
                         # Trích xuất danh sách cơ sở từ quan hệ doctor_facilities
                         doc_facilities = []
@@ -239,10 +240,15 @@ def search_doctors(
             db_error_message = "Cơ sở dữ liệu Supabase chưa được cấu hình hoặc tạm thời ngắt kết nối."
 
         # 2. Bổ sung hoặc fallback từ nguồn dữ liệu hồ sơ Vinmec (992 bác sĩ)
+        matched_spec_folds = {normalize_fold(n) for n in matched_spec_names if n}
         crawled_records = _load_crawled_doctors()
         scored_crawled: list[tuple[int, int, dict[str, Any]]] = []
 
         for record in crawled_records:
+            if not name_query and not is_physician(
+                [*(record.get("credentials") or []), *(record.get("positions") or [])]
+            ):
+                continue
             full_name = str(record.get("name") or "")
             norm_name = normalize_fold(full_name)
             if name_query and name_query not in norm_name:
@@ -262,17 +268,18 @@ def search_doctors(
             if min_experience_years is not None and years < min_experience_years:
                 continue
 
-            # Tính điểm tương đồng chuyên khoa
+            # Tính điểm tương đồng chuyên khoa: chỉ dựa trên danh sách chuyên khoa của hồ sơ, khớp nguyên từ.
+            # (Không dò trong phần giới thiệu và không so chuỗi con: "mắt" ≠ "mặt", "mật".)
             score = 1
             if specialty_terms:
-                searchable = normalize_fold(" ".join([*specialties, *positions, str(record.get("overview") or "")]))
-                spec_text = normalize_fold(" ".join(specialties))
-                matched_term_count = sum(
-                    4 if term in spec_text else 1 for term in specialty_terms if term in searchable
-                )
-                if matched_term_count == 0:
+                spec_folds = {normalize_fold(s) for s in specialties}
+                if matched_spec_folds:
+                    score = 4 * len(spec_folds & matched_spec_folds)
+                else:
+                    spec_text = " ".join(spec_folds)
+                    score = sum(4 for term in specialty_terms if re.search(rf"\b{re.escape(term)}\b", spec_text))
+                if score == 0:
                     continue
-                score = matched_term_count
 
             scored_crawled.append((score, years, record))
 

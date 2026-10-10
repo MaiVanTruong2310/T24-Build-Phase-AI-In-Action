@@ -30,6 +30,11 @@ SPECIALTY_BILINGUAL_MAP: dict[str, dict[str, str]] = {
     "SAN_PHU_KHOA": {"vi": "Sản phụ khoa", "en": "Obstetrics & Gynecology"},
     "UNG_BUOU": {"vi": "Ung bướu", "en": "Oncology"},
     "MAT": {"vi": "Mắt (Nhãn khoa)", "en": "Ophthalmology"},
+    "THAN_TIET_NIEU": {"vi": "Thận - Tiết niệu", "en": "Nephrology & Urology"},
+    "RANG_HAM_MAT": {"vi": "Răng Hàm Mặt", "en": "Dentistry & Maxillofacial"},
+    "NOI_TIET": {"vi": "Nội tiết", "en": "Endocrinology"},
+    "HUYET_HOC": {"vi": "Huyết học", "en": "Hematology"},
+    "NAM_KHOA": {"vi": "Nam khoa", "en": "Andrology"},
     "NHAN_KHOA": {"vi": "Mắt (Nhãn khoa)", "en": "Ophthalmology"},
     "DA_KHOA": {"vi": "Sức khỏe tổng quát", "en": "General Internal Medicine"},
     "TONG_QUAT": {"vi": "Sức khỏe tổng quát", "en": "General Internal Medicine"},
@@ -304,9 +309,10 @@ def get_specialty_display_name(specialty_input: str, language: str = "vi") -> st
 
 def canonicalize_specialty_code(specialty_input: str) -> str:
     """
-    Chuẩn hóa tên hoặc mã chuyên khoa về 1 trong 11 mã chuẩn Vinmec/DDXPlus:
+    Chuẩn hóa tên hoặc mã chuyên khoa về mã chuẩn Vinmec/DDXPlus:
     HO_HAP, TIM_MACH, TIEU_HOA, TAI_MUI_HONG, THAN_KINH, MIEN_DICH,
-    TRUYEN_NHIEM, TAM_THAN, XUONG_KHOP, DA_LIEU, TONG_QUAT.
+    TRUYEN_NHIEM, TAM_THAN, XUONG_KHOP, DA_LIEU, THAN_TIET_NIEU,
+    SAN_PHU_KHOA, NHI_KHOA, MAT, RANG_HAM_MAT, TONG_QUAT.
     """
     if not specialty_input:
         return "TONG_QUAT"
@@ -322,7 +328,8 @@ def canonicalize_specialty_code(specialty_input: str) -> str:
         return "TIM_MACH"
     if any(k in clean for k in ["tieuhoa", "tieuhoaganmat", "gastro", "hepato"]):
         return "TIEU_HOA"
-    if any(k in clean for k in ["taimuihong", "ent", "otorhino"]):
+    # "ent" phải là từ riêng: substring khớp nhầm "Center" (Women's Health Center → TMH).
+    if any(k in clean for k in ["taimuihong", "otorhino"]) or re.search(r"\bent\b", text.lower()):
         return "TAI_MUI_HONG"
     if any(k in clean for k in ["thankinh", "noithankinh", "neuro"]):
         return "THAN_KINH"
@@ -336,10 +343,44 @@ def canonicalize_specialty_code(specialty_input: str) -> str:
         return "XUONG_KHOP"
     if any(k in clean for k in ["dalieu", "dermato"]):
         return "DA_LIEU"
+    # Trước đây các khoa dưới rơi về TONG_QUAT → hiển thị và tìm lịch nhầm "Sức khỏe tổng quát".
+    if any(k in clean for k in ["tietnieu", "urolog", "nephro"]):
+        return "THAN_TIET_NIEU"
+    if any(k in clean for k in ["sanphukhoa", "phukhoa", "khoasan", "suckhoephunu", "obstet", "gyneco", "women"]):
+        return "SAN_PHU_KHOA"
+    if any(k in clean for k in ["nhikhoa", "trungtamnhi", "noinhi", "pediatr"]):
+        return "NHI_KHOA"
+    if any(k in clean for k in ["nhankhoa", "khoamat", "khammat", "ophthalm"]) or clean in {"mat", "mat(nhankhoa)"}:
+        return "MAT"
+    if any(k in clean for k in ["ranghammat", "nhakhoa", "dentist", "dental"]):
+        return "RANG_HAM_MAT"
+    if any(k in clean for k in ["ungbuou", "ungthu", "oncolog"]):
+        return "UNG_BUOU"
+    if any(k in clean for k in ["noitiet", "endocrin", "daithaoduong", "tieuduong"]):
+        return "NOI_TIET"
+    if any(k in clean for k in ["huyethoc", "hematolog", "truyenmau"]):
+        return "HUYET_HOC"
+    if any(k in clean for k in ["namkhoa", "androlog"]):
+        return "NAM_KHOA"
+    if any(k in clean for k in ["capcuu", "emergency", "hoisuc"]):
+        return "CAP_CUU"
     if any(k in clean for k in ["dakhoa", "noikhoa", "suckhoetongquat", "tongquat", "general", "kham"]):
         return "TONG_QUAT"
 
     return "TONG_QUAT"
+
+
+def get_same_day_safety_net(language: str = "vi") -> str:
+    """Dặn dò an toàn cho ca ưu tiên khám trong ngày (ATS 3): dấu hiệu nặng lên thì gọi cấp cứu."""
+    if language == "en":
+        return (
+            "\n\n⚠️ While waiting for your appointment, if you develop shortness of breath, chest pain, drowsiness, "
+            "seizures or rapidly worsening symptoms, call 115 or go to the nearest emergency department."
+        )
+    return (
+        "\n\n⚠️ Trong lúc chờ khám, nếu xuất hiện khó thở, đau ngực, lơ mơ, co giật hoặc triệu chứng nặng lên nhanh, "
+        "hãy gọi 115 hoặc đến cơ sở cấp cứu gần nhất."
+    )
 
 
 def get_medical_disclaimer(language: str = "vi") -> str:

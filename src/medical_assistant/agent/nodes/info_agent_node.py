@@ -20,6 +20,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
+from src.medical_assistant.agent.nodes.info_fallback import answer_info_without_llm
 from src.medical_assistant.agent.state import AgentState
 from src.medical_assistant.agent.tools import ALL_TOOLS
 from src.medical_assistant.domain.guardrail_service import get_guardrail_service
@@ -234,6 +235,8 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
     prompt_tokens = token_counter.count_tokens(" ".join(all_prompt_texts))
 
     llm_succeeded: bool = False
+    direct: tuple[str, str, dict[str, Any]] | None = None  # câu trả lời tra thẳng DB khi LLM lỗi
+    dept_resp: str | None = None
     fallback_used: bool = False
     has_data_unavailable: bool = False
     data_unavailable_reason: str | None = None
@@ -306,10 +309,18 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
         fallback_used = True
         tool_errors = [str(exc)]
 
-        # Graceful degradation: Thử tra cứu thông tin chuyên khoa qua domain service khi LLM không khả dụng
+        # Graceful degradation 1: cơ sở / bác sĩ tra thẳng DB, không cần LLM.
+        direct = answer_info_without_llm(query)
+        # Graceful degradation 2: Thử tra cứu thông tin chuyên khoa qua domain service khi LLM không khả dụng
         guardrail = get_guardrail_service()
         dept_resp = None
-        if state.get("workflow_status") == "DEPARTMENT_INFO" or any(
+        if direct:
+            final_text, direct_tool, direct_data = direct
+            tools_called = [{"tool": direct_tool, "args": {"query": query}}]
+            collected_results = [{"tool": direct_tool, "data": direct_data}]
+            has_data_unavailable = False
+            data_unavailable_reason = None
+        elif state.get("workflow_status") == "DEPARTMENT_INFO" or any(
             kw in query.lower() for kw in ["thông tin về", "chuyên khoa", "khoa ", "khia "]
         ):
             try:
@@ -322,7 +333,9 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
                 logger.warning("Department info fallback failed: %s", d_exc)
                 dept_resp = None
 
-        if dept_resp:
+        if direct:
+            pass
+        elif dept_resp:
             final_text = dept_resp
             tools_called = [{"tool": "get_department_info", "input": {"department_key": query}}]
             collected_results = [{"tool": "get_department_info", "result": dept_resp}]
@@ -376,7 +389,9 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
     latency_ms = round((time.monotonic() - start_time) * 1000, 2)
 
     # Yêu cầu 4: workflow_status nếu LLM lỗi/timeout đặt INFO_UNAVAILABLE
-    workflow_status = "INFO_ANSWERED" if llm_succeeded else "INFO_UNAVAILABLE"
+    # LLM lỗi nhưng đã trả lời có căn cứ từ DB (cơ sở/bác sĩ) → vẫn là INFO_ANSWERED; llm_succeeded giữ False.
+    answered_from_db = not llm_succeeded and (direct is not None or bool(dept_resp))
+    workflow_status = "INFO_ANSWERED" if (llm_succeeded or answered_from_db) else "INFO_UNAVAILABLE"
 
     # Lưu lại kết quả tool gần nhất (rút gọn <= 2KB)
     compacted_history_tools = _compact_tool_results(collected_results, max_bytes=2048)
@@ -460,9 +475,20 @@ async def info_agent_node(state: AgentState, llm: Any = None) -> dict[str, Any]:
     preserved_meta = {k: v for k, v in existing_meta.items() if k in preserved_metadata_keys}
     merged_meta = {**preserved_meta, **new_meta}
 
+    listed_doctors = [
+        {
+            "full_name": d.get("full_name") or d.get("name"),
+            "specialty": (d.get("specialties") or [None])[0],
+            "workplace": str(d.get("workplace") or "").split(",")[0] or None,
+        }
+        for item in collected_results
+        if item.get("tool") == "search_doctors" and isinstance(item.get("data"), dict)
+        for d in (item["data"].get("doctors") or [])[:5]
+    ]
     return {
         "response": sanitized_response,
         "workflow_status": workflow_status,
+        "last_listed_doctors": listed_doctors or state.get("last_listed_doctors") or [],
         "last_tool_results": compacted_history_tools,
         "full_tool_results": collected_results,
         "metadata": merged_meta,

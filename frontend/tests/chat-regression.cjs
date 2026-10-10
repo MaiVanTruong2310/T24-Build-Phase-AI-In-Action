@@ -67,6 +67,7 @@ async function widgetTest(mode) {
     '../features/chat/AssistantMessage': {},
     '../features/chat/ChatHistoryPanel': { ChatHistoryPanel: 'ChatHistoryPanel' },
     '../features/chat/ChatAccessGate': { ChatAccessGate: 'ChatAccessGate' },
+    '../features/chat/SosButton': { SosButton: 'SosButton' },
     '../features/patient-profiles/PatientSelector': {
       PatientSelector: 'PatientSelector',
     },

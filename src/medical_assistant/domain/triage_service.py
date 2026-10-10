@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from src.medical_assistant.domain.ats_descriptor_service import is_intensity_idiom, match_ats_descriptors, strip_accents
 from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
 from src.medical_assistant.domain.disease_triage import (
     ATSLevel,
@@ -31,6 +32,34 @@ from src.medical_assistant.domain.specialty_router import get_specialty_router
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 TRIAGED_DISEASES_PATH = ROOT_DIR / "data" / "datalake" / "normalized" / "diseases_triaged.jsonl"
+
+# Cache pattern đã biên dịch cho các cụm từ động (tên bệnh...). Bộ nhớ đệm nội bộ của `re` chỉ giữ 512 pattern,
+# trong khi bảng disease_triage có hàng nghìn tên: dùng re.search(f"...") trực tiếp sẽ biên dịch lại mọi lượt
+# (đo được ~0.5-2s CPU mỗi lần evaluate_symptoms, và hàm này chạy 3 lần mỗi lượt chat).
+_WORD_RE_CACHE: dict[str, re.Pattern[str]] = {}
+
+
+class _FoldedText(str):
+    """Câu người dùng gõ tiếng Việt KHÔNG dấu: phép `x in text` bỏ dấu x trước khi so.
+
+    Nhờ vậy các từ khóa / tên bệnh có dấu trong KB vẫn khớp được "dau bung", "buon non"
+    mà không phải sửa từng chỗ so khớp. Chỉ dùng khi câu gốc không có dấu.
+    """
+
+    def __contains__(self, item: object) -> bool:
+        return isinstance(item, str) and strip_accents(item.lower()) in str(self)
+
+
+_VI_ASCII_HINT = re.compile(r"\b(?:toi|bi|khong|dau|bung|sot|con|em|bac si|ngay|hom|nguoi|kham|chong mat|buon non)\b")
+
+
+def _word_boundary_search(term: str, text: str) -> bool:
+    if isinstance(text, _FoldedText):
+        term = strip_accents(term)
+    pattern = _WORD_RE_CACHE.get(term)
+    if pattern is None:
+        pattern = _WORD_RE_CACHE[term] = re.compile(rf"\b{re.escape(term)}\b")
+    return pattern.search(text) is not None
 
 
 class ClinicalTriageService:
@@ -53,6 +82,47 @@ class ClinicalTriageService:
         "headache",
         "chest pain",
     }
+    # Cột red_flags trong disease_triage là văn tự do, tách theo dấu phẩy sinh mảnh rác ("ngoài ra", "ví dụ",
+    # "tiêu chảy"...). Chỉ cụm chứa một dấu hiệu nguy kịch dưới đây mới được kích hoạt cổng cấp cứu ATS 1-2.
+    DB_RED_FLAG_CRITICAL_MARKERS = (
+        "hôn mê",
+        "bất tỉnh",
+        "mất ý thức",
+        "ngừng thở",
+        "ngưng thở",
+        "ngừng tim",
+        "không thở được",
+        "tím tái",
+        "tím môi",
+        "môi tím",
+        "vã mồ hôi lạnh",
+        "trụy mạch",
+        "trụy tim mạch",
+        "sốc",
+        "tụt huyết áp",
+        "ngạt thở",
+        "thở rít",
+        "suy hô hấp",
+        "thiếu oxy",
+        "khó đánh thức",
+        "gọi khó tỉnh",
+        "li bì",
+        "lơ mơ",
+        "ngủ lịm",
+        "vô niệu",
+        "phù phổi",
+        "bọt hồng",
+        "nôn ra máu",
+        "ho ra máu",
+        "đi ngoài ra máu",
+        "xuất huyết não",
+        "liệt",
+        "méo miệng",
+        "nói lấp",
+        "co giật",
+        "động kinh",
+        "đột quỵ",
+    )
     PRIMARY_ROUTING_THRESHOLD = 0.65
     SECONDARY_ROUTING_THRESHOLD = 0.60
     SECONDARY_TO_PRIMARY_RATIO = 0.75
@@ -102,6 +172,18 @@ class ClinicalTriageService:
             ["duration", "stress_anxiety", "fatigue", "mood_changes"],
         ),
         "skin_lesion": ("DA_LIEU", "Da liễu", ["duration", "location", "itching", "rash"]),
+        "dizziness": ("THAN_KINH", "Thần kinh", ["onset", "severity", "vision_changes", "numbness_weakness"]),
+        "urinary_symptoms": ("THAN_TIET_NIEU", "Thận - Tiết niệu", ["duration", "fever", "back_pain"]),
+        "gynecologic_symptoms": ("SAN_PHU_KHOA", "Sản phụ khoa", ["duration", "pregnancy", "abdominal_pain"]),
+        "ear_nose_symptoms": ("TAI_MUI_HONG", "Tai - Mũi - Họng", ["duration", "fever", "hearing_loss"]),
+        "dental_pain": ("RANG_HAM_MAT", "Răng Hàm Mặt", ["duration", "swelling", "fever"]),
+        "neck_lump": ("TAI_MUI_HONG", "Tai - Mũi - Họng", ["duration", "size_growth", "fever", "weight_loss"]),
+        "pregnancy_care": ("SAN_PHU_KHOA", "Sản phụ khoa", ["gestational_age", "bleeding", "abdominal_pain"]),
+        "low_mood": (
+            "TAM_THAN",
+            "Trung tâm Chăm sóc sức khỏe tinh thần",
+            ["duration", "sleep", "self_harm_thoughts"],
+        ),
     }
 
     def __init__(self):
@@ -139,13 +221,16 @@ class ClinicalTriageService:
                         probing_questions=r.get("probing_questions") or [],
                     )
                     self.diseases[rec.disease_key] = rec
+                self.kb_source = "supabase"
                 return
         except Exception:
             pass
 
         # 2. Fallback sang file cục bộ nếu offline
         if not TRIAGED_DISEASES_PATH.exists():
+            self.kb_source = "none"
             return
+        self.kb_source = "local_jsonl"
         with open(TRIAGED_DISEASES_PATH, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
@@ -194,7 +279,8 @@ class ClinicalTriageService:
             ),
             (
                 "MASSIVE_GI_BLEEDING",
-                r"nôn\s+(?:ra\s+)?(?:.*?)máu|nôn\s+ra\s+máu|tiêu\s+ra\s+máu\s+ồ\s+ạt|đi\s+ngoài\s+ra\s+máu\s+ồ\s+ạt|vomiting blood|hematemesis|(phân đen|black tarry stool|melena).*(ngất|tụt huyết áp|sốc|bất tỉnh|mất ý thức|faint|collapse|unconscious|shock)",
+                # Giới hạn cùng vế câu, ≤15 ký tự: không khớp "nôn 5 ngày, ... nước tiểu sẫm màu" khi bỏ dấu.
+                r"nôn\s+(?:ra\s+)?[^.,;]{0,15}?máu|nôn\s+ra\s+máu|tiêu\s+ra\s+máu\s+ồ\s+ạt|đi\s+ngoài\s+ra\s+máu\s+ồ\s+ạt|vomiting blood|hematemesis|(phân đen|black tarry stool|melena).*(ngất|tụt huyết áp|sốc|bất tỉnh|mất ý thức|faint|collapse|unconscious|shock)",
                 "Tiêu hóa - Gan mật",
                 "Xuất huyết tiêu hóa cấp",
             ),
@@ -212,7 +298,9 @@ class ClinicalTriageService:
             ),
             (
                 "ACUTE_TOXIC_OVERDOSE",
-                r"uống (nhầm|phải)?.*(thuốc (sâu|diệt chuột|chuột|độc|quá liều)|hóa chất)|tự tử|poison|overdose|ingested (chemicals|pesticide)|suicid",
+                r"uống (nhầm|phải)?.*(thuốc (sâu|diệt chuột|chuột|độc|quá liều)|hóa chất)|tự tử|poison|overdose|ingested (chemicals|pesticide)|suicid|"
+                r"uống\s+(?:cả|hết|nguyên|cả một|hết một|nhiều)\s+(?:lọ|vỉ|hộp|chai|nắm|vốc)\b|uống\s+quá\s+liều|"
+                r"uống\s+(?:\d{2,}|cả chục|vài chục|mấy chục)\s+viên",
                 "Cấp cứu",
                 "Ngộ độc cấp tính tối khẩn",
             ),
@@ -221,6 +309,19 @@ class ClinicalTriageService:
                 r"(?:trễ kinh|chậm kinh|hai vạch|que thử).*?(?:đau bụng|dữ dội|ra máu|choáng|muốn ngất)|missed period.*(severe abdominal pain|bleeding)",
                 "Sản phụ khoa",
                 "Nghi ngờ Thai ngoài tử cung vỡ / Biến chứng thai nghén cấp",
+            ),
+            (
+                # Đang mang thai + dấu hiệu nguy hiểm (nhau bong non/tiền đạo, vỡ ối, tiền sản giật).
+                # Lookbehind chặn phủ định liền trước ("không ra máu") để khám thai thường không bị đẩy lên cấp cứu.
+                "OBSTETRIC_EMERGENCY",
+                r"\b(?:mang\s+thai|có\s+thai|co\s+thai|có\s+bầu|co\s+bau|mang\s+bầu|mang\s+bau|bầu|bau|thai)\b[^.;\n]*?"
+                r"(?<!không )(?<!khong )(?<!chưa )(?<!chua )(?<!không có )(?<!không bị )(?<!không thấy )"
+                r"(?:ra\s+máu|ra\s+mau|ra\s+huyết|ra\s+huyet|chảy\s+máu|chay\s+mau|băng\s+huyết|vỡ\s+ối|vo\s+oi|"
+                r"đau\s+bụng\s+dữ\s+dội|dau\s+bung\s+du\s+doi|bụng\s+cứng|bung\s+cung|đau\s+đầu\s+dữ\s+dội|"
+                r"dau\s+dau\s+du\s+doi|nhìn\s+mờ|nhin\s+mo|co\s+giật|co\s+giat)|"
+                r"pregnan\w*.*?(?:bleeding|waters?\s+broke|severe\s+(?:abdominal\s+pain|headache))",
+                "Sản phụ khoa",
+                "Cấp cứu sản khoa: Ra máu / vỡ ối / dấu hiệu tiền sản giật khi mang thai",
             ),
             (
                 "CAUDA_EQUINA_SYNDROME",
@@ -251,7 +352,16 @@ class ClinicalTriageService:
             [
                 (
                     "SUICIDAL_IDEATION",
-                    r"(?:chán sống|chan song|không muốn sống|khong muon song|không muốn thức dậy|khong muon thuc day|muốn uống.{0,30}thuốc|muon uong.{0,30}thuoc|suicid|kill myself|end my life|self-harm)",
+                    r"(?:chán sống|chan song|không muốn sống|khong muon song|không thiết sống|khong thiet song|"
+                    r"không muốn thức dậy|khong muon thuc day|"
+                    r"(?:muốn|muon) (?:uống|uong) (?:hết|het|cả|ca|thật nhiều|that nhieu|nhiều|nhieu) .{0,15}(?:thuốc|thuoc)|"
+                    r"(?:muốn|muon) (?:uống|uong) (?:thuốc|thuoc).{0,25}(?:chết|chet|cho xong|ngủ luôn|ngu luon)|"
+                    r"tự sát|tu sat|tự vẫn|tu van\b|tự làm hại|tu lam hai|tự rạch|tu rach|"
+                    # "muốn chết" là ý nghĩ tự sát, trừ thành ngữ cường độ: "đau muốn chết", "mệt muốn chết".
+                    r"(?<!đau )(?<!dau )(?<!mệt )(?<!met )(?<!nóng )(?<!nong )(?<!ngứa )(?<!ngua )(?<!đói )(?<!doi )"
+                    r"(?<!sợ )(?<!so )(?<!cười )(?<!cuoi )(?<!lạnh )(?<!lanh )(?<!nhức )(?<!nhuc )(?<!khát )(?<!khat )"
+                    r"(?<!buồn ngủ )(?<!buon ngu )(?:muốn|muon)\s+(?:chết|chet)\b|"
+                    r"suicid|kill myself|end my life|want to die|self-harm)",
                     "Cấp cứu",
                     "Nguy cơ tự hại / khủng hoảng tâm lý",
                 ),
@@ -265,6 +375,10 @@ class ClinicalTriageService:
         )
         self.hard_red_flags = [
             (rid, re.compile(pat, re.IGNORECASE), spec, name) for rid, pat, spec, name in raw_hard_red_flags
+        ]
+        # Bản không dấu: người dùng gõ "co giat, khong tinh" phải được bắt như "co giật, không tỉnh".
+        self.hard_red_flags_ascii = [
+            re.compile(strip_accents(pat), re.IGNORECASE) for _, pat, _, _ in raw_hard_red_flags
         ]
         # Giữ tương thích ngược với thuộc tính cũ
         self.red_flag_rules = [(pat, spec, name) for _, pat, spec, name in self.hard_red_flags]
@@ -798,7 +912,7 @@ class ClinicalTriageService:
                     phrases = [p.strip() for p in re.split(r"[,:;]+", rf_clean)]
                     for p in phrases:
                         p_sub = re.sub(r"\(.*?\)", "", p).strip()
-                        if 5 <= len(p_sub) <= 70:
+                        if 5 <= len(p_sub) <= 70 and any(m in p_sub for m in self.DB_RED_FLAG_CRITICAL_MARKERS):
                             if not any(skip_kw in p_sub for skip_kw in non_symptom_words):
                                 self.db_emergency_red_flags.append(
                                     {
@@ -824,7 +938,9 @@ class ClinicalTriageService:
         raw_warning_rules = [
             (
                 "COUGH_WITH_DYSPNEA",
-                r"(?:ho.*(?:khó thở|hụt hơi)|(?:khó thở|hụt hơi).*ho|cough.*(?:shortness of breath|dyspnea)|(?:shortness of breath|dyspnea).*cough)",
+                # \bho\b: không khớp "hoàn toàn"; lookbehind: không khớp "không khó thở".
+                r"(?:\bho\b.*(?<!không )(?<!chưa )(?:khó thở|hụt hơi)|(?<!không )(?<!chưa )(?:khó thở|hụt hơi).*\bho\b|"
+                r"cough.*(?:shortness of breath|dyspnea)|(?:shortness of breath|dyspnea).*cough)",
                 "Nội hô hấp",
                 "Ho kèm khó thở cần được đánh giá trong ngày",
             ),
@@ -871,7 +987,7 @@ class ClinicalTriageService:
             ),
             (
                 "ACUTE_APPENDICITIS_SUSPECT",
-                r"đau hố chậu phải|đau ruột thừa|right lower quadrant pain|appendicitis|(?:quanh rốn|dưới rốn).*?(?:chạy xuống|lan xuống|xuống dưới).*?(?:bên phải|dưới|hố chậu)|(?:đau bụng bên phải phía dưới|đau bụng phía dưới bên phải|đau bụng bên phải).*?(?:quanh rốn|đi lại|sốt nhẹ)|(?:ban đầu đau quanh rốn).*?(?:chạy xuống|xuống dưới)",
+                r"đau hố chậu phải|đau ruột thừa|(?:bụng dưới|hạ vị)\s+(?:bên\s+|phía\s+)?phải|right lower quadrant pain|appendicitis|(?:quanh rốn|dưới rốn).*?(?:chạy xuống|lan xuống|xuống dưới).*?(?:bên phải|dưới|hố chậu)|(?:đau bụng bên phải phía dưới|đau bụng phía dưới bên phải|đau bụng bên phải).*?(?:quanh rốn|đi lại|sốt nhẹ)|(?:ban đầu đau quanh rốn).*?(?:chạy xuống|xuống dưới)",
                 "Tiêu hóa - Gan mật",
                 "Theo dõi Bụng ngoại khoa / Đau bụng cần khám trực tiếp trong ngày",
             ),
@@ -886,6 +1002,53 @@ class ClinicalTriageService:
             (rule_id, re.compile(pattern, re.IGNORECASE), specialty, name)
             for rule_id, pattern, specialty, name in raw_warning_rules
         ]
+        self.warning_rules_ascii = [re.compile(strip_accents(p), re.IGNORECASE) for _, p, _, _ in raw_warning_rules]
+
+    _CHILD_MENTION = re.compile(
+        r"\bbe (?:nha|toi|con|bi|so sinh|trai|gai|\d)|\bem be\b|\btre (?:em|nho|so sinh)\b|\bcon (?:toi|em|minh|nha)\b"
+        r"|\b(?:[0-9]|1[0-5]) tuoi\b|\b\d+ (?:thang|tuan) tuoi\b"
+    )
+    _ADULT_AGE = re.compile(r"\b(?:1[6-9]|[2-9]\d|1\d\d) tuoi\b")
+    _GENERAL_SPECIALTIES = {"sức khỏe tổng quát", "trung tâm sức khỏe tổng quát", "nội tổng quát", "general health"}
+
+    @classmethod
+    def _route_child_to_pediatrics(cls, result: TriageEvaluationResult, text: str) -> TriageEvaluationResult:
+        """Trẻ em (bé, con tôi 3 tuổi...) mà kết quả là khoa tổng quát → Nhi khoa. Ca cấp cứu giữ nguyên."""
+        if result.is_emergency:
+            return result
+        folded = strip_accents(text.lower())
+        # Trẻ nhũ nhi: mọi chuyên khoa → Nhi khoa (bác sĩ nhi khám đầu tiên).
+        from src.medical_assistant.domain.clinical_fact_service import INFANT_PATTERN
+
+        if re.search(INFANT_PATTERN, re.sub(r"\s+", " ", folded)):
+            return result.model_copy(update={"suggested_specialty": "Nhi khoa"})
+        if (result.suggested_specialty or "").lower() not in cls._GENERAL_SPECIALTIES:
+            return result
+        if not cls._CHILD_MENTION.search(folded) or cls._ADULT_AGE.search(folded):
+            return result
+        return result.model_copy(update={"suggested_specialty": "Nhi khoa"})
+
+    _NAME_QUALIFIER = re.compile(
+        r"\s+(?:tuýp|type|ở|do|thai kỳ|cấp tính|mạn tính|mãn tính|cấp|mạn|nguyên phát|thứ phát|giai đoạn|bẩm sinh)\b.*$"
+    )
+
+    @classmethod
+    def _disease_name_mention_bonus(cls, rec_name_clean: str, text: str) -> int:
+        """+40 nếu câu chứa nguyên tên bệnh, +20 nếu chứa phần đầu tên (bỏ hậu tố tuýp/cấp/thai kỳ...).
+
+        Chỉ áp cho tên ≥ 2 chữ: tên 1 chữ ("Than", "Dại", "Down", "Câm") dễ trùng từ thường.
+        """
+        base = re.sub(r"\s*\(.*?\)|^tổng quan\s+", "", rec_name_clean).strip()
+        # Tên 1 chữ chỉ tính khi là tên riêng Latin ≥ 5 ký tự (Basedow, Parkinson, Crohn), không phải "than", "dại".
+        is_proper_single = len(base.split()) == 1 and base.isascii() and len(base) >= 5
+        if len(base.split()) < 2 and not is_proper_single:
+            return 0
+        if re.search(rf"\b{re.escape(base)}\b", text):
+            return 40
+        head = cls._NAME_QUALIFIER.sub("", base).strip()
+        if head != base and len(head.split()) >= 2 and re.search(rf"\b{re.escape(head)}\b", text):
+            return 20
+        return 0
 
     def _check_acs_combination(self, user_text: str, clean_user_text: str, negation_svc) -> dict[str, Any] | None:
         """
@@ -1131,7 +1294,27 @@ class ClinicalTriageService:
 
         return None
 
+    _EVAL_CACHE_MAX = 256
+
     def evaluate_symptoms(self, user_message: str, language: str | None = None) -> TriageEvaluationResult:
+        """Đánh giá triệu chứng, có cache theo (câu hỏi, ngôn ngữ).
+
+        Một lượt chat gọi hàm này 3 lần với cùng đầu vào (before_turn, route_intent, analyze), mỗi lần ~0,1-0,2s CPU
+        chặn event loop. Kết quả chỉ phụ thuộc văn bản và ngôn ngữ (bộ luật nạp một lần khi khởi tạo), nên cache được.
+        Luôn trả về bản sao sâu để nơi gọi chỉnh sửa kết quả không làm hỏng cache.
+        """
+        lang = language if language in ["vi", "en"] else detect_language(user_message)
+        key = (user_message, lang)
+        cache = self.__dict__.setdefault("_eval_cache", {})
+        hit = cache.get(key)
+        if hit is None:
+            hit = self._route_child_to_pediatrics(self._evaluate_symptoms_uncached(user_message, lang), user_message)
+            if len(cache) >= self._EVAL_CACHE_MAX:
+                cache.pop(next(iter(cache)))  # bỏ mục cũ nhất
+            cache[key] = hit
+        return hit.model_copy(deep=True)
+
+    def _evaluate_symptoms_uncached(self, user_message: str, language: str | None = None) -> TriageEvaluationResult:
         """
         Đánh giá lâm sàng thông điệp người bệnh qua Kiến trúc An toàn 3 Tầng (Safety Engine v3):
         Tầng 1: Hard Red Flags (ATS Level 1) kết hợp Tầng A ACS
@@ -1166,21 +1349,46 @@ class ClinicalTriageService:
         # 1. TẦNG 1: QUÉT HARD RED FLAGS (ATS Level 1 Resuscitation)
         # =========================================================================
         negated_scopes = negation_svc.extract_negated_scopes(user_text)
+        # Người dùng gõ không dấu → khớp thêm bản không dấu của luật. Chỉ bật khi câu không có dấu,
+        # vì bỏ dấu câu có dấu sẽ gây trùng ("tìm" → "tim", "lần" → "lan").
+        ascii_text = strip_accents(user_text)
+        ascii_mode = ascii_text == user_text
+        ascii_clean = strip_accents(clean_user_text)
+        ascii_scopes = negation_svc.extract_negated_scopes(ascii_text) if ascii_mode else []
+
+        def phrase_hit(token: str) -> bool:
+            if token in clean_user_text and not negation_svc.is_phrase_negated(token, user_text):
+                return True
+            if not ascii_mode:
+                return False
+            plain = strip_accents(token)
+            return plain in ascii_clean and not negation_svc.is_phrase_negated(plain, ascii_text)
 
         if not safety_emergency:
-            for rid, pattern, spec_name, flag_name in self.hard_red_flags:
+            for (rid, pattern, spec_name, flag_name), ascii_pattern in zip(
+                self.hard_red_flags, self.hard_red_flags_ascii, strict=True
+            ):
+                text, scopes = user_text, negated_scopes
                 match = pattern.search(user_text)
+                if not match and ascii_mode:
+                    text, scopes = ascii_text, ascii_scopes
+                    match = ascii_pattern.search(ascii_text)
                 if match:
                     matched_str = match.group(0)
+                    # Cụm cờ đỏ tự chứa từ phủ định ("không muốn sống", "không thiết sống") chính là triệu chứng,
+                    # không được bộ phủ định loại bỏ.
+                    self_negated = bool(re.match(r"(?:không|khong|chán|chan)\b", matched_str, re.IGNORECASE))
+                    if is_intensity_idiom(text, match.start(), matched_str):
+                        continue
                     # Kiểm tra xem triệu chứng cờ đỏ có bị phủ định không ("không đau ngực", "không ngất")
                     # Nếu điểm bắt đầu của match nằm trong vùng phủ định thì bỏ qua
-                    if any(s <= match.start() < e for s, e, _ in negated_scopes):
+                    if not self_negated and any(s <= match.start() < e for s, e, _ in scopes):
                         continue
-                    if negation_svc.is_phrase_negated(matched_str, user_text):
+                    if not self_negated and negation_svc.is_phrase_negated(matched_str, text):
                         continue
                     safety_ats = (
                         ATSLevel.LEVEL_2_EMERGENT
-                        if rid in {"STEMI_ACS_CRUSHING", "STROKE_FAST", "MENINGITIS_TRIAD"}
+                        if rid in {"STEMI_ACS_CRUSHING", "STROKE_FAST", "MENINGITIS_TRIAD", "OBSTETRIC_EMERGENCY"}
                         else ATSLevel.LEVEL_1_RESUSCITATION
                     )
                     safety_emergency = True
@@ -1196,7 +1404,10 @@ class ClinicalTriageService:
         if not safety_emergency:
             for rule in self.syndrome_rules:
                 # Kiểm tra yếu tố phủ định (Negation factors)
-                is_negated = any(nf in clean_user_text for nf in rule.get("negative_factors", []))
+                is_negated = any(
+                    nf in clean_user_text or (ascii_mode and strip_accents(nf) in ascii_clean)
+                    for nf in rule.get("negative_factors", [])
+                )
                 if is_negated:
                     continue
 
@@ -1207,7 +1418,7 @@ class ClinicalTriageService:
                     # Kiểm tra xem có token nào khớp và KHÔNG bị phủ định
                     grp_matched = False
                     for token in grp:
-                        if token in clean_user_text and not negation_svc.is_phrase_negated(token, user_text):
+                        if phrase_hit(token):
                             grp_matched = True
                             break
                     if not grp_matched:
@@ -1235,7 +1446,7 @@ class ClinicalTriageService:
                 if phrase in self.NON_SPECIFIC_RED_FLAGS:
                     continue
                 # Khớp cụm từ triệu chứng cờ đỏ và đảm bảo không bị phủ định
-                if phrase in clean_user_text and not negation_svc.is_phrase_negated(phrase, user_text):
+                if phrase_hit(phrase):
                     # Tránh các cờ đỏ 1 từ quá đơn lẻ không có ngữ cảnh nguy kịch
                     if len(phrase.split()) == 1 and phrase in {"khó thở", "ho", "sốt", "đau ngực"}:
                         continue
@@ -1245,6 +1456,20 @@ class ClinicalTriageService:
                     safety_flags.append(f"{db_rf['disease_name']}: {phrase}")
                     default_safety_specialty = db_rf["specialty"]
                     break
+
+        # =========================================================================
+        # 2C. MÔ TẢ LÂM SÀNG ATS (ACEM 2023) + SINH HIỆU BỆNH NHÂN TỰ BÁO — chỉ được NÂNG mức khẩn
+        # =========================================================================
+        ats_desc = match_ats_descriptors(user_message)
+        if ats_desc and ats_desc.ats_level <= 2:
+            desc_level = ATSLevel(ats_desc.ats_level)
+            if safety_ats is None or desc_level.value < safety_ats.value:
+                safety_ats = desc_level
+                safety_emergency = True
+                safety_rule_ids.insert(0, ats_desc.rule_id)
+                safety_flags.insert(0, ats_desc.name)
+                if ats_desc.specialty:
+                    default_safety_specialty = ats_desc.specialty
 
         # =========================================================================
         # ⚡ SHORT-CIRCUIT TỐI KHẨN: Level 1 Resuscitation & Level 2 Emergent
@@ -1291,17 +1516,34 @@ class ClinicalTriageService:
                 )
 
         if not safety_emergency:
-            for rule_id, pattern, spec_name, warning_name in self.warning_rules:
+            for (rule_id, pattern, spec_name, warning_name), ascii_pattern in zip(
+                self.warning_rules, self.warning_rules_ascii, strict=True
+            ):
+                text = user_text
                 match = pattern.search(user_text)
+                if not match and ascii_mode:
+                    text, match = ascii_text, ascii_pattern.search(ascii_text)
                 if match:
                     matched_str = match.group(0)
-                    if negation_svc.is_phrase_negated(matched_str, user_text):
+                    if negation_svc.is_phrase_negated(matched_str, text):
                         continue
                     if safety_ats is None:
                         default_safety_specialty = spec_name
                     safety_ats = ATSLevel.LEVEL_3_URGENT
                     safety_flags.append(warning_name)
                     safety_rule_ids.append(rule_id)
+
+            if ats_desc and ats_desc.ats_level == 3 and safety_ats is None:
+                safety_ats = ATSLevel.LEVEL_3_URGENT
+                safety_flags.append(ats_desc.name)
+                safety_rule_ids.append(ats_desc.rule_id)
+                if ats_desc.specialty:
+                    default_safety_specialty = ats_desc.specialty
+                else:
+                    routed = get_specialty_router().route(query=user_text)
+                    default_safety_specialty = (
+                        routed["specialty_name"] if routed.get("confidence", 0.0) >= 0.1 else "Sức khỏe tổng quát"
+                    )
 
             if safety_ats == ATSLevel.LEVEL_3_URGENT and default_safety_specialty:
                 guidance = get_triage_guidance(
@@ -1505,7 +1747,12 @@ class ClinicalTriageService:
                     "routine checkup",
                 )
             )
-            if has_general_checkup and not safety_emergency:
+            # Đã có bệnh ("bị tiểu đường muốn khám định kỳ") → tái khám chuyên khoa, để bộ khớp bệnh xử lý.
+            has_known_condition = bool(
+                re.search(r"\b(?:bị|mắc|bệnh|đang điều trị|tái khám)\b", clean_user_text)
+                or (ascii_mode and re.search(r"\b(?:bi|mac|benh|dang dieu tri|tai kham)\b", clean_user_text))
+            )
+            if has_general_checkup and not safety_emergency and not has_known_condition:
                 guidance = get_triage_guidance(
                     specialty="Trung tâm Sức khỏe tổng quát",
                     ats_level=5,
@@ -1614,6 +1861,11 @@ class ClinicalTriageService:
                     "lo âu",
                     "stress",
                     "căng thẳng thần kinh",
+                    "buồn chán",
+                    "trầm cảm",
+                    "chán nản",
+                    "không muốn làm gì",
+                    "mất hứng thú",
                     "insomnia",
                     "anxiety",
                 )
@@ -1655,7 +1907,7 @@ class ClinicalTriageService:
 
             # Sốt ở trẻ nhỏ chưa đủ thông tin
             has_pediatric_fever = any(
-                term in clean_user_text
+                term in clean_user_text or (ascii_mode and strip_accents(term) in ascii_clean)
                 for term in (
                     "bé nhà tôi sốt",
                     "bé sốt",
@@ -1710,6 +1962,10 @@ class ClinicalTriageService:
                 scoring_user_text[:scope_start] + " " * (scope_end - scope_start) + scoring_user_text[scope_end:]
             )
         clean_user_text = re.sub(r"[,:;.\(\)\?\!]+", " ", scoring_user_text).lower()
+        # Tiếng Việt không dấu: so khớp KB (có dấu) ở dạng bỏ dấu.
+        if strip_accents(user_text) == user_text and _VI_ASCII_HINT.search(clean_user_text):
+            clean_user_text = _FoldedText(clean_user_text)
+            scoring_user_text = _FoldedText(scoring_user_text.lower())
 
         # Từ dừng lâm sàng để loại bỏ nhiễu bigram (Bilingual EN-VI)
         CLINICAL_STOPWORDS = {  # noqa: N806
@@ -2069,6 +2325,9 @@ class ClinicalTriageService:
 
         for record in self.diseases.values():
             score = 0
+            # Điểm từ bằng chứng ĐẶC HIỆU (tên bệnh, từ khóa lõi, hội chứng, cờ đỏ, dấu hiệu cảnh báo).
+            # Chỉ khớp triệu chứng điển hình/nhẹ thì không đủ để nâng mức khẩn của bệnh.
+            specific_score = 0
             rec_name_clean = record.name.lower().strip()
             rec_key = getattr(record, "disease_key", "")
             rec_spec_code = getattr(record, "primary_specialty_code", "")
@@ -2077,11 +2336,18 @@ class ClinicalTriageService:
             for kw, target_key in CORE_DISEASE_KEYWORDS.items():
                 if kw in clean_user_text and (target_key in rec_key or kw in rec_name_clean):
                     score += 35
+                    specific_score += 35
+
+            # 0.05 Người dùng nêu đích danh tên bệnh đã biết ("bị tiểu đường", "bị basedow muốn tái khám").
+            name_bonus = self._disease_name_mention_bonus(rec_name_clean, clean_user_text)
+            score += name_bonus
+            specific_score += name_bonus
 
             # 0.1 Khớp cụm triệu chứng hội chứng
             for req_set, target_key, cluster_score in CORE_SYMPTOM_CLUSTERS:
                 if all(tok in clean_user_text for tok in req_set) and target_key in rec_key:
                     score += cluster_score
+                    specific_score += cluster_score
 
             # 0.2 Kiểm soát đặc thù bệnh lý (Pertinent negative discriminators)
             if "ddx-epiglottitis" in rec_key:
@@ -2092,8 +2358,9 @@ class ClinicalTriageService:
                     score -= 30
 
             # 1. Khớp tên bệnh: CHẶN đứng false substring collision
-            if len(rec_name_clean) >= 5 and re.search(rf"\b{re.escape(rec_name_clean)}\b", scoring_user_text):
+            if len(rec_name_clean) >= 5 and _word_boundary_search(rec_name_clean, scoring_user_text):
                 score += 30
+                specific_score += 30
             else:
                 parts = re.split(r"[\(\)]", rec_name_clean)
                 for part in parts:
@@ -2101,9 +2368,10 @@ class ClinicalTriageService:
                     if (
                         len(part_clean) >= 6
                         and part_clean not in CLINICAL_STOPWORDS
-                        and re.search(rf"\b{re.escape(part_clean)}\b", scoring_user_text)
+                        and _word_boundary_search(part_clean, scoring_user_text)
                     ):
                         score += 20
+                        specific_score += 20
                         break
 
             # 2. Khớp Tổ hợp Hội chứng (Syndrome Combinations Boost)
@@ -2118,6 +2386,7 @@ class ClinicalTriageService:
                     match_count = sum(1 for sym in req_symptoms if sym.lower().strip() in clean_user_text)
                     if match_count >= 2:
                         score += 25
+                        specific_score += 25
                     if match_count == len(req_symptoms) and len(req_symptoms) >= 2:
                         score += 15
 
@@ -2131,6 +2400,7 @@ class ClinicalTriageService:
                 for phrase in phrases:
                     if phrase not in CLINICAL_STOPWORDS and phrase in clean_user_text:
                         score += 8
+                        specific_score += 8
                         rec_matched_flags.append(phrase)
                 words = [w for w in rf_clean.split() if len(w) >= 3]
                 if len(words) >= 2:
@@ -2152,6 +2422,7 @@ class ClinicalTriageService:
                 for phrase in phrases:
                     if phrase not in CLINICAL_STOPWORDS and phrase in clean_user_text:
                         score += 5
+                        specific_score += 5
 
             # 5. Khớp Typical / Mild
             for ts in record.symptom_hierarchy.typical_or_mild:
@@ -2191,7 +2462,9 @@ class ClinicalTriageService:
                     score += 15
 
             if score >= 10:
-                candidates.append({"record": record, "score": score, "flags": rec_matched_flags[:3]})
+                candidates.append(
+                    {"record": record, "score": score, "flags": rec_matched_flags[:3], "specific": specific_score > 0}
+                )
 
         # BƯỚC 3: TOP-K SPECIALTY AGGREGATOR
         specialty_router = get_specialty_router()
@@ -2279,6 +2552,11 @@ class ClinicalTriageService:
 
             # Phân tầng triệu chứng thông thường (Outpatient ATS 4/5 hoặc Bán khẩn ATS 3)
             cand_ats = acuity.ats_level
+            # Bệnh khớp chỉ nhờ triệu chứng điển hình/nhẹ (vd "đầy hơi" ↔ "Vàng da bệnh lý"): không lấy mức
+            # khẩn của bệnh, giữ ATS 4 — tránh đẩy ca nhẹ lên "khám trong ngày" vì một trùng khớp lỏng.
+            if not best_cand_in_winner.get("specific") and cand_ats.value < ATSLevel.LEVEL_4_STANDARD.value:
+                cand_ats = ATSLevel.LEVEL_4_STANDARD
+                acuity = acuity.model_copy(update={"urgency_tier": UrgencyTier.WITHIN_WEEK, "max_booking_days": 7})
             cand_tier = acuity.urgency_tier
             cand_max_days = acuity.max_booking_days
             cand_emergency = acuity.max_booking_days == 0
@@ -2286,7 +2564,8 @@ class ClinicalTriageService:
 
             # Database acuity alone cannot establish an emergency without a specific red flag.
             if cand_ats in (ATSLevel.LEVEL_1_RESUSCITATION, ATSLevel.LEVEL_2_EMERGENT):
-                if matched_flags:
+                # Mảnh red flag khớp phải là dấu hiệu nguy kịch, không phải "suy tim"/"giai đoạn 2"/"bụng chướng".
+                if any(m in f for f in matched_flags for m in self.DB_RED_FLAG_CRITICAL_MARKERS):
                     cand_emergency = True
                     cand_tier = UrgencyTier.EMERGENCY_BLOCK
                     cand_max_days = 0
@@ -2343,7 +2622,8 @@ class ClinicalTriageService:
             )
 
         # BƯỚC 4: Fallback — dùng Specialty Router thay vì luôn trả "Sức khỏe tổng quát"
-        router_result = specialty_router.route(query=user_text)
+        # Không định tuyến theo triệu chứng bệnh nhân đã phủ định ("không đau ngực" ≠ Tim mạch).
+        router_result = specialty_router.route(query=scoring_user_text)
         fallback_spec = (
             router_result.get("specialty_name")
             if router_result.get("confidence", 0.0) >= 0.1
@@ -2431,9 +2711,13 @@ class ClinicalTriageService:
         primary = facts.get("primary_complaint") or facts.get("chief_complaint")
         explicit_primary = facts.get("primary_complaint_explicit_code")
         known = set(facts.get("positive_facts") or []) | set(facts.get("negative_facts") or [])
+        active_codes = {str(item["code"]) for item in active}
         for complaint in active:
             code = str(complaint["code"])
             spec_code, name, expected = self.COMPLAINT_ROUTES[code]
+            # Ho kèm đau họng / triệu chứng tai mũi = viêm đường hô hấp trên → Tai - Mũi - Họng.
+            if code == "cough" and {"sore_throat", "ear_nose_symptoms"} & active_codes:
+                spec_code, name, expected = self.COMPLAINT_ROUTES["sore_throat"]
             candidate = grouped.setdefault(
                 spec_code,
                 {
@@ -2458,6 +2742,24 @@ class ClinicalTriageService:
                 candidate["score"] += 0.75
 
         base_specialty_code = canonicalize_specialty_code(base_result.suggested_specialty)
+        # Bệnh nhi: triệu chứng chung (sốt) đi Nhi khoa thay vì Nội tổng quát.
+        if (base_specialty_code == "NHI_KHOA" or facts.get("patient_is_child")) and "TONG_QUAT" in grouped:
+            grouped["NHI_KHOA"] = {**grouped.pop("TONG_QUAT"), "code": "NHI_KHOA", "name": "Nhi khoa"}
+        # Trẻ nhũ nhi: mọi nhóm triệu chứng gộp về Nhi khoa (bác sĩ nhi khám đầu, chuyển chuyên khoa nếu cần).
+        if facts.get("patient_is_infant") and not base_result.is_emergency and grouped:
+            merged: dict[str, Any] | None = None
+            for value in grouped.values():
+                if merged is None:
+                    merged = {**value, "code": "NHI_KHOA", "name": "Nhi khoa"}
+                    merged["evidence"] = list(value["evidence"])
+                    merged["missing"] = list(value["missing"])
+                    merged["complaint_codes"] = list(value["complaint_codes"])
+                    merged["sources"] = list(value["sources"])
+                else:
+                    merged["score"] += value["score"]
+                    for key in ("evidence", "missing", "complaint_codes", "sources"):
+                        merged[key].extend(value[key])
+            grouped = {"NHI_KHOA": merged}
         urgent_specialty_codes = {
             self.URGENT_RULE_SPECIALTIES[rule_id]
             for rule_id in base_result.triggered_rule_ids
@@ -2492,6 +2794,9 @@ class ClinicalTriageService:
             confidence += 0.15 if is_urgent_winner else 0.0
             confidence += 0.05 if len(set(value["complaint_codes"])) >= 2 else 0.0
             confidence += 0.05 if explicit_primary in value["complaint_codes"] else 0.0
+            # Đồng thuận giữa bộ khớp bệnh (base) và triệu chứng trích xuất → ưu tiên làm chuyên khoa chính.
+            agrees_with_base = value["code"] == base_specialty_code and base_specialty_code != "TONG_QUAT"
+            confidence += 0.05 if agrees_with_base else 0.0
             confidence -= min(0.10, 0.02 * len(set(value["missing"])))
             confidence = round(max(0.0, min(1.0, confidence)), 3)
             evidence_strength = (
@@ -2549,6 +2854,27 @@ class ClinicalTriageService:
             "general health",
         }:
             update["suggested_specialty"] = recommended[0].name
+        # Chuyên khoa chính (dùng để tìm lịch) phải nằm trong danh sách gợi ý hiển thị cho bệnh nhân.
+        # Chỉ áp cho ca thường (ATS 4-5); ca khẩn giữ chuyên khoa của cổng an toàn.
+        if (
+            recommended
+            and not base_result.is_emergency
+            and base_result.ats_level.value >= ATSLevel.LEVEL_4_STANDARD.value
+            and base_specialty_code not in {candidate.code for candidate in recommended}
+        ):
+            base_candidate = next((c for c in candidates if c.code == base_specialty_code), None)
+            if base_candidate is not None and base_specialty_code != "TONG_QUAT":
+                # Chuyên khoa chính có triệu chứng hỗ trợ → giữ nó và đưa vào danh sách (vẫn tối đa 2).
+                if len(recommended) >= self.MAX_PUBLIC_SPECIALTIES:
+                    dropped = recommended.pop()
+                    dropped.publicly_recommended = False
+                    dropped.suppression_reason = "replaced_by_primary_specialty"
+                base_candidate.publicly_recommended = True
+                base_candidate.suppression_reason = None
+                recommended.append(base_candidate)
+            else:
+                # Không triệu chứng nào hỗ trợ (vd. đã hết) → theo danh sách gợi ý.
+                update["suggested_specialty"] = recommended[0].name
 
         # Safety gates win immediately; a multi-system conflict must never delay them.
         if base_result.is_emergency or base_result.ats_level.value <= ATSLevel.LEVEL_3_URGENT.value:
@@ -2558,7 +2884,8 @@ class ClinicalTriageService:
             candidate for candidate in candidates if candidate.routing_confidence >= self.CLARIFICATION_THRESHOLD
         ]
         if len(clarification_candidates) >= 2:
-            visible_for_reason = recommended[:2] or clarification_candidates[:2]
+            # Cần đủ 2 tên: chỉ 1 khoa được gợi ý công khai thì lấy từ danh sách cần hỏi lại (tránh IndexError).
+            visible_for_reason = recommended[:2] if len(recommended) >= 2 else clarification_candidates[:2]
             names = [candidate.name for candidate in visible_for_reason]
             if language == "en":
                 reason = f"Active complaints currently point to both {names[0]} and {names[1]}."
@@ -2574,7 +2901,14 @@ class ClinicalTriageService:
                 )
             update.update(
                 {
-                    "suggested_specialty": recommended[0].name if recommended else base_result.suggested_specialty,
+                    # Giữ chuyên khoa chính nếu đã nằm trong danh sách gợi ý (vd. ho + rát họng → TMH).
+                    "suggested_specialty": (
+                        update.get("suggested_specialty", base_result.suggested_specialty)
+                        if base_specialty_code in {c.code for c in recommended}
+                        else recommended[0].name
+                        if recommended
+                        else base_result.suggested_specialty
+                    ),
                     "conflict_reason": reason if len(recommended) >= 2 else None,
                     "needs_multi_symptom_clarification": True,
                     "clarification_question": question,

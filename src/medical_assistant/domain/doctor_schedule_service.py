@@ -46,7 +46,11 @@ SPECIALTY_ALIAS_MAP = {
     "sản": ["sản", "phụ khoa", "sản phụ khoa", "hỗ trợ sinh sản", "womens health"],
     "xương khớp": ["xương khớp", "chấn thương chỉnh hình", "orthopedics", "y học thể thao"],
     "cấp cứu": ["cấp cứu", "hồi sức", "emergency"],
-    "tai mũi họng": ["tai mũi họng", "ent"],
+    # Không dùng "ent": ilike *ent* khớp nhầm "Women's Health Center", "Breast Center".
+    "tai mũi họng": ["tai mũi họng", "tai - mũi - họng", "otorhinolaryngology"],
+    "răng hàm mặt": ["răng hàm mặt", "răng - hàm - mặt", "nha khoa", "răng", "dental"],
+    # Không dùng "urology": ilike *urology* khớp nhầm "Neurology".
+    "thận tiết niệu": ["thận - tiết niệu", "tiết niệu", "nội thận", "nephrology"],
     "da liễu": ["da liễu", "dermatology"],
     "hô hấp": ["hô hấp", "nội hô hấp", "phổi", "respiratory"],
     "mắt": ["mắt", "nhãn khoa", "ophthalmology"],
@@ -98,7 +102,7 @@ def _specialty_terms(name: str | None) -> list[str]:
                 if len(fa) <= 3:
                     if re.search(rf"\b{re.escape(fa)}\b", folded):
                         # Guard against "mat" matching "gan mat" or "tieu hoa"
-                        if fa == "mat" and ("gan" in folded or "tieu hoa" in folded):
+                        if fa == "mat" and any(k in folded for k in ("gan", "tieu hoa", "rang", "ham")):
                             continue
                         matched = True
                         break
@@ -110,6 +114,15 @@ def _specialty_terms(name: str | None) -> list[str]:
             terms.update(folded_aliases)
 
     return sorted((term for term in terms if len(term) >= 2), key=len, reverse=True)
+
+
+_NON_PHYSICIAN = re.compile(r"điều dưỡng|kỹ thuật viên|hộ sinh|dược sĩ|chuyên viên|nhân viên", re.IGNORECASE)
+
+
+def is_physician(title: Any) -> bool:
+    """Bản ghi có phải bác sĩ (được đặt lịch khám) không; bảng doctors có cả điều dưỡng, dược sĩ, KTV."""
+    text = " ".join(title) if isinstance(title, list) else str(title or "")
+    return "bác sĩ" in text.lower() or not _NON_PHYSICIAN.search(text)
 
 
 def _experience_years(value: Any) -> int:
@@ -194,7 +207,27 @@ class DoctorScheduleService:
             except Exception:
                 scored.append((0, spec))
 
-        scored.sort(key=lambda pair: pair[0], reverse=True)
+        query = _fold(query_name)
+        terms = {_fold(t) for t in _specialty_terms(query_name)}
+        wants_pediatric = bool(re.search(r"\b(?:nhi|so sinh|tre em|pediatric)", query))
+        wants_surgery = bool(re.search(r"\b(?:ngoai|phau thuat|can thiep|surgery)\b", query))
+
+        def relevance(spec: dict[str, Any]) -> int:
+            """Khớp đúng tên > khoa nội/chung > khoa ngoại/can thiệp (khi bệnh nhân không nhắc)."""
+            name = _fold(spec.get("name"))
+            bare = re.sub(r"^(?:khoa|trung tam|noi)\s+", "", name)
+            score = 5 if query in (name, bare) else 3 if (name in terms or bare in terms) else 0
+            if not wants_surgery and re.match(r"(?:ngoai|phau thuat|can thiep)\b", name):
+                score -= 2
+            return score
+
+        def is_pediatric(spec: dict[str, Any]) -> bool:
+            return bool(re.match(r"(?:nhi|so sinh|pediatric)\b", _fold(spec.get("name"))))
+
+        # Người lớn không được gợi ý bác sĩ khoa Nhi khi còn khoa phù hợp khác (và ngược lại ưu tiên Nhi cho trẻ).
+        if not wants_pediatric and any(not is_pediatric(spec) for _, spec in scored):
+            scored = [pair for pair in scored if not is_pediatric(pair[1])]
+        scored.sort(key=lambda pair: (relevance(pair[1]), pair[0]), reverse=True)
         return [pair[1] for pair in scored]
 
     def find_specialty_by_name(self, query_name: str) -> dict[str, Any] | None:
@@ -293,9 +326,11 @@ class DoctorScheduleService:
                 "status": "eq.active",
                 "review_status": "eq.approved",
                 "booking_enabled": "eq.true",
-                "limit": limit_doctors,
+                "limit": limit_doctors * 3,
             },
         )
+        # Chỉ gợi ý bác sĩ để đặt lịch khám (bỏ điều dưỡng, dược sĩ, kỹ thuật viên...).
+        doctors = [row for row in doctors if is_physician(row.get("title"))][:limit_doctors]
         if not doctors:
             return []
 
@@ -365,6 +400,8 @@ class DoctorScheduleService:
         scored: list[tuple[int, int, dict[str, Any]]] = []
         query_is_pediatric = any(term in {"nhi", "noi nhi", "ngoai nhi", "pediatrics"} for term in terms)
         for record in _load_crawled_doctors():
+            if not is_physician([*(record.get("credentials") or []), *(record.get("positions") or [])]):
+                continue
             specialties = record.get("specialties") or []
             positions = record.get("positions") or []
             sections = record.get("sections") or {}

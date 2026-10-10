@@ -172,6 +172,7 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
         key="WORKING_HOURS_HOTLINE",
         patterns=[
             r"gio lam viec|gio mo cua|lam viec den may gio|may gio lam viec|mo cua den may gio|dong cua luc may gio|kham thu 7|kham chu nhat|hotline|so dien thoai tong dai|dia chi benh vien",
+            r"(?:lam viec|mo cua|dong cua|kham)\s+(?:tu\s+|den\s+|luc\s+)?may\s+gio",
             # English
             r"(working|operating|opening)\s+hours",
             r"(what\s+time|when)\s+do\s+you\s+(open|close)",
@@ -232,6 +233,61 @@ FAQ_KNOWLEDGE_BASE: list[FAQEntry] = [
         ),
         quick_replies_vi=["Quay lại đặt lịch khám", "Kiểm tra mã đặt lịch", "Gặp lễ tân"],
         quick_replies_en=["Return to booking", "Check booking status", "Contact receptionist"],
+    ),
+    # 6. Số cấp cứu: luôn hướng 115 trước, sau đó mới tới khoa Cấp cứu 24/7 của bệnh viện.
+    FAQEntry(
+        key="EMERGENCY_CONTACT",
+        patterns=[
+            r"(?:so|sdt|dien thoai|hotline|duong day nong|goi)\s+(?:\w+\s+){0,3}cap cuu",
+            r"cap cuu\s+(?:\w+\s+){0,3}(?:so|sdt|dien thoai|hotline|goi)",
+            r"emergency\s+(?:number|phone|hotline|contact)",
+        ],
+        response_vi=(
+            "🚨 **Liên hệ cấp cứu:**\n\n"
+            "• Khi có dấu hiệu nguy hiểm (đau ngực dữ dội, khó thở, yếu liệt nửa người, co giật, chảy máu nhiều, "
+            "lơ mơ...): **gọi ngay 115** hoặc đến khoa Cấp cứu gần nhất, không chờ đặt lịch.\n"
+            "• Khoa Cấp cứu các bệnh viện Vinmec trực **24/7**. Hotline cơ sở chính:\n"
+            "  - Times City (Hà Nội): `024 3974 3556`\n"
+            "  - Central Park (TP.HCM): `028 3622 1166`\n"
+            "  - Đà Nẵng: `023 6371 1111` | Hải Phòng: `022 5730 9888`"
+        ),
+        response_en=(
+            "🚨 **Emergency contact:**\n\n"
+            "• For danger signs (severe chest pain, trouble breathing, one-sided weakness, seizures, heavy bleeding, "
+            "confusion...): **call 115 now** or go to the nearest emergency department — do not wait for an appointment.\n"
+            "• Vinmec emergency departments operate **24/7**. Main hotlines:\n"
+            "  - Times City (Hanoi): `+84 24 3974 3556`\n"
+            "  - Central Park (HCMC): `+84 28 3622 1166`\n"
+            "  - Danang: `+84 23 6371 1111` | Hai Phong: `+84 22 5730 9888`"
+        ),
+        quick_replies_vi=["Tư vấn triệu chứng", "Tìm cơ sở gần nhất"],
+        quick_replies_en=["Consult symptoms", "Find nearest hospital"],
+    ),
+    # 7. Bảo hiểm
+    FAQEntry(
+        key="INSURANCE",
+        patterns=[
+            r"bao hiem|bhyt|bao lanh",
+            r"\binsurance\b|direct billing",
+        ],
+        response_vi=(
+            "🛡️ **Bảo hiểm tại Vinmec:**\n\n"
+            "• **Bảo hiểm tư nhân / quốc tế:** Vinmec có bảo lãnh viện phí trực tiếp với nhiều công ty bảo hiểm; "
+            "bác mang thẻ bảo hiểm và giấy tờ tùy thân khi đến khám.\n"
+            "• **Bảo hiểm y tế (BHYT):** áp dụng tùy cơ sở và theo quy định hiện hành.\n\n"
+            "Phạm vi chi trả khác nhau theo từng hợp đồng, bác vui lòng gọi hotline cơ sở định khám để được xác nhận "
+            "trước (Times City `024 3974 3556`, Central Park `028 3622 1166`)."
+        ),
+        response_en=(
+            "🛡️ **Insurance at Vinmec:**\n\n"
+            "• **Private / international insurance:** Vinmec offers direct billing with many insurers; "
+            "please bring your insurance card and ID.\n"
+            "• **National health insurance (BHYT):** availability depends on the facility and current regulations.\n\n"
+            "Coverage varies by policy, so please call the facility hotline to confirm in advance "
+            "(Times City `+84 24 3974 3556`, Central Park `+84 28 3622 1166`)."
+        ),
+        quick_replies_vi=["Đặt lịch khám", "Xem bảng giá"],
+        quick_replies_en=["Book an appointment", "View prices"],
     ),
 ]
 

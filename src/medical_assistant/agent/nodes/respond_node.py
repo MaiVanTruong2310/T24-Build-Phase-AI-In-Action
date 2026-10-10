@@ -13,6 +13,7 @@ from src.medical_assistant.domain.booking_slot_service import (
 from src.medical_assistant.domain.guardrail_service import get_guardrail_service
 from src.medical_assistant.domain.language_service import (
     get_medical_disclaimer,
+    get_same_day_safety_net,
     get_specialty_display_name,
 )
 
@@ -200,7 +201,7 @@ async def respond_node(state: AgentState) -> dict:
         facility_name = (
             booking_intake.get("facility_preference")
             or state.get("facility_preference")
-            or "Bệnh viện ĐKQT Vinmec Riverside"
+            or "Chưa chọn cơ sở (điều phối viên tư vấn cơ sở phù hợp)"  # không tự gán cơ sở thay bệnh nhân
         )
 
         if ranked_specialties and len(ranked_specialties) > 1:
@@ -217,11 +218,41 @@ async def respond_node(state: AgentState) -> dict:
         )
 
         if not p_name or not p_phone or len(str(p_phone).replace(" ", "")) < 9:
-            response = (
-                "Dạ, em rất sẵn lòng hỗ trợ giữ chỗ và đặt lịch ngay cho bác! "
-                "Tuy nhiên em cần thêm **Họ và tên** cùng **Số điện thoại** chính xác để nhân viên y tế liên hệ tiếp nhận. "
-                "Bác vui lòng nhắn lại thông tin giúp em nhé ạ!"
-            )
+            latest_text = str(state.get("query") or state.get("user_input") or "")
+            # SĐT quá ngắn (LLM có thể trích "12345") cũng là SĐT sai, không phải "chưa có SĐT".
+            phone_invalid = bool(p_phone) and len(str(p_phone).replace(" ", "")) < 9
+            if phone_invalid:
+                p_phone = None
+            if (not p_phone and re.search(r"\d{4,}", latest_text)) or phone_invalid:
+                # Có gõ dãy số nhưng không phải SĐT Việt Nam hợp lệ → nói rõ thay vì lặp lại câu chung.
+                response = (
+                    "Dạ, số điện thoại bác vừa nhắn chưa đúng định dạng (cần 10 số, ví dụ 0912 345 678). "
+                    "Bác vui lòng kiểm tra và nhắn lại số điện thoại giúp em nhé ạ!"
+                )
+            elif p_name and p_name != "Quý khách" and not p_phone:
+                response = (
+                    f"Dạ, em đã ghi nhận tên **{p_name}**. "
+                    "Bác vui lòng cho em xin **Số điện thoại** để nhân viên y tế liên hệ xác nhận lịch nhé ạ!"
+                )
+            else:
+                response = (
+                    "Dạ, em rất sẵn lòng hỗ trợ giữ chỗ và đặt lịch ngay cho bác! "
+                    "Tuy nhiên em cần thêm **Họ và tên** cùng **Số điện thoại** chính xác để nhân viên y tế liên hệ tiếp nhận. "
+                    "Bác vui lòng nhắn lại thông tin giúp em nhé ạ!"
+                )
+            if lang == "en":
+                if (not p_phone and re.search(r"\d{4,}", latest_text)) or phone_invalid:
+                    response = (
+                        "The phone number you sent doesn't look valid (a 10-digit Vietnamese number, "
+                        "e.g. 0912 345 678). Could you please check and send it again?"
+                    )
+                elif p_name and p_name != "Quý khách" and not p_phone:
+                    response = f"Thank you, **{p_name}**. Could you share your **phone number** so our coordinator can confirm the appointment?"
+                else:
+                    response = (
+                        "I'd be glad to book this for you! Please send your **full name** and **phone number** "
+                        "so our coordinator can contact you to confirm."
+                    )
             quick_replies = []
         else:
             intake_payload = {
@@ -231,7 +262,10 @@ async def respond_node(state: AgentState) -> dict:
                 "facility_preference": facility_name,
                 "preferred_date": pref_date,
                 "preferred_period": pref_period,
-                "specialty_name": spec_display_name,
+                # Phiếu cho điều phối viên luôn ghi tên chuyên khoa tiếng Việt.
+                "specialty_name": get_specialty_display_name(spec_display_name, "vi")
+                if lang == "en"
+                else spec_display_name,
                 "doctor_name": doc_display_name,
             }
             try:
@@ -277,6 +311,21 @@ async def respond_node(state: AgentState) -> dict:
                     f"💡 Bác có thể dùng mã phiếu `{request_code}` tra cứu trạng thái tiếp nhận tại mục **Tiến trình điều trị** trên thanh menu bất cứ lúc nào."
                 )
                 quick_replies = ["Tiến trình điều trị", "Cần tư vấn thêm"]
+                if lang == "en":
+                    response = (
+                        f"🎉 **APPOINTMENT REQUEST RECEIVED!**\n\n"
+                        f"📋 **Request code:** `{request_code}`\n"
+                        f"• 👤 **Patient:** {p_name}\n"
+                        f"• 📞 **Phone:** {p_phone}\n"
+                        f"• 🩺 **Specialty:** {spec_display_name}\n"
+                        f"• 🏥 **Facility:** {facility_name}\n"
+                        f"• 👨‍⚕️ **Doctor:** {doc_display_name}\n"
+                        f"• 📅 **Date:** {pref_date or 'Coordinator will arrange the earliest date'}\n"
+                        f"• ⏰ **Session:** {pref_period}\n\n"
+                        f"✅ Our coordinator will call {p_phone} to confirm the exact time. "
+                        f"You can track the request with code `{request_code}` under **Treatment progress**."
+                    )
+                    quick_replies = ["Treatment progress", "More help"]
             except Exception as exc:
                 logger.error("Error auto-committing conversational booking: %s", exc)
                 response = build_booking_guidance_text(
@@ -1098,7 +1147,13 @@ async def respond_node(state: AgentState) -> dict:
         "LANGUAGE_CHANGED",
     }
 
-    full_response = response + (disclaimer if has_clinical_context else "")
+    # Ca ưu tiên khám trong ngày (ATS 3) được hẹn sau → dặn dấu hiệu cần gọi cấp cứu khi chờ.
+    safety_net = (
+        get_same_day_safety_net(lang)
+        if has_clinical_context and not is_emergency and state.get("ats_level") == 3
+        else ""
+    )
+    full_response = response + safety_net + (disclaimer if has_clinical_context else "")
 
     # TẦNG 3: Post-Generation Medical Safety Validators (SAF-01 & SAF-02)
     from src.medical_assistant.domain.security.guardrail_validators import MedicalSafetyValidators
@@ -1144,6 +1199,9 @@ async def respond_node(state: AgentState) -> dict:
     if llm_fallback:
         token_metrics["model"] = "fallback-rule"
         token_metrics["execution_mode"] = "llm_fallback_rule"
+    from src.medical_assistant.infrastructure.llm import llm_usage_sink
+
+    token_counter.apply_provider_usage(token_metrics, llm_usage_sink.get())
     meta["token_usage"] = token_metrics
     meta["quick_replies"] = quick_replies
     meta["booking_intake"] = None if workflow_status in {"FAQ_ANSWERED", "SECURITY_BLOCKED"} else booking_intake

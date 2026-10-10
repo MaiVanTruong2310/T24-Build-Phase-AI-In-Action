@@ -2,13 +2,44 @@ import asyncio
 import logging
 import threading
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_openai import ChatOpenAI
 
 from src.medical_assistant.config import get_settings
+
+# Usage thật do provider trả về, gom theo từng request. Route đặt một list rỗng ở đầu lượt;
+# list được chia sẻ cho mọi task con nên node nào gọi LLM cũng ghi vào cùng một chỗ.
+llm_usage_sink: ContextVar[list[dict[str, int]] | None] = ContextVar("llm_usage_sink", default=None)
+
+
+class _UsageRecorder(BaseCallbackHandler):
+    """Ghi usage_metadata thật của mỗi lần gọi LLM vào llm_usage_sink (nếu có)."""
+
+    def on_llm_end(self, response: Any, **kwargs: Any) -> None:
+        sink = llm_usage_sink.get()
+        if sink is None:
+            return
+        for generations in response.generations:
+            for generation in generations:
+                usage = getattr(getattr(generation, "message", None), "usage_metadata", None)
+                if not usage:
+                    continue
+                sink.append(
+                    {
+                        "input_tokens": int(usage.get("input_tokens") or 0),
+                        "output_tokens": int(usage.get("output_tokens") or 0),
+                        "cache_read": int((usage.get("input_token_details") or {}).get("cache_read") or 0),
+                        "reasoning": int((usage.get("output_token_details") or {}).get("reasoning") or 0),
+                    }
+                )
+
+
+_USAGE_RECORDER = _UsageRecorder()
 
 
 @dataclass
@@ -305,16 +336,33 @@ class _StructuredFailover:
 
 
 def _build_openai_compatible_model(
-    *, api_key: str, base_url: str, model: str, temperature: float, timeout: float, max_tokens: int = 800
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    temperature: float,
+    timeout: float,
+    max_tokens: int = 800,
+    deepseek_disable_thinking: bool | None = None,
 ) -> ChatOpenAI:
+    # langchain-openai đổi max_tokens thành max_completion_tokens, nhưng DeepSeek chỉ nhận max_tokens
+    # nên trần output bị bỏ qua. Với DeepSeek gửi thẳng qua extra_body (và tắt thinking nếu được yêu cầu).
+    if deepseek_disable_thinking is None:
+        token_kwargs: dict[str, Any] = {"max_tokens": max_tokens}
+    else:
+        extra_body: dict[str, Any] = {"max_tokens": max_tokens}
+        if deepseek_disable_thinking:
+            extra_body["thinking"] = {"type": "disabled"}
+        token_kwargs = {"extra_body": extra_body}
     return ChatOpenAI(
         model=model,
         api_key=api_key,
         base_url=base_url,
         temperature=temperature,
         timeout=timeout,
-        max_tokens=max_tokens,
         max_retries=0,
+        callbacks=[_USAGE_RECORDER],
+        **token_kwargs,
     )
 
 
@@ -350,6 +398,8 @@ def get_llm() -> FailoverChatModel:
                 model=ds_model,
                 temperature=settings.llm_temperature,
                 timeout=settings.llm_request_timeout_seconds,
+                max_tokens=settings.llm_max_output_tokens,
+                deepseek_disable_thinking=settings.deepseek_disable_thinking,
             )
         )
 

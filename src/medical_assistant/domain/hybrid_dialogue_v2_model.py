@@ -117,3 +117,71 @@ class HybridDialogueResponse(BaseModel):
     action_confidence: float = Field(default=0.9, ge=0.0, le=1.0)
     draft_response: str = ""
     quick_replies: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Schema gọn gửi cho LLM (function calling). Chỉ giữ các trường backend thực sự đọc,
+# để giảm token của định nghĩa tool và token output. HybridDialogueResponse ở trên vẫn là
+# hợp đồng nội bộ đầy đủ (fallback rule, test); LLM trả LeanDialogueOutput rồi chuyển qua to_full().
+# ---------------------------------------------------------------------------
+class LeanFactsDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    subject: Literal["self", "other", "unknown"] = "self"
+    chief_complaint: str | None = None
+    complaints: list[ComplaintDelta] = Field(default_factory=list)
+    observations: list[FactObservation] = Field(default_factory=list)
+    duration_days: int | None = Field(None, ge=0)
+    bowel_interval_days: int | None = Field(None, ge=0)
+    location: str | None = None
+    severity: Literal["mild", "moderate", "severe", "unknown"] = "unknown"
+    qualifiers: list[str] = Field(default_factory=list)
+    body_regions: list[str] = Field(default_factory=list)
+    primary_system: str | None = None
+    functional_impairment: bool = False
+    missing_dimensions: list[str] = Field(default_factory=list)
+    corrections: list[FactCorrection] = Field(default_factory=list)
+    patient_name: str | None = None
+    patient_phone: str | None = None
+
+
+class LeanSafetyConcern(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str
+    evidence: str | None = None
+
+
+class LeanActionArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    specialty_key: str | None = None
+    slot_id: str | None = None
+    facility_id: str | None = None
+    facility_name: str | None = None
+    requested_days: int | None = Field(None, gt=0)
+    preferred_date_text: str | None = None
+    preferred_period: Literal["morning", "afternoon", "evening", "null"] = "null"
+    department_key: str | None = None
+    comparison_requested: bool | None = False
+
+
+class LeanDialogueOutput(BaseModel):
+    """Phần LLM thực sự phải trả. Các trường quyết định (action, độ tin cậy, câu trả lời) là bắt buộc."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    primary_intent: str
+    proposed_action: str
+    draft_response: str
+    extraction_confidence: float = Field(ge=0.0, le=1.0)
+    action_confidence: float = Field(ge=0.0, le=1.0)
+    facts_delta: LeanFactsDelta = Field(default_factory=LeanFactsDelta)
+    safety_concerns: list[LeanSafetyConcern] = Field(default_factory=list)
+    needs_clarification: bool = False
+    action_args: LeanActionArgs = Field(default_factory=LeanActionArgs)
+    candidate_specialties: list[CandidateSpecialty] = Field(default_factory=list)
+    quick_replies: list[str] = Field(default_factory=list)
+
+    def to_full(self, language: str = "vi") -> HybridDialogueResponse:
+        return HybridDialogueResponse.model_validate({**self.model_dump(), "language": language})
