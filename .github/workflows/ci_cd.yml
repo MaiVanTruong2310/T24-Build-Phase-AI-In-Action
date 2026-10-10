@@ -185,21 +185,34 @@ jobs:
           npm --version
           npx --version
 
+      - name: Configure npm cache
+        run: |
+          echo "npm_config_cache=${RUNNER_TEMP}/npm-cache" >> "$GITHUB_ENV"
+          rm -rf "${RUNNER_TEMP}/npm-cache"
+          mkdir -p "${RUNNER_TEMP}/npm-cache"
+
       - name: Install frontend dependencies
+        working-directory: frontend
         run: npm ci
 
       - name: Pull Vercel project settings
+        working-directory: frontend
         env:
-          npm_config_cache: /tmp/npm-cache-${{ github.run_id }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          npx --yes vercel@63.1.0 pull \
+          npx --yes vercel@latest pull \
             --yes \
             --environment="$VERCEL_ENV" \
             --token="$VERCEL_TOKEN"
 
       - name: Build Vercel deployment
+        working-directory: frontend
         shell: bash
         run: |
+          echo "npm cache:"
+          npm config get cache
           if [[ "$GITHUB_REF_NAME" == "main" ]]; then
             npx vercel@latest build \
               --prod \
