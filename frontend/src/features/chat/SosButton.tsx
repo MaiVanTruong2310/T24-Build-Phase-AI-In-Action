@@ -89,7 +89,7 @@ export function SosButton({ variant = 'pill' }: SosButtonProps) {
     // Chờ tối đa vài giây nếu vị trí chưa về kịp; không chặn việc gửi.
     const location = locationRef.current ?? (await Promise.race([
       requestPosition(),
-      new Promise<{ error: string }>(resolve => window.setTimeout(() => resolve({ error: 'Hết thời gian lấy vị trí' }), 3000)),
+      new Promise<{ position?: Position; error?: string }>(resolve => window.setTimeout(() => resolve({ error: 'Hết thời gian lấy vị trí' }), 3000)),
     ]));
     const { name, phone } = patientInfo();
     try {
