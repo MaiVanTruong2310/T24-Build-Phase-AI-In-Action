@@ -177,6 +177,13 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Startup warmup encountered error: %s", exc)
 
+    # Chỉ mục vector (Chroma) không nằm trong image → dựng nền từ data/datalake/rag/*.jsonl, không chặn healthcheck.
+    # Chưa dựng xong thì RAG vẫn chạy bằng FTS như cũ. Bỏ qua khi test để không gọi mạng.
+    if settings.app_env != "test":
+        from src.medical_assistant.rag.vector_index import ensure_vector_index
+
+        app.state.vector_index_task = asyncio.create_task(asyncio.to_thread(ensure_vector_index))
+
     try:
         cleanup_task = asyncio.create_task(
             _booking_hold_cleanup_loop(settings.booking_hold_cleanup_interval_seconds, stop_event)
