@@ -1,0 +1,30 @@
+/* Nút nổi Zalo Bot: ngôn ngữ vẽ tay chung (biến --hd-* từ Header.css, có giá trị dự phòng). Nằm góc trái dưới để không đè nút chat AI ở góc phải. */
+.zbot {
+  --ink: var(--hd-ink, #1f2d26);
+  --paper: var(--hd-paper, #ffffff);
+  --cta-bg: var(--hd-cta-bg, #285c45);
+  --cta-fg: var(--hd-cta-fg, #e4f3ea);
+  --shadow: var(--hd-shadow, #1f2d26);
+  --thread: var(--hd-thread, #bd5f57);
+  position: fixed; left: 16px; bottom: 16px; z-index: 9990; display: inline-flex; align-items: center; gap: 10px; padding: 6px 16px 6px 6px; text-decoration: none; color: var(--ink);
+  background: var(--paper); border: 2px solid var(--ink); border-radius: 999px 900px 999px 920px / 900px 999px 920px 999px; box-shadow: 3px 3px 0 var(--shadow);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+html.dark .zbot { --ink: var(--hd-ink, #d3e6db); --paper: var(--hd-paper, #14231c); --shadow: var(--hd-shadow, #3f6350); }
+.zbot:hover { transform: translate(-1px, -1px) rotate(-1deg); box-shadow: 4px 4px 0 var(--shadow); }
+.zbot:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow); }
+.zbot:focus-visible { outline: 2px dashed var(--thread); outline-offset: 3px; }
+.zbot__badge {
+  display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0; color: var(--cta-fg); background: var(--cta-bg);
+  border: 2px solid var(--ink); border-radius: 12px 14px 11px 13px / 13px 11px 14px 12px; box-shadow: 2px 2px 0 var(--shadow);
+  font-family: var(--hd-hand, 'FC Baby Doll', system-ui, sans-serif); font-size: 26px; line-height: 1; transform: rotate(-4deg);
+}
+.zbot__label { display: flex; flex-direction: column; gap: 2px; line-height: 1.1; }
+.zbot__title { font-family: var(--hd-hand, 'FC Baby Doll', system-ui, sans-serif); font-size: 19px; }
+.zbot__sub { font-size: 11px; font-weight: 600; color: color-mix(in srgb, var(--ink) 65%, transparent); }
+@media (max-width: 639px) {
+  .zbot { left: 10px; bottom: 10px; padding: 4px; }
+  .zbot__label { display: none; }
+  .zbot--lifted { bottom: 84px; }
+}
+@media (prefers-reduced-motion: reduce) { .zbot { transition: none; } }

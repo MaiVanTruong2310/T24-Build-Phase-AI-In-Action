@@ -1,0 +1,118 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (never commit large generated data). Keep the reviewed specialty
+# corpus required by the chat runtime.
+data/*
+!data/datalake/
+data/datalake/*
+!data/datalake/normalized/
+data/datalake/normalized/*
+!data/datalake/normalized/diseases_triaged.jsonl
+!data/datalake/rag/
+data/datalake/rag/*
+!data/datalake/rag/specialties.jsonl
+!data/crawled/
+data/crawled/*
+!data/crawled/doctors/
+data/crawled/doctors/*
+!data/crawled/doctors/processed/
+data/crawled/doctors/processed/*
+!data/crawled/doctors/processed/jsonl/
+data/crawled/doctors/processed/jsonl/*
+!data/crawled/doctors/processed/jsonl/vinmec_professionals_vi.jsonl
+*.db
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Test coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# Docker
+docker-compose.override.yml
+
+# Node (frontend)
+node_modules/
+.next/
+out/
+.nuxt/
+
+# Build
+*.pyc
+*.pyo
+
+
+AGENTS.md
+CACHE.md
+ExceptionDesign.md
+task/*
+docs-spec/*
+planning/*
+specs/*
+VMEC-01 — Đặc tả build hệ thống.html
+frontend/node_modules
+frontend/UI
+context-agent/*
+
+# Local runner scripts (kept local only, do not commit)
+run.bat
+run.ps1
+run.sh
+
+# Local agent instructions and context
+.agent/
+.agents/
+context_agent/
+
+data/
+!data/
+!data/sop/
+data/sop/*
+!data/sop/*.md
+planning/
+specs/
+docs-spec/
+task/
+
+# Benchmark: commit script + dữ liệu ca test + mốc chuẩn; KHÔNG commit kết quả sinh ra khi chạy
+eval/conversation_bench/bench.db
+eval/conversation_bench/results.db
+eval/conversation_bench/generated/paraphrase_cache.jsonl
+eval/conversation_bench/_runs/
+reports/conversation_bench/
+reports/accent_baseline/*/
+reports/compliance_eval/
+reports/triage_eval/

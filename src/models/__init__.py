@@ -1,0 +1,85 @@
+"""SQLAlchemy persistence models."""
+
+from src.models.auth import OtpChallenge, RefreshSession
+from src.models.booking import Booking
+from src.models.booking_hold import BookingHold
+from src.models.catalog import (
+    CatalogAuditEvent,
+    Doctor,
+    DoctorFacility,
+    DoctorSchedule,
+    DoctorService,
+    DoctorSpecialty,
+    Facility,
+    Service,
+    Specialty,
+)
+from src.models.conversation import (
+    Conversation,
+    ConversationParticipant,
+    Handoff,
+    Message,
+    PatientChatContext,
+    StaffAgentContext,
+)
+from src.models.coordination import (
+    ConsultationRequest,
+    ConsultationRequestEvent,
+    ConsultationSession,
+    ConsultationSlot,
+    WeeklyShift,
+)
+from src.models.notification import Notification
+from src.models.package_request import PackageRequest
+from src.models.patient_profile import PatientProfile, PatientRelationship
+from src.models.ui_visibility import UiVisibility
+from src.models.user import User
+from src.models.workbench import (
+    CoordinationCase,
+    CoordinationDeposit,
+    CoordinationEvent,
+    CoordinationMessage,
+    CoordinationPolicy,
+    CoordinatorMember,
+)
+from src.models.zalo import ZaloUserMapping
+
+__all__ = [
+    "Conversation",
+    "ConversationParticipant",
+    "Message",
+    "Handoff",
+    "PatientChatContext",
+    "StaffAgentContext",
+    "PackageRequest",
+    "PatientProfile",
+    "PatientRelationship",
+    "CatalogAuditEvent",
+    "Booking",
+    "BookingHold",
+    "Notification",
+    "Doctor",
+    "DoctorFacility",
+    "DoctorSchedule",
+    "DoctorService",
+    "DoctorSpecialty",
+    "Facility",
+    "OtpChallenge",
+    "RefreshSession",
+    "Service",
+    "Specialty",
+    "User",
+    "UiVisibility",
+    "ZaloUserMapping",
+    "ConsultationRequest",
+    "ConsultationRequestEvent",
+    "ConsultationSession",
+    "ConsultationSlot",
+    "WeeklyShift",
+    "CoordinationCase",
+    "CoordinationDeposit",
+    "CoordinationEvent",
+    "CoordinationMessage",
+    "CoordinationPolicy",
+    "CoordinatorMember",
+]

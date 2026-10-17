@@ -1,0 +1,125 @@
+name: Frontend deployment
+
+on:
+  workflow_call:
+
+env:
+  VERCEL_CLI_VERSION: "63.1.0"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend_deploy:
+    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    timeout-minutes: 20
+    name: Deploy frontend to Vercel
+    runs-on: self-hosted
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      # API đi qua proxy /api của chính domain Vercel (frontend/api/proxy.js): cookie phiên là cookie cùng trang.
+      # Gọi thẳng backend (duckdns) thì cookie là cookie bên thứ ba, Safari/Brave/Chrome ẩn danh chặn → đăng nhập
+      # xong không tải được hồ sơ. WebSocket vẫn đi thẳng backend (Vercel không proxy WS), xác thực bằng ticket.
+      VITE_API_BASE_URL: same-origin
+      VITE_WS_ORIGIN: ${{ github.ref_name == 'main' && secrets.API_DOMAIN_PROD || secrets.API_DOMAIN_DEV }}
+      VERCEL_CLI_VERSION: "63.1.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # KhÃƒÂ´ng dÃƒÂ¹ng "cache: npm": runner self-hosted Ã„â€˜ÃƒÂ£ giÃ¡Â»Â¯ sÃ¡ÂºÂµn ~/.npm trÃƒÂªn mÃƒÂ¡y; cache GitHub chÃƒÂ©p cÃ¡ÂºÂ£ thÃ†Â° mÃ¡Â»Â¥c
+          # nÃƒÂ y (Ã„â€˜ÃƒÂ£ phÃƒÂ¬nh 8,6 GB) nÃƒÂªn mÃ¡Â»â€”i lÃ¡ÂºÂ§n chÃ¡ÂºÂ¡y phÃ¡ÂºÂ£i tÃ¡ÂºÂ£i lÃ¡ÂºÂ¡i, hÃ¡ÂºÂ¿t hÃ¡ÂºÂ¡n link giÃ¡Â»Â¯a chÃ¡Â»Â«ng rÃ¡Â»â€œi job bÃ¡Â»â€¹ hÃ¡Â»Â§y.
+
+      - name: Check Node environment
+        run: |
+          node --version
+          npm --version
+          npx --version
+
+      - name: Report runner resources
+        run: |
+          free -h
+          df -h /
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Cache Vercel CLI
+        id: vercel-cli-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vercel-cli
+          key: ${{ runner.os }}-vercel-${{ env.VERCEL_CLI_VERSION }}
+
+      - name: Install Vercel CLI
+        shell: bash
+        if: steps.vercel-cli-cache.outputs.cache-hit != 'true'
+        run: |
+          prefix="${RUNNER_TEMP}/vercel-cli"
+          for attempt in 1 2 3; do
+            npm install --global --prefer-offline --no-audit --no-fund --prefix "$prefix" "vercel@${VERCEL_CLI_VERSION}" && break
+            if [[ "$attempt" == 3 ]]; then exit 1; fi
+            echo "CÃƒÂ i Vercel CLI lÃ¡Â»â€”i (lÃ¡ÂºÂ§n $attempt), thÃ¡Â»Â­ lÃ¡ÂºÂ¡i sau 15 giÃƒÂ¢y"
+            sleep 15
+          done
+          "$prefix/bin/vercel" --version
+
+      - name: Add Vercel CLI to PATH
+        run: echo "$RUNNER_TEMP/vercel-cli/bin" >> "$GITHUB_PATH"
+
+      - name: Check Vercel CLI
+        run: vercel --version
+
+      - name: Pull Vercel project settings
+        working-directory: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          vercel pull \
+            --yes \
+            --environment="$VERCEL_ENV" \
+            --token="$VERCEL_TOKEN"
+
+      - name: Require BACKEND_ORIGIN for API proxy
+        shell: bash
+        run: |
+          if ! vercel env ls "$VERCEL_ENV" --token="$VERCEL_TOKEN" 2>/dev/null | grep -qw BACKEND_ORIGIN; then
+            exit 1
+          fi
+
+      - name: Build Vercel deployment
+        working-directory: frontend
+        shell: bash
+        run: |
+          if [[ "$VERCEL_ENV" == "production" ]]; then
+            vercel build --prod --token="$VERCEL_TOKEN"
+          else
+            vercel build --token="$VERCEL_TOKEN"
+          fi
+
+      - name: Deploy prebuilt frontend
+        shell: bash
+        run: |
+          if [[ "$VERCEL_ENV" == "production" ]]; then
+            DEPLOY_URL=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          else
+            DEPLOY_URL=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          fi
+          echo "Deployed: $DEPLOY_URL"
+          echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"

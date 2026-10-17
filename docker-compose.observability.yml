@@ -1,0 +1,58 @@
+services:
+  node-exporter:
+    image: ${NODE_EXPORTER_IMAGE:-prom/node-exporter:v1.9.1}
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "${EXPORTER_BIND_ADDRESS:-127.0.0.1}:${NODE_EXPORTER_PORT:-9100}:9100"
+    restart: unless-stopped
+
+  cadvisor:
+    image: ${CADVISOR_IMAGE:-gcr.io/cadvisor/cadvisor:v0.49.2}
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    ports:
+      - "${EXPORTER_BIND_ADDRESS:-127.0.0.1}:${CADVISOR_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  backend:
+    # Prometheus reaches this restricted port from the monitoring EC2 only.
+    # Enforce the corresponding security-group rule at the AWS layer.
+    ports:
+      - "${METRICS_BIND_ADDRESS:-127.0.0.1}:${METRICS_PORT:-8001}:8000"
+    environment:
+      METRICS_ENABLED: "true"
+      OTEL_ENABLED: "true"
+      OTEL_ENVIRONMENT: ${OBSERVABILITY_ENVIRONMENT:-${APP_ENV:-development}}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-ai20k-backend}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+
+  alloy:
+    image: ${ALLOY_IMAGE:-grafana/alloy:v1.6.1}
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    environment:
+      OBSERVABILITY_ENVIRONMENT: ${OBSERVABILITY_ENVIRONMENT:-${APP_ENV:-development}}
+      LOKI_URL: ${LOKI_URL:?LOKI_URL is required when observability is enabled}
+      TEMPO_OTLP_ENDPOINT: ${TEMPO_OTLP_ENDPOINT:?TEMPO_OTLP_ENDPOINT is required when observability is enabled}
+    volumes:
+      - ./observability/alloy/agent.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    expose:
+      - "4317"
+      - "4318"
+      - "12345"
+    restart: unless-stopped

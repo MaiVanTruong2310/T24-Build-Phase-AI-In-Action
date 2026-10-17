@@ -1,0 +1,197 @@
+/* Phần còn lại của trang chủ + chân trang: cùng ngôn ngữ vẽ tay với header/hero.
+   Biến --hd-* và font 'FC Baby Doll' được định nghĩa trong Header.css. */
+.lp-wrap { max-width: 80rem; margin: 0 auto; padding: 0 16px; }
+@media (min-width: 640px) { .lp-wrap { padding: 0 24px; } }
+
+.lp-section {
+  position: relative;
+  padding: 72px 0;
+  border-bottom: 2px dashed color-mix(in srgb, var(--hd-thread, #bd5f57) 45%, transparent);
+  background: var(--app-page);
+  color: var(--app-text);
+}
+@media (min-width: 1024px) { .lp-section { padding: 96px 0; } }
+.lp-section--last { border-bottom: 0; }
+
+.lp-kicker {
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 3px 12px;
+  border: 2px solid var(--hd-ink, #1f2d26);
+  border-radius: 10px 14px 11px 15px / 14px 10px 15px 11px;
+  background: var(--hd-tint, #d9efe2);
+  box-shadow: 2px 2px 0 var(--hd-shadow, #1f2d26);
+  color: var(--app-primary);
+  font-family: var(--hd-hand, inherit);
+  font-size: 18px;
+  line-height: 1.25;
+  transform: rotate(-1deg);
+}
+.lp-title {
+  margin: 0;
+  color: var(--app-text);
+  font-size: clamp(26px, 4vw, 40px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.lp-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--hd-ink, #1f2d26);
+  border-radius: 12px 15px 12px 16px / 15px 12px 16px 12px;
+  background: var(--hd-tint, #d9efe2);
+  color: var(--app-primary);
+}
+.lp-icon--lg { width: 52px; height: 52px; border-radius: 14px 17px 13px 18px / 17px 13px 18px 14px; }
+.lp-tag {
+  padding: 1px 10px;
+  border: 1.5px solid var(--hd-ink, #1f2d26);
+  border-radius: 8px 11px 9px 12px / 11px 8px 12px 9px;
+  background: var(--hd-paper, #ffffff);
+  color: var(--app-primary);
+  font-family: var(--hd-hand, inherit);
+  font-size: 16px;
+  line-height: 1.4;
+  transform: rotate(2deg);
+}
+
+.lp-card {
+  padding: 26px 24px 28px;
+  border: 2px solid var(--hd-ink, #1f2d26);
+  border-radius: 16px 20px 15px 21px / 21px 15px 20px 16px;
+  background: var(--hd-paper, #ffffff);
+  box-shadow: 5px 5px 0 var(--hd-shadow, #1f2d26);
+}
+.lp-card--danger { background: var(--hd-sos-bg, #f8e4e2); color: var(--hd-sos-fg, #7a2f2a); }
+.lp-card--danger .lp-icon { background: var(--hd-paper, #ffffff); color: var(--hd-sos-fg, #7a2f2a); }
+.lp-card--danger .lp-tag { color: var(--hd-sos-fg, #7a2f2a); }
+.lp-card-title { margin: 0 0 8px; font-family: var(--hd-hand, inherit); font-size: 26px; font-weight: 400; line-height: 1.15; color: inherit; }
+.lp-card-text { margin: 0; font-size: 15px; line-height: 1.65; color: var(--app-secondary); }
+.lp-card--danger .lp-card-text { color: inherit; }
+
+.lp-limits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 22px;
+  margin-top: 36px;
+  padding: 16px 22px;
+  border: 2px dashed var(--hd-thread, #bd5f57);
+  border-radius: 16px;
+  background: var(--app-muted);
+}
+.lp-limits__label { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-family: var(--hd-hand, inherit); font-size: 21px; line-height: 1.2; color: var(--hd-danger, #893d38); }
+.lp-limits ul { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; padding: 0; list-style: none; }
+.lp-limits li { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; color: var(--app-text); }
+.lp-limits li::before { content: '✕'; color: var(--hd-danger, #893d38); font-weight: 800; }
+.lp-limits__note { margin: 0 0 0 auto; font-size: 14px; color: var(--app-secondary); }
+
+/* Story: bước và chú thích dùng font vẽ tay */
+.lp-step { margin: 0; font-family: var(--hd-hand, inherit); font-size: 16px; color: var(--app-secondary); }
+.lp-step-title { margin: 2px 0 0; font-family: var(--hd-hand, inherit); font-size: 26px; font-weight: 400; line-height: 1.15; color: var(--app-text); }
+.lp-caption { margin: 14px 0 0; text-align: center; font-family: var(--hd-hand, inherit); font-size: 16px; color: var(--app-secondary); }
+
+/* CTA */
+.lp-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 44px 24px;
+  text-align: center;
+  border: 2px solid var(--hd-ink, #1f2d26);
+  border-radius: 22px 26px 21px 27px / 27px 21px 26px 22px;
+  background: var(--hd-tint, #d9efe2);
+  box-shadow: 6px 6px 0 var(--hd-shadow, #1f2d26);
+}
+.lp-cta__text { max-width: 34rem; margin: 0; font-size: 16px; line-height: 1.65; color: var(--app-secondary); }
+.lp-cta__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
+@media (max-width: 639px) { .lp-cta__actions { width: 100%; flex-direction: column; } }
+
+/* Chân trang */
+.lp-footer {
+  padding: 56px 0 28px;
+  border-top: 2px solid var(--hd-ink, #1f2d26);
+  background: var(--app-muted);
+  color: var(--app-text);
+}
+.lp-footer__grid { display: grid; gap: 32px; }
+@media (min-width: 768px) { .lp-footer__grid { grid-template-columns: 1.6fr 1fr 1fr auto; gap: 40px; } }
+.lp-footer__brand { margin: 0 0 10px; font-family: var(--font-display, serif); font-size: 30px; font-weight: 600; line-height: 1; letter-spacing: 0.04em; color: var(--app-primary); }
+.lp-footer__brand span { color: var(--app-accent); }
+.lp-footer__desc { max-width: 26rem; margin: 0; font-size: 14px; line-height: 1.65; color: var(--app-secondary); }
+.lp-footer__head { margin: 0 0 12px; font-family: var(--hd-hand, inherit); font-size: 20px; line-height: 1.2; }
+.lp-footer ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lp-footer li a { font-size: 14px; color: var(--app-secondary); text-decoration: none; }
+.lp-footer li a:hover { color: var(--app-primary); text-decoration: underline wavy var(--hd-thread, #bd5f57) 1.5px; text-underline-offset: 4px; }
+.lp-footer__sos { align-self: start; justify-self: start; }
+.lp-footer__bottom {
+  display: grid;
+  gap: 6px;
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 2px dashed color-mix(in srgb, var(--hd-thread, #bd5f57) 45%, transparent);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-secondary);
+}
+.lp-footer__bottom p { margin: 0; }
+
+/* Nút và tem dùng chung (hero, CTA, chân trang) */
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 0 24px;
+  box-sizing: border-box;
+  border: 2px solid var(--hd-ink, #1f2d26);
+  border-radius: 12px 16px 12px 17px / 16px 12px 17px 12px;
+  box-shadow: 4px 4px 0 var(--hd-shadow, #1f2d26);
+  font-family: var(--hd-hand, inherit);
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, background-color 0.2s;
+}
+.hero-btn--primary { background: var(--hd-cta-bg, #285c45); color: var(--hd-cta-fg, #e4f3ea); }
+.hero-btn--ghost { background: var(--hd-paper, #ffffff); color: var(--app-text); }
+.hero-btn--ghost:hover { background: var(--app-muted); }
+.hero-btn:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--hd-shadow, #1f2d26); }
+.hero-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--hd-shadow, #1f2d26); }
+.hero-btn:focus-visible, .hero-sos:focus-visible { outline: 2px solid var(--app-primary); outline-offset: 3px; }
+
+.hero-sos {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 9px 16px;
+  border: 2px solid var(--hd-ink, #1f2d26);
+  border-radius: 14px 18px 13px 19px / 18px 13px 19px 14px;
+  background: var(--hd-sos-bg, #f8e4e2);
+  box-shadow: 3px 3px 0 var(--hd-sos-shadow, #1f2d26);
+  color: var(--hd-sos-fg, #7a2f2a);
+  font-size: 14px;
+  text-decoration: none;
+  transform: rotate(-0.8deg);
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+.hero-sos b { font-family: var(--hd-hand, inherit); font-size: 22px; font-weight: 400; line-height: 1; }
+.hero-sos:hover { transform: rotate(-0.8deg) translate(-1px, -1px); box-shadow: 4px 4px 0 var(--hd-sos-shadow, #1f2d26); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-circle__ink path { animation: none; stroke-dashoffset: 0; }
+  .hero-btn, .hero-sos { transition: none; }
+}

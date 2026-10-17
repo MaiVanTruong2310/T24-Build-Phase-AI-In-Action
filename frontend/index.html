@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="vi" class="overflow-y-scroll">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#285c45" />
+    <meta name="description" content="VCare+ - Hệ thống y tế số đa tầng bác sĩ giám sát" />
+    <link rel="icon" href="/vcare-logo.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/vcare-logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Đặt theme trước khi trang vẽ để không bị nháy: chỉ tối khi người dùng đã chọn tối.
+      try {
+        var t = localStorage.getItem('vcare_theme') || localStorage.getItem('medicare_theme');
+        var d = document.documentElement;
+        if (t === 'dark') { d.classList.add('dark'); d.setAttribute('data-theme', 'dark'); }
+        else { d.classList.remove('dark'); d.setAttribute('data-theme', 'light'); }
+      } catch (e) {}
+    </script>
+    <title>VCare+ - Hệ Thống Khám Bệnh Đa Tầng Bác Sĩ Giám Sát</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

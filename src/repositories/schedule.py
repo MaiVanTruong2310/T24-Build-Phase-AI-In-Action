@@ -1,0 +1,203 @@
+"""Doctor schedule persistence queries."""
+
+from datetime import UTC, datetime
+from uuid import UUID
+
+from sqlalchemy import exists, func, select
+from sqlalchemy.orm import selectinload
+
+from src.models.booking import Booking
+from src.models.booking_hold import BookingHold
+from src.models.catalog import Doctor, DoctorSchedule, Facility
+
+
+class ScheduleRepositoryMixin:
+    """Schedule queries composed into the catalog repository."""
+
+    async def is_appointment_schedule(self, schedule_id: UUID) -> bool:
+        """Appointment rows are linked by their owning booking."""
+        return bool(await self.session.scalar(select(exists().where(Booking.appointment_schedule_id == schedule_id))))
+
+    async def count_active_bookings_for_schedules(self, schedule_ids: list[UUID]) -> dict[UUID, int]:
+        """Count bookings and unexpired holds for each schedule in one batch."""
+        if not schedule_ids:
+            return {}
+
+        booking_counts = await self.session.execute(
+            select(Booking.schedule_id, func.count(Booking.id))
+            .where(
+                Booking.schedule_id.in_(schedule_ids),
+                Booking.status == "pending_approval",
+            )
+            .group_by(Booking.schedule_id)
+        )
+        counts = {schedule_id: int(count) for schedule_id, count in booking_counts}
+
+        hold_counts = await self.session.execute(
+            select(BookingHold.schedule_id, func.count(BookingHold.id))
+            .where(
+                BookingHold.schedule_id.in_(schedule_ids),
+                BookingHold.status == "active",
+                BookingHold.expires_at > datetime.now(UTC),
+            )
+            .group_by(BookingHold.schedule_id)
+        )
+        for schedule_id, count in hold_counts:
+            counts[schedule_id] = counts.get(schedule_id, 0) + int(count)
+        return counts
+
+    async def list_pending_reservations_for_schedules(
+        self, schedule_ids: list[UUID]
+    ) -> dict[UUID, list[tuple[UUID, datetime]]]:
+        """Load durable pending reservations used to rebuild Redis counters."""
+        if not schedule_ids:
+            return {}
+        rows = await self.session.execute(
+            select(Booking.schedule_id, Booking.id, Booking.expired_at).where(
+                Booking.schedule_id.in_(schedule_ids),
+                Booking.status == "pending_approval",
+                Booking.expired_at > datetime.now(UTC),
+            )
+        )
+        values: dict[UUID, list[tuple[UUID, datetime]]] = {}
+        for schedule_id, booking_id, expires_at in rows:
+            if expires_at is not None:
+                values.setdefault(schedule_id, []).append((booking_id, expires_at))
+        return values
+
+    async def count_active_holds_for_schedules(self, schedule_ids: list[UUID]) -> dict[UUID, int]:
+        """Count active DB holds separately from Redis pending bookings."""
+        if not schedule_ids:
+            return {}
+        rows = await self.session.execute(
+            select(BookingHold.schedule_id, func.count(BookingHold.id))
+            .where(
+                BookingHold.schedule_id.in_(schedule_ids),
+                BookingHold.status == "active",
+                BookingHold.expires_at > datetime.now(UTC),
+            )
+            .group_by(BookingHold.schedule_id)
+        )
+        return {schedule_id: int(count) for schedule_id, count in rows}
+
+    async def get_schedule(self, schedule_id: UUID, *, for_update: bool = False) -> DoctorSchedule | None:
+        """Fetch a schedule with its doctor and facility."""
+        statement = (
+            select(DoctorSchedule)
+            .options(
+                selectinload(DoctorSchedule.doctor),
+                selectinload(DoctorSchedule.facility),
+                selectinload(DoctorSchedule.service),
+            )
+            .where(DoctorSchedule.id == schedule_id)
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def get_schedule_by_external_identity(
+        self,
+        source_system: str,
+        external_schedule_id: str,
+        *,
+        for_update: bool = False,
+    ) -> DoctorSchedule | None:
+        """Find an imported schedule by its idempotency identity."""
+        statement = select(DoctorSchedule).where(
+            DoctorSchedule.source_system == source_system,
+            DoctorSchedule.external_schedule_id == external_schedule_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def lock_doctor(self, doctor_id: UUID) -> Doctor | None:
+        """Lock a doctor row so schedule conflict checks serialize per doctor."""
+        statement = select(Doctor).where(Doctor.id == doctor_id).with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def find_schedule_conflict(
+        self,
+        *,
+        doctor_id: UUID,
+        starts_at: datetime,
+        ends_at: datetime,
+        exclude_schedule_id: UUID | None = None,
+    ) -> DoctorSchedule | None:
+        """Find an overlapping reusable availability schedule."""
+        statement = (
+            select(DoctorSchedule)
+            .where(
+                DoctorSchedule.doctor_id == doctor_id,
+                DoctorSchedule.status != "cancelled",
+                DoctorSchedule.starts_at < ends_at,
+                DoctorSchedule.ends_at > starts_at,
+            )
+            .order_by(DoctorSchedule.starts_at)
+            .limit(1)
+        )
+        if exclude_schedule_id:
+            statement = statement.where(
+                DoctorSchedule.id != exclude_schedule_id,
+                ~exists(
+                    select(Booking.id).where(
+                        Booking.appointment_schedule_id == DoctorSchedule.id,
+                        Booking.schedule_id == exclude_schedule_id,
+                    )
+                ),
+            )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def list_schedules(
+        self,
+        *,
+        doctor_id: UUID | None,
+        facility_id: UUID | None,
+        service_id: UUID | None,
+        starts_from: datetime | None,
+        starts_to: datetime | None,
+        schedule_status: str | None,
+        source_system: str | None,
+        public_only: bool,
+        offset: int,
+        limit: int,
+    ) -> list[DoctorSchedule]:
+        """List schedule slots, optionally restricted to public availability."""
+        statement = (
+            select(DoctorSchedule)
+            .join(Doctor)
+            .join(Facility)
+            .options(
+                selectinload(DoctorSchedule.doctor),
+                selectinload(DoctorSchedule.facility),
+                selectinload(DoctorSchedule.service),
+            )
+            .order_by(DoctorSchedule.starts_at)
+            .offset(offset)
+            .limit(limit)
+        )
+        if doctor_id:
+            statement = statement.where(DoctorSchedule.doctor_id == doctor_id)
+        if facility_id:
+            statement = statement.where(DoctorSchedule.facility_id == facility_id)
+        if service_id:
+            statement = statement.where(DoctorSchedule.service_id == service_id)
+        if starts_from:
+            statement = statement.where(DoctorSchedule.ends_at > starts_from)
+        if starts_to:
+            statement = statement.where(DoctorSchedule.starts_at < starts_to)
+        if schedule_status:
+            statement = statement.where(DoctorSchedule.status == schedule_status)
+        if source_system:
+            statement = statement.where(DoctorSchedule.source_system == source_system)
+        if public_only:
+            statement = statement.where(
+                ~exists(select(Booking.id).where(Booking.appointment_schedule_id == DoctorSchedule.id)),
+                DoctorSchedule.status == "available",
+                DoctorSchedule.capacity > 0,
+                Doctor.status == "active",
+                Doctor.review_status == "approved",
+                Doctor.booking_enabled.is_(True),
+                Facility.status == "active",
+            )
+        return list((await self.session.execute(statement)).scalars().all())

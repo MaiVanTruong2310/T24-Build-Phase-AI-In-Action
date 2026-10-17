@@ -1,0 +1,124 @@
+name: Observability deployment
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: observability-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  observability_deploy:
+    name: Deploy observability EC2
+    timeout-minutes: 20
+    runs-on: self-hosted
+    env:
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.OBSERVABILITY_GRAFANA_ADMIN_PASSWORD }}
+      PROMETHEUS_DEV_TARGET: ${{ secrets.OBSERVABILITY_DEV_TARGET }}
+      PROMETHEUS_PROD_TARGET: ${{ secrets.OBSERVABILITY_PROD_TARGET }}
+      NODE_EXPORTER_DEV_TARGET: ${{ secrets.OBSERVABILITY_NODE_EXPORTER_DEV_TARGET }}
+      NODE_EXPORTER_PROD_TARGET: ${{ secrets.OBSERVABILITY_NODE_EXPORTER_PROD_TARGET }}
+      CADVISOR_DEV_TARGET: ${{ secrets.OBSERVABILITY_CADVISOR_DEV_TARGET }}
+      CADVISOR_PROD_TARGET: ${{ secrets.OBSERVABILITY_CADVISOR_PROD_TARGET }}
+      GRAFANA_ROOT_URL: ${{ secrets.OBSERVABILITY_GRAFANA_ROOT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Validate observability deployment settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in GRAFANA_ADMIN_PASSWORD PROMETHEUS_DEV_TARGET PROMETHEUS_PROD_TARGET NODE_EXPORTER_DEV_TARGET NODE_EXPORTER_PROD_TARGET CADVISOR_DEV_TARGET CADVISOR_PROD_TARGET GRAFANA_ROOT_URL; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required observability setting: $name"
+              exit 1
+            fi
+          done
+
+      - name: Copy observability stack to monitoring EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
+          username: ${{ secrets.OBSERVABILITY_EC2_USER }}
+          key: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
+          source: "observability/*"
+          target: "/opt/observability"
+          strip_components: 1
+
+      - name: Start observability stack
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
+          username: ${{ secrets.OBSERVABILITY_EC2_USER }}
+          key: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
+          envs: GRAFANA_ADMIN_PASSWORD,PROMETHEUS_DEV_TARGET,PROMETHEUS_PROD_TARGET,NODE_EXPORTER_DEV_TARGET,NODE_EXPORTER_PROD_TARGET,CADVISOR_DEV_TARGET,CADVISOR_PROD_TARGET,GRAFANA_ROOT_URL
+          script: |
+            set -euo pipefail
+            cd /opt/observability
+
+            OBSERVABILITY_PEER="${PROMETHEUS_DEV_TARGET%%:*}"
+            TELEMETRY_BIND_ADDRESS=$(ip -4 route get "$OBSERVABILITY_PEER" | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
+            if [[ ! "$TELEMETRY_BIND_ADDRESS" =~ ^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.) ]]; then
+              echo "Could not derive a private telemetry bind address."
+              exit 1
+            fi
+
+            cat > .env <<EOF
+            PROMETHEUS_DEV_TARGET=${PROMETHEUS_DEV_TARGET}
+            PROMETHEUS_PROD_TARGET=${PROMETHEUS_PROD_TARGET}
+            NODE_EXPORTER_DEV_TARGET=${NODE_EXPORTER_DEV_TARGET}
+            NODE_EXPORTER_PROD_TARGET=${NODE_EXPORTER_PROD_TARGET}
+            CADVISOR_DEV_TARGET=${CADVISOR_DEV_TARGET}
+            CADVISOR_PROD_TARGET=${CADVISOR_PROD_TARGET}
+            GRAFANA_ADMIN_USER=admin
+            GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+            GRAFANA_ROOT_URL=${GRAFANA_ROOT_URL}
+            GRAFANA_BIND_ADDRESS=0.0.0.0
+            TELEMETRY_BIND_ADDRESS=${TELEMETRY_BIND_ADDRESS}
+            PROMETHEUS_RETENTION=15d
+            EOF
+            chmod 600 .env
+
+            docker compose --env-file .env -f docker-compose.yml config >/dev/null
+            docker compose --env-file .env -f docker-compose.yml pull
+            docker compose --env-file .env -f docker-compose.yml up -d --remove-orphans
+
+            for attempt in $(seq 1 36); do
+              if curl --fail --silent http://127.0.0.1:9090/-/ready >/dev/null \
+                && curl --fail --silent http://127.0.0.1:9091/-/healthy >/dev/null \
+                && curl --fail --silent "http://${TELEMETRY_BIND_ADDRESS}:3100/ready" >/dev/null \
+                && curl --fail --silent http://127.0.0.1:3200/ready >/dev/null \
+                && curl --fail --silent http://127.0.0.1:3000/api/health >/dev/null; then
+                break
+              fi
+              if [ "$attempt" -eq 36 ]; then
+                echo "Observability services did not become ready."
+                docker compose --env-file .env -f docker-compose.yml ps
+                exit 1
+              fi
+              sleep 5
+            done
+
+            for job in ai20k-backend ai20k-node ai20k-cadvisor; do
+              QUERY="http://127.0.0.1:9090/api/v1/query?query=count%28up%7Bjob%3D%22${job}%22%7D%20%3D%3D%201%29"
+              for attempt in $(seq 1 36); do
+                if curl --fail --silent "$QUERY" | grep -Eq '"value":\[[0-9.]+,"2"\]'; then
+                  break
+                fi
+                if [ "$attempt" -eq 36 ]; then
+                  echo "Prometheus targets for ${job} are not all healthy."
+                  docker compose --env-file .env -f docker-compose.yml ps
+                  exit 1
+                fi
+                sleep 5
+              done
+            done
+
+            docker compose --env-file .env -f docker-compose.yml ps
+            docker image prune -a -f --filter "until=168h"
+            docker builder prune -a -f --filter "until=168h"

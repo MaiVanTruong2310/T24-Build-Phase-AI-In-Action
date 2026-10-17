@@ -1,0 +1,11 @@
+define flow input rails
+  $allowed = execute staff_input_allowed(text=$user_message)
+  if not $allowed
+    bot refuse to respond
+    stop
+
+define flow output rails
+  $allowed = execute staff_output_allowed(text=$bot_message)
+  if not $allowed
+    bot refuse to respond
+    stop

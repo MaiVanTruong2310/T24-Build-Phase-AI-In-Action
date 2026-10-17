@@ -1,0 +1,65 @@
+"""Production LLM Client Service.
+
+Provides High Availability LLM access with Circuit Breakers,
+Hedged Requests failover, and multi-provider fallback.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from langchain_openai import ChatOpenAI
+
+from src.config import get_settings
+from src.medical_assistant.infrastructure.llm import (
+    FailoverChatModel,
+)
+from src.medical_assistant.infrastructure.llm import (
+    create_chat_model as _create_chat_model,
+)
+from src.medical_assistant.infrastructure.llm import (
+    get_failover_chat_model as _get_failover_chat_model,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def get_llm(temperature: float | None = None) -> Any:
+    """Create or return the primary configured chat model for agent nodes.
+
+    Falls back to OpenRouter/Gemini/OpenAI based on environment configuration.
+    """
+    settings = get_settings()
+    temp = temperature if temperature is not None else settings.llm_temperature
+    try:
+        return _create_chat_model(temperature=temp)
+    except Exception:
+        logger.warning("llm.client.fallback")
+        return ChatOpenAI(
+            model=settings.model_name,
+            api_key=settings.openai_api_key or "sk-dummy",
+            temperature=temp,
+        )
+
+
+def get_failover_llm(temperature: float = 0.2) -> FailoverChatModel:
+    """Return the High-Availability Failover LLM Gateway.
+
+    Features:
+    - Hedged Requests (races slow primary with fast backup)
+    - Circuit Breaker (30s cooldown for rate limits/failures)
+    - Automatic provider cooldown & retry
+    """
+    return _get_failover_chat_model(temperature=temperature)
+
+
+create_chat_model = _create_chat_model
+
+
+__all__ = [
+    "FailoverChatModel",
+    "get_llm",
+    "get_failover_llm",
+    "create_chat_model",
+]

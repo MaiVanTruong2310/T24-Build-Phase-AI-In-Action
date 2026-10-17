@@ -1,0 +1,280 @@
+"""Authentication request and response schemas."""
+
+import base64
+import binascii
+import re
+from datetime import date, datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def normalize_vn_phone(value: str | None) -> str | None:
+    """Dạng chuẩn duy nhất để lưu SĐT Việt Nam: "0xxxxxxxxx" ("+84912…", "84912…", "091.2…" → "0912…").
+
+    Trước đây "+8491…" và "091…" được lưu nguyên dạng gõ nên cùng một số đăng ký được hai hồ sơ."""
+    if value is None:
+        return None
+    cleaned = re.sub(r"[\s.()-]", "", value)
+    if cleaned.startswith("+84"):
+        cleaned = "0" + cleaned[3:]
+    elif cleaned.startswith("84") and len(cleaned) == 11:
+        cleaned = "0" + cleaned[2:]
+    return cleaned
+
+
+def phone_variants(value: str | None) -> list[str]:
+    """Các dạng có thể đang nằm trong DB cho cùng một số (dữ liệu cũ còn lưu "+84…")."""
+    canonical = normalize_vn_phone(value)
+    if not canonical:
+        return []
+    variants = [canonical]
+    if canonical.startswith("0"):
+        variants += ["+84" + canonical[1:], "84" + canonical[1:]]
+    return variants
+
+
+class RegisterRequest(BaseModel):
+    address: str | None = Field(default=None, max_length=500)
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+    full_name: str | None = Field(default=None, max_length=200)
+    date_of_birth: date | None = None
+    gender: Literal["male", "female", "other", "unspecified"] | None = None
+    citizen_id: str | None = Field(default=None, pattern=r"^\d{12}$")
+    health_insurance_code: str | None = Field(default=None, min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "RegisterRequest":
+        """Require at least one account identity during registration."""
+        if not self.email and not self.phone:
+            raise ValueError("email or phone is required")
+        today = date.today()
+        if self.date_of_birth:
+            if self.date_of_birth >= today:
+                raise ValueError("date_of_birth must be in the past")
+            min_year = today.year - 150
+            try:
+                min_dob = today.replace(year=min_year)
+            except ValueError:
+                min_dob = date(min_year, 2, 28)
+            if self.date_of_birth < min_dob:
+                raise ValueError("Ngày sinh không hợp lệ: tuổi không được vượt quá 150 tuổi.")
+        if self.full_name is not None:
+            if not 2 <= len(self.full_name.strip()) <= 200:
+                raise ValueError("Họ tên phải có từ 2 đến 200 ký tự.")
+            self.full_name = self.full_name.strip()
+        if self.phone is not None:
+            cleaned_phone = re.sub(r"[\s.()-]", "", self.phone)
+            if cleaned_phone and not re.fullmatch(
+                r"^(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-5]|9[0-9])\d{7}$", cleaned_phone
+            ):
+                raise ValueError("Cần số điện thoại Việt Nam hợp lệ.")
+            self.phone = normalize_vn_phone(cleaned_phone)
+        if self.email:
+            self.email = self.email.strip().lower()
+            if not re.fullmatch(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", self.email):
+                raise ValueError("Email không đúng định dạng.")
+            if self.email.endswith("@gmail.com"):
+                user_part = self.email.split("@")[0]
+                if (
+                    not (6 <= len(user_part) <= 30)
+                    or not re.fullmatch(r"^[a-zA-Z0-9.]+$", user_part)
+                    or user_part.startswith(".")
+                    or user_part.endswith(".")
+                    or ".." in user_part
+                ):
+                    raise ValueError("Địa chỉ Gmail không đúng định dạng (tên tài khoản từ 6-30 ký tự).")
+        return self
+
+
+class OtpSendRequest(BaseModel):
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
+    purpose: Literal["register", "login", "reset_password"] = "register"
+
+    @model_validator(mode="after")
+    def validate_target(self) -> "OtpSendRequest":
+        """Require an email or phone target for OTP delivery."""
+        if not self.email and not self.phone:
+            raise ValueError("email or phone is required")
+        return self
+
+
+class OtpVerifyRequest(OtpSendRequest):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class OtpSendResponse(BaseModel):
+    """Return the OTP only when the configured delivery provider is a mock."""
+
+    otp: str | None = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Identify the account that should receive a password-reset OTP."""
+
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "ForgotPasswordRequest":
+        """Require an email or phone without exposing account existence."""
+        if not self.email and not self.phone:
+            raise ValueError("email or phone is required")
+        return self
+
+
+class ResetPasswordRequest(BaseModel):
+    """Verify a reset OTP and provide the replacement password."""
+
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "ResetPasswordRequest":
+        """Require an email or phone for password reset."""
+        if not self.email and not self.phone:
+            raise ValueError("email or phone is required")
+        return self
+
+
+class LoginRequest(BaseModel):
+    """Email/password sign-in delegated to Supabase Auth."""
+
+    # Không strip toàn bộ chuỗi: mật khẩu có khoảng trắng đầu/cuối là hợp lệ khi đăng ký/đặt lại, cắt đi ở đây
+    # thì người dùng đó không bao giờ đăng nhập được. Email được chuẩn hóa riêng bên dưới.
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        """Store and compare the canonical lower-case email."""
+        return value.strip().lower()
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(min_length=32)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class MedicalCondition(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    id: str = Field(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+    name: str = Field(min_length=1, max_length=200)
+    status: Literal["recovered", "in_treatment"]
+
+
+class PatientDetails(BaseModel):
+    """Patient-reported details; these do not certify a clinical diagnosis."""
+
+    model_config = ConfigDict(extra="forbid")
+    portrait_image: str | None = Field(default=None, max_length=180000)
+    medical_history: list[MedicalCondition] = Field(default_factory=list, max_length=100)
+    blood_type: Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] | None = None
+    allergies: str | None = Field(default=None, max_length=2000)
+    current_medications: str | None = Field(default=None, max_length=2000)
+    address: str | None = Field(default=None, max_length=500)
+    emergency_name: str | None = Field(default=None, max_length=200)
+    emergency_relationship: str | None = Field(default=None, max_length=100)
+    emergency_phone: str | None = Field(default=None, pattern=r"^(?:0|\+84)[35789]\d{8}$")
+    systolic: int | None = Field(default=None, ge=40, le=300)
+    diastolic: int | None = Field(default=None, ge=20, le=200)
+    heart_rate: int | None = Field(default=None, ge=20, le=300)
+    height_cm: float | None = Field(default=None, gt=0, le=300)
+    weight_kg: float | None = Field(default=None, gt=0, le=500)
+    blood_glucose: float | None = Field(default=None, gt=0, le=100)
+
+
+class PortraitUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    image: str | None = Field(max_length=180000)
+
+    @field_validator("image")
+    @classmethod
+    def validate_image(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        prefix = "data:image/jpeg;base64,"
+        if not value.startswith(prefix):
+            raise ValueError("Ảnh hồ sơ cần ở định dạng JPEG.")
+        try:
+            image = base64.b64decode(value[len(prefix) :], validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("Dữ liệu ảnh không hợp lệ.") from exc
+        if not image.startswith(b"\xff\xd8\xff") or not image.endswith(b"\xff\xd9"):
+            raise ValueError("Dữ liệu ảnh JPEG không hợp lệ.")
+        return value
+
+
+class PatientDetailsResponse(PatientDetails):
+    # Portraits are loaded separately, never embedded into normal auth/profile responses.
+    portrait_image: str | None = Field(default=None, exclude=True)
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: str | None
+    phone: str | None
+    role: str
+    status: str
+    full_name: str | None
+    date_of_birth: date | None
+    gender: str | None
+    citizen_id: str | None
+    health_insurance_code: str | None
+    patient_details: PatientDetailsResponse | None = None
+
+
+class SessionResponse(BaseModel):
+    id: str
+    expires_at: datetime
+    revoked_at: datetime | None
+
+
+class UpdateProfileRequest(BaseModel):
+    """Patient-editable profile fields."""
+
+    model_config = ConfigDict(extra="forbid")
+    full_name: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, pattern=r"^(?:0|\+84)[35789]\d{8}$")
+    patient_details: PatientDetails | None = None
+    date_of_birth: date | None = None
+    gender: Literal["male", "female", "other", "unspecified"] | None = None
+    citizen_id: str | None = Field(default=None, pattern=r"^\d{12}$")
+    health_insurance_code: str | None = Field(default=None, min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_date_of_birth(self) -> "UpdateProfileRequest":
+        """Prevent a profile from containing a future birth date or > 150 years."""
+        if self.date_of_birth:
+            today = date.today()
+            if self.date_of_birth >= today:
+                raise ValueError("date_of_birth must be in the past / Ngày sinh không được ở tương lai.")
+            min_year = today.year - 150
+            try:
+                min_dob = today.replace(year=min_year)
+            except ValueError:
+                min_dob = date(min_year, 2, 28)
+            if self.date_of_birth < min_dob:
+                raise ValueError("Ngày sinh không hợp lệ: tuổi không được vượt quá 150 tuổi.")
+        if self.patient_details and "portrait_image" in self.patient_details.model_fields_set:
+            raise ValueError("Vui lòng dùng API ảnh hồ sơ để cập nhật ảnh.")
+        if self.phone:
+            self.phone = normalize_vn_phone(self.phone)
+        return self

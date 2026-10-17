@@ -1,0 +1,26 @@
+/* Chế độ sửa ẩn/hiện (chỉ trong iframe của /staff/ui-editor). Người dùng thường không có thẻ .uiv nào. */
+.uiv { position: relative; outline: 2px dashed rgba(37, 99, 235, .55); outline-offset: 2px; border-radius: 6px; }
+.uiv--inline { display: inline-flex; align-items: center; }
+.uiv:hover { outline-color: #2563eb; }
+.uiv.is-hidden { outline-color: #dc2626; }
+.uiv.is-hidden > :not(.uiv__bar) { opacity: .3; filter: grayscale(1); }
+.uiv.is-locked { outline-color: rgba(100, 116, 139, .55); }
+.uiv__bar {
+  position: absolute; top: -12px; left: -2px; z-index: 9990; display: inline-flex; align-items: center; gap: 4px;
+  max-width: min(320px, 90vw); pointer-events: none; font: 600 11px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.uiv__toggle {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border: 0; border-radius: 999px;
+  background: #16a34a; color: #fff; cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); white-space: nowrap;
+}
+.uiv__toggle svg { width: 12px; height: 12px; }
+.uiv.is-hidden .uiv__toggle { background: #dc2626; }
+.uiv.is-locked .uiv__toggle { background: #64748b; cursor: not-allowed; }
+.uiv__toggle:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+.uiv__label {
+  overflow: hidden; padding: 3px 6px; border-radius: 999px; background: rgba(15, 23, 42, .85); color: #fff;
+  text-overflow: ellipsis; white-space: nowrap; display: none;
+}
+/* Nhãn chỉ hiện khi rê chuột (display:none để không tràn ngang trang). */
+.uiv:hover > .uiv__bar .uiv__label, .uiv__toggle:focus-visible + .uiv__label { display: inline; }
+.uiv__error { pointer-events: auto; padding: 3px 6px; border-radius: 6px; background: #fee2e2; color: #991b1b; }

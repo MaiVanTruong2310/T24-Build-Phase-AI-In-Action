@@ -1,0 +1,1 @@
+"""Medical assistant application package."""

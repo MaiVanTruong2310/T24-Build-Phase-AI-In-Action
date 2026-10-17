@@ -1,0 +1,32 @@
+.cw-booking-dialog{position:fixed;inset:0;margin:auto;width:min(840px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:0;border:1px solid #b9d5df;border-radius:18px;box-shadow:0 28px 90px #082f4970;color:#12384a;background:#f8fcfd;overscroll-behavior:contain}
+.cw-booking-dialog::backdrop{background:#082f49a8;backdrop-filter:blur(5px)}
+.cw-booking-dialog form{padding:0 26px 22px;overflow:auto;max-height:calc(100dvh - 24px);scrollbar-width:thin;scrollbar-color:#43869a #e2eef1;scrollbar-gutter:stable}
+.cw-booking-dialog form::-webkit-scrollbar,.cw-booking-dialog textarea::-webkit-scrollbar{width:10px}
+.cw-booking-dialog form::-webkit-scrollbar-track,.cw-booking-dialog textarea::-webkit-scrollbar-track{border-radius:8px;background:#e2eef1}
+.cw-booking-dialog form::-webkit-scrollbar-thumb,.cw-booking-dialog textarea::-webkit-scrollbar-thumb{border:2px solid #e2eef1;border-radius:8px;background:#43869a}
+.cw-booking-dialog header,.cw-booking-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.cw-booking-dialog header{position:sticky;top:0;z-index:1;margin:0 -26px 18px;padding:21px 26px 17px;border-bottom:1px solid #c7dfe7;background:linear-gradient(115deg,#e7f5f8,#f5fbfc 72%)}
+.cw-booking-intake{padding:11px 14px;background:#e9f5f7;border:1px solid #c8e1e7;border-radius:10px;color:#244f60;font-size:13px}
+.cw-booking-dialog h2{margin:0 0 5px;color:#0b526c;font-size:22px;letter-spacing:-.02em}.cw-booking-dialog header p{margin:0;color:#426575;font-size:13px;line-height:1.5}
+.cw-booking-dialog header button{width:36px;height:36px;border:1px solid #bdd6df;border-radius:10px;background:#fff;color:#245468;font-size:22px;cursor:pointer;transition:background .16s,border-color .16s}
+.cw-booking-dialog header button:hover{background:#e7f5f8;border-color:#69a6b7}
+.cw-booking-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cw-booking-grid label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:650;color:#294753}
+.cw-booking-dialog input,.cw-booking-dialog select,.cw-booking-dialog textarea{width:100%;min-height:42px;border:1px solid #b7cdd5;border-radius:10px;padding:9px 11px;font:inherit;background:#fff;color:#12384a;transition:border-color .16s,box-shadow .16s,background .16s}
+.cw-booking-dialog input:hover,.cw-booking-dialog select:hover,.cw-booking-dialog textarea:hover{border-color:#6b9eae}
+.cw-booking-dialog input:disabled,.cw-booking-dialog select:disabled{cursor:wait;background:#edf4f6;color:#65808b}
+.cw-booking-dialog input:focus-visible,.cw-booking-dialog select:focus-visible,.cw-booking-dialog textarea:focus-visible,.cw-booking-dialog button:focus-visible{outline:3px solid #0e749044;outline-offset:2px;border-color:#0e7490}
+.cw-booking-dialog input[readonly]{background:#f5f8f9;color:#4b626b}
+.cw-booking-field-state,.cw-booking-selection{display:flex;min-height:16px;align-items:center;gap:7px;color:#587581;font-size:12px;font-weight:450;line-height:1.4}
+.cw-booking-selection{color:#087a69}
+.cw-booking-field-error{color:#a3473e}
+.cw-booking-spinner{width:13px;height:13px;flex:0 0 13px;border:2px solid #c5dfe5;border-top-color:#087e92;border-radius:50%;animation:cw-booking-spin .7s linear infinite}
+@keyframes cw-booking-spin{to{transform:rotate(360deg)}}
+.cw-booking-dialog textarea{min-height:78px;resize:vertical}.cw-booking-grid .cw-booking-wide,.cw-booking-grid .cw-booking-consent{grid-column:1/-1}
+.cw-booking-grid .cw-booking-consent{flex-direction:row;align-items:flex-start;line-height:1.5}.cw-booking-consent input{flex:0 0 18px;width:18px;min-height:18px;margin:1px 0 0;accent-color:#087f8c}
+.cw-booking-grid .cw-booking-gap{grid-column:1/-1;flex-direction:row;align-items:center}.cw-booking-gap input{flex:0 0 18px;width:18px;min-height:18px;margin:0;accent-color:#087f8c}
+.cw-booking-dialog footer{position:sticky;bottom:-22px;justify-content:flex-end;margin:18px -26px -22px;padding:14px 26px 22px;border-top:1px solid #c7dfe7;background:#f8fcfd}
+.cw-booking-dialog footer button{min-height:42px;padding:8px 15px;border:1px solid #b7cdd5;border-radius:10px;background:#fff;color:#244f60;cursor:pointer;transition:background .16s,border-color .16s}
+.cw-booking-dialog footer button:hover{background:#e9f5f7;border-color:#69a6b7}
+@media(max-width:600px){.cw-booking-grid{grid-template-columns:1fr}.cw-booking-grid .cw-booking-wide,.cw-booking-grid .cw-booking-consent{grid-column:auto}.cw-booking-dialog form{padding:0 16px 16px}.cw-booking-dialog header{margin:0 -16px 14px;padding:16px}.cw-booking-dialog footer{bottom:-16px;margin:14px -16px -16px;padding:12px 16px 16px}}
+@media(prefers-reduced-motion:reduce){.cw-booking-dialog input,.cw-booking-dialog select,.cw-booking-dialog textarea,.cw-booking-dialog header button,.cw-booking-dialog footer button{transition:none}.cw-booking-spinner{animation-duration:1.5s}}

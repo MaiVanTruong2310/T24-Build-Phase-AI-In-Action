@@ -1,0 +1,602 @@
+import { acceptCaseDetail, canCaseAction } from '../features/coordinator/uiLogic'
+import { useOutletContext } from 'react-router-dom'
+import type { StaffContext } from '../layouts/StaffLayout'
+import { saveAndRefresh } from '../features/coordinator/mutations'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { SosCard } from '../features/coordinator/SosCard'
+import { BookingModal } from '../features/coordinator/BookingModal'
+import { api, canAdminister, dateTime, priorities, resolveStaffWorkbenchWebSocketUrl, statuses, type Case, type CaseDetail, type Dashboard, type Member, type Policy } from '../features/coordinator/api'
+import { websocketNeedsTicket } from '../app/apiClient'
+import { fetchTakeoverTicket } from '../features/chat/api'
+import { DataLoadingState } from '../components/DataLoadingState'
+import './CoordinatorWorkbench.css'
+
+const sourceNames: Record<string, string> = { chat: 'Hội thoại', consultation: 'Phiếu khám', package: 'Gói khám', booking: 'Lịch chờ duyệt' }
+const eventNames: Record<string, string> = { claim: 'Nhận ca', decline: 'Từ chối nhận ca', handover: 'Bàn giao', takeover: 'Tiếp quản chat', resume: 'Trả về AI', contact: 'Liên hệ', follow_up: 'Hẹn liên hệ', emergency_detected: 'Phát hiện cảnh báo', emergency_dismiss: 'Xác nhận không phải cấp cứu', emergency_ack: 'Tiếp nhận khẩn', emergency_transfer: 'Ghi nhận bàn giao cấp cứu', complete: 'Hoàn tất', cancel: 'Hủy', plan_updated: 'Đổi phương án khám', deposit_requested: 'Yêu cầu cọc', deposit_verified: 'Xác minh cọc', deposit_expired: 'Hết hạn cọc', booking_confirmed: 'Chốt lịch', refund_request: 'Yêu cầu hoàn cọc', refund_confirm: 'Xác nhận hoàn cọc', intake_submitted: 'Nhận phiếu', human_requested: 'Yêu cầu người hỗ trợ', patient_cancelled: 'Bệnh nhân tự hủy', patient_cancel_requested: 'Bệnh nhân xin hủy lịch', patient_rescheduled: 'Bệnh nhân đổi ngày khám', patient_reschedule_requested: 'Bệnh nhân xin đổi lịch' }
+
+type CarePipelineStep = {
+  step_number: number;
+  anatomical_rank: number;
+  department_name: string;
+  target_symptoms?: string[];
+  clinical_rationale?: string;
+};
+
+export default function CoordinatorWorkbench({ mode = 'queue' }: { mode?: 'queue' | 'dashboard' | 'emergency' | 'chat' | 'settings' }) {
+  const [params, setParams] = useSearchParams()
+  const selectedId = params.get('case')
+  const { member: me, updateMember: setMe } = useOutletContext<StaffContext>()
+  const [members, setMembers] = useState<Member[]>([])
+  const [items, setItems] = useState<Case[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [selected, setSelected] = useState<CaseDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
+  const [detailAttempt, setDetailAttempt] = useState(0)
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null)
+  const [status, setStatus] = useState('')
+  const [search, setSearch] = useState('')
+  const [mine, setMine] = useState(false)
+  const [error, setError] = useState('')
+  const [pollError, setPollError] = useState('')
+  const [shiftNote, setShiftNote] = useState('')
+  const [shiftHandover, setShiftHandover] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [note, setNote] = useState('')
+  const [handover, setHandover] = useState('')
+  const [followUp, setFollowUp] = useState('')
+  const [message, setMessage] = useState('')
+  const [bookingOpen, setBookingOpen] = useState(false)
+  const [bookingSeed, setBookingSeed] = useState<{ department?: string; reason?: string }>({})
+  const [reference, setReference] = useState('')
+  const [policyForm, setPolicyForm] = useState({ hold_minutes: '', response_minutes: '', emergency_response_minutes: '', payment_instructions: '', refund_policy: '' })
+  const [account, setAccount] = useState({ user_id: '', clinical_qualification: '', facility_ids: '', is_admin: false, enabled: true })
+  const busyRef = useRef(false)
+  const selectedRef = useRef(selectedId); selectedRef.current = selectedId
+  const requestGeneration = useRef(0)
+  const statsAt = useRef(0)
+  const detailGeneration = useRef(0)
+  const resourcesReady = useRef(false)
+  const admin = canAdminister(me)
+  const canReceive = (member: Member) => member.user_id !== me?.user_id && member.on_duty && (!member.facility_ids.length || !selected?.facility_id || member.facility_ids.includes(selected.facility_id))
+
+  const load = useCallback(async () => {
+    const query = new URLSearchParams({ offset: String(offset), limit: '30' })
+    if (status) query.set('status', status)
+    if (search.trim()) query.set('q', search.trim())
+    if (mine) query.set('mine', 'true')
+    if (mode === 'emergency') query.set('emergency_only', 'true')
+    if (mode === 'chat') query.set('conversations', 'true')
+    const generation = ++requestGeneration.current
+    setLoading(true)
+    try {
+      const refreshStats = Date.now() - statsAt.current >= 30000
+      const needResources = !resourcesReady.current && mode !== 'chat'
+      const id = selectedRef.current
+      // Bắn song song mọi request (trước đây chạy nối đuôi nhau: danh sách -> thống kê -> danh mục -> chi tiết).
+      const listPromise = api<{ items: Case[]; total: number }>('/cases?' + query)
+      const statsPromise = refreshStats ? Promise.all([api<Dashboard>('/dashboard'), api<Member[]>('/members'), api<Member>('/me')]) : null
+      const detailRequest = id ? ++detailGeneration.current : 0
+      const detailPromise = id ? api<CaseDetail>('/cases/' + id) : null
+      // Tránh cảnh báo unhandled rejection khi một promise lỗi trong lúc ta còn đang await cái khác.
+      for (const p of [statsPromise, detailPromise]) p?.catch(() => undefined)
+      if (needResources) {
+        // Danh mục + chính sách chỉ cần khi mở form thao tác, không chặn việc hiện danh sách.
+        resourcesReady.current = true
+        void api<Policy | null>('/policy').then(p => {
+          if (p) setPolicyForm({ hold_minutes: String(p.hold_minutes), response_minutes: String(p.response_minutes), emergency_response_minutes: String(p.emergency_response_minutes), payment_instructions: p.payment_instructions, refund_policy: p.refund_policy })
+        }).catch(() => { resourcesReady.current = false })
+      }
+      const list = await listPromise
+      if (generation !== requestGeneration.current) return
+      setItems(list.items); setTotal(list.total)
+      setLoading(false)
+      if (statsPromise) {
+        const [stats, people, identity] = await statsPromise
+        if (generation !== requestGeneration.current) return
+        setDashboard(stats); setMembers(people); setMe(identity); statsAt.current = Date.now()
+      }
+      if (detailPromise) {
+        const value = await detailPromise
+        if (generation === requestGeneration.current && detailRequest === detailGeneration.current) setSelected(current => acceptCaseDetail(current, value, selectedRef.current))
+      }
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false)
+    }
+  }, [offset, status, search, mine, mode, setMe])
+  const loadRef = useRef(load)
+  loadRef.current = load
+  useEffect(() => {
+    let active = true
+    void load().then(() => { if (active) setPollError('') }).catch(e => {
+      if (active) { setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.'); setLoading(false) }
+    })
+    return () => { active = false; requestGeneration.current += 1 }
+  }, [load])
+  useEffect(() => {
+    let stopped = false
+    let socket: WebSocket | undefined
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+    let reconnectAttempt = 0
+    let connected = false
+    let socketOpen = false
+    // Khi WebSocket rớt, vẫn tải lại hàng đợi định kỳ để không bỏ sót ca mới/cấp cứu cho tới khi nối lại.
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
+    const startFallback = () => {
+      if (stopped || socketOpen || fallbackTimer !== undefined) return
+      fallbackTimer = setTimeout(() => {
+        fallbackTimer = undefined
+        if (stopped || socketOpen) return
+        refresh(false)
+        startFallback()
+      }, 15000)
+    }
+    const refresh = (forceStats = true) => {
+      if (stopped || busyRef.current) return
+      if (forceStats) statsAt.current = 0
+      void loadRef.current().then(() => setPollError('')).catch(e => {
+        setPollError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.')
+      })
+    }
+    const connect = async () => {
+      if (stopped) return
+      // WebSocket khác domain (proxy same-origin) không mang cookie → xác thực bằng ticket.
+      const ticket = websocketNeedsTicket ? await fetchTakeoverTicket() : null
+      if (stopped) return
+      try {
+        socket = new WebSocket(resolveStaffWorkbenchWebSocketUrl(ticket))
+      } catch {
+        scheduleReconnect()
+        return
+      }
+      const currentSocket = socket
+      currentSocket.addEventListener('open', () => {
+        socketOpen = true
+        if (fallbackTimer !== undefined) { clearTimeout(fallbackTimer); fallbackTimer = undefined }
+        if (connected) refresh()
+        connected = true
+        reconnectAttempt = 0
+      })
+      currentSocket.addEventListener('message', event => {
+        try {
+          const payload = JSON.parse(String(event.data)) as { type?: string }
+          // Tin nhắn mới không đổi thống kê/nhân sự, nên không ép tải lại 3 API đó.
+          if (payload.type === 'takeover.case_updated') refresh(true)
+          else if (payload.type === 'takeover.message_created') refresh(false)
+        } catch {
+          return
+        }
+      })
+      currentSocket.addEventListener('close', scheduleReconnect)
+      currentSocket.addEventListener('error', () => currentSocket.close())
+    }
+    function scheduleReconnect() {
+      socketOpen = false
+      startFallback()
+      if (stopped || reconnectTimer !== undefined) return
+      const delay = Math.min(1000 * 2 ** reconnectAttempt, 30000)
+      reconnectAttempt += 1
+      reconnectTimer = setTimeout(() => { reconnectTimer = undefined; void connect() }, delay)
+    }
+    void connect()
+    return () => {
+      stopped = true
+      if (reconnectTimer !== undefined) clearTimeout(reconnectTimer)
+      if (fallbackTimer !== undefined) clearTimeout(fallbackTimer)
+      socket?.close()
+    }
+  }, [])
+  useEffect(() => {
+    let active = true
+    const detailRequest = ++detailGeneration.current
+    setSelected(null); setNote(''); setMessage(''); setReference(''); setHandover(''); setFollowUp(''); setError(''); setNotice(''); setBookingOpen(false); setBookingSeed({})
+    setDetailError('')
+    setDetailLoading(Boolean(selectedId))
+    if (selectedId) void api<CaseDetail>('/cases/' + selectedId).then(value => {
+      if (active && detailRequest === detailGeneration.current) setSelected(current => acceptCaseDetail(current, value, selectedRef.current))
+    }).catch(e => { if (active && detailRequest === detailGeneration.current) setDetailError(e instanceof Error ? e.message : 'Không thể tải hồ sơ ca.') })
+      .finally(() => { if (active && detailRequest === detailGeneration.current) setDetailLoading(false) })
+    return () => { active = false; detailGeneration.current += 1 }
+  }, [selectedId, detailAttempt])
+  const run = async (task: () => Promise<unknown>, success: string | ((result: unknown) => string)) => {
+    if (busyRef.current) return
+    detailGeneration.current += 1
+    busyRef.current = true; setBusy(true); setError(''); setNotice('')
+    requestGeneration.current += 1
+    try {
+      const outcome = await saveAndRefresh(task, result => {
+        if (result && typeof result === 'object') {
+          if ('id' in result && 'version' in result) {
+            const detail = result as CaseDetail
+            setSelected(current => acceptCaseDetail(current, detail, selectedRef.current))
+          }
+          if ('on_duty' in result && typeof result.on_duty === 'boolean') {
+            const onDuty = result.on_duty
+            setMe(current => current ? { ...current, on_duty: onDuty } : current)
+          }
+        }
+        setNotice(typeof success === 'function' ? success(result) : success); statsAt.current = 0
+      }, load)
+      if (!outcome.refreshed) setError('Thao tác đã lưu thành công, nhưng chưa tải lại được dữ liệu. Hãy làm mới để xem trạng thái mới nhất.')
+    } catch (e) { setError(e instanceof Error ? e.message : 'Thao tác thất bại.') }
+    finally { busyRef.current = false; setBusy(false) }
+  }
+  const act = (action: string) => selected && run(async () => {
+    const res = await api<CaseDetail>('/cases/' + selected.id + '/actions', 'POST', { version: selected.version, action, note, assigned_to: handover || null, follow_up_at: followUp ? new Date(followUp).toISOString() : null, reference: reference || null })
+    if (action === 'decline') setParams({})
+    if (action === 'claim' && mode === 'queue' && res.priority !== 0 && !res.booking_id) { setBookingSeed({}); setBookingOpen(true) }
+    return res
+  }, action === 'decline' ? 'Đã từ chối nhận ca.' : action === 'claim' && selected?.priority === 0 ? 'Đã nhận và bắt đầu xử lý ca cấp cứu.' : action === 'claim' ? 'Đã nhận ca thành công.' : 'Đã lưu thao tác.')
+  const owned = Boolean(selected && me && selected.assigned_to === me.user_id)
+  const allowed = (action: string) => canCaseAction(selected, me, action)
+  const claimOrEditBooking = () => {
+    if (!selected || busy) return
+    if (owned) {
+      if (mode === 'queue' && selected.priority !== 0 && !selected.booking_id) {
+        setBookingSeed({})
+        setBookingOpen(true)
+      }
+      return
+    }
+    void act('claim')
+  }
+  const choose = (id: string) => setParams({ case: id })
+  const person = (id: string | null) => members.find(x => x.user_id === id)?.name || (id ? 'Nhân viên đã ngừng hoạt động' : 'Chưa nhận')
+
+  const handleSelectAll = () => {
+    if (items.length > 0 && items.every(i => selectedIds.includes(i.id))) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(items.map(i => i.id))
+    }
+  }
+
+  const toggleItemSelect = (id: string, e: React.MouseEvent | React.ChangeEvent) => {
+    e.stopPropagation()
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const handleBulkDecline = async () => {
+    if (!selectedIds.length || busy) return
+    const count = selectedIds.length
+    if (!window.confirm(`Xác nhận từ chối nhận ${count} ca hội thoại đã chọn?`)) return
+    await run(async () => {
+      const result = await api<{ processed: string[]; count: number; skipped?: { id: string; reason: string }[] }>('/cases/bulk-actions', 'POST', {
+        case_ids: selectedIds,
+        action: 'decline',
+        note: 'Bác sĩ từ chối nhận ca'
+      })
+      setSelectedIds([])
+      if (selectedId && result.processed.includes(selectedId)) setParams({})
+      return result
+    }, result => {
+      const { count: declined = 0, skipped = [] } = (result ?? {}) as { count?: number; skipped?: unknown[] }
+      return skipped.length
+        ? `Đã từ chối ${declined}/${count} ca. ${skipped.length} ca được giữ lại (ca cấp cứu, ca của người khác hoặc đã có phương án/cọc/lịch).`
+        : `Đã từ chối nhận ${declined} ca hội thoại.`
+    })
+  }
+
+  const handleBulkClaim = async () => {
+    if (!selectedIds.length || busy) return
+    const count = selectedIds.length
+    await run(async () => {
+      const result = await api<{ count: number; skipped?: { id: string; reason: string }[] }>('/cases/bulk-actions', 'POST', {
+        case_ids: selectedIds,
+        action: 'claim',
+        note: 'Nhận ca'
+      })
+      setSelectedIds([])
+      return result
+    }, result => {
+      const { count: claimed = 0, skipped = [] } = (result ?? {}) as { count?: number; skipped?: unknown[] }
+      return skipped.length
+        ? `Đã nhận ${claimed}/${count} ca. ${skipped.length} ca bỏ qua (đã có người phụ trách, đã đóng hoặc bệnh nhân chưa yêu cầu hỗ trợ).`
+        : `Đã nhận ${claimed} ca hội thoại thành công.`
+    })
+  }
+
+  if (mode === 'chat') return <div className="coordinator-workbench cw-chat-workspace">
+    <header className="cw-heading"><div><h1>Hội thoại bệnh nhân</h1><p>Theo dõi các hội thoại bệnh nhân chủ động yêu cầu hỗ trợ hoặc đang cần cấp cứu.</p></div><button disabled={busy} onClick={() => void load().catch(e => setPollError(e.message))}>Làm mới</button></header>
+    {pollError && <p className="cw-error" role="alert">{pollError}</p>}{error && <p className="cw-error" role="alert">{error}</p>}{notice && <p className="cw-notice" role="status">{notice}</p>}
+    {me && <div className="cw-actions"><strong>{me.name} · {me.on_duty ? 'Đang trực' : 'Chưa bắt đầu ca trực'}</strong><button disabled={busy || me.on_duty} onClick={() => void run(() => api('/duty/start', 'POST'), 'Đã bắt đầu ca trực.')}>Bắt đầu ca trực</button><button disabled={busy || !me.on_duty} onClick={() => void run(() => api('/duty/end', 'POST'), 'Đã kết thúc ca trực.')}>Kết thúc ca trực</button></div>}
+    <div className="cw-chat-layout">
+      <section className="cw-panel cw-conversation-list" aria-label="Danh sách hội thoại">
+        <h2>Danh sách hội thoại</h2>
+        <label>Tìm bệnh nhân<input placeholder="Tên, điện thoại hoặc mã ca" value={search} onChange={e => { setSearch(e.target.value); setOffset(0) }} /></label>
+        <label>Trạng thái<select value={status} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="">Tất cả hội thoại</option>{Object.entries(statuses).filter(([key]) => key !== 'observing').map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <label className="cw-check"><input type="checkbox" checked={mine} onChange={e => { setMine(e.target.checked); setOffset(0) }} />Hội thoại của tôi</label>
+
+        {items.length > 0 && <div className="cw-list-toolbar">
+          <div className="cw-toolbar-row">
+            <label className="cw-select-all-pill">
+              <input
+                type="checkbox"
+                className="cw-checkbox-input"
+                checked={items.length > 0 && items.every(i => selectedIds.includes(i.id))}
+                onChange={handleSelectAll}
+              />
+              <span className="cw-select-label">Chọn tất cả</span>
+              <span className="cw-count-badge">{items.length}</span>
+            </label>
+            {selectedIds.length > 0 && (
+              <span className="cw-selected-pill">Đã chọn: <strong>{selectedIds.length}</strong></span>
+            )}
+          </div>
+          {selectedIds.length > 0 && <div className="cw-bulk-action-bar">
+            <button
+              type="button"
+              className="cw-bulk-btn cw-bulk-btn-claim"
+              disabled={busy}
+              onClick={() => void handleBulkClaim()}
+            >
+              📥 Nhận ({selectedIds.length})
+            </button>
+            <button
+              type="button"
+              className="cw-bulk-btn cw-bulk-btn-decline"
+              disabled={busy}
+              onClick={() => void handleBulkDecline()}
+            >
+              ✕ Từ chối ({selectedIds.length})
+            </button>
+          </div>}
+        </div>}
+
+        {loading && !pollError && <DataLoadingState className="py-10 flex flex-col items-center justify-center text-slate-400" />}
+        {items.map(item => {
+          const isSelected = selectedIds.includes(item.id)
+          const isActive = item.id === selectedId
+          return (
+            <div
+              key={item.id}
+              className={`cw-conv-card ${isActive ? 'cw-conv-card-active' : ''} ${isSelected ? 'cw-conv-card-selected' : ''}`}
+              onClick={() => choose(item.id)}
+            >
+              <div className="cw-conv-card-top">
+                <label className="cw-conv-checkbox-label" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className="cw-checkbox-input"
+                    checked={isSelected}
+                    onChange={e => toggleItemSelect(item.id, e)}
+                  />
+                </label>
+                <div className="cw-conv-patient-info">
+                  <strong className="cw-conv-patient-name">{item.patient.name || 'Bệnh nhân chưa cung cấp tên'}</strong>
+                  <span className="cw-conv-subtext">{item.patient.phone || 'Chưa có SĐT'} · {item.id.slice(0, 8).toUpperCase()}</span>
+                </div>
+                {item.priority === 0 && (
+                  <span className="cw-priority-badge cw-priority-emergency">CẤP CỨU</span>
+                )}
+              </div>
+
+              <div className="cw-conv-status-tag">
+                <span className={item.priority === 0 ? 'cw-status-crit' : item.control === 'human' ? 'cw-status-doc' : 'cw-status-patient'}>
+                  {item.priority === 0 ? '🚨 Cảnh báo cấp cứu' : item.control === 'human' ? '👨‍⚕️ Bác sĩ đang hỗ trợ' : '💬 Chờ phản hồi'}
+                </span>
+              </div>
+
+              <div className="cw-conv-footer">
+                <span className="cw-conv-state">{statuses[item.status] || item.status} {item.assigned_to ? `· ${person(item.assigned_to)}` : ''}</span>
+                <time className="cw-conv-time">{dateTime(item.created_at)}</time>
+              </div>
+            </div>
+          )
+        })}
+        {!loading && !items.length && <p className="cw-empty">Không có hội thoại yêu cầu hỗ trợ hoặc cấp cứu.</p>}
+        <footer className="cw-pagination"><span>{total} hội thoại</span><button disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 30))}>Trước</button><button disabled={offset + 30 >= total} onClick={() => setOffset(offset + 30)}>Sau</button></footer>
+      </section>
+      <section className="cw-panel cw-conversation-thread" aria-label="Nội dung hội thoại">
+        {!selectedId ? <div className="cw-chat-placeholder"><h2>Chọn một hội thoại để xem tin nhắn</h2><p>Tiếp nhận ca yêu cầu hỗ trợ hoặc khẩn cấp để xử lý và tư vấn trực tiếp cho bệnh nhân.</p></div> : !selected ? <DataLoadingState className="py-10 flex flex-col items-center justify-center text-slate-400" label="Đang tải hội thoại…" /> : <>
+          <header className="cw-heading"><div><h2>{selected.patient.name || 'Hội thoại bệnh nhân'}</h2><small>{selected.patient.phone || 'Chưa có điện thoại'} · {person(selected.assigned_to)}</small><p>{selected.priority === 0 ? '🚨 Tình trạng cấp cứu - Cần can thiệp khẩn cấp.' : selected.control === 'human' ? 'Bác sĩ điều phối đang trả lời; AI tạm dừng.' : 'Bệnh nhân đang chờ bác sĩ / điều phối viên tiếp quản.'}</p></div><button onClick={() => setParams({})}>Đóng hội thoại</button></header>
+          <SosCard snapshot={selected.ai_snapshot} patient={selected.patient} />
+          {selected.priority === 0 && <div className="cw-emergency"><strong>Hội thoại có cảnh báo cấp cứu</strong><p>Tiếp nhận và ghi diễn biến trong trang xử lý cấp cứu.</p><Link to={'/staff/emergency?case=' + encodeURIComponent(selected.id)}>Mở ca cấp cứu</Link></div>}
+          <div className="cw-thread-action-bar">
+            {owned ? (
+              <div className="cw-owned-status-pill">
+                <span className="cw-owned-dot">●</span>
+                <span>Bạn đang phụ trách hội thoại này</span>
+              </div>
+            ) : selected.assigned_to ? (
+              <div className="cw-other-assigned-pill">
+                <span>Bác sĩ phụ trách: {person(selected.assigned_to)}</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="cw-btn-primary-claim"
+                disabled={busy || !allowed('claim')}
+                onClick={() => void act('claim')}
+              >
+                {selected.priority === 0 ? '🚨 Nhận và bắt đầu xử lý' : '📥 Nhận ca'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="cw-btn-danger-decline"
+              disabled={busy || !allowed('decline')}
+              title={allowed('decline') ? undefined : 'Không thể từ chối: ca cấp cứu, ca của người khác hoặc ca đã có phương án/cọc/lịch.'}
+              onClick={() => void act('decline')}
+            >
+              ✕ Từ chối nhận
+            </button>
+            {selected.status !== 'observing' && (
+              <Link to={'/staff/queue?case=' + encodeURIComponent(selected.id)} className="cw-btn-link-action">
+                Phiếu điều phối & xếp lịch →
+              </Link>
+            )}
+          </div>
+          <div className="cw-messages cw-chat-messages" role="log" aria-label="Tin nhắn bệnh nhân và nhân viên">
+            {selected.messages.length ? selected.messages.map(m => <article key={m.id} className={'cw-message-' + m.sender}><strong>{m.sender === 'patient' ? 'Bệnh nhân' : m.sender === 'coordinator' ? person(m.actor_id) : m.sender === 'ai' ? 'AI' : 'Thông báo'}</strong><time>{dateTime(m.created_at)}</time><p>{m.body}</p></article>) : <p>Chưa có tin nhắn được lưu.</p>}
+          </div>
+          <form className="cw-chat-composer" onSubmit={e => { e.preventDefault(); if (!allowed('message') || !message.trim()) return; const body = message.trim(); const caseId = selected.id; void run(async () => { await api('/cases/' + caseId + '/messages', 'POST', { client_id: crypto.randomUUID(), body }); if (selectedRef.current === caseId) setMessage('') }, 'Đã gửi tin nhắn.') }}>
+            <label className="cw-composer-label">
+              <span>Nội dung phản hồi bệnh nhân:</span>
+              <textarea
+                maxLength={5000}
+                disabled={busy || !allowed('message')}
+                required
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder={owned ? "Nhập nội dung tư vấn và hỗ trợ bệnh nhân trực tiếp..." : "Hãy bấm 'Nhận ca' để bắt đầu trao đổi với bệnh nhân."}
+              />
+            </label>
+            <div className="cw-composer-actions">
+              <button
+                type="submit"
+                className="cw-btn-send-message"
+                disabled={busy || !allowed('message') || !message.trim()}
+              >
+                Gửi tin nhắn ✈
+              </button>
+            </div>
+          </form>
+          {selected.control === 'human' && <details className="cw-chat-resume"><summary>Trả hội thoại về AI</summary><label>Tóm tắt nội dung đã hỗ trợ<textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Ghi thông tin AI cần biết để tiếp tục hỗ trợ." /></label><button disabled={busy || !allowed('resume') || !note.trim()} onClick={() => void act('resume')}>Trả về AI kèm tóm tắt</button><button disabled={busy || !allowed('complete') || !note.trim()} title={allowed('complete') ? 'Đóng ca, trả hội thoại cho AI kèm tóm tắt và giải phóng ca trực.' : 'Chỉ kết thúc được ca chat chưa có phương án, cọc hay lịch khám.'} onClick={() => void act('complete')}>Kết thúc hỗ trợ và đóng ca</button></details>}
+        </>}
+      </section>
+    </div>
+  </div>
+  const title = mode === 'dashboard' ? 'Tổng quan điều phối' : mode === 'emergency' ? 'Ưu tiên cấp cứu' : mode === 'settings' ? 'Tài khoản và chính sách' : 'Hàng đợi điều phối'
+  return <div className="coordinator-workbench">
+    <header className="cw-heading"><div><h1>{title}</h1><p>Điều hướng khám và hỗ trợ bệnh nhân. Không chẩn đoán xác định hoặc kê đơn.</p></div><button disabled={busy} onClick={() => { statsAt.current = 0; void load().then(() => { setPollError(''); setNotice('Đã cập nhật dữ liệu.') }).catch(e => setPollError(e.message)) }}>Làm mới</button></header>
+    {pollError && <p className="cw-error" role="alert">Tải dữ liệu: {pollError}</p>}{error && <p className="cw-error" role="alert">{error}</p>}{notice && <p className="cw-notice" role="status">{notice}</p>}
+    {me && <section className="cw-panel"><div className="cw-actions"><strong>{me.name} · {me.on_duty ? 'Đang trực' : 'Chưa bắt đầu ca trực'}</strong><button disabled={busy || me.on_duty} onClick={() => void run(() => api('/duty/start', 'POST'), 'Đã bắt đầu ca trực.')}>Bắt đầu ca trực</button><button disabled={busy || !me.on_duty} onClick={() => void run(() => api('/duty/end', 'POST'), 'Đã kết thúc ca trực.')}>Kết thúc ca trực</button></div><details><summary>Bàn giao toàn bộ ca đang xử lý và kết thúc ca trực</summary><label>Điều phối viên nhận ca<select value={shiftHandover} onChange={e => setShiftHandover(e.target.value)}><option value="">Chọn người đang trực</option>{members.filter(m => m.user_id !== me.user_id && m.on_duty).map(m => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}</select></label><label>Tóm tắt bàn giao<textarea value={shiftNote} onChange={e => setShiftNote(e.target.value)} /></label><button disabled={busy || !me.on_duty || !shiftHandover || !shiftNote.trim()} onClick={() => void run(() => api('/duty/handover', 'POST', { assigned_to: shiftHandover, note: shiftNote }), 'Đã bàn giao ca trực.')}>Bàn giao và kết thúc ca trực</button></details></section>}
+    {mode === 'settings' ? <div className="cw-columns"><section className="cw-panel"><h2>Chính sách vận hành</h2><p>Nhập điều khoản áp dụng thực tế. Chưa cấu hình sẽ không thể yêu cầu cọc.</p><form onSubmit={e => { e.preventDefault(); void run(async () => { await api<Policy>('/policy', 'PUT', { ...policyForm, hold_minutes: Number(policyForm.hold_minutes), response_minutes: Number(policyForm.response_minutes), emergency_response_minutes: Number(policyForm.emergency_response_minutes) }) }, 'Đã lưu chính sách.') }}>
+      <label>Thời hạn giữ chỗ (phút)<input type="number" min="5" max="1440" required value={policyForm.hold_minutes} onChange={e => setPolicyForm({ ...policyForm, hold_minutes: e.target.value })} /></label>
+      <label>Hạn tiếp nhận thông thường (phút)<input type="number" min="1" required value={policyForm.response_minutes} onChange={e => setPolicyForm({ ...policyForm, response_minutes: e.target.value })} /></label>
+      <label>Hạn tiếp nhận cấp cứu (phút)<input type="number" min="1" max="60" required value={policyForm.emergency_response_minutes} onChange={e => setPolicyForm({ ...policyForm, emergency_response_minutes: e.target.value })} /></label>
+      <label>Hướng dẫn chuyển cọc<textarea required minLength={10} value={policyForm.payment_instructions} onChange={e => setPolicyForm({ ...policyForm, payment_instructions: e.target.value })} /></label><label>Điều kiện đổi/hủy/hoàn cọc<textarea required minLength={10} value={policyForm.refund_policy} onChange={e => setPolicyForm({ ...policyForm, refund_policy: e.target.value })} /></label><button className="cw-primary" disabled={busy || !admin}>Lưu chính sách</button>
+    </form></section><section className="cw-panel"><h2>Điều phối viên</h2><ul>{members.map(m => <li key={m.user_id}>{m.name} · {m.clinical_qualification}{m.is_admin ? ' · Quản trị' : ''}<small>{m.user_id}</small></li>)}</ul><form onSubmit={e => { e.preventDefault(); void run(() => api('/members', 'PUT', { ...account, facility_ids: account.facility_ids.split(',').map(x => x.trim()).filter(Boolean) }), 'Đã lưu quyền tài khoản.') }}><label>ID tài khoản đã xác thực<input required value={account.user_id} onChange={e => setAccount({ ...account, user_id: e.target.value })} /></label><label>Thông tin chuyên môn<input required value={account.clinical_qualification} onChange={e => setAccount({ ...account, clinical_qualification: e.target.value })} /></label><label>ID cơ sở được phép (phân cách dấu phẩy; để trống nếu toàn hệ thống)<input value={account.facility_ids} onChange={e => setAccount({ ...account, facility_ids: e.target.value })} /></label><label className="cw-check"><input type="checkbox" checked={account.is_admin} onChange={e => setAccount({ ...account, is_admin: e.target.checked })} />Quản trị điều phối</label><label className="cw-check"><input type="checkbox" checked={account.enabled} onChange={e => setAccount({ ...account, enabled: e.target.checked })} />Cho phép hoạt động</label><button disabled={busy || !admin}>Lưu quyền</button></form></section></div> : <>
+      {dashboard && <section className="cw-stats"><div><span>Chưa nhận</span><strong>{dashboard.counts.new || 0}</strong></div><div><span>Cấp cứu đang mở</span><strong>{dashboard.emergency}</strong></div><div><span>Quá hạn xử lý</span><strong>{dashboard.overdue}</strong></div><div><span>Chờ cọc</span><strong>{dashboard.counts.waiting_deposit || 0}</strong></div></section>}
+      {mode === 'dashboard' && dashboard && <section className="cw-panel"><h2>Nhắc việc đến hạn</h2>{dashboard.followups.length ? dashboard.followups.map(c => <button key={c.id} onClick={() => choose(c.id)}>{c.patient.name || 'Chưa có tên'} · {dateTime(c.follow_up_at)} · {person(c.assigned_to)}</button>) : <p>Không có nhắc việc đến hạn.</p>}</section>}
+      <section className="cw-toolbar"><label>Tìm ca<input placeholder="Tên, điện thoại hoặc mã ca" value={search} onChange={e => { setSearch(e.target.value); setOffset(0) }} /></label><label>Trạng thái<select value={status} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="">Tất cả</option>{Object.entries(statuses).filter(([k]) => k !== 'observing').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label><label className="cw-check"><input type="checkbox" checked={mine} onChange={e => { setMine(e.target.checked); setOffset(0) }} />Ca của tôi</label></section>
+      <div className={'cw-grid' + (selectedId ? ' cw-with-detail' : '')}><section className="cw-panel cw-queue"><div className="cw-table-wrap"><table><thead><tr><th>Bệnh nhân / mã</th><th>Ưu tiên</th><th>Trạng thái</th><th>Phụ trách</th><th>Hạn xử lý</th><th>Ngày tạo gần nhất</th></tr></thead><tbody>{loading ? <tr><td colSpan={6}><DataLoadingState className="py-8 flex flex-col items-center justify-center text-slate-400" label="Đang tải dữ liệu…" /></td></tr> : items.map(c => <tr key={c.id} className={c.id === selectedId ? 'cw-selected' : ''}><td><button type="button" onClick={() => choose(c.id)} className="cw-link" aria-current={c.id === selectedId ? 'true' : undefined}>{c.patient.name || 'Chưa có tên'}</button><small>{c.patient.phone || 'Chưa có điện thoại'} · {sourceNames[c.source] || c.source}</small><small>{c.id.slice(0, 8).toUpperCase()}</small></td><td className={c.priority === 0 ? 'cw-critical' : ''}>{priorities[c.priority]}</td><td>{statuses[c.status] || c.status}</td><td>{person(c.assigned_to)}</td><td>{dateTime(c.due_at)}</td><td>{dateTime(c.created_at)}</td></tr>)}</tbody></table></div>{!loading && !items.length && <p className="cw-empty">{mode === 'emergency' ? 'Hiện không có ca cấp cứu đang hoạt động.' : 'Không có ca phù hợp.'}</p>}<footer className="cw-pagination"><span>{total} ca</span><button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 30))}>Trước</button><button disabled={offset + 30 >= total} onClick={() => setOffset(offset + 30)}>Sau</button></footer></section>
+      {selectedId && <aside className="cw-detail"><header className="cw-detail-header"><div><span>Hồ sơ bệnh nhân</span><strong>{items.find(item => item.id === selectedId)?.patient.name || 'Đang mở hồ sơ'}</strong></div><button type="button" onClick={() => setParams({})}>Đóng hồ sơ</button></header>{selected?.id !== selectedId ? detailLoading || !detailError ? <div className="cw-detail-loading" role="status" aria-live="polite"><span className="cw-loading-line cw-loading-title" /><span className="cw-loading-line" /><span className="cw-loading-line" /><span className="cw-loading-line cw-loading-short" /><span className="cw-loading-line" /><span>Đang tải thông tin bệnh nhân…</span></div> : <div className="cw-detail-error" role="alert"><strong>Chưa tải được hồ sơ bệnh nhân</strong><p>{detailError || 'Hồ sơ hiện chưa khả dụng.'}</p><button type="button" onClick={() => setDetailAttempt(attempt => attempt + 1)}>Thử tải lại</button></div> : <>
+        <section className="cw-panel"><h2>{selected.patient.name || 'Hồ sơ ca'}</h2><small>Mã {selected.id} · phiên bản {selected.version}</small><p>{statuses[selected.status]} · {priorities[selected.priority]} · {person(selected.assigned_to)}</p><dl>{Object.entries(selected.patient).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{{ name: 'Họ tên', phone: 'Điện thoại', email: 'Email', date_of_birth: 'Ngày sinh', gender: 'Giới tính', guardian_name: 'Người giám hộ', guardian_phone: 'Liên hệ giám hộ', preferred_date: 'Ngày mong muốn', preferred_period: 'Buổi mong muốn', facility_preference: 'Cơ sở mong muốn', contact_time_preference: 'Thời gian liên hệ', notes: 'Nội dung yêu cầu', consent_to_contact: 'Đồng ý liên hệ' }[k] || k}</dt><dd>{String(v)}</dd></div>)}</dl><p>Hạn xử lý: {dateTime(selected.due_at)}. Nhắc việc: {dateTime(selected.follow_up_at)}</p><button className="cw-btn-primary-claim" disabled={busy || ['completed', 'cancelled'].includes(selected.status) || Boolean(selected.assigned_to && !owned) || Boolean(selected.booking_id) || (selected.priority === 0 && owned)} onClick={claimOrEditBooking}>{selected.priority === 0 ? owned ? '🚨 Đang xử lý cấp cứu' : '🚨 Nhận và bắt đầu xử lý' : selected.booking_id ? 'Booking đã tạo' : owned ? 'Tiếp tục tạo booking' : '📥 Nhận ca'}</button></section>
+        <SosCard snapshot={selected.ai_snapshot} patient={selected.patient} />
+        <section className="cw-panel cw-ai-panel">
+          <h2>Kết quả Định hướng Lâm sàng (AI Triage & Care Pipeline)</h2>
+          {Object.keys(selected.ai_snapshot).length ? (
+            <>
+              <div className="cw-ai-badges">
+                {selected.ai_snapshot.ats_level ? (
+                  <span className={`cw-ats-badge cw-ats-${selected.ai_snapshot.ats_level}`}>
+                    ATS Cấp {String(selected.ai_snapshot.ats_level)}: {
+                      selected.ai_snapshot.ats_level === 1 ? 'CẤP CỨU KHẨN CẤP' :
+                      selected.ai_snapshot.ats_level === 2 ? 'NGUY CƠ CAO (≤ 24h)' :
+                      selected.ai_snapshot.ats_level === 3 ? 'BÁN KHẨN (≤ 3 ngày)' : 'TIÊU CHUẨN (≤ 7 ngày)'
+                    }
+                  </span>
+                ) : null}
+                {selected.ai_snapshot.max_booking_days !== undefined && (
+                  <span className="cw-window-badge">
+                    Cửa sổ khám: <strong>{String(selected.ai_snapshot.max_booking_days)} ngày</strong>
+                  </span>
+                )}
+              </div>
+
+              {selected.ai_snapshot.emergency_warning && (
+                <div className="cw-emergency-banner" role="alert">
+                  <strong>🚨 CẢNH BÁO LÂM SÀNG CẤP CỨU:</strong>
+                  <p>{String(selected.ai_snapshot.emergency_warning)}</p>
+                </div>
+              )}
+
+              {/* LỘ TRÌNH KHÁM PHÂN TẦNG ĐA KHOA (STAGED CARE NAVIGATION PIPELINE) */}
+              {(selected.ai_snapshot.care_pipeline as { pipeline_steps?: CarePipelineStep[] } | undefined)?.pipeline_steps?.length ? (
+                <div className="cw-pipeline-container">
+                  <div className="cw-pipeline-header">
+                    <strong>🏥 Lộ trình Khám Ưu tiên Phân tầng (Staged Care Navigation):</strong>
+                    <small>Nguyên tắc y khoa: Cơ quan sinh tồn luôn được ưu tiên khám trước mức độ đau đơn thuần.</small>
+                  </div>
+                  <div className="cw-pipeline-steps">
+                    {((selected.ai_snapshot.care_pipeline as { pipeline_steps: CarePipelineStep[] }).pipeline_steps).map(step => (
+                      <div key={step.step_number} className={`cw-step-card ${step.step_number === 1 ? 'cw-step-primary' : 'cw-step-secondary'}`}>
+                        <div className="cw-step-badge">
+                          Bước {step.step_number} {step.anatomical_rank === 1 ? '· Sinh tồn' : step.anatomical_rank === 2 ? '· Nội tạng chính' : '· Ngoại vi'}
+                        </div>
+                        <div className="cw-step-content">
+                          <h4 className="cw-step-title">{step.department_name}</h4>
+                          {step.target_symptoms?.length ? (
+                            <p className="cw-step-symptoms">
+                              <strong>Triệu chứng:</strong> {step.target_symptoms.join(', ')}
+                            </p>
+                          ) : null}
+                          {step.clinical_rationale && (
+                            <p className="cw-step-rationale">{step.clinical_rationale}</p>
+                          )}
+                          <button
+                            type="button"
+                            className="cw-apply-btn"
+                            disabled={busy || !owned}
+                            onClick={() => {
+                              setBookingSeed({ department: step.department_name, reason: `Định hướng theo lộ trình khám AI: Bước ${step.step_number} (${step.department_name})` })
+                              setBookingOpen(true)
+                            }}
+                          >
+                            Áp dụng Bước {step.step_number} vào phương án
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : selected.ai_snapshot.suggested_department_name ? (
+                <div className="cw-single-specialty-card">
+                  <div>
+                    <strong>Chuyên khoa khuyến nghị:</strong>
+                    <h3>{String(selected.ai_snapshot.suggested_department_name)}</h3>
+                  </div>
+                  <button
+                    type="button"
+                    className="cw-apply-btn"
+                    disabled={busy || !owned}
+                    onClick={() => {
+                      const department = String(selected.ai_snapshot.suggested_department_name)
+                      setBookingSeed({ department, reason: `Khám theo khuyến nghị AI: ${department}` })
+                      setBookingOpen(true)
+                    }}
+                  >
+                    Mở booking theo gợi ý AI
+                  </button>
+                </div>
+              ) : null}
+
+              <details className="cw-details-raw">
+                <summary>Dữ kiện lâm sàng & Phân tích chi tiết</summary>
+                <pre>{JSON.stringify(selected.ai_snapshot, null, 2)}</pre>
+              </details>
+            </>
+          ) : (
+            <p>Phiếu này chưa có kết quả AI được lưu.</p>
+          )}
+        </section>
+        <section className="cw-panel"><h2>Liên hệ và bàn giao</h2><label>{selected.priority === 0 ? 'Diễn biến xử lý / kết quả bàn giao cấp cứu' : 'Kết quả liên hệ / lý do thao tác'}<textarea value={note} onChange={e => setNote(e.target.value)} /></label><div className="cw-actions"><button disabled={busy || !owned || !note.trim() || !allowed('contact')} onClick={() => void act('contact')}>Lưu kết quả liên hệ</button><button disabled={busy || !owned || !note.trim() || !allowed('complete')} onClick={() => void act('complete')}>Hoàn tất ca</button><button disabled={busy || !owned || !note.trim() || !allowed('cancel')} onClick={() => void act('cancel')}>Hủy ca</button><button disabled={busy || !note.trim() || !allowed('reopen')} onClick={() => void act('reopen')}>Mở lại ca</button></div><label>Nhắc liên hệ lúc<input type="datetime-local" value={followUp} onChange={e => setFollowUp(e.target.value)} /></label><button disabled={busy || !allowed('follow_up') || !followUp || new Date(followUp).getTime() <= Date.now() || !Number.isFinite(new Date(followUp).getTime())} onClick={() => void act('follow_up')}>Đặt nhắc việc</button><label>Người nhận bàn giao<select value={handover} onChange={e => setHandover(e.target.value)}><option value="">Chọn điều phối viên</option>{members.filter(canReceive).map(m => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}</select></label><button disabled={busy || !owned || !handover || !note.trim() || !allowed('handover')} onClick={() => void act('handover')}>Bàn giao ca</button>{selected.priority === 0 && <div className="cw-emergency"><h3>Xử lý cấp cứu</h3><p>Ghi rõ thời điểm bàn giao và việc bên nhận đã xác nhận trong ghi chú.</p><label>Đơn vị/người nhận<input value={reference} onChange={e => setReference(e.target.value)} /></label><button disabled={busy || !owned || !note.trim() || !reference.trim() || !allowed('emergency_transfer')} onClick={() => void act('emergency_transfer')}>Ghi nhận bàn giao cấp cứu</button><button disabled={busy || !owned || !note.trim() || !allowed('emergency_ack')} onClick={() => void act('emergency_ack')}>Ghi nhận tiếp nhận khẩn</button><button disabled={busy || !owned || !note.trim() || !allowed('emergency_dismiss')} title="Bác sĩ xác nhận cảnh báo là nhầm: hạ về mức Cần hỗ trợ sớm để lập phương án khám. Ghi lý do lâm sàng vào ghi chú." onClick={() => { if (window.confirm('Xác nhận ca này KHÔNG phải cấp cứu? Lý do sẽ được ghi vào nhật ký ca.')) void act('emergency_dismiss') }}>Xác nhận không phải cấp cứu</button></div>}</section>
+        {selected.session_id && <section className="cw-panel"><h2>Hội thoại</h2><p>{selected.control === 'human' ? 'Bác sĩ điều phối đang trả lời; AI tạm dừng.' : 'AI đang trả lời.'}</p><div className="cw-actions"><button disabled={busy || !allowed('takeover')} onClick={() => void act('takeover')}>Tiếp quản</button><button disabled={busy || !allowed('resume') || !note.trim()} onClick={() => void act('resume')}>Trả về AI kèm tóm tắt</button></div><div className="cw-messages">{selected.messages.map(m => <article key={m.id}><strong>{m.sender === 'patient' ? 'Bệnh nhân' : m.sender === 'coordinator' ? person(m.actor_id) : m.sender === 'ai' ? 'AI' : 'Thông báo'}</strong><time>{dateTime(m.created_at)}</time><p>{m.body}</p></article>)}</div><form onSubmit={e => { e.preventDefault(); const body = message; const caseId = selected.id; void run(async () => { await api('/cases/' + caseId + '/messages', 'POST', { client_id: crypto.randomUUID(), body }); if (selectedRef.current === caseId) setMessage('') }, 'Đã gửi tin nhắn.') }}><label>Tư vấn điều hướng<textarea required value={message} onChange={e => setMessage(e.target.value)} placeholder="Hỏi rõ triệu chứng, giải thích chuyên khoa hoặc hướng dẫn bước tiếp theo." /></label><button className="cw-primary" disabled={busy || !allowed('message') || !message.trim()}>Gửi tới bệnh nhân</button></form></section>}
+        {selected.priority !== 0 && <section className="cw-panel"><h2>Booking và lịch khám</h2>{selected.booking_id ? <><p>Đã tạo booking <strong>{selected.booking_id}</strong>.</p><p>{selected.plan.doctor_name || 'Bác sĩ'} · {dateTime(String(selected.plan.starts_at || ''))} · {selected.plan.facility_name || 'Cơ sở'}</p></> : <><p>Chọn bác sĩ, chuyên khoa, dịch vụ và giờ khám từ lịch đã công bố. Xác nhận sẽ tạo booking cùng lịch hẹn cho bác sĩ.</p><button className="cw-btn-primary-claim" disabled={!owned || busy || ['cancelled', 'completed'].includes(selected.status)} onClick={() => setBookingOpen(true)}>Tạo booking và lịch hẹn</button></>}</section>}
+        <section className="cw-panel"><h2>Lịch sử thao tác</h2>{selected.events.length ? selected.events.map(e => <article key={e.id} className="cw-event"><strong>{eventNames[e.action] || e.action}</strong><small>{dateTime(e.created_at)} · {person(e.actor_id)}</small>{e.note && <p>{e.note}</p>}</article>) : <p>Chưa có thao tác.</p>}</section>
+      </>}</aside>}
+      </div>
+    </>}
+    {mode === 'queue' && bookingOpen && selected && !selected.booking_id && <BookingModal
+      case_={selected}
+      approvedBy={me.user_id}
+      initialDepartment={bookingSeed.department}
+      initialReason={bookingSeed.reason}
+      onClose={() => setBookingOpen(false)}
+      onCreated={value => {
+        setSelected(value)
+        setBookingOpen(false)
+        setNotice('Đã tạo booking và lịch hẹn cho bác sĩ.')
+        statsAt.current = 0
+        void load().catch(e => setPollError(e instanceof Error ? e.message : 'Không tải được dữ liệu mới.'))
+      }}
+    />}
+  </div>
+}

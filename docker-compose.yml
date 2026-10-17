@@ -1,0 +1,52 @@
+services:
+  backend:
+    image: ${IMAGE_REPO:-ai20k-agent}:${IMAGE_TAG:-local}
+    pull_policy: ${PULL_POLICY:-missing}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - ${APP_ENV_FILE:-.env}
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
+    volumes:
+      - ${APP_DATA_PATH:-./data}:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  redis_data:
+    name: ${REDIS_VOLUME_NAME:-ai20k-redis}
+
+networks:
+  default:
+    driver: bridge

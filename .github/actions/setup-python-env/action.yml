@@ -1,0 +1,66 @@
+name: Setup cached Python environment
+description: Restore or create the repository Python environment
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Cache hosted Python environment
+      id: python-env-cache
+      if: runner.environment == 'github-hosted'
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/ci-python-venv
+        key: ${{ runner.os }}-python-3.11-${{ hashFiles('requirements.lock') }}
+
+    - name: Check self-hosted Python environment
+      id: local-python-env
+      if: runner.environment == 'self-hosted'
+      shell: bash
+      env:
+        CI_PYTHON_ENV: ${{ format('{0}/ai20k-ci-python-3.11-{1}', runner.tool_cache, hashFiles('requirements.lock')) }}
+      run: |
+        if [[ -f "$CI_PYTHON_ENV/.ci-ready" && -x "$CI_PYTHON_ENV/bin/ruff" ]]; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Install dependencies
+      if: runner.environment == 'self-hosted'
+      shell: bash
+      env:
+        CI_PYTHON_ENV: ${{ format('{0}/ai20k-ci-python-3.11-{1}', runner.tool_cache, hashFiles('requirements.lock')) }}
+      run: |
+        timeout 20m bash -euo pipefail -c '
+          exec 9>"$CI_PYTHON_ENV.lock"
+          echo "Waiting for Python environment lock: $CI_PYTHON_ENV"
+          if ! flock -w 900 9; then
+            echo "Timed out waiting for Python environment lock: $CI_PYTHON_ENV" >&2
+            exit 1
+          fi
+          echo "Acquired Python environment lock."
+          if [[ -f "$CI_PYTHON_ENV/.ci-ready" && -x "$CI_PYTHON_ENV/bin/ruff" ]]; then
+            echo "Reusing cached Python environment."
+            exit 0
+          fi
+          rm -rf "$CI_PYTHON_ENV"             # dọn venv dở dang
+          echo "Creating Python virtual environment."
+          python -m venv "$CI_PYTHON_ENV"
+          PIP_TMPDIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/pip-install.XXXXXX")"
+          export TMPDIR="$PIP_TMPDIR"
+          echo "Installing locked Python dependencies."
+          "$CI_PYTHON_ENV/bin/python" -m pip install \
+            --retries 3 --timeout 30 --prefer-binary --require-hashes -r requirements.lock
+          touch "$CI_PYTHON_ENV/.ci-ready"
+          echo "Python environment is ready."
+        '
+
+    - name: Add Python environment to PATH
+      shell: bash
+      env:
+        CI_PYTHON_ENV: ${{ runner.environment == 'self-hosted' && format('{0}/ai20k-ci-python-3.11-{1}', runner.tool_cache, hashFiles('requirements.lock')) || format('{0}/ci-python-venv', runner.temp) }}
+      run: echo "$CI_PYTHON_ENV/bin" >> "$GITHUB_PATH"

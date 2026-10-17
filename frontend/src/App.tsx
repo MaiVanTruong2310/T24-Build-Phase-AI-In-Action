@@ -1,0 +1,196 @@
+import FamilyProfiles from './pages/FamilyProfiles'
+import { StaffAdminGate } from './features/coordinator/StaffAdminGate'
+import { TypewriterLoader } from './components/TypewriterLoader';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { createBrowserRouter, RouterProvider, Navigate, useLocation, useSearchParams } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
+import type { AppDispatch, RootState } from './app/store'
+import { initializeAuth, logout, sessionChanged } from './features/auth/authSlice'
+import {
+  ACCESS_TOKEN_KEY,
+  AUTH_SESSION_KEY,
+  AUTH_TOKENS_UPDATED_EVENT,
+  REFRESH_TOKEN_KEY,
+  readPublishedSession,
+} from './features/auth/session'
+import { staffRedirectFor } from './features/auth/staffReturnTo'
+import { UI_EDIT_MODE } from './features/uiVisibility/store'
+import { PatientLayout } from './layouts/PatientLayout'
+import { RootLayout } from './layouts/RootLayout'
+
+const AuthLayout = lazy(() => import('./layouts/AuthLayout').then((module) => ({ default: module.AuthLayout })))
+const StaffLayout = lazy(() => import('./layouts/StaffLayout').then((module) => ({ default: module.StaffLayout })))
+const Landing = lazy(() => import('./pages/Landing').then((module) => ({ default: module.Landing })))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const Login = lazy(() => import('./pages/Login').then((module) => ({ default: module.Login })))
+const Register = lazy(() => import('./pages/Register').then((module) => ({ default: module.Register })))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then((module) => ({ default: module.ForgotPassword })))
+const CoordinatorWorkbench = lazy(() => import('./pages/CoordinatorWorkbench'))
+const StaffDashboard = lazy(() => import('./pages/StaffDashboard'))
+const PatientCoordinationRequests = lazy(() => import('./pages/PatientCoordinationRequests'))
+const ConsultationBooking = lazy(() => import('./pages/ConsultationBooking'))
+const AppointmentBooking = lazy(() => import('./pages/AppointmentBooking'))
+const DoctorDirectory = lazy(() => import('./pages/DoctorDirectory'))
+const DoctorProfile = lazy(() => import('./pages/DoctorProfile'))
+const CoordinatorSchedule = lazy(() => import('./pages/CoordinatorSchedule'))
+const ScheduleApprove = lazy(() => import('./pages/ScheduleApprove'))
+const AppointmentApproval = lazy(() => import('./pages/AppointmentApproval'))
+const AppointmentHistory = lazy(() => import('./pages/AppointmentHistory'))
+const AppointmentProgress = lazy(() => import('./pages/AppointmentProgress'))
+const AppointmentDetail = lazy(() => import('./pages/AppointmentDetail'))
+const DoctorManagement = lazy(() => import('./pages/DoctorManagement'))
+const CreateDoctor = lazy(() => import('./pages/DoctorManagement/Create'))
+const ServiceManagement = lazy(() => import('./pages/ServiceManagement'))
+const CreateService = lazy(() => import('./pages/ServiceManagement/Create'))
+const StaffPatients = lazy(() => import('./pages/StaffPatients'))
+const StaffAppointments = lazy(() => import('./pages/StaffAppointments'))
+const UiEditor = lazy(() => import('./pages/UiEditor'))
+
+
+const DoctorSchedule = lazy(() => import('./pages/DoctorSchedule'))
+const PatientProfile = lazy(() => import('./pages/PatientProfile'))
+const PatientDepartments = lazy(() => import('./pages/PatientDepartments'))
+const PatientConsultation = lazy(() => import('./pages/PatientConsultation'))
+
+
+
+function PatientAppointmentRoute() {
+  const [searchParams] = useSearchParams()
+  return searchParams.has('reschedule')
+    ? <PatientAuthGate><AppointmentBooking /></PatientAuthGate>
+    : <ConsultationBooking />
+}
+
+const router = createBrowserRouter([
+  { path: '/', element: <StaffRedirect><Landing /></StaffRedirect> },
+  {
+    element: <AuthLayout />,
+    children: [
+      { path: '/login', element: <Login /> },
+      { path: '/register', element: <Register /> },
+      { path: '/forgot-password', element: <ForgotPassword /> },
+    ]
+  },
+  // Standalone Patient Profile Page (renders full-bleed layout with its own header & footer)
+  { path: '/patient/profile', element: <PatientAuthGate><PatientProfile /></PatientAuthGate> },
+  { path: '/patient/records', element: <Navigate to="/patient/profile" replace /> },
+  {
+    element: <RootLayout />,
+    children: [
+      {
+        path: 'patient',
+        element: <StaffRedirect><PatientLayout /></StaffRedirect>,
+        children: [
+          { index: true, element: <PatientConsultation /> },
+          { path: 'profile', element: <PatientAuthGate><PatientProfile /></PatientAuthGate> },
+          { path: 'records', element: <Navigate to="/patient/profile" replace /> },
+          { path: 'departments', element: <PatientDepartments /> },
+          { path: 'family', element: <PatientAuthGate><FamilyProfiles /></PatientAuthGate> },
+          { path: 'appointments', element: <PatientAppointmentRoute /> },
+          { path: 'requests', element: <PatientCoordinationRequests /> },
+          { path: 'doctors', element: <DoctorDirectory /> },
+          { path: 'doctors/:id', element: <DoctorProfile /> },
+          { path: 'appointments/history', element: <PatientAuthGate><AppointmentHistory /></PatientAuthGate> },
+          { path: 'progress', element: <PatientAuthGate><AppointmentProgress /></PatientAuthGate> },
+          { path: 'progress/:id', element: <PatientAuthGate><AppointmentDetail /></PatientAuthGate> },
+          { path: 'appointments/:id', element: <PatientAuthGate><AppointmentDetail /></PatientAuthGate> }
+        ]
+      }
+    ]
+  },
+  {
+    path: 'staff',
+    element: <StaffGate />,
+    children: [
+      { index: true, element: <StaffDashboard /> },
+      { path: 'overview', element: <StaffDashboard /> },
+      { path: 'coordination', element: <CoordinatorWorkbench /> },
+      { path: 'dieu-phoi', element: <Navigate to="/staff/coordination" replace /> },
+      { path: 'shifts', element: <StaffAdminGate><CoordinatorSchedule /></StaffAdminGate> },
+      { path: 'settings', element: <StaffAdminGate><CoordinatorWorkbench mode="settings" /></StaffAdminGate> },
+      { path: 'queue', element: <CoordinatorWorkbench key="queue" /> },
+      { path: 'emergency', element: <CoordinatorWorkbench mode="emergency" /> },
+      { path: 'chat', element: <CoordinatorWorkbench key="chat" mode="chat" /> },
+      { path: 'doctors', element: <StaffAdminGate><DoctorManagement /></StaffAdminGate> },
+      { path: 'doctors/create', element: <StaffAdminGate><CreateDoctor /></StaffAdminGate> },
+      { path: 'doctors/:id/edit', element: <StaffAdminGate><CreateDoctor /></StaffAdminGate> },
+      { path: 'services', element: <StaffAdminGate><ServiceManagement /></StaffAdminGate> },
+      { path: 'services/create', element: <StaffAdminGate><CreateService /></StaffAdminGate> },
+      { path: 'ui-editor', element: <StaffAdminGate><UiEditor /></StaffAdminGate> },
+      { path: 'appointments', element: <StaffAppointments /> },
+      { path: 'booking-approvals', element: <AppointmentApproval /> },
+      { path: 'appointments/approve/:id', element: <ScheduleApprove /> },
+      { path: 'doctor-schedule', element: <DoctorSchedule /> },
+      { path: 'patients', element: <StaffPatients /> },
+      { path: 'monitoring', element: <CoordinatorWorkbench mode="emergency" /> }
+    ]
+  },
+  { path: '*', element: <NotFound /> }
+])
+
+function PatientAuthGate({ children }: { children: ReactNode }) {
+  const user = useSelector((state: RootState) => state.auth.user)
+  const location = useLocation()
+  // Khung xem trước của /staff/ui-editor: nhân viên xem bố cục trang bệnh nhân (API vẫn tự kiểm quyền).
+  if (UI_EDIT_MODE && user?.role === 'staff') return <>{children}</>
+  if (!user) {
+    const returnTo = encodeURIComponent(`${location.pathname}${location.search}`)
+    return <Navigate to={`/login?returnTo=${returnTo}`} replace />
+  }
+  return user.role === 'patient' ? <>{children}</> : <Navigate to={staffRedirectFor(user.role, location.pathname) ?? '/staff'} replace />
+}
+
+// Phiên nhân viên còn hiệu lực mà mở trang chủ/trang bệnh nhân: chuyển về bàn điều phối, không dùng giao diện bệnh nhân.
+function StaffRedirect({ children }: { children: ReactNode }) {
+  const role = useSelector((state: RootState) => state.auth.user?.role)
+  const { pathname } = useLocation()
+  const target = UI_EDIT_MODE ? null : staffRedirectFor(role, pathname)
+  return target ? <Navigate to={target} replace /> : <>{children}</>
+}
+
+function StaffGate() {
+  const user = useSelector((state: RootState) => state.auth.user)
+  if (user?.role === 'staff') return <StaffLayout />
+  return <Navigate to="/" replace />
+}
+
+export function App() {
+  const dispatch = useDispatch<AppDispatch>()
+  const { initialized, restoreError, loading } = useSelector((state: RootState) => state.auth)
+
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key && [AUTH_SESSION_KEY, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY].includes(event.key)) {
+        dispatch(sessionChanged(readPublishedSession()))
+      }
+    }
+    const handleTokensUpdated = () => dispatch(sessionChanged(readPublishedSession()))
+    const handleTokenRefreshed = () => { void dispatch(initializeAuth()) }
+    const handleUnauthorized = () => dispatch(logout())
+
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener(AUTH_TOKENS_UPDATED_EVENT, handleTokensUpdated)
+    window.addEventListener('auth:refreshed', handleTokenRefreshed)
+    window.addEventListener('auth:unauthorized', handleUnauthorized)
+    void dispatch(initializeAuth())
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener(AUTH_TOKENS_UPDATED_EVENT, handleTokensUpdated)
+      window.removeEventListener('auth:refreshed', handleTokenRefreshed)
+      window.removeEventListener('auth:unauthorized', handleUnauthorized)
+    }
+  }, [dispatch])
+
+  if (!initialized) return <main className="flex min-h-screen items-center justify-center bg-slate-50 light:bg-app-page text-app-secondary" role="status">Đang khôi phục phiên đăng nhập…</main>
+
+  return <>
+    <Suspense fallback={<main className="flex min-h-screen items-center justify-center flex-col gap-5 bg-slate-50 light:bg-app-page text-slate-600 light:text-app-secondary dark:bg-app-page dark:text-slate-300" role="status"><TypewriterLoader size="lg" /><span>Đang tải trang…</span></main>}>
+      <RouterProvider router={router} />
+    </Suspense>
+    {restoreError && <div role="status" className="fixed bottom-4 left-1/2 z-[100] flex max-w-[90vw] -translate-x-1/2 items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-lg">
+      <span>{restoreError}</span>
+      <button type="button" disabled={loading} onClick={() => void dispatch(initializeAuth())} className="shrink-0 font-semibold underline disabled:opacity-50">Thử lại</button>
+    </div>}
+  </>
+}

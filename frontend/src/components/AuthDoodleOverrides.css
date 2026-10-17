@@ -1,0 +1,136 @@
+/* Chuyển các form Tailwind sẵn có sang ngôn ngữ vẽ tay mà không đổi cấu trúc/logic. Phạm vi: .auth-doodle-active-face. */
+.auth-doodle-active-face { color: var(--ink); }
+
+/* Bỏ khung panel cũ, giữ lại các phần bên trong */
+.auth-doodle-active-face > div,
+.auth-doodle-active-face > div > div:first-child:not(.relative) {
+  max-width: none;
+}
+.auth-doodle-active-face > div:has(> h2),
+.auth-doodle-active-face > div:has(> div > h2),
+.auth-doodle-active-face > div > div:first-child:not(.relative):has(h2) {
+  background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; backdrop-filter: none !important; padding: 0 !important;
+}
+
+/* Tiêu đề */
+.auth-doodle-active-face h2 {
+  font-family: var(--hand); font-size: clamp(26px, 5vw, 34px); font-weight: 400 !important; line-height: 1.1; letter-spacing: 0 !important;
+  color: var(--cta-bg) !important;
+}
+html.dark .auth-doodle-active-face h2 { color: var(--ink) !important; }
+.auth-doodle-active-face h3 { font-family: var(--hand); font-weight: 400 !important; font-size: 20px; color: var(--ink) !important; }
+.auth-doodle-active-face p { color: var(--ink); }
+.auth-doodle-active-face [class*='text-slate-6'], .auth-doodle-active-face [class*='text-slate-5'], .auth-doodle-active-face [class*='text-slate-4'],
+.auth-doodle-active-face [class*='text-app-secondary'] { color: color-mix(in srgb, var(--ink) 68%, transparent) !important; }
+.auth-doodle-active-face label, .auth-doodle-active-face [class*='text-slate-7'] { color: var(--ink) !important; }
+.auth-doodle-active-face label { font-weight: 700; }
+
+/* Logo và nhãn nhỏ */
+.auth-doodle-active-face img[alt*='Logo'] { background: var(--paper) !important; border: 2px solid var(--ink) !important; border-radius: 14px 16px 13px 15px !important; box-shadow: 3px 3px 0 var(--shadow) !important; }
+.auth-doodle-active-face [class*='border-emerald-500/30'] {
+  color: var(--sos-fg) !important; background: transparent !important; border: 2px dashed var(--thread) !important; font-weight: 700;
+}
+.auth-doodle-active-face [class*='border-emerald-500/30'] svg { color: var(--thread) !important; }
+.auth-doodle-active-face .text-emerald-600, .auth-doodle-active-face [class*='text-emerald-600'] { color: var(--cta-bg) !important; }
+html.dark .auth-doodle-active-face [class*='text-emerald-'] { color: var(--ink) !important; }
+
+/* Số bước 1-2-3 và nhãn "Tùy chọn" */
+.auth-doodle-active-face [class*='rounded-full'][class*='bg-emerald-'], .auth-doodle-active-face [class*='rounded-full'][class*='bg-app-'] {
+  background: var(--tint) !important; color: var(--ink) !important; border: 2px solid var(--ink); box-shadow: 1px 1px 0 var(--shadow); font-family: var(--hand); font-weight: 400 !important; font-size: 15px;
+}
+.auth-doodle-active-face [class*='bg-emerald-100'], .auth-doodle-active-face [class*='bg-emerald-500/10']:not([class*='border-']), .auth-doodle-active-face [class*='bg-app-muted'] {
+  background: var(--tint) !important; color: var(--ink) !important; border-radius: 8px !important;
+}
+
+/* Nhóm phụ (khối "Định danh y tế") */
+.auth-doodle-active-face [class*='bg-slate-50'], .auth-doodle-active-face [class*='bg-slate-100'], .auth-doodle-active-face [class*='bg-app-page'],
+.auth-doodle-active-face [class*='bg-emerald-50']:not([class*='border-emerald-500/30']) {
+  background: color-mix(in srgb, var(--tint) 45%, var(--paper)) !important;
+}
+.auth-doodle-active-face div div[class*='rounded-2xl'][class*='border'], .auth-doodle-active-face div div[class*='rounded-xl'][class*='bg-slate-50'] {
+  border: 2px dashed color-mix(in srgb, var(--ink) 60%, transparent) !important; border-radius: 14px 16px 13px 15px !important; box-shadow: none !important;
+}
+
+/* Ô nhập */
+.auth-doodle-active-face input:not([type='checkbox']):not([type='radio']),
+.auth-doodle-active-face select,
+.auth-doodle-active-face textarea {
+  width: 100%; min-width: 0; min-height: 46px; font-weight: 500; color: var(--ink) !important; background-color: var(--paper) !important;
+  border: 2px solid var(--ink) !important; border-radius: var(--r-field) !important; box-shadow: 3px 3px 0 var(--shadow) !important;
+  transition: transform .12s, box-shadow .12s, border-color .12s;
+}
+.auth-doodle-active-face input::placeholder, .auth-doodle-active-face textarea::placeholder { color: color-mix(in srgb, var(--ink) 50%, transparent) !important; }
+.auth-doodle-active-face input:not([type='checkbox']):hover, .auth-doodle-active-face select:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--shadow) !important; }
+.auth-doodle-active-face input:not([type='checkbox']):focus, .auth-doodle-active-face select:focus, .auth-doodle-active-face textarea:focus {
+  outline: 2px dashed var(--thread) !important; outline-offset: 3px; box-shadow: 3px 3px 0 var(--shadow) !important; --tw-ring-shadow: 0 0 #0000;
+}
+.auth-doodle-active-face input[class*='border-red-'], .auth-doodle-active-face select[class*='border-red-'] { border-color: var(--thread) !important; }
+.auth-doodle-active-face input:disabled { opacity: .6; }
+.auth-doodle-active-face svg[class*='text-slate-4'], .auth-doodle-active-face svg[class*='text-slate-5'] { color: color-mix(in srgb, var(--ink) 60%, transparent) !important; }
+.auth-doodle-active-face input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--cta-bg); border: 2px solid var(--ink); border-radius: 4px; background: var(--paper); }
+.auth-doodle-active-face .text-red-500, .auth-doodle-active-face [class*='text-red-6'], .auth-doodle-active-face [class*='text-red-5'] { color: var(--thread) !important; }
+
+/* Nút chính (submit và nút CTA dạng link) */
+.auth-doodle-active-face button[type='submit'],
+.auth-doodle-active-face a[class*='bg-cyan-600'], .auth-doodle-active-face a[class*='bg-app-primary'] {
+  min-height: 48px; color: var(--cta-fg) !important; background: var(--cta-bg) !important; border: 2px solid var(--ink) !important;
+  border-radius: var(--r-btn) !important; box-shadow: 4px 4px 0 var(--shadow) !important; font-weight: 800 !important; text-decoration: none;
+  transition: transform .12s, box-shadow .12s;
+}
+.auth-doodle-active-face button[type='submit']:hover:not(:disabled), .auth-doodle-active-face a[class*='bg-cyan-600']:hover { transform: translate(-1px, -1px) rotate(-.4deg); box-shadow: 5px 5px 0 var(--shadow) !important; }
+.auth-doodle-active-face button[type='submit']:active:not(:disabled), .auth-doodle-active-face a[class*='bg-cyan-600']:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--shadow) !important; }
+.auth-doodle-active-face button:disabled { opacity: .55; cursor: not-allowed; }
+.auth-doodle-active-face button:focus-visible, .auth-doodle-active-face a:focus-visible { outline: 2px dashed var(--thread); outline-offset: 3px; }
+
+/* Nút phụ (đăng nhập bằng..., gửi lại email, mở hộp thư) */
+.auth-doodle-active-face button:not([type]):not([tabindex]):not([class*='absolute']),
+.auth-doodle-active-face button[type='button']:not([tabindex]):not([class*='absolute']),
+.auth-doodle-active-face a[class*='bg-slate-100'] {
+  color: var(--ink) !important; background: var(--paper) !important; border: 2px solid var(--ink) !important; border-radius: var(--r-btn) !important;
+  box-shadow: 3px 3px 0 var(--shadow); transition: transform .12s, box-shadow .12s, background-color .12s;
+}
+.auth-doodle-active-face button:not([type]):not([tabindex]):not([class*='absolute']):hover:not(:disabled),
+.auth-doodle-active-face button[type='button']:not([tabindex]):not([class*='absolute']):hover:not(:disabled),
+.auth-doodle-active-face a[class*='bg-slate-100']:hover { background: var(--tint) !important; transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--shadow); }
+.auth-doodle-active-face button:not([type]):not([tabindex]) [class*='bg-'], .auth-doodle-active-face button:not([type]):not([tabindex]) > div > div:first-child {
+  background: var(--tint) !important; border: 2px solid var(--ink) !important; border-radius: 9px !important; color: var(--ink) !important;
+}
+.auth-doodle-active-face button:not([type]):not([tabindex]) [class*='text-blue'], .auth-doodle-active-face button:not([type]):not([tabindex]) [class*='text-cyan'], .auth-doodle-active-face button:not([type]):not([tabindex]) [class*='text-red'] { color: var(--cta-bg) !important; }
+.auth-doodle-active-face button:not([type]):not([tabindex]) [class*='text-[10px]'][class*='uppercase'] { background: var(--sos-bg) !important; color: var(--sos-fg) !important; border: 2px dashed var(--thread) !important; border-radius: 8px !important; }
+
+/* Đường kẻ "Hoặc đăng nhập bằng" */
+.auth-doodle-active-face [class*='border-t'] { border-top: 2px dashed color-mix(in srgb, var(--ink) 40%, transparent) !important; }
+.auth-doodle-active-face span[class*='uppercase'][class*='bg-white'], .auth-doodle-active-face span[class*='uppercase'][class*='bg-app-surface'] { background: var(--paper) !important; color: var(--ink) !important; font-family: var(--hand); font-size: 14px !important; letter-spacing: .5px; text-transform: none; font-weight: 400 !important; }
+
+/* Liên kết */
+.auth-doodle-active-face a:not([class*='bg-cyan-600']):not([class*='bg-slate-100']):not([class*='bg-app-primary']) {
+  color: var(--cta-bg) !important; font-weight: 700; text-decoration: underline wavy color-mix(in srgb, var(--thread) 70%, transparent); text-underline-offset: 4px;
+}
+html.dark .auth-doodle-active-face a:not([class*='bg-cyan-600']):not([class*='bg-slate-100']):not([class*='bg-app-primary']) { color: var(--ink) !important; }
+
+/* Thông báo lỗi / thành công / ghi chú */
+.auth-doodle-active-face [class*='bg-red-50'] { background: var(--sos-bg) !important; color: var(--sos-fg) !important; border: 2px dashed var(--thread) !important; border-radius: 12px !important; }
+.auth-doodle-active-face [class*='bg-red-50'] p { color: var(--sos-fg) !important; }
+.auth-doodle-active-face [role='status'] { color: var(--cta-bg) !important; background: var(--tint); border: 2px solid var(--ink); border-radius: 12px; padding: 8px 12px; font-weight: 600; }
+html.dark .auth-doodle-active-face [role='status'] { color: var(--ink) !important; }
+.auth-doodle-active-face [role='alert'] { color: var(--sos-fg) !important; background: var(--sos-bg); border: 2px dashed var(--thread); border-radius: 12px; padding: 8px 12px; font-weight: 600; }
+
+/* Màn "Kiểm tra hộp thư" */
+.auth-doodle-active-face [class*='bg-cyan-500/10'] {
+  background: var(--tint) !important; border: 2px solid var(--ink) !important; border-radius: 50% 46% 52% 48% !important; box-shadow: 3px 3px 0 var(--shadow); color: var(--cta-bg) !important;
+}
+.auth-doodle-active-face [class*='text-cyan-'] { color: var(--cta-bg) !important; }
+html.dark .auth-doodle-active-face [class*='text-cyan-'] { color: var(--ink) !important; }
+.auth-doodle-active-face [class*='bg-cyan-600'][class*='rounded-full'] { background: var(--cta-bg) !important; color: var(--cta-fg) !important; border: 2px solid var(--ink); font-family: var(--hand); font-weight: 400 !important; font-size: 13px !important; box-shadow: none !important; }
+.auth-doodle-active-face .break-all { background: var(--tint) !important; border: 2px solid var(--ink) !important; border-radius: var(--r-field) !important; color: var(--ink) !important; }
+
+@media (max-width: 639px) {
+  .auth-doodle-active-face h2 { font-size: 28px; }
+}
+html.dark .auth-doodle-active-face button:not([type]):not([tabindex]) [class*='text-blue'],
+html.dark .auth-doodle-active-face button:not([type]):not([tabindex]) [class*='text-cyan'],
+html.dark .auth-doodle-active-face button:not([type]):not([tabindex]) [class*='text-red'] { color: var(--ink) !important; }
+
+/* Ô chữ Z (nút "Mã OTP qua Zalo / SMS"): chữ Z vẽ tay trên nền xanh của app */
+.auth-doodle-active-face button:not([type]):not([tabindex]) .auth-zbadge.auth-zbadge.auth-zbadge { background: var(--cta-bg) !important; color: var(--cta-fg) !important; box-shadow: 2px 2px 0 var(--shadow); }
+.auth-doodle-active-face button .auth-zbadge__letter { color: var(--cta-fg) !important; font-family: var(--hand); font-size: 22px; line-height: 1; transform: rotate(-6deg); }

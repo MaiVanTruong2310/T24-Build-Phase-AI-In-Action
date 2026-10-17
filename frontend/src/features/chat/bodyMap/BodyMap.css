@@ -1,0 +1,77 @@
+/* Hình cơ thể: cùng ngôn ngữ vẽ tay với header (biến --hd-* ở Landing/Header.css, có sẵn bản sáng/tối). */
+.body-map { display: flex; flex-direction: column; gap: 8px; color: var(--app-text, #243b30); }
+.body-map__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.body-map__title {
+  margin: 0; padding: 2px 10px; border: 2px solid var(--hd-ink); border-radius: 10px 14px 11px 15px / 14px 10px 15px 11px;
+  background: var(--hd-tint); box-shadow: 2px 2px 0 var(--hd-shadow); color: var(--app-primary, #285c45);
+  font-family: var(--hd-hand, inherit); font-size: 18px; line-height: 1.25; transform: rotate(-1deg);
+}
+.body-map__views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.body-map__view {
+  padding: 3px 8px; border: 2px solid var(--hd-ink); border-radius: 9px 12px 10px 13px / 12px 9px 13px 10px;
+  background: var(--hd-paper); color: var(--app-text, #243b30); font-size: 11.5px; line-height: 1.2; cursor: pointer; white-space: nowrap;
+}
+.body-map__view.is-active { background: var(--hd-cta-bg); color: var(--hd-cta-fg); }
+.body-map__view:focus-visible, .body-map__extra:focus-visible, .body-map__option:focus-visible { outline: 2px dashed var(--hd-thread); outline-offset: 2px; }
+/* Chiều cao cố định: đổi chữ khi rê chuột không được đẩy hình nhảy dưới con trỏ. */
+.body-map__caption { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 3.4em; line-height: 1.3; font-size: 13px; color: var(--app-primary, #285c45); text-align: center; overflow: hidden; }
+.body-map__caption strong { font-weight: 700; }
+.body-map__caption span { font-size: 11.5px; color: var(--app-secondary, #6b8075); }
+.body-map__search input {
+  width: 100%; padding: 6px 10px; border: 2px solid var(--hd-ink); border-radius: 10px 13px 11px 14px / 13px 10px 14px 11px;
+  background: var(--hd-paper); color: var(--app-text, #243b30); font-size: 13px;
+}
+.body-map__search input:focus { outline: 2px dashed var(--hd-thread); outline-offset: 2px; }
+.body-map__matches { display: flex; flex-wrap: wrap; gap: 6px; }
+.body-map__matches .body-map__extra { padding: 4px 10px; font-size: 12px; }
+.body-map__svg { width: 100%; max-height: 46vh; touch-action: manipulation; overflow: visible; }
+.body-map__svg--head, .body-map__svg--abdomen { max-height: 40vh; }
+.body-map__base > * { fill: var(--hd-paper); stroke: var(--hd-ink); stroke-width: 2; stroke-linejoin: round; }
+.body-map__region > * {
+  fill: var(--hd-tint); fill-opacity: .55; stroke: var(--hd-ink); stroke-width: 1.4; stroke-dasharray: 4 3;
+  cursor: pointer; transition: fill .12s ease, fill-opacity .12s ease;
+}
+/* Màn cảm ứng không có rê chuột: :hover dính lại sau khi chạm → chỉ áp cho thiết bị có chuột. */
+.body-map__region:focus-visible > *, .body-map__region.is-hovered > * { fill: var(--hd-thread); fill-opacity: .45; stroke-dasharray: none; stroke-width: 2; }
+.body-map__region:focus { outline: none; }
+.body-map__region:focus-visible > * { stroke: var(--hd-thread); stroke-width: 3; }
+.body-map__region.is-selected > * { fill: var(--hd-thread); fill-opacity: .75; stroke-dasharray: none; stroke-width: 2.4; }
+.body-map[aria-disabled] .body-map__region > * { cursor: not-allowed; }
+.body-map__landmarks { pointer-events: none; fill: none; stroke: var(--hd-ink); stroke-width: 1.2; stroke-opacity: .55; }
+.body-map__landmarks circle { fill: var(--hd-ink); fill-opacity: .55; stroke: none; }
+.body-map__label { pointer-events: none; fill: var(--app-text, #243b30); font-size: 10.5px; font-weight: 600; text-anchor: middle; paint-order: stroke; stroke: var(--hd-paper); stroke-width: 3px; stroke-linejoin: round; }
+.body-map__label.is-selected { fill: #fff; stroke: none; }
+.body-map__sides text { fill: var(--hd-thread); font-family: var(--hd-hand, inherit); font-size: 16px; font-weight: 700; text-anchor: middle; }
+.body-map__panel-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.body-map__link { padding: 2px 0; border: 0; background: none; color: var(--app-primary, #285c45); font-size: 12px; text-decoration: underline; cursor: pointer; }
+.body-map__link:disabled { opacity: .5; cursor: not-allowed; }
+.body-map__link:focus-visible { outline: 2px dashed var(--hd-thread); outline-offset: 2px; }
+.body-map__hint { margin: -4px 0 0; font-size: 11px; color: var(--app-secondary, #6b8075); text-align: center; }
+.body-map__extras { display: flex; justify-content: center; gap: 8px; }
+.body-map__extra, .body-map__option {
+  padding: 6px 12px; border: 2px solid var(--hd-ink); border-radius: 12px 15px 11px 16px / 15px 11px 16px 12px;
+  background: var(--hd-paper); color: var(--app-text, #243b30); box-shadow: 2px 2px 0 var(--hd-shadow);
+  font-size: 13px; line-height: 1.3; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease;
+}
+.body-map__extra.is-active { background: var(--hd-tint); }
+.body-map__extra:hover:not(:disabled), .body-map__option:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--hd-shadow); }
+.body-map__extra:disabled, .body-map__option:disabled { opacity: .5; cursor: not-allowed; }
+.body-map__panel {
+  padding: 10px; border: 2px solid var(--hd-ink); border-radius: 14px 18px 13px 17px / 17px 13px 18px 14px;
+  background: var(--hd-paper); box-shadow: 3px 3px 0 var(--hd-shadow);
+}
+.body-map__panel-title { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.body-map__options { display: flex; flex-wrap: wrap; gap: 8px; }
+.body-map__panel-note { margin: 8px 0 0; font-size: 11px; color: var(--app-secondary, #6b8075); }
+.body-map--pulse { animation: body-map-pulse 1.4s ease 2; border-radius: 16px; }
+@keyframes body-map-pulse { 50% { box-shadow: 0 0 0 4px var(--hd-thread); } }
+
+/* Bảng trượt trên màn hình nhỏ */
+.body-map-sheet { position: fixed; inset: 0; z-index: 10010; /* trên tay nắm Phiếu hẹn khám (.bd-layer 10001) */ display: flex; align-items: flex-end; justify-content: center; background: rgba(15, 30, 22, .45); }
+.body-map-sheet__panel {
+  width: min(100%, 460px); max-height: 92dvh; overflow-y: auto; padding: 14px 16px max(16px, env(safe-area-inset-bottom));
+  border: 2px solid var(--hd-ink); border-bottom: 0; border-radius: 18px 18px 0 0; background: var(--app-page, #f6fcf9);
+}
+.body-map-sheet__close { display: block; margin: 0 0 6px auto; padding: 4px 10px; border: 2px solid var(--hd-ink); border-radius: 10px; background: var(--hd-paper); color: var(--app-text, #243b30); font-size: 12px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .body-map__region > *, .body-map__extra, .body-map__option { transition: none; } .body-map--pulse { animation: none; } }
+@media (hover: hover) { .body-map__region:hover > * { fill: var(--hd-thread); fill-opacity: .45; stroke-dasharray: none; stroke-width: 2; } }

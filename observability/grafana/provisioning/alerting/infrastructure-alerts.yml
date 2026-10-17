@@ -1,0 +1,121 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Production infrastructure alerts
+    folder: AI20K Operations
+    interval: 1m
+    rules:
+      - uid: production-target-down
+        title: Production monitoring target unavailable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              datasource: {type: prometheus, uid: prometheus}
+              editorMode: code
+              expr: min by (job, environment) (up{environment="production",job=~"ai20k-(backend|node|cadvisor)"})
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [1], type: lt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 3m
+        annotations:
+          summary: A production backend or exporter target has been unavailable for 3 minutes.
+          description: Check the target label, EC2 health, Docker containers, security groups, and Prometheus targets.
+        labels: {severity: critical, service: infrastructure}
+        isPaused: false
+
+      - uid: production-resource-saturation
+        title: Production server resource saturation
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              datasource: {type: prometheus, uid: prometheus}
+              editorMode: code
+              expr: label_replace(100 * (1 - avg by (environment) (rate(node_cpu_seconds_total{job="ai20k-node",environment="production",mode="idle"}[5m]))) > 85, "signal", "cpu_percent", "", ".*") or label_replace(100 * (1 - node_memory_MemAvailable_bytes{job="ai20k-node",environment="production"} / node_memory_MemTotal_bytes{job="ai20k-node",environment="production"}) > 90, "signal", "memory_percent", "", ".*") or label_replace(100 * (1 - node_filesystem_avail_bytes{job="ai20k-node",environment="production",mountpoint="/"} / node_filesystem_size_bytes{job="ai20k-node",environment="production",mountpoint="/"}) > 85, "signal", "disk_percent", "", ".*")
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: Production CPU, RAM, or root disk usage remained above its safety threshold for 10 minutes.
+          description: CPU threshold is 85%, RAM is 90%, and root filesystem is 85%. Use the signal label to identify the affected resource.
+        labels: {severity: warning, service: infrastructure}
+        isPaused: false
+
+      - uid: production-http-anomaly
+        title: Production HTTP traffic anomaly
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              datasource: {type: prometheus, uid: prometheus}
+              editorMode: code
+              expr: label_replace((100 * sum by (environment) (rate(http_requests_total{job="ai20k-backend",environment="production",status=~"5.."}[5m])) / clamp_min(sum by (environment) (rate(http_requests_total{job="ai20k-backend",environment="production"}[5m])), 0.001) > 5) and on (environment) (sum by (environment) (rate(http_requests_total{job="ai20k-backend",environment="production"}[5m])) > 1), "signal", "5xx_percent", "", ".*") or label_replace(histogram_quantile(0.95, sum by (le, environment) (rate(http_request_duration_seconds_bucket{job="ai20k-backend",environment="production"}[5m]))) > 2, "signal", "latency_p95_seconds", "", ".*") or label_replace(sum by (environment) (rate(http_requests_total{job="ai20k-backend",environment="production"}[5m])) > 100, "signal", "requests_per_second", "", ".*")
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Production traffic exceeded an error, latency, or volume threshold for 5 minutes.
+          description: Thresholds are 5xx above 5% with traffic above 1 RPS, p95 latency above 2 seconds, or traffic above 100 RPS. Use the signal label to identify the condition.
+        labels: {severity: critical, service: backend}
+        isPaused: false

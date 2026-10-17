@@ -1,0 +1,45 @@
+/* Header trang auth: viền mực gợn sóng, logo chữ thập vẽ tay, nút "Về trang chủ" dạng pill (biến --hd-* từ Header.css, có giá trị dự phòng). */
+.auth-hd {
+  --ink: var(--hd-ink, #1f2d26);
+  --paper: var(--hd-paper, #ffffff);
+  --tint: var(--hd-tint, #d9efe2);
+  --thread: var(--hd-thread, #bd5f57);
+  --shadow: var(--hd-shadow, #1f2d26);
+  position: relative; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; padding: 12px 24px; box-sizing: border-box; background: var(--app-page, #f6fcf9);
+}
+html.dark .auth-hd { --ink: var(--hd-ink, #d3e6db); --paper: var(--hd-paper, #14231c); --tint: var(--hd-tint, #1f3a2d); --shadow: var(--hd-shadow, #3f6350); }
+.auth-hd__wave { position: absolute; left: 0; bottom: -5px; width: 100%; height: 10px; color: var(--ink); pointer-events: none; }
+.auth-hd__brand { display: inline-flex; flex-shrink: 0; align-items: center; gap: 10px; text-decoration: none; border-radius: 10px; }
+.auth-hd__brand svg { width: 42px; height: 42px; overflow: visible; transition: transform .2s; }
+.auth-hd__brand:hover svg { transform: rotate(-6deg); }
+.auth-hd__text { display: flex; flex-direction: column; gap: 4px; }
+.auth-hd__wordmark { font-family: var(--font-display, serif); font-size: 28px; font-weight: 600; letter-spacing: .04em; line-height: 1; color: var(--app-primary, #285c45); }
+.auth-hd__wordmark span { color: var(--app-accent, #bd5f57); }
+.auth-hd__slogan { font-size: 10px; font-weight: 600; line-height: 1.2; color: color-mix(in srgb, var(--ink) 65%, transparent); }
+.auth-hd__actions { display: flex; align-items: center; gap: 14px; }
+.auth-hd__home {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 0 16px; text-decoration: none; color: var(--ink);
+  font-family: var(--hd-hand, 'FC Baby Doll', system-ui, sans-serif); font-size: 18px; line-height: 1; background: var(--tint);
+  border: 2px solid var(--ink); border-radius: 999px 900px 999px 920px / 900px 999px 920px 999px; box-shadow: 2px 2px 0 var(--shadow);
+  white-space: nowrap; transition: transform .12s, box-shadow .12s;
+}
+.auth-hd__home:hover { transform: translate(-1px, -1px) rotate(-1deg); box-shadow: 3px 3px 0 var(--shadow); }
+.auth-hd__home:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow); }
+.auth-hd a:focus-visible { outline: 2px dashed var(--thread); outline-offset: 3px; }
+@media (max-width: 639px) {
+  .auth-hd { padding: 10px 14px; }
+  .auth-hd__brand svg { width: 34px; height: 34px; }
+  .auth-hd__wordmark { font-size: 24px; }
+  .auth-hd__slogan { display: none; }
+  .auth-hd__home { min-height: 32px; padding: 0 10px; font-size: 15px; }
+  .auth-hd__actions { gap: 8px; }
+}
+@media (max-width: 359px) {
+  .auth-hd { padding: 10px 10px; gap: 8px; }
+  .auth-hd__brand { gap: 6px; }
+  .auth-hd__brand svg { width: 30px; height: 30px; }
+  .auth-hd__wordmark { font-size: 20px; }
+  .auth-hd__home { padding: 0 8px; font-size: 14px; }
+  .auth-hd__actions { gap: 6px; }
+}

@@ -1,0 +1,73 @@
+{"id": "D001", "stratum": "emergency", "query": "đau thắt ngực dữ dội lan ra tay trái, vã mồ hôi", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D002", "stratum": "emergency", "query": "bé 2 tuổi co giật, mắt trợn ngược, không tỉnh", "gold_ats": 1, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D003", "stratum": "emergency", "query": "tôi bị méo miệng, nói ngọng, yếu nửa người đột ngột", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D004", "stratum": "emergency", "query": "khó thở nặng, môi tím tái, không nói được cả câu", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D005", "stratum": "emergency", "query": "nôn ra máu tươi nhiều, chóng mặt muốn ngất", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D006", "stratum": "emergency", "query": "dau nguc du doi va kho tho dot ngot", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D007", "stratum": "emergency", "query": "uống nhầm thuốc diệt chuột cách đây 30 phút", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D008", "stratum": "emergency", "query": "phụ nữ mang thai 8 tháng ra máu âm đạo nhiều, đau bụng", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D009", "stratum": "routine", "query": "đau lưng dưới 3 ngày sau khi bê đồ nặng, không tê chân", "gold_ats": 4, "gold_specialty": "XUONG_KHOP", "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D010", "stratum": "routine", "query": "đau đầu gối khi leo cầu thang vài tháng nay", "gold_ats": 4, "gold_specialty": "XUONG_KHOP", "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D011", "stratum": "routine", "query": "đau cổ vai gáy do ngồi máy tính nhiều", "gold_ats": 4, "gold_specialty": "XUONG_KHOP", "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D012", "stratum": "routine", "query": "ho khan kéo dài 3 tuần, không sốt", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D013", "stratum": "routine", "query": "đau bụng âm ỉ vùng thượng vị sau ăn, ợ chua", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D014", "stratum": "routine", "query": "nổi mẩn đỏ ngứa ở tay sau khi đổi xà phòng", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D015", "stratum": "routine", "query": "con 3 tuổi sốt 38.5 hai ngày, vẫn chơi bình thường", "gold_ats": 3, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D016", "stratum": "routine", "query": "em muốn khám sức khỏe tổng quát định kỳ", "gold_ats": 5, "gold_specialty": "TONG_QUAT", "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D017", "stratum": "routine", "query": "ù tai và chóng mặt khi đổi tư thế", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D018", "stratum": "routine", "query": "đau họng, nuốt vướng 2 ngày, hơi sốt nhẹ", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D019", "stratum": "routine", "query": "tiểu buốt, tiểu rắt từ hôm qua", "gold_ats": 3, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D020", "stratum": "routine", "query": "trễ kinh 10 ngày, muốn khám thai", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D021", "stratum": "hard_negation", "query": "không đau ngực, không khó thở, chỉ hơi mệt vài hôm", "gold_ats": 4, "gold_specialty": "TONG_QUAT", "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D022", "stratum": "hard_negation", "query": "tôi không bị sốt, chỉ đau đầu gối", "gold_ats": 4, "gold_specialty": "XUONG_KHOP", "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D023", "stratum": "hard_multi", "query": "đau lưng, sốt cao và tiểu ra máu", "gold_ats": 3, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D024", "stratum": "hard_multi", "query": "đau ngực nhẹ khi vận động, hơi khó thở khi leo thang", "gold_ats": 3, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D025", "stratum": "hard_ambiguous", "query": "thấy người không khỏe", "gold_ats": 5, "gold_specialty": "TONG_QUAT", "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D026", "stratum": "trap_false_alarm", "query": "tôi bị tiêu chảy 2 ngày, vẫn ăn uống được", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D027", "stratum": "trap_false_alarm", "query": "con tôi sốt cao 39 độ từ tối qua, vẫn tỉnh táo chơi được", "gold_ats": 3, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D028", "stratum": "trap_false_alarm", "query": "ngoài ra tôi còn hơi đau đầu nhẹ", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D029", "stratum": "trap_false_alarm", "query": "đau răng, ví dụ khi ăn đồ lạnh thì ê buốt", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D030", "stratum": "trap_false_alarm", "query": "dạo này tôi hay nhầm lẫn đồ đạc, hay quên", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D031", "stratum": "trap_false_alarm", "query": "đau đớn ở gót chân khi đi bộ buổi sáng", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D032", "stratum": "trap_false_alarm", "query": "bố tôi bị suy tim, muốn đặt lịch tái khám", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D033", "stratum": "trap_false_alarm", "query": "mẹ tôi suy thận mạn, cần khám định kỳ", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D034", "stratum": "trap_false_alarm", "query": "tôi hay bị chuột rút bắp chân ban đêm", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D035", "stratum": "trap_false_alarm", "query": "da khô, khát nước nhiều, tiểu nhiều", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D036", "stratum": "trap_false_alarm", "query": "hay mệt mỏi, chóng mặt khi đứng dậy nhanh", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D037", "stratum": "trap_false_alarm", "query": "tiểu đường giai đoạn 2 thì cần khám gì", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D038", "stratum": "trap_false_alarm", "query": "buồn nôn nhẹ sau khi ăn đồ dầu mỡ", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D039", "stratum": "trap_false_alarm", "query": "bụng chướng, đầy hơi sau ăn", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D040", "stratum": "trap_false_alarm", "query": "năm ngoái bố tôi bị đột quỵ, giờ muốn khám kiểm tra lại", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D041", "stratum": "trap_false_alarm", "query": "bé nhà tôi hay nôn trớ sau bú, vẫn bú tốt, tăng cân đều", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D042", "stratum": "trap_false_alarm", "query": "phù nề nhẹ ở mắt cá chân vào cuối ngày", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D043", "stratum": "trap_false_alarm", "query": "tiểu ít hơn bình thường vì dạo này uống ít nước", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D044", "stratum": "trap_false_alarm", "query": "tôi bị co giật cơ mí mắt mấy hôm nay", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D045", "stratum": "trap_false_alarm", "query": "muốn tầm soát ung thư vì theo thống kê của tổ chức y tế thế giới tỷ lệ mắc tăng", "gold_ats": 5, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D046", "stratum": "emergency_obstetric", "query": "bầu 7 tháng ra máu", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D047", "stratum": "emergency_obstetric", "query": "có thai 30 tuần bị ra huyết đỏ tươi", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D048", "stratum": "emergency_obstetric", "query": "vợ tôi mang bầu 32 tuần đau bụng dữ dội, bụng cứng", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D049", "stratum": "emergency_obstetric", "query": "đang có thai 3 tháng ra máu nhiều kèm đau bụng", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D050", "stratum": "emergency_obstetric", "query": "thai 35 tuần vỡ ối, ra nước nhiều", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D051", "stratum": "emergency_obstetric", "query": "mang thai 34 tuần đau đầu dữ dội, nhìn mờ, phù chân", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D052", "stratum": "emergency_obstetric", "query": "bau 6 thang ra mau nhieu", "gold_ats": 2, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D053", "stratum": "pregnancy_routine", "query": "mang thai 12 tuần muốn khám thai định kỳ", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D054", "stratum": "pregnancy_routine", "query": "có bầu 5 tháng hay bị ợ nóng", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D055", "stratum": "pregnancy_routine", "query": "bầu 20 tuần, không ra máu, không đau bụng, muốn siêu âm hình thái", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D056", "stratum": "pregnancy_routine", "query": "đang mang thai, bị đau lưng nhẹ", "gold_ats": 4, "gold_specialty": null, "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D057", "stratum": "multi_site", "query": "đau đầu, đau họng và đau bụng", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Thần kinh", "Tai - Mũi - Họng"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D058", "stratum": "multi_site", "query": "đau lưng và ho kéo dài 2 tuần", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["XUONG_KHOP", "HO_HAP"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D059", "stratum": "multi_site", "query": "mắt đỏ ngứa, nổi mẩn ngứa ở tay", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Mắt (Nhãn khoa)", "Da liễu"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D060", "stratum": "multi_site", "query": "mất ngủ, rụng tóc nhiều", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Da liễu", "Trung tâm Chăm sóc sức khỏe tinh thần"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D061", "stratum": "multi_site", "query": "đau khớp gối, sốt nhẹ", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["XUONG_KHOP"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D062", "stratum": "multi_site", "query": "táo bón mấy hôm, kèm đau đầu", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Tiêu hóa - Gan mật", "Thần kinh"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D063", "stratum": "multi_site", "query": "tiểu buốt và đau lưng", "gold_ats": 3, "gold_specialty": null, "gold_specialties": ["Thận - Tiết niệu"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D064", "stratum": "multi_site", "query": "trễ kinh và đau đầu", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Sản phụ khoa", "Thần kinh"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D065", "stratum": "multi_site", "query": "đau họng, ho, sốt", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Tai - Mũi - Họng"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D066", "stratum": "multi_site", "query": "ù tai, chóng mặt", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Tai - Mũi - Họng"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D067", "stratum": "multi_site", "query": "đau dạ dày và đau vai gáy", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Tiêu hóa - Gan mật", "XUONG_KHOP"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D068", "stratum": "multi_site", "query": "bé bị sốt, ho, nổi ban đỏ", "gold_ats": 3, "gold_specialty": null, "gold_specialties": ["Nhi khoa"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D069", "stratum": "multi_site", "query": "đau răng và đau tai", "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Răng Hàm Mặt", "Tai - Mũi - Họng"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D070", "stratum": "multi_turn", "turns": ["tôi bị đau lưng", "tôi bị thêm đau họng nữa"], "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["XUONG_KHOP", "Tai - Mũi - Họng"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D071", "stratum": "multi_turn", "turns": ["tôi đau đầu", "giờ thêm đau bụng", "à hết đau đầu rồi"], "gold_ats": 4, "gold_specialty": null, "gold_specialties": ["Tiêu hóa - Gan mật"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D072", "stratum": "multi_site", "query": "đau bụng dưới và tiểu buốt", "gold_ats": 3, "gold_specialty": null, "gold_specialties": ["Thận - Tiết niệu"], "label_status": "draft_unreviewed", "annotator": null}
+{"id": "D073", "stratum": "multi_site", "query": "đau ngực nhẹ khi hít sâu và ho có đờm", "gold_ats": 3, "gold_specialty": null, "gold_specialties": ["Trung tâm Tim mạch"], "label_status": "draft_unreviewed", "annotator": null}

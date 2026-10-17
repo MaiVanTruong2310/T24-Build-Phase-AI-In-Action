@@ -1,0 +1,885 @@
+"""Deterministic clinical fact extraction for safe dialogue-state management.
+
+This layer does not diagnose. It records facts explicitly stated by the patient,
+including negations, so the dialogue policy does not ask the same question twice.
+"""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from collections.abc import Iterable
+from typing import Any
+
+
+def _normalize(text: str) -> str:
+    value = unicodedata.normalize("NFD", (text or "").lower())
+    value = "".join(c for c in value if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", value.replace("đ", "d")).strip()
+
+
+# Tuổi trẻ nhũ nhi trên văn bản đã bỏ dấu: "con tôi 9 tháng", "bé 6 tháng tuổi", "trẻ sơ sinh".
+INFANT_PATTERN = (
+    r"\b(?:con|be|chau)(?: (?:toi|em|minh|nha|trai|gai))? (?:[1-9]|1\d|2[0-4]) (?:thang|tuan)\b(?! nay| roi| qua)"
+    r"|\b(?:[1-9]|1\d|2[0-4]) (?:thang|tuan) tuoi\b|\bso sinh\b"
+)
+
+FACT_PATTERNS = {
+    # Táo bón / Tiêu hóa
+    "hard_stool": [r"phan (?:kho|cung|kho cung)"],
+    "straining": [r"\b(?:phai )?ran\b", r"\bran (?:met|muon xiu|nhieu)\b"],
+    "abdominal_bloating": [r"bung(?:\s+\w+){0,2}\s+(?:chuong|cang)", r"day bung", r"i ach"],
+    "passing_gas": [r"van (?:danh hoi|trung tien) duoc", r"van xa hoi duoc"],
+    "unable_to_pass_gas": [r"khong (?:danh hoi|trung tien) duoc"],
+    "vomiting": [r"\bnon oi\b", r"\bbi non\b", r"\bnon\b"],
+    "fever": [
+        r"bi sot",
+        r"sot cao",
+        r"len con sot",
+        r"nhiet do cao",
+        # "sốt" đứng trong liệt kê triệu chứng; không khớp "bỏ sót".
+        r"\bsot (?:nhe|vua|\d|ve (?:chieu|dem)|lien tuc|keo dai|nong)",
+        r"(?:^|[,;]|\bva\b|\bkem\b|\bthem\b)\s*sot\b(?=\s*(?:[,.;]|$|va\b|kem\b|\d))",
+    ],
+    "weight_loss": [r"sut can", r"giam can khong chu y"],
+    "blood_in_stool": [r"mau (?:do )?(?:tren giay|trong phan)", r"dinh (?:chut )?mau", r"di ngoai ra mau"],
+    "severe_abdominal_pain": [r"dau bung (?:du doi|quan du doi|tang nhieu)", r"bung dau quan"],
+    "mild_abdominal_pain": [
+        r"dau (?:bung )?(?:am i|lam ram)",
+        r"bung(?:\s+\w+){0,6}\s+dau (?:am i|lam ram)",
+        r"khong quan du doi",
+    ],
+    "eating_normally": [r"an uong van duoc", r"van an uong duoc", r"an uong binh thuong"],
+    "diarrhea": [r"tieu chay", r"di ngoai phan long", r"di long"],
+    "heartburn": [r"o chua", r"o nong", r"trao nguoc"],
+    "abdominal_pain": [
+        r"dau bung",
+        r"dau thuong vi",
+        r"dau (?:da day|bao tu)",
+        # "dạ dày nóng rát", "nóng rát vùng thượng vị": khó chịu vùng thượng vị, khám Tiêu hóa như đau bụng.
+        r"(?:da day|bao tu|thuong vi)(?:\s+\w+){0,2}\s+(?:nong rat|con cao)",
+        r"(?:nong rat|con cao)\s+(?:o\s+)?(?:vung\s+)?(?:da day|bao tu|thuong vi)",
+        r"bung(?:\s+\w+){0,2}\s+kho chiu",
+        # "đau vài hôm nay ở bụng", "đau mấy ngày rồi, ở bụng dưới"
+        r"\bdau\b[^.;!?]{0,30}?\bo\s+(?:vung\s+)?bung\b",
+        r"kho chiu\s+(?:o\s+)?(?:vung\s+)?bung",
+        r"dau\s+(?:o\s+)?(?:vung\s+)?(?:ha suon|quanh ron)",
+        r"bung dau",
+        r"bung(?:\s+\w+){0,6}\s+dau",
+        r"(?:dau|bi dau)\s+(?:them\s+(?:ca\s+)?)?bung",
+        r"bung\s+(?:cung\s+)?(?:bi\s+)?dau",
+        r"(?:ngoai ra|them vao|va con)\s+(?:bi\s+)?dau\s+bung",
+        r"stomach\s+(?:ache|pain|hurts?)",
+        r"abdominal pain",
+    ],
+    "constipation": [r"tao bon", r"kho di ngoai", r"phan (?:kho|cung)", r"ngay moi di (?:cau|ngoai)"],
+    # Thần kinh / Đau đầu
+    "headache": [
+        r"dau dau(?!\s+goi)",
+        r"nhuc dau(?!\s+goi)",
+        r"dau nua dau",
+        r"buot dau",
+        r"nang dau",
+        r"headache",
+        r"migraine",
+    ],
+    "one_sided_headache": [r"nua dau (?:ben )?(?:trai|phai)", r"dau mot ben"],
+    "nausea": [r"buon non", r"mac non", r"nausea"],
+    "photophobia": [r"so anh sang", r"choi mat"],
+    "vision_changes": [
+        r"nhin mo",
+        r"nhin doi",
+        r"hoa mat",
+        r"mo mat",
+        r"mat mo",
+        r"moi mat",
+        r"mat moi",
+        r"giam thi luc",
+    ],
+    "eye_symptoms": [
+        r"moi mat",
+        r"mat moi",
+        r"mat mo",
+        r"mo mat",
+        r"nhin mo",
+        r"com mat",
+        r"kho mat",
+        r"dau mat",
+        r"chay nuoc mat",
+        r"do mat",
+        r"\bmat (?:bi )?(?:do|sung do)\b(?=\s*(?:[,.;]|$|ngua|chay|va\b|kem\b))",
+        r"ngua mat",
+        r"\bmat ngua\b",
+        r"giam thi luc",
+        r"loan thi",
+        r"can thi",
+        r"nhan khoa",
+    ],
+    "dizziness": [r"chong mat", r"choang vang", r"dizzy", r"dizziness"],
+    "numbness_weakness": [r"te (?:yeu|bi)", r"yeu nua nguoi", r"yeu tay chan", r"te tay", r"te chan"],
+    "fatigue": [
+        r"(?:rat |qua |thay )?met(?: moi| la| lu)?",
+        r"co the (?:rat )?met",
+        r"kiet suc",
+        r"u oai",
+        r"fatigue",
+        r"lethargy",
+        r"exhausted",
+    ],
+    "sore_throat": [
+        # Bỏ dấu "đau hông lưng" cũng thành "dau hong" → loại trường hợp có "lưng" theo sau.
+        r"dau hong\b(?!\s+lung)",
+        r"rat hong",
+        r"kho chiu o hong",
+        r"viem hong",
+        r"sore throat",
+        r"throat\s+(?:pain|ache|sore)",
+        # Bounded tolerance for the common phrase-level typo "đau học".
+        r"\bdau hoc\b",
+    ],
+    # Tim mạch / Hô hấp
+    "chest_pain": [
+        r"dau nguc",
+        r"tuc nguc",
+        r"that nguc",
+        r"dau\s+(?:tuc|that|nang|de)\s+(?:long\s+)?nguc",
+        r"(?:tuc|that|nang|de)\s+(?:vung\s+|long\s+)?nguc",
+        r"chest (?:pain|tightness|pressure|heaviness|discomfort)",
+    ],
+    "shortness_of_breath": [r"kho tho", r"hut hoi", r"tho gap", r"shortness of breath", r"dyspnea"],
+    "cough": [
+        r"\bho khan\b",
+        r"\bho co dom\b",
+        r"\bbi ho\b",
+        r"\bcon ho\b",
+        r"\bcough\b",
+        r"\bho (?:keo dai|nhieu|lien tuc|dai dang|ra dom|ra mau|\d)",
+        # "ho" đứng trong liệt kê triệu chứng (văn bản đã bỏ dấu nên phải tránh "và họ", "hồ").
+        r"(?:^|[,;]|\bva\b|\bkem\b|\bthem\b)\s*ho\b(?=\s*(?:[,.;]|$|va\b|kem\b|\d))",
+    ],
+    # Cơ xương khớp
+    "joint_pain": [
+        r"dau khop",
+        r"dau xuong khop",
+        r"nhuc khop",
+        r"dau dau goi",
+        r"dau goi",
+        r"khop goi",
+        r"moi goi",
+        r"sung dau goi",
+        r"sung goi",
+        # Khớp nhỏ tay/chân: "đau khuỷu tay", "sưng đau các khớp ngón tay", "đau gót chân", "sưng đau ngón chân cái".
+        r"(?:dau|sung|nhuc)(?:\s+\w+){0,2}\s+(?:khuyu tay|co chan|mat ca chan|got chan|ngon chan|khop ngon tay|ngon tay)",
+        r"knee pain",
+    ],
+    "back_pain": [r"dau lung", r"dau that lung", r"dau hong lung", r"moi lung", r"dau cot song", r"xuong cut"],
+    "neck_shoulder_pain": [
+        r"dau vai gay",
+        r"moi vai gay",
+        r"moi co",
+        r"co vai gay",
+        # Bỏ dấu "đau vài hôm/ngày/lần" cũng thành "dau vai" → loại khi theo sau là đơn vị thời gian/số lần.
+        r"\bdau (?:moi )?vai\b(?!\s+(?:hom|ngay|tuan|thang|nam|gio|tieng|phut|lan|buoi|bua|dem|toi|sang|chieu))",
+    ],
+    "muscle_pain": [
+        r"bap dui",
+        r"dau dui",
+        r"co dui",
+        r"dau bap dui",
+        r"dau co dui",
+        r"bap chan",
+        r"dau bap chan",
+        r"dau cang chan",
+        r"cang chan",
+        r"dau co\b(?!\s*hong)",
+        r"dau co bap",
+        r"dau bap tay",
+        r"dau chan",
+        r"thigh pain",
+        r"muscle pain",
+        r"leg pain",
+        r"calf pain",
+        r"muscle ache",
+        r"sore muscle",
+    ],
+    "hair_loss": [
+        r"rung toc",
+        r"toc rung",
+        r"hair loss",
+        r"alopecia",
+        r"rung nhieu toc",
+        r"hoi dau",
+    ],
+    "insomnia": [
+        r"mat ngu",
+        r"kho ngu",
+        r"khong ngu duoc",
+        r"thuc trang dem",
+        r"ngu kem",
+        r"kho vao giac",
+        r"insomnia",
+        r"trui ngu",
+    ],
+    "skin_lesion": [
+        r"bong troc",
+        r"bong da",
+        r"troc da",
+        r"da bong troc",
+        r"troc vay",
+        r"vay nen",
+        r"ngua da",
+        r"man ngua",
+        r"viem da",
+        r"phat ban",
+        r"noi (?:(?:cac|nhung|nhieu|vai|may|mot so|it) )?(?:man|ban)",  # "nổi các mẩn đỏ ở tay"
+        r"ban do\b",
+        r"noi me day",
+        r"bi me day",
+        r"man me day",
+        r"di ung me day",
+        r"me day man tinh",
+        r"skin peeling",
+        r"peeling skin",
+        r"rash",
+    ],
+    # Nhóm trước đây không có complaint code → không bao giờ được gợi ý chuyên khoa.
+    "urinary_symptoms": [
+        r"tieu buot",
+        r"tieu rat",
+        r"tieu ra mau",
+        r"tieu dem nhieu",
+        r"(?:di |hay |thuc day )tieu dem",
+        r"tieu nhieu lan",
+        r"tieu gat",
+        r"tieu khong het",
+        r"tieu (?:ri|nho) giot",
+        r"tieu kho",
+        r"buot khi (?:di )?tieu",
+        r"dau khi (?:di )?tieu",
+        r"nuoc tieu (?:duc|co mau|do)",
+        r"painful urination",
+        r"dysuria",
+    ],
+    # Khối/u vùng cổ: "sờ thấy cục ở cổ", "nổi hạch cổ", "bướu cổ".
+    "neck_lump": [
+        r"\b(?:cuc|khoi|u|hach)\s+(?:cung\s+)?(?:o|tren|duoi|vung|ben)?\s*co\b(?! the| duoc| khong| ai| gi)",
+        r"noi hach",
+        r"buou co",
+        r"nhan giap",
+        r"neck lump",
+    ],
+    # Khám thai định kỳ (ca bất thường thai kỳ đã có cổng cấp cứu sản khoa bắt trước).
+    "pregnancy_care": [
+        r"mang thai",
+        r"co thai",
+        r"kham thai",
+        r"thai \d+ tuan",
+        r"bau \d+ (?:tuan|thang)",
+        r"pregnan",
+    ],
+    # Khí sắc trầm / lo âu (ý nghĩ tự hại đã có cổng cấp cứu bắt trước).
+    "low_mood": [
+        r"buon chan",
+        r"tram cam",
+        r"chan nan",
+        r"khong muon lam gi",
+        r"mat hung thu",
+        r"lo au",
+        r"hay lo lang",
+        r"depress",
+    ],
+    "gynecologic_symptoms": [
+        r"tre kinh",
+        r"cham kinh",
+        r"rong kinh",
+        r"mat kinh",
+        r"dau bung kinh",
+        r"kinh nguyet (?:khong deu|bat thuong)",
+        r"khi hu",
+        r"ngua vung kin",
+        r"ra mau (?:am dao|bat thuong)",
+        r"missed period",
+    ],
+    "ear_nose_symptoms": [
+        r"\bu tai\b",
+        r"dau tai",
+        r"nghe kem",
+        r"chay mu tai",
+        r"ngua tai",
+        r"nghet mui",
+        r"chay nuoc mui",
+        r"so mui",
+        r"ear ?ache",
+        r"tinnitus",
+    ],
+    "dental_pain": [
+        r"dau rang",
+        r"nhuc rang",
+        r"sau rang",
+        r"e buot rang",
+        r"rang (?:bi )?e buot",
+        r"chay mau chan rang",
+        r"sung loi",
+        r"rang khon",
+        r"toothache",
+    ],
+    "palpitations": [
+        r"hoi hop",
+        r"danh trong nguc",
+        r"tim dap (?:nhanh|manh|loan|don dap|thinh thich)",
+        r"palpitations?",
+        r"heart (?:racing|pounding)",
+    ],
+    "hoarseness": [r"khan tieng", r"mat tieng", r"khan giong", r"hoarse(?:ness)?"],
+    "mouth_ulcer": [r"nhiet mieng", r"loet mieng", r"mouth ulcers?", r"canker sores?"],
+    "anorectal_symptoms": [r"hau mon", r"benh tri\b", r"\bbi tri\b", r"tri (?:noi|ngoai)\b", r"hemorrhoids?"],
+}
+
+NEGATION_PATTERNS = {
+    "vomiting": [r"khong (?:non|oi)", r"khong bi non", r"chua bi non"],
+    "fever": [r"khong sot", r"het sot", r"chua tung sot", r"dau co sot"],
+    "weight_loss": [r"khong sut can", r"khong giam can"],
+    "severe_abdominal_pain": [r"khong (?:dau )?quan du doi", r"chi dau lam ram"],
+    "unable_to_pass_gas": [r"van (?:danh hoi|trung tien) duoc"],
+    "blood_in_stool": [
+        r"khong (?:bi )?di ngoai ra mau",
+        r"khong (?:co |thay )?mau (?:do )?(?:tren giay|trong phan)",
+    ],
+    "diarrhea": [r"khong (?:bi )?tieu chay", r"khong di ngoai phan long"],
+    "headache": [r"khong dau dau", r"khong nhuc dau", r"khong bi dau dau", r"het dau dau", r"khong con dau dau"],
+    "abdominal_pain": [r"khong dau bung", r"khong bi dau bung", r"het dau bung", r"khong con dau bung"],
+    "constipation": [r"khong tao bon", r"het tao bon", r"di ngoai binh thuong"],
+    "nausea": [r"khong buon non", r"khong mac non", r"khong thay non nao"],
+    "fatigue": [r"khong met", r"khong thay met", r"het met", r"khong con met"],
+    "chest_pain": [r"khong dau nguc", r"khong tuc nguc", r"khong thay tuc nguc"],
+    "shortness_of_breath": [r"khong kho tho", r"tho binh thuong"],
+    "cough": [r"\bkhong ho\b(?!\s+(?:tro|hoi|hoc)\b)", r"\bkhong bi ho\b", r"\bhet ho\b", r"\bkhong con ho\b"],
+    "sore_throat": [r"khong dau hong\b(?!\s+lung)", r"het dau hong\b(?!\s+lung)", r"khong con dau hong\b(?!\s+lung)"],
+    "back_pain": [r"khong dau lung", r"het dau lung", r"khong con dau lung"],
+    "joint_pain": [r"khong dau khop", r"het dau khop", r"khong con dau khop"],
+    "neck_shoulder_pain": [r"khong dau vai gay", r"het dau vai gay", r"khong con dau vai gay"],
+    "vision_changes": [
+        r"khong mo mat",
+        r"mat van ro",
+        r"nhin binh thuong",
+        r"nhin ro",
+        r"mat (?:em |toi )?nhin ro",
+        r"mat binh thuong",
+        r"khong (?:bi )?nhin (?:mo|doi)",
+    ],
+    "eye_symptoms": [
+        r"khong moi mat",
+        r"khong mo mat",
+        r"mat van ro",
+        r"nhin binh thuong",
+        r"mat binh thuong",
+    ],
+    "numbness_weakness": [
+        r"khong (?:bi )?te",
+        r"khong (?:bi )?yeu",
+        r"khong te yeu",
+        r"tay chan binh thuong",
+        r"khong (?:bi )?te (?:\w+\s+)?tay chan",
+        r"khong te tay",
+        r"khong te chan",
+    ],
+    "muscle_pain": [
+        r"khong (?:bi )?dau co",
+        r"khong (?:bi )?dau dui",
+        r"khong (?:bi )?dau bap dui",
+        r"khong (?:bi )?dau chan",
+        r"het dau co",
+        r"het dau dui",
+        r"het dau bap dui",
+    ],
+    "dizziness": [
+        r"khong (?:bi )?chong mat",
+        r"het chong mat",
+        r"khong con chong mat",
+        r"khong chong mat",
+    ],
+    "urinary_symptoms": [r"khong (?:bi )?tieu buot", r"het tieu buot", r"tieu binh thuong"],
+    "ear_nose_symptoms": [r"khong (?:bi )?(?:u tai|dau tai)", r"het (?:u tai|dau tai)"],
+    "dental_pain": [r"khong (?:bi )?dau rang", r"het dau rang"],
+    "palpitations": [r"khong (?:bi )?hoi hop", r"khong danh trong nguc", r"het hoi hop"],
+    "hoarseness": [r"khong (?:bi )?khan tieng", r"het khan tieng"],
+    "mouth_ulcer": [r"khong (?:bi )?nhiet mieng", r"het nhiet mieng"],
+    "anorectal_symptoms": [r"khong (?:bi )?(?:dau|ngua) hau mon", r"khong (?:bi )?tri\b"],
+}
+
+
+COMPLAINT_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("constipation", "gastroenterology", tuple(FACT_PATTERNS["constipation"])),
+    ("headache", "neurology", tuple(FACT_PATTERNS["headache"])),
+    ("dizziness", "neurology", tuple(FACT_PATTERNS.get("dizziness", ()))),
+    ("sore_throat", "ear_nose_throat", tuple(FACT_PATTERNS["sore_throat"])),
+    ("chest_pain", "cardiology", tuple(FACT_PATTERNS["chest_pain"])),
+    ("shortness_of_breath", "respiratory", tuple(FACT_PATTERNS["shortness_of_breath"])),
+    ("abdominal_pain", "gastroenterology", tuple(FACT_PATTERNS["abdominal_pain"])),
+    ("back_pain", "musculoskeletal", tuple(FACT_PATTERNS["back_pain"])),
+    ("joint_pain", "musculoskeletal", tuple(FACT_PATTERNS["joint_pain"])),
+    ("cough", "respiratory", tuple(FACT_PATTERNS["cough"])),
+    ("fever", "general_medicine", tuple(FACT_PATTERNS["fever"])),
+    ("neck_shoulder_pain", "musculoskeletal", tuple(FACT_PATTERNS["neck_shoulder_pain"])),
+    ("muscle_pain", "musculoskeletal", tuple(FACT_PATTERNS["muscle_pain"])),
+    ("eye_symptoms", "ophthalmology", tuple(FACT_PATTERNS["eye_symptoms"])),
+    ("hair_loss", "dermatology", tuple(FACT_PATTERNS["hair_loss"])),
+    ("insomnia", "psychiatry", tuple(FACT_PATTERNS["insomnia"])),
+    ("skin_lesion", "dermatology", tuple(FACT_PATTERNS["skin_lesion"])),
+    ("urinary_symptoms", "urology", tuple(FACT_PATTERNS["urinary_symptoms"])),
+    ("gynecologic_symptoms", "gynecology", tuple(FACT_PATTERNS["gynecologic_symptoms"])),
+    ("ear_nose_symptoms", "ear_nose_throat", tuple(FACT_PATTERNS["ear_nose_symptoms"])),
+    ("dental_pain", "dentistry", tuple(FACT_PATTERNS["dental_pain"])),
+    ("palpitations", "cardiology", tuple(FACT_PATTERNS["palpitations"])),
+    ("hoarseness", "ear_nose_throat", tuple(FACT_PATTERNS["hoarseness"])),
+    ("mouth_ulcer", "dentistry", tuple(FACT_PATTERNS["mouth_ulcer"])),
+    ("anorectal_symptoms", "gastroenterology", tuple(FACT_PATTERNS["anorectal_symptoms"])),
+    ("neck_lump", "ear_nose_throat", tuple(FACT_PATTERNS["neck_lump"])),
+    ("pregnancy_care", "obstetrics", tuple(FACT_PATTERNS["pregnancy_care"])),
+    ("low_mood", "psychiatry", tuple(FACT_PATTERNS["low_mood"])),
+)
+
+COMPLAINT_SYSTEMS = {code: system for code, system, _ in COMPLAINT_RULES}
+
+ANATOMICAL_BODY_REGIONS: dict[str, dict[str, Any]] = {
+    "lower_limb": {
+        "primary_system": "musculoskeletal",
+        "synonyms": [
+            "bắp đùi",
+            "đùi",
+            "cơ đùi",
+            "bắp chuối",
+            "cẳng chân",
+            "gối",
+            "khớp gối",
+            "cổ chân",
+            "gót chân",
+            "bàn chân",
+        ],
+        "complaint_codes": ["muscle_pain", "joint_pain"],
+    },
+    "spine_back": {
+        "primary_system": "musculoskeletal",
+        "synonyms": ["thắt lưng", "lưng", "cột sống", "đốt sống", "cổ vai gáy"],
+        "complaint_codes": ["back_pain", "neck_shoulder_pain"],
+    },
+    "abdomen": {
+        "primary_system": "gastroenterology",
+        "synonyms": ["thượng vị", "quanh rốn", "hạ vị", "đau bụng", "dạ dày", "ruột"],
+        "complaint_codes": ["abdominal_pain", "constipation"],
+    },
+    "thorax_chest": {
+        "primary_system": "cardiology",
+        "synonyms": ["ngực", "tức ngực", "nhói ngực", "thắt ngực"],
+        "complaint_codes": ["chest_pain"],
+    },
+    "respiratory": {
+        "primary_system": "respiratory",
+        "synonyms": ["khó thở", "hụt hơi", "thở dốc", "thở rít"],
+        "complaint_codes": ["shortness_of_breath", "cough"],
+    },
+    "head": {
+        "primary_system": "neurology",
+        "synonyms": ["đau đầu", "nhức đầu", "nửa đầu"],
+        "complaint_codes": ["headache"],
+    },
+    "vestibular": {
+        "primary_system": "neurology",
+        "synonyms": ["chóng mặt", "mất thăng bằng", "quay cuồng", "choáng"],
+        "complaint_codes": ["dizziness"],
+    },
+}
+
+SIDE_LABELS = {"trai": "trái", "phai": "phải", "tren": "trên", "duoi": "dưới"}
+# Vùng bụng (đã bỏ dấu) → nhãn hiển thị; cụ thể đứng trước để "bụng dưới bên phải" không bị "bụng dưới" nuốt.
+ABDOMINAL_REGIONS: tuple[tuple[str, str], ...] = (
+    (r"ha suon (?:ben )?(phai|trai)", "hạ sườn {}"),
+    (r"bung duoi (?:ben )?(phai|trai)", "bụng dưới bên {}"),
+    (r"thuong vi|tren ron|da day|bao tu", "thượng vị"),
+    (r"quanh ron", "quanh rốn"),
+    (r"ha vi|tren xuong mu", "hạ vị"),
+)
+
+
+def _abdominal_region(normalized: str) -> str | None:
+    for pattern, label in ABDOMINAL_REGIONS:
+        match = re.search(pattern, normalized)
+        if match:
+            return label.format(*(SIDE_LABELS[side] for side in match.groups()))
+    return None
+
+
+def _is_resolution(text: str, code: str) -> bool:
+    return bool(
+        re.search(r"\b(?:het|khong con|da khoi)\b", text)
+        and code
+        in {
+            "headache",
+            "abdominal_pain",
+            "constipation",
+            "sore_throat",
+            "back_pain",
+            "joint_pain",
+            "neck_shoulder_pain",
+            "muscle_pain",
+            "hair_loss",
+            "insomnia",
+            "skin_lesion",
+            "urinary_symptoms",
+            "ear_nose_symptoms",
+            "dental_pain",
+            "palpitations",
+            "hoarseness",
+            "mouth_ulcer",
+            "anorectal_symptoms",
+        }
+    )
+
+
+def _normalize_complaint(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, str):
+        code = value.strip()
+        return (
+            {
+                "code": code,
+                "system": COMPLAINT_SYSTEMS.get(code, "unknown"),
+                "status": "active",
+                "first_seen_turn": None,
+                "last_seen_turn": None,
+                "severity": None,
+                "duration_days": None,
+                "evidence": [],
+                "confidence": 1.0,
+                "source": "legacy",
+            }
+            if code
+            else None
+        )
+    if not isinstance(value, dict) or not value.get("code"):
+        return None
+    code = str(value["code"])
+    normalized = dict(value)
+    normalized.setdefault("system", COMPLAINT_SYSTEMS.get(code, "unknown"))
+    normalized.setdefault("status", "active")
+    normalized.setdefault("first_seen_turn", None)
+    normalized.setdefault("last_seen_turn", None)
+    normalized.setdefault("severity", None)
+    normalized.setdefault("duration_days", None)
+    normalized.setdefault("evidence", [])
+    normalized.setdefault("confidence", 1.0)
+    normalized.setdefault("source", "unknown")
+    return normalized
+
+
+class ClinicalFactService:
+    def extract(self, text: str, turn_index: int | None = None, in_episode: bool = False) -> dict[str, Any]:
+        """in_episode: đang tư vấn một triệu chứng → câu trả lời ngắn "3 ngày nay" cũng là thời gian bệnh."""
+        normalized = _normalize(text)
+        positive: set[str] = set()
+        negative: set[str] = set()
+
+        for fact, patterns in FACT_PATTERNS.items():
+            if any(re.search(pattern, normalized) for pattern in patterns):
+                positive.add(fact)
+        for fact, patterns in NEGATION_PATTERNS.items():
+            if any(re.search(pattern, normalized) for pattern in patterns):
+                negative.add(fact)
+                positive.discard(fact)
+
+        # Kiểm tra bổ sung qua ClinicalNegationService để chống sót câu phủ định
+        from src.medical_assistant.domain.clinical_negation_service import get_clinical_negation_service
+
+        negation_svc = get_clinical_negation_service()
+        for fact in list(positive):
+            patterns = FACT_PATTERNS.get(fact, [])
+            for p in patterns:
+                m = re.search(p, normalized)
+                if m and negation_svc.is_phrase_negated(m.group(0), text):
+                    negative.add(fact)
+                    positive.discard(fact)
+                    break
+
+        duration_days = None
+        is_greeting_wish = bool(re.search(r"chuc(?:\s+\w+)?\s+\d*\s*ngay\s+(?:vui|tot|an|hanh|dep)", normalized))
+        has_clinical_duration_context = bool(
+            in_episode
+            or positive
+            or re.search(r"\b(?:bi|dau|nhuc|moi|buot|te|sung|sot|kho tho|kho chiu|met|ho|non|oi)\b", normalized)
+        )
+        if not is_greeting_wish and has_clinical_duration_context:
+            if re.search(r"\b(?:dung (?:mot )?tuan|1 tuan)\b", normalized):
+                duration_days = 7
+            elif re.search(r"\b(?:tu hom qua|duoc 1 ngay|mot ngay|hom qua)\b", normalized):
+                duration_days = 1
+            elif re.search(r"\b(?:hom kia|2 ngay|hai ngay)\b", normalized):
+                duration_days = 2
+            elif re.search(r"\b(?:ba ngay|3 ngay)\b", normalized):
+                duration_days = 3
+            else:
+                match = re.search(r"\b(\d+)\s+ngay\b", normalized)
+                weeks = re.search(r"\b(\d+|hai|ba)\s+tuan\b", normalized)
+                months = re.search(r"\b(\d+|mot|hai|ba)\s+thang\b(?!\s+tuoi)", normalized)
+                words = {"mot": 1, "hai": 2, "ba": 3}
+                if match:
+                    duration_days = int(match.group(1))
+                elif weeks:
+                    duration_days = 7 * int(words.get(weeks.group(1), weeks.group(1)))
+                elif months:
+                    duration_days = 30 * int(words.get(months.group(1), months.group(1)))
+
+        bowel_interval_days = None
+        interval = re.search(r"(\d+)\s*(?:-|den)?\s*(\d+)?\s*ngay moi di (?:cau|ngoai)", normalized)
+        if interval:
+            bowel_interval_days = int(interval.group(2) or interval.group(1))
+        elif re.search(r"ba bon ngay moi di (?:cau|ngoai)", normalized):
+            bowel_interval_days = 4
+
+        location = None
+        msk_loc = re.search(
+            r"(?:dau|nhuc|moi|buot|te|sung)\s+(?:(?:o|vung|phan)\s+)*(bap dui|dui|co dui|bap chan|cang chan|khop goi|dau goi|co tay|co chan|khop hang|that lung|cot song|co vai gay|vai gay|ba vai|canh tay|bap tay|ngon chan|ngon tay|ban chan|ban tay|got chan)",
+            normalized,
+        )
+        if msk_loc:
+            msk_loc_map = {
+                "bap dui": "bắp đùi",
+                "dui": "đùi",
+                "co dui": "cơ đùi",
+                "bap chan": "bắp chân",
+                "cang chan": "cẳng chân",
+                "khop goi": "khớp gối",
+                "dau goi": "đầu gối",
+                "co tay": "cổ tay",
+                "co chan": "cổ chân",
+                "khop hang": "khớp háng",
+                "that lung": "thắt lưng",
+                "cot song": "cột sống",
+                "co vai gay": "cổ vai gáy",
+                "vai gay": "vai gáy",
+                "ba vai": "bả vai",
+                "canh tay": "cánh tay",
+                "bap tay": "bắp tay",
+                "ngon chan": "ngón chân",
+                "ngon tay": "ngón tay",
+                "ban chan": "bàn chân",
+                "ban tay": "bàn tay",
+                "got chan": "gót chân",
+            }
+            location = msk_loc_map.get(msk_loc.group(1), msk_loc.group(1))
+        elif "abdominal_pain" in positive and _abdominal_region(normalized):
+            # Vùng bụng cụ thể (thượng vị, hạ sườn phải...) → cây hỏi đau bụng không hỏi lại "đau ở vùng nào".
+            location = _abdominal_region(normalized)
+        else:
+            abdominal_location = re.search(
+                r"dau bung(?:\s+(?:o|vung))?\s+(?:ben\s+)?(trai|phai|tren|duoi)",
+                normalized,
+            )
+            if not abdominal_location:
+                abdominal_location = re.search(
+                    r"bung\s+(?:ben\s+)?(trai|phai|tren|duoi)(?:\s+\w+){0,6}\s+dau",
+                    normalized,
+                )
+            if abdominal_location:
+                location = f"bụng bên {SIDE_LABELS[abdominal_location.group(1)]}"
+            elif re.search(r"(?:left|right)\s+(?:side\s+of\s+)?(?:the\s+)?(?:abdomen|stomach)", normalized):
+                side = "left" if "left" in normalized else "right"
+                location = f"{side} abdomen"
+
+        complaints: list[dict[str, Any]] = []
+        for code, system, patterns in COMPLAINT_RULES:
+            matched = next(
+                (re.search(pattern, normalized) for pattern in patterns if re.search(pattern, normalized)), None
+            )
+            is_negative = code in negative
+            if not matched and not is_negative:
+                continue
+            status = (
+                "resolved"
+                if is_negative and _is_resolution(normalized, code)
+                else ("denied" if is_negative else "active")
+            )
+            complaints.append(
+                {
+                    "code": code,
+                    "system": system,
+                    "status": status,
+                    "first_seen_turn": turn_index,
+                    "last_seen_turn": turn_index,
+                    "severity": (
+                        "severe"
+                        if code == "abdominal_pain" and "severe_abdominal_pain" in positive
+                        else "mild"
+                        if code == "abdominal_pain" and "mild_abdominal_pain" in positive
+                        else None
+                    ),
+                    "duration_days": duration_days,
+                    "evidence": [matched.group(0) if matched else text.strip()[:240]],
+                    "confidence": 1.0 if matched else 0.95,
+                    "source": "deterministic",
+                    "_pos": matched.start() if matched else len(normalized),
+                }
+            )
+        # Triệu chứng chính = triệu chứng bệnh nhân nhắc trước, không phải thứ tự khai báo COMPLAINT_RULES.
+        complaints.sort(key=lambda item: item.pop("_pos"))
+        # Đau lưng kèm tiểu buốt/rắt: nghi nguồn gốc đường tiết niệu (nhiễm trùng, sỏi) → tiết niệu là triệu chứng chính
+        # dù kể sau ("đau thắt lưng, tiểu buốt" từng ra Chấn thương chỉnh hình).
+        active_codes = {item["code"] for item in complaints if item["status"] == "active"}
+        if {"back_pain", "urinary_symptoms"} <= active_codes:
+            complaints.sort(key=lambda item: item["code"] != "urinary_symptoms")
+        # "Đau bụng kinh": "đau bụng" khớp trước nhưng là triệu chứng phụ khoa → Sản phụ khoa.
+        if "gynecologic_symptoms" in active_codes and re.search(r"dau bung (?:kinh|khi (?:hanh|co) kinh)", normalized):
+            complaints.sort(key=lambda item: item["code"] != "gynecologic_symptoms")
+
+        active_complaints = [item["code"] for item in complaints if item["status"] == "active"]
+        chief_complaint = active_complaints[0] if active_complaints else None
+        explicit_primary = None
+        if re.search(r"\b(?:la chinh|kho chiu hon|nang hon|uu tien)\b", normalized):
+            for code, _, patterns in COMPLAINT_RULES:
+                if code not in active_complaints:
+                    continue
+                if any(
+                    re.search(rf"(?:{pattern}).{{0,32}}\b(?:la chinh|kho chiu hon|nang hon|uu tien)\b", normalized)
+                    for pattern in patterns
+                ):
+                    explicit_primary = code
+                    break
+            explicit_primary = explicit_primary or chief_complaint
+
+        # Bệnh nhi → triệu chứng chung đi Nhi khoa. "be" cần ngữ cảnh để không khớp "bê đồ nặng".
+        is_child = bool(
+            re.search(
+                r"\bbe (?:nha|toi|con|bi|so sinh|trai|gai|\d)|\bem be\b|\btre (?:em|nho|so sinh)\b"
+                r"|\b(?:[0-9]|1[0-5]) tuoi\b|\b\d+ thang tuoi\b",
+                normalized,
+            )
+        )
+        # Trẻ nhũ nhi (≤ 24 tháng / sơ sinh): mọi vấn đề không cấp cứu khám Nhi trước.
+        # "con tôi 9 tháng" là tuổi; "ho 2 tháng nay" là thời gian bệnh → cần chủ ngữ trẻ đứng ngay trước.
+        is_infant = bool(re.search(INFANT_PATTERN, normalized))
+
+        return {
+            "patient_is_child": True if (is_child or is_infant) else None,
+            "patient_is_infant": True if is_infant else None,
+            "chief_complaint": chief_complaint,
+            "primary_complaint": explicit_primary or chief_complaint,
+            "primary_complaint_explicit": explicit_primary is not None,
+            "primary_complaint_explicit_code": explicit_primary,
+            "complaints": complaints,
+            "positive_facts": sorted(positive),
+            "negative_facts": sorted(negative),
+            "duration_days": duration_days,
+            "bowel_interval_days": bowel_interval_days,
+            "location": location,
+        }
+
+    def merge(self, existing: dict[str, Any] | None, new: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(existing or {})
+        positive = set(merged.get("positive_facts") or [])
+        negative = set(merged.get("negative_facts") or [])
+        for fact in new.get("positive_facts") or []:
+            positive.add(fact)
+            negative.discard(fact)
+        for fact in new.get("negative_facts") or []:
+            negative.add(fact)
+            positive.discard(fact)
+        merged["positive_facts"] = sorted(positive)
+        merged["negative_facts"] = sorted(negative)
+
+        existing_items = [
+            item for value in (merged.get("complaints") or []) if (item := _normalize_complaint(value)) is not None
+        ]
+        if not existing_items and merged.get("chief_complaint"):
+            legacy = _normalize_complaint(merged["chief_complaint"])
+            if legacy:
+                existing_items.append(legacy)
+        by_code = {item["code"]: item for item in existing_items}
+        order = [item["code"] for item in existing_items]
+
+        incoming_values = list(new.get("complaints") or [])
+        if not incoming_values and new.get("chief_complaint"):
+            incoming_values = [new["chief_complaint"]]
+        for value in incoming_values:
+            incoming = _normalize_complaint(value)
+            if not incoming:
+                continue
+            code = incoming["code"]
+            if code not in by_code:
+                by_code[code] = incoming
+                order.append(code)
+                continue
+            current = by_code[code]
+            for field in ("system", "last_seen_turn", "severity", "duration_days", "confidence"):
+                if incoming.get(field) is not None:
+                    current[field] = incoming[field]
+            incoming_status = incoming.get("status")
+            preserve_deterministic_status = bool(
+                current.get("source") == "deterministic"
+                and incoming.get("source") == "llm"
+                and incoming.get("last_seen_turn") is None
+                and code in {"chest_pain", "shortness_of_breath", "syncope", "stroke_signs"}
+            )
+            if incoming_status and incoming_status != "uncertain" and not preserve_deterministic_status:
+                current["status"] = incoming_status
+            if incoming.get("source") and not preserve_deterministic_status:
+                current["source"] = incoming["source"]
+            if current.get("first_seen_turn") is None:
+                current["first_seen_turn"] = incoming.get("first_seen_turn")
+            current["evidence"] = list(
+                dict.fromkeys([*(current.get("evidence") or []), *(incoming.get("evidence") or [])])
+            )[-6:]
+
+        merged["complaints"] = [by_code[code] for code in order]
+        active_codes = [item["code"] for item in merged["complaints"] if item.get("status") == "active"]
+        previous_primary = merged.get("primary_complaint") or merged.get("chief_complaint")
+        requested_primary = new.get("primary_complaint") or new.get("chief_complaint")
+        if new.get("primary_complaint_explicit") and requested_primary in active_codes:
+            primary = requested_primary
+            merged["primary_complaint_explicit_code"] = requested_primary
+        else:
+            primary = (
+                previous_primary if previous_primary in active_codes else (active_codes[0] if active_codes else None)
+            )
+        if merged.get("primary_complaint_explicit_code") not in active_codes:
+            merged["primary_complaint_explicit_code"] = None
+        merged["primary_complaint_explicit"] = bool(merged.get("primary_complaint_explicit_code"))
+        merged["primary_complaint"] = primary
+        merged["chief_complaint"] = primary
+        merged["active_complaint_codes"] = active_codes
+
+        for key in (
+            "duration_days",
+            "bowel_interval_days",
+            "subject",
+            "location",
+            "severity",
+            "pain_severity_0_10",
+            "onset",
+            "patient_is_child",
+            "patient_is_infant",
+        ):
+            if new.get(key) is not None:
+                merged[key] = new[key]
+
+        if new.get("qualifiers"):
+            merged["qualifiers"] = list(dict.fromkeys((merged.get("qualifiers") or []) + new["qualifiers"]))
+
+        # Merge new arrays while keeping old elements
+        if new.get("observations"):
+            merged["observations"] = merged.get("observations", []) + new["observations"]
+        if new.get("corrections"):
+            merged["corrections"] = merged.get("corrections", []) + new["corrections"]
+
+        return merged
+
+    @staticmethod
+    def knows_any(facts: dict[str, Any] | None, names: Iterable[str]) -> bool:
+        if not facts:
+            return False
+        known = set(facts.get("positive_facts") or []) | set(facts.get("negative_facts") or [])
+        return any(name in known for name in names)
+
+
+_clinical_fact_service = ClinicalFactService()
+
+
+def get_clinical_fact_service() -> ClinicalFactService:
+    return _clinical_fact_service

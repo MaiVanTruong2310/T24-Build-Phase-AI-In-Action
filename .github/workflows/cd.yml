@@ -1,0 +1,10 @@
+name: CD
+
+on:
+  workflow_call:
+
+jobs:
+  backend:
+    name: Deploy backend
+    uses: ./.github/workflows/backend-deploy.yml
+    secrets: inherit

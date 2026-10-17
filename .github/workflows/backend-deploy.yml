@@ -1,0 +1,199 @@
+name: Backend deployment
+
+on:
+  workflow_call:
+
+env:
+  IMAGE: ${{ vars.DOCKERHUB_REPO }}
+  DEPLOY_SHA: ${{ github.sha }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-${{ github.repository }}-backend
+  cancel-in-progress: false
+
+jobs:
+  backend_deploy:
+    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    timeout-minutes: 30
+    runs-on: self-hosted
+    env:
+      DEPLOY_BRANCH: ${{ github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Copy compose files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.yml,docker-compose.prod.yml,docker-compose.dev.yml,docker-compose.observability.yml,observability/alloy/agent.alloy"
+          target: "/opt/app"
+
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_BRANCH: ${{ github.ref_name }}
+          OBSERVABILITY_LOKI_URL: ${{ secrets.OBSERVABILITY_LOKI_URL }}
+          OBSERVABILITY_TEMPO_OTLP_ENDPOINT: ${{ secrets.OBSERVABILITY_TEMPO_OTLP_ENDPOINT }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          STAFF_AGENT_CACHE_HMAC_KEY: ${{ secrets.STAFF_AGENT_CACHE_HMAC_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        with:
+          host: ${{ github.ref_name == 'main' && secrets.EC2_HOST_PROD || secrets.EC2_HOST_DEV }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DEPLOY_SHA,DEPLOY_BRANCH,OBSERVABILITY_LOKI_URL,OBSERVABILITY_TEMPO_OTLP_ENDPOINT,REDIS_PASSWORD,STAFF_AGENT_CACHE_HMAC_KEY,DATABASE_URL
+          script: |
+            set -euo pipefail
+            cd /opt/app
+
+            for name in REDIS_PASSWORD STAFF_AGENT_CACHE_HMAC_KEY DATABASE_URL; do
+              if [[ -z "${!name:-}" ]]; then
+                echo "Missing required deployment secret: $name"
+                exit 1
+              fi
+            done
+
+            if [[ -z "${OBSERVABILITY_LOKI_URL:-}" || -z "${OBSERVABILITY_TEMPO_OTLP_ENDPOINT:-}" ]]; then
+              echo "Missing required observability endpoint."
+              exit 1
+            fi
+
+            MONITORING_HOST="${OBSERVABILITY_LOKI_URL#*://}"
+            MONITORING_HOST="${MONITORING_HOST%%/*}"
+            MONITORING_HOST="${MONITORING_HOST%%:*}"
+            MONITORING_IP=$(getent ahostsv4 "$MONITORING_HOST" | awk 'NR==1 {print $1}')
+            METRICS_BIND_ADDRESS=$(ip -4 route get "$MONITORING_IP" | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
+            if [[ ! "$METRICS_BIND_ADDRESS" =~ ^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.) ]]; then
+              echo "Could not derive a private metrics bind address."
+              exit 1
+            fi
+
+            if [ "$DEPLOY_BRANCH" = "main" ]; then
+              OVERRIDE=docker-compose.prod.yml
+              ENV_TAG=production
+              FRONTEND_ORIGIN="${{ secrets.FRONTEND_PROD_URL || 'https://c4-app-t124.vercel.app' }}"
+            else
+              OVERRIDE=docker-compose.dev.yml
+              ENV_TAG=development
+              FRONTEND_ORIGIN="${{ secrets.FRONTEND_DEV_URL || 'https://c4-app-t124-dev.vercel.app' }}"
+            fi
+
+            FRONTEND_ORIGIN="${FRONTEND_ORIGIN%/}"
+
+            if [[ ! "$FRONTEND_ORIGIN" =~ ^https?://[^/]+$ ]]; then
+              echo "Invalid frontend origin for CORS: $FRONTEND_ORIGIN"
+              exit 1
+            fi
+
+            cat > .env <<EOF
+            IMAGE_REPO=${{ vars.DOCKERHUB_REPO }}
+            IMAGE_TAG=${DEPLOY_SHA}
+            APP_ENV=${ENV_TAG}
+            VITE_API_BASE_URL=${{ github.ref_name == 'main' && secrets.API_DOMAIN_PROD || secrets.API_DOMAIN_DEV }}
+            AUTH_COOKIE_SAMESITE=none
+            AUTH_COOKIE_SECURE=true
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            OPENAI_MODEL_NAME=${{ vars.OPENAI_MODEL_NAME || 'gpt-4o-mini' }}
+            LLM_PROVIDER=${{ vars.LLM_PROVIDER || 'deepseek' }}
+            DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+            DEEPSEEK_MODEL_NAME=${{ vars.DEEPSEEK_MODEL_NAME || 'deepseek-chat' }}
+            OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+            GOOGLE_AI_API_KEY=${{ secrets.GOOGLE_AI_API_KEY }}
+            ZALO_BOT_TOKEN=${{ github.ref_name == (vars.ZALO_DEPLOY_BRANCH || 'main') && secrets.ZALO_BOT_TOKEN || '' }}
+            ZALO_BOT_SECRET_TOKEN=${{ github.ref_name == (vars.ZALO_DEPLOY_BRANCH || 'main') && secrets.ZALO_BOT_SECRET_TOKEN || '' }}
+            ZALO_BOT_MODE=${{ github.ref_name == (vars.ZALO_DEPLOY_BRANCH || 'main') && 'webhook' || 'disabled' }}
+            ZALO_WEBHOOK_URL=${{ github.ref_name == (vars.ZALO_DEPLOY_BRANCH || 'main') && vars.ZALO_WEBHOOK_URL || '' }}
+            JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+            JWT_ALGORITHM=HS256
+            JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
+            JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
+            OTP_EXPIRE_MINUTES=5
+            OTP_MAX_ATTEMPTS=5
+            MOCK_OTP_CODE=123456
+            CORS_ORIGINS=http://localhost:5173,${FRONTEND_ORIGIN},https://c4-app-t124-dev.vercel.app,https://c4-app-t124.vercel.app
+            METRICS_ENABLED=true
+            METRICS_BIND_ADDRESS=${METRICS_BIND_ADDRESS}
+            EXPORTER_BIND_ADDRESS=${METRICS_BIND_ADDRESS}
+            METRICS_PORT=8001
+            OBSERVABILITY_ENVIRONMENT=${ENV_TAG}
+            OTEL_ENABLED=true
+            OTEL_SERVICE_NAME=ai20k-backend
+            OTEL_ENVIRONMENT=${ENV_TAG}
+            LOKI_URL=${OBSERVABILITY_LOKI_URL}
+            TEMPO_OTLP_ENDPOINT=${OBSERVABILITY_TEMPO_OTLP_ENDPOINT}
+            REDIS_PASSWORD=${REDIS_PASSWORD}
+            REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+            STAFF_AGENT_CACHE_REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+            STAFF_AGENT_CACHE_HMAC_KEY=${STAFF_AGENT_CACHE_HMAC_KEY}
+            DATABASE_URL=${DATABASE_URL}
+            LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}
+            LANGCHAIN_PROJECT=ai20k-agent
+            LANGCHAIN_TRACING_V2=false
+            LANGSMITH_TRACING=false
+            SUPABASE_URL=${{secrets.SUPABASE_URL}}
+            SUPABASE_KEY=${{secrets.SUPABASE_KEY}}
+            SUPABASE_AUTH_REDIRECT_URL=${FRONTEND_ORIGIN}
+            EOF
+
+            chmod 600 .env
+
+            COMPOSE_FILES=(-f docker-compose.yml -f "$OVERRIDE" -f docker-compose.observability.yml)
+
+            docker compose "${COMPOSE_FILES[@]}" config >/dev/null
+            RUNNING_BACKEND=$(docker compose "${COMPOSE_FILES[@]}" ps -q backend)
+            ROLLBACK_AVAILABLE=false
+            if [ -n "$RUNNING_BACKEND" ]; then
+              RUNNING_IMAGE=$(docker inspect --format '{{.Image}}' "$RUNNING_BACKEND")
+              docker image tag "$RUNNING_IMAGE" "${{ vars.DOCKERHUB_REPO }}:rollback-${ENV_TAG}"
+              ROLLBACK_AVAILABLE=true
+            fi
+            df -h / || true
+            docker compose "${COMPOSE_FILES[@]}" pull
+            if docker container inspect postgres-pgvector >/dev/null 2>&1; then
+              docker container rm --force postgres-pgvector
+            fi
+
+            # Chờ /health trả 200. Không dùng `curl --retry --retry-connrefused`: curl không thử lại khi container vừa
+            # khởi động đã nhận kết nối rồi reset (lỗi 56) / trả rỗng (lỗi 52) → readiness fail ngay sau 0.3s và rollback
+            # oan (deploy develop 16/10). Vòng lặp thử lại với mọi lỗi, mỗi lần tối đa 5s.
+            wait_healthy() {
+              for _ in $(seq 1 "$1"); do
+                if curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8000/health; then
+                  return 0
+                fi
+                sleep 5
+              done
+              return 1
+            }
+
+            rollback_backend() {
+              if [ "$ROLLBACK_AVAILABLE" = true ]; then
+                IMAGE_TAG="rollback-${ENV_TAG}" docker compose "${COMPOSE_FILES[@]}" up -d --no-build --pull never backend || true
+                wait_healthy 12 || echo "Rollback backend did not become healthy."
+              else
+                echo "No previous backend image is available for rollback."
+              fi
+            }
+
+            if ! docker compose "${COMPOSE_FILES[@]}" up -d --remove-orphans; then
+              echo "Compose update failed; attempting rollback."
+              rollback_backend
+              exit 1
+            fi
+
+            docker compose "${COMPOSE_FILES[@]}" ps
+            if ! wait_healthy 18; then
+              echo "New backend failed readiness; attempting rollback."
+              rollback_backend
+              exit 1
+            fi
+
+            df -h / || true

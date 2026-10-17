@@ -1,0 +1,371 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  IMAGE: ${{ vars.DOCKERHUB_REPO }}
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: ci-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  backend_format_lint:
+    name: Backend format and lint
+    if: >-
+      (github.event_name == 'pull_request' &&
+       startsWith(github.head_ref, 'feature/') &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    timeout-minutes: 10
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install --retries 3 --timeout 30 "ruff>=0.8.0"
+      - run: ruff format --check src/ tests/
+      - run: ruff check src/ tests/
+
+  backend_tests:
+    name: Backend compile and tests
+    timeout-minutes: 30
+    runs-on: self-hosted
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: ai20k_test
+          POSTGRES_USER: ai20k_test
+          POSTGRES_PASSWORD: ai20k_test
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U ai20k_test -d ai20k_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      - name: Report runner resources
+        run: |
+          free -h
+          df -h /
+          docker system df
+      - name: Compile backend
+        run: python -m compileall -q src
+
+      - name: Run full test suite
+        run: pytest tests/ -v --tb=short
+        env:
+          APP_ENV: test
+          OPENAI_API_KEY: test-key
+          JWT_SECRET_KEY: test-secret-key-with-at-least-32-bytes
+          DATABASE_URL: postgresql+psycopg://ai20k_test:ai20k_test@localhost:${{ job.services.postgres.ports[5432] }}/ai20k_test
+          DATABASE_AUTO_CREATE: "false"
+
+  quality_gates:
+    name: Security and code quality
+    needs: [backend_tests, frontend_check]
+    if: >-
+      (github.event_name == 'pull_request' &&
+       startsWith(github.head_ref, 'feature/') &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    timeout-minutes: 20
+    runs-on: self-hosted
+    env:
+      SONAR_ENABLED: ${{ vars.SONAR_ENABLED }}
+      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan dependencies, secrets, and configuration
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Explain skipped SonarQube analysis
+        if: github.ref == 'refs/heads/main' && env.SONAR_ENABLED != 'true'
+        run: echo "SonarQube analysis is disabled until SONAR_ENABLED=true."
+
+      - name: Validate SonarQube configuration
+        if: github.ref == 'refs/heads/main' && env.SONAR_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in SONAR_HOST_URL SONAR_PROJECT_KEY SONAR_TOKEN; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required SonarQube setting: $name"
+              exit 1
+            fi
+          done
+
+      - name: Analyze and wait for Quality Gate
+        if: github.ref == 'refs/heads/main' && env.SONAR_ENABLED == 'true'
+        uses: SonarSource/sonarqube-scan-action@59db25f34e16620e48ab4bb9e4a5dce155cb5432 # v8.0.0
+        with:
+          args: >
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
+
+  backend_image:
+    name: Backend image build and publish
+    needs: [quality_gates]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    timeout-minutes: 30
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          for attempt in 1 2 3; do
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin && exit 0
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Docker Hub login failed; retrying in 10 seconds ($attempt/3)."
+            sleep 10
+          done
+
+      - name: Build Docker image
+        run: |
+          for attempt in 1 2 3; do
+            docker build --tag ai20k-agent:ci . && exit 0
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Docker build failed; retrying in 10 seconds ($attempt/3)."
+            sleep 10
+          done
+
+      - name: Tag and push image
+        run: |
+          set -euo pipefail
+          docker tag ai20k-agent:ci "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:$GITHUB_SHA"
+
+      - name: Docker logout
+        if: always()
+        run: docker logout
+
+  container_security:
+    name: Trivy backend image security
+    needs: [backend_image]
+    timeout-minutes: 15
+    runs-on: self-hosted
+    steps:
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Scan published backend image
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Docker logout
+        if: always()
+        run: docker logout
+
+  promote_backend_image:
+    name: Promote scanned backend image
+    needs: [container_security]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    runs-on: self-hosted
+    steps:
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Promote immutable image to environment tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref_name }}" = "main" ]; then ENV_TAG=production; else ENV_TAG=development; fi
+          docker pull "$IMAGE:$GITHUB_SHA"
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:$ENV_TAG"
+          docker push "$IMAGE:$ENV_TAG"
+
+      - name: Docker logout
+        if: always()
+        run: docker logout
+
+  frontend_check:
+    name: Frontend checks
+    if: >-
+      (github.event_name == 'pull_request' &&
+       startsWith(github.head_ref, 'feature/') &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    timeout-minutes: 20
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      # API đi qua proxy /api của chính domain Vercel (frontend/api/proxy.js): cookie phiên là cookie cùng trang.
+      # Gọi thẳng backend (duckdns) thì cookie là cookie bên thứ ba, Safari/Brave/Chrome ẩn danh chặn → đăng nhập
+      # xong không tải được hồ sơ. WebSocket vẫn đi thẳng backend (Vercel không proxy WS), xác thực bằng ticket.
+      VITE_API_BASE_URL: same-origin
+      VITE_WS_ORIGIN: ${{ github.ref_name == 'main' && secrets.API_DOMAIN_PROD || secrets.API_DOMAIN_DEV }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Report runner resources
+        run: |
+          free -h
+          df -h /
+
+      - name: Install frontend dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Run Chat & Coordinator Regression Tests
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+        run: |
+          node tests/coordinator-session-chat.cjs
+          node tests/chat-regression.cjs
+
+      - name: Build frontend
+        run: npm run build
+
+  deploy:
+    name: Deploy
+    needs: [promote_backend_image]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/cd.yml
+    secrets: inherit
+
+  deploy_frontend:
+    name: Deploy frontend
+    needs: [deploy]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/frontend-deploy.yml
+    secrets: inherit
+
+  deploy_observability:
+    name: Deploy observability
+    needs: [deploy]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/observability-deploy.yml
+    secrets: inherit
+
+  pr_merge_gate:
+    name: PR merge gate
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      startsWith(github.head_ref, 'feature/') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    needs:
+      - backend_format_lint
+      - backend_tests
+      - frontend_check
+      - quality_gates
+    runs-on: self-hosted
+    steps:
+      - name: Require every pull request check to pass
+        if: >-
+          needs.backend_format_lint.result != 'success' ||
+          needs.backend_tests.result != 'success' ||
+          needs.frontend_check.result != 'success' ||
+          needs.quality_gates.result != 'success'
+        run: exit 1
+      - run: echo "All required checks passed for this pull request commit."
+
+  publish_ci_metrics:
+    name: Publish CI metrics
+    if: always()
+    needs:
+      - backend_format_lint
+      - backend_tests
+      - frontend_check
+      - quality_gates
+      - backend_image
+      - container_security
+      - promote_backend_image
+      - deploy
+      - deploy_frontend
+      - deploy_observability
+      - pr_merge_gate
+    timeout-minutes: 5
+    runs-on: self-hosted
+    continue-on-error: true
+    env:
+      PIPELINE_CONCLUSION: >-
+        ${{ contains(needs.*.result, 'failure') && 'failure' ||
+            contains(needs.*.result, 'cancelled') && 'cancelled' || 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Build sanitized metrics payload
+        id: metrics
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/export_ci_metrics.py "$PIPELINE_CONCLUSION"
+
+      - name: Push metrics through the monitoring host
+        uses: appleboy/ssh-action@v1
+        continue-on-error: true
+        env:
+          METRICS_B64: ${{ steps.metrics.outputs.payload }}
+          METRICS_RUN_ID: ${{ github.run_id }}
+        with:
+          host: ${{ secrets.OBSERVABILITY_EC2_HOST }}
+          username: ${{ secrets.OBSERVABILITY_EC2_USER }}
+          key: ${{ secrets.OBSERVABILITY_EC2_SSH_KEY }}
+          envs: METRICS_B64,METRICS_RUN_ID
+          script: |
+            set -euo pipefail
+            METRICS_URL="http://127.0.0.1:9091/metrics/job/github_actions/run/${METRICS_RUN_ID}"
+            printf '%s' "$METRICS_B64" | base64 -d | curl --fail --silent --show-error --data-binary @- "$METRICS_URL"
+            QUERY_URL="http://127.0.0.1:9090/api/v1/query?query=ci_pipeline_run_info%7Brun_id%3D%22${METRICS_RUN_ID}%22%7D"
+            for attempt in $(seq 1 30); do
+              if result=$(curl --fail --silent --show-error "$QUERY_URL") && printf '%s' "$result" | grep -Fq "\"run_id\":\"${METRICS_RUN_ID}\""; then
+                curl --fail --silent --show-error -X DELETE "$METRICS_URL"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "Prometheus has not confirmed scraping run ${METRICS_RUN_ID}; leaving the Pushgateway group for a later scrape."

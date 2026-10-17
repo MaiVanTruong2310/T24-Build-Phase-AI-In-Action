@@ -1,0 +1,264 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "description": "Backend overview following ObservabilityInformationDesign.md: service health, RED metrics, host/container saturation, logs, and linked traces. Filter with Environment and time range.",
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "CI/CD dashboard",
+      "tooltip": "Open GitHub Actions pipeline analysis in Grafana",
+      "type": "link",
+      "url": "/d/ai20k-cicd/ai20k-ci-cd-pipeline"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "targetBlank": true,
+      "title": "CI/CD runs",
+      "tooltip": "Open GitHub Actions for this repository",
+      "type": "link",
+      "url": "https://github.com/AI20K-Build-Phase-Cohort-4/P-124/actions"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "targetBlank": true,
+      "title": "Backend images",
+      "tooltip": "Open published backend images on Docker Hub",
+      "type": "link",
+      "url": "https://hub.docker.com/r/newaccount339/ai20k-agent/tags"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "targetBlank": true,
+      "title": "Operations runbook",
+      "tooltip": "Open observability deployment and troubleshooting guidance",
+      "type": "link",
+      "url": "https://github.com/AI20K-Build-Phase-Cohort-4/P-124/blob/develop/observability/README.md"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Explore logs",
+      "tooltip": "Open Grafana Explore with the Loki datasource",
+      "type": "link",
+      "url": "/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22loki%22,%7B%7D%5D"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Explore traces",
+      "tooltip": "Open Grafana Explore with the Tempo datasource",
+      "type": "link",
+      "url": "/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22tempo%22,%7B%7D%5D"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "targetBlank": true,
+      "title": "Prometheus targets",
+      "tooltip": "Inspect Prometheus target health through the Grafana datasource proxy",
+      "type": "link",
+      "url": "/api/datasources/proxy/uid/prometheus/targets"
+    },
+    {
+      "asDropdown": false,
+      "icon": "bell",
+      "includeVars": false,
+      "keepTime": false,
+      "targetBlank": false,
+      "title": "Production alerts",
+      "tooltip": "Open CI/CD and infrastructure alert states",
+      "type": "link",
+      "url": "/alerting/list?search=folder%3AAI20K%20Operations"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "sum(up{job=\"ai20k-backend\"})", "legendFormat": "Healthy backends", "refId": "A"}],
+      "title": "Backend targets up",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 9, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sum by (environment) (rate(http_requests_total{job=\"ai20k-backend\",environment=~\"$environment\"}[5m]))", "legendFormat": "{{environment}}", "refId": "A"}],
+      "title": "Request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 9, "x": 15, "y": 0},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, environment) (rate(http_request_duration_seconds_bucket{job=\"ai20k-backend\",environment=~\"$environment\"}[5m])))", "legendFormat": "p95 {{environment}}", "refId": "A"}],
+      "title": "Request latency p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 10, "w": 14, "x": 0, "y": 8},
+      "id": 4,
+      "options": {"deduplication": "exact", "enableLogDetails": true, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "time": {"from": "now-1h", "to": "now"}, "wrapLines": false},
+      "targets": [{"expr": "{job=\"docker\",environment=~\"$environment\"}", "refId": "A"}],
+      "title": "Application logs",
+      "type": "logs"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "100 * (1 - avg by (environment) (rate(node_cpu_seconds_total{job=\"ai20k-node\",mode=\"idle\",environment=~\"$environment\"}[5m])))", "legendFormat": "{{environment}}", "refId": "A"}],
+      "title": "Host CPU usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18},
+      "id": 7,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "node_memory_MemTotal_bytes{job=\"ai20k-node\",environment=~\"$environment\"} - node_memory_MemAvailable_bytes{job=\"ai20k-node\",environment=~\"$environment\"}", "legendFormat": "{{environment}} used", "refId": "A"}],
+      "title": "Host memory used",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 26},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "100 * sum by (environment) (rate(container_cpu_usage_seconds_total{job=\"ai20k-cadvisor\",container_label_com_docker_compose_service=\"backend\",environment=~\"$environment\"}[5m])) / on(environment) count by (environment) (node_cpu_seconds_total{job=\"ai20k-node\",mode=\"idle\",environment=~\"$environment\"})", "legendFormat": "{{environment}} backend", "refId": "A"}],
+      "title": "Backend container CPU",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 26},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sum by (environment) (container_memory_working_set_bytes{job=\"ai20k-cadvisor\",container_label_com_docker_compose_service=\"backend\",environment=~\"$environment\"})", "legendFormat": "{{environment}} backend", "refId": "A"}],
+      "title": "Backend container memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 34},
+      "id": 10,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "100 * sum by (environment) (rate(http_requests_total{job=\"ai20k-backend\",status=~\"4..\",environment=~\"$environment\"}[5m])) / sum by (environment) (rate(http_requests_total{job=\"ai20k-backend\",environment=~\"$environment\"}[5m]))", "legendFormat": "4xx {{environment}}", "refId": "A"}],
+      "title": "4xx error rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 34},
+      "id": 11,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "100 * sum by (environment) (rate(http_requests_total{job=\"ai20k-backend\",status=~\"5..\",environment=~\"$environment\"}[5m])) / sum by (environment) (rate(http_requests_total{job=\"ai20k-backend\",environment=~\"$environment\"}[5m]))", "legendFormat": "5xx {{environment}}", "refId": "A"}],
+      "title": "5xx error rate (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 34},
+      "id": 12,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "histogram_quantile(0.50, sum by (le, environment) (rate(http_request_duration_seconds_bucket{job=\"ai20k-backend\",environment=~\"$environment\"}[5m])))", "legendFormat": "p50 {{environment}}", "refId": "A"}, {"expr": "histogram_quantile(0.99, sum by (le, environment) (rate(http_request_duration_seconds_bucket{job=\"ai20k-backend\",environment=~\"$environment\"}[5m])))", "legendFormat": "p99 {{environment}}", "refId": "B"}],
+      "title": "Request latency p50 / p99",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 42},
+      "id": 13,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "topk(10, sum by (handler, environment) (rate(http_requests_total{job=\"ai20k-backend\",environment=~\"$environment\"}[5m])))", "legendFormat": "{{environment}} {{handler}}", "refId": "A"}],
+      "title": "Top request handlers by rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 80}, {"color": "red", "value": 90}]}}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 42},
+      "id": 14,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "100 * (1 - node_filesystem_avail_bytes{job=\"ai20k-node\",mountpoint=\"/\",environment=~\"$environment\"} / node_filesystem_size_bytes{job=\"ai20k-node\",mountpoint=\"/\",environment=~\"$environment\"})", "legendFormat": "{{environment}} root filesystem", "refId": "A"}],
+      "title": "Host root filesystem used",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 50},
+      "id": 15,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sum by (environment) (rate(node_network_receive_bytes_total{job=\"ai20k-node\",device!~\"lo|docker.*|veth.*\",environment=~\"$environment\"}[5m]))", "legendFormat": "{{environment}} received", "refId": "A"}, {"expr": "sum by (environment) (rate(node_network_transmit_bytes_total{job=\"ai20k-node\",device!~\"lo|docker.*|veth.*\",environment=~\"$environment\"}[5m]))", "legendFormat": "{{environment}} sent", "refId": "B"}],
+      "title": "Host network throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 50},
+      "id": 16,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sum by (environment) (rate(node_disk_read_bytes_total{job=\"ai20k-node\",environment=~\"$environment\"}[5m]))", "legendFormat": "{{environment}} read", "refId": "A"}, {"expr": "sum by (environment) (rate(node_disk_written_bytes_total{job=\"ai20k-node\",environment=~\"$environment\"}[5m]))", "legendFormat": "{{environment}} written", "refId": "B"}],
+      "title": "Host disk throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 10, "w": 10, "x": 14, "y": 8},
+      "id": 5,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [{"expr": "sum by (environment) (rate(http_requests_total{job=\"ai20k-backend\",status=~\"5..\",environment=~\"$environment\"}[5m]))", "legendFormat": "5xx {{environment}}", "refId": "A"}],
+      "title": "5xx error rate",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "templating": {"list": [{"current": {"text": "All", "value": ".*"}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "definition": "label_values(up{job=\"ai20k-backend\"}, environment)", "includeAll": true, "label": "Environment", "multi": true, "name": "environment", "options": [], "query": {"query": "label_values(up{job=\"ai20k-backend\"}, environment)", "refId": "StandardVariableQuery"}, "refresh": 1, "type": "query"}]},
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "AI20K - Backend Observability",
+  "uid": "ai20k-observability",
+  "version": 5
+}

@@ -1,0 +1,65 @@
+{
+  "annotations": {"list": []},
+  "description": "CI/CD metrics emitted by GitHub Actions to self-hosted Prometheus. No GitHub PAT is required.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {"asDropdown": false, "icon": "external link", "includeVars": false, "keepTime": false, "targetBlank": true, "title": "Open detailed GitHub Actions logs", "type": "link", "url": "https://github.com/AI20K-Build-Phase-Cohort-4/P-124/actions"},
+    {"asDropdown": false, "icon": "bell", "includeVars": false, "keepTime": false, "targetBlank": false, "title": "Open CI alerts", "type": "link", "url": "/alerting/list?search=service%3Dci"}
+  ],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "One sample for each completed workflow, grouped by final result.",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "sum by (conclusion) (ci_pipeline_run_info)", "legendFormat": "{{conclusion}}", "range": true, "refId": "A"}],
+      "title": "Pipeline results",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "95th percentile of observed workflow duration over the selected dashboard range.",
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "quantile(0.95, max_over_time(ci_pipeline_run_duration_seconds[$__range]))", "instant": true, "range": false, "refId": "A"}],
+      "title": "Pipeline p95 duration",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Maximum completed job duration by job and conclusion in the selected range.",
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "max by (ci_job, job_conclusion) (ci_pipeline_job_duration_seconds)", "legendFormat": "{{ci_job}} ({{job_conclusion}})", "range": true, "refId": "A"}],
+      "title": "Job duration and conclusion",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "-- Grafana --", "uid": "grafana"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 8},
+      "id": 4,
+      "options": {"code": {"language": "plaintext", "showLineNumbers": false, "showMiniMap": false}, "content": "### Reading the pipeline\n\n- **Production failure:** a failed `push` on `main` in the last 10 minutes.\n- **Slow production:** completed `main` push exceeds 60 minutes.\n- **No feature/develop alerts:** their metrics remain visible for analysis only.\n- **Telemetry alert:** Pushgateway is unavailable for 5 minutes.\n\nOnly sanitized status and timing labels enter Prometheus. Detailed logs remain in GitHub so its masking and access controls continue to apply.", "mode": "markdown"},
+      "pluginVersion": "11.5.2",
+      "title": "Analysis guide",
+      "type": "text"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["github", "ci-cd", "operations"],
+  "templating": {"list": []},
+  "time": {"from": "now-24h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "AI20K - CI/CD Pipeline",
+  "uid": "ai20k-cicd",
+  "version": 2
+}

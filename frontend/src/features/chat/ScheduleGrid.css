@@ -1,0 +1,28 @@
+/* Lưới lịch trống 7 ngày trong tin nhắn bot. Điện thoại: vuốt ngang, cột "Buổi" đứng yên. */
+.sgrid { margin-top: 10px; border: 1.5px solid var(--hd-ink, #1f2d26); border-radius: 12px; background: var(--app-surface, #fff); color: var(--app-text, #243b30); font-size: 12px; overflow: hidden; }
+.sgrid__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; border-bottom: 1px dashed rgba(100, 130, 115, .45); }
+.sgrid__head svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--app-primary, #285c45); }
+.sgrid__title { font-weight: 700; }
+.sgrid__facility { width: 100%; color: var(--app-secondary, #6b8075); font-size: 11px; }
+.sgrid__scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sgrid__table { width: 100%; min-width: 460px; border-collapse: separate; border-spacing: 4px; table-layout: fixed; }
+.sgrid__table th { font-weight: 600; text-align: center; padding: 2px 0; }
+.sgrid__corner, .sgrid__period { position: sticky; left: 0; z-index: 1; width: 48px; background: var(--app-surface, #fff); text-align: left !important; color: var(--app-secondary, #6b8075); }
+.sgrid__wd { display: block; font-size: 11px; color: var(--app-secondary, #6b8075); }
+.sgrid__date { display: block; font-size: 12px; }
+.sgrid__cell { padding: 0; text-align: center; }
+.sgrid__cell.is-empty { color: var(--app-secondary, #6b8075); opacity: .45; }
+.sgrid__btn {
+  width: 100%; min-height: 34px; padding: 4px 2px; border: 1.5px solid var(--app-primary, #285c45); border-radius: 8px;
+  background: var(--app-muted, #eef7f1); color: var(--app-primary, #285c45); font-weight: 700; font-size: 12px; cursor: pointer;
+}
+.sgrid__btn:hover:not(:disabled), .sgrid__btn.is-open { background: var(--app-primary, #285c45); color: #fff; }
+.sgrid__btn.is-highlight { box-shadow: 0 0 0 2px var(--hd-thread, #c0392b); }
+.sgrid__btn:focus-visible, .sgrid__doc:focus-visible { outline: 2px dashed var(--hd-thread, #c0392b); outline-offset: 2px; }
+.sgrid__btn:disabled, .sgrid__doc:disabled { opacity: .5; cursor: not-allowed; }
+.sgrid__pick { display: grid; gap: 6px; padding: 8px 10px; border-top: 1px dashed rgba(100, 130, 115, .45); }
+.sgrid__pick-title { margin: 0; font-weight: 700; }
+.sgrid__doc { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border: 1px solid rgba(100, 130, 115, .5); border-radius: 10px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.sgrid__doc span { color: var(--app-secondary, #6b8075); font-size: 11px; }
+.sgrid__doc:hover:not(:disabled) { border-color: var(--app-primary, #285c45); background: var(--app-muted, #eef7f1); }
+.sgrid__hint { margin: 0; padding: 0 10px 8px; color: var(--app-secondary, #6b8075); font-size: 11px; }

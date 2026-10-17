@@ -1,0 +1,125 @@
+/* Khung Đăng nhập / Đăng ký / Quên mật khẩu: ngôn ngữ vẽ tay chung của app (biến --hd-* từ Header.css, có giá trị dự phòng).
+   Chỉ đổi giao diện; logic nằm ở Login.tsx, Register.tsx, ForgotPassword.tsx. */
+@font-face {
+  font-family: 'FC Baby Doll';
+  src: url('/fonts/fc-baby-doll-v3.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.auth-doodle-wrapper,
+.auth-doodle-solo {
+  --ink: var(--hd-ink, #1f2d26);
+  --paper: var(--hd-paper, #ffffff);
+  --tint: var(--hd-tint, #d9efe2);
+  --thread: var(--hd-thread, #bd5f57);
+  --cta-bg: var(--hd-cta-bg, #285c45);
+  --cta-fg: var(--hd-cta-fg, #e4f3ea);
+  --sos-bg: var(--hd-sos-bg, #f8e4e2);
+  --sos-fg: var(--hd-sos-fg, #7a2f2a);
+  --shadow: var(--hd-shadow, #1f2d26);
+  --hand: var(--hd-hand, 'FC Baby Doll', 'Plus Jakarta Sans', system-ui, sans-serif);
+  --focus: var(--hd-cta-bg, #285c45);
+  --r-card: 20px 24px 18px 22px / 22px 18px 24px 20px;
+  --r-card-alt: 24px 18px 22px 20px / 18px 24px 20px 22px;
+  --r-field: 10px 13px 9px 12px / 12px 9px 13px 10px;
+  --r-btn: 12px 15px 11px 14px / 14px 11px 15px 12px;
+  --card-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+}
+html.dark .auth-doodle-wrapper,
+html.dark .auth-doodle-solo,
+html[data-theme='dark'] .auth-doodle-wrapper,
+html[data-theme='dark'] .auth-doodle-solo {
+  --ink: var(--hd-ink, #d3e6db);
+  --paper: var(--hd-paper, #14231c);
+  --tint: var(--hd-tint, #1f3a2d);
+  --sos-bg: var(--hd-sos-bg, #331614);
+  --sos-fg: var(--hd-sos-fg, #f8e4e2);
+  --shadow: var(--hd-shadow, #3f6350);
+}
+.auth-doodle-wrapper { max-width: 680px; padding: 0 12px; }
+.auth-doodle-signup { --card-width: 680px; }
+
+/* Công tắc Đăng nhập / Đăng ký */
+.auth-doodle-toggle { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; z-index: 2; cursor: pointer; }
+.auth-doodle-toggle:disabled { cursor: wait; }
+.auth-doodle-header { display: flex; align-items: center; gap: 16px; margin-bottom: 30px; z-index: 5; }
+.auth-doodle-mode-text {
+  font-family: var(--hand); font-size: 22px; font-weight: 400; line-height: 1; color: var(--ink); opacity: .5; text-decoration: none;
+  transition: opacity .2s, transform .2s;
+}
+.auth-doodle-mode-text:hover { opacity: .8; }
+.auth-doodle-mode-text.is-active { opacity: 1; transform: rotate(-2deg); }
+.auth-doodle-mode-text:focus-visible { outline: 2px dashed var(--thread); outline-offset: 5px; border-radius: 4px; }
+.auth-doodle-switch-label {
+  position: relative; display: inline-block; flex-shrink: 0; width: 56px; height: 30px; background: var(--tint);
+  border: 2px solid var(--ink); border-radius: 999px 900px 999px 920px / 900px 999px 920px 999px; box-shadow: 2px 2px 0 var(--shadow);
+  cursor: pointer; transition: transform .1s, box-shadow .1s;
+}
+.auth-doodle-switch-label:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow); }
+.auth-doodle-switch-handle {
+  position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; background: var(--thread); border: 2px solid var(--ink); border-radius: 50%;
+  transition: transform .4s cubic-bezier(.68, -.55, .265, 1.55);
+}
+.auth-doodle-toggle:checked + .auth-doodle-switch-handle { transform: translateX(26px); }
+.auth-doodle-toggle:focus-visible + .auth-doodle-switch-handle { outline: 2px dashed var(--thread); outline-offset: 5px; }
+
+/* Thẻ 3D */
+.auth-doodle-card-scene { position: relative; perspective: 1000px; width: min(100%, var(--card-width)); z-index: 2; }
+.auth-doodle-card-inner { position: relative; width: 100%; transform-style: preserve-3d; }
+.auth-doodle-card-inner.is-login { animation: auth-doodle-flip-login .8s cubic-bezier(.4, .2, .2, 1) both; }
+.auth-doodle-card-inner.is-signup { transform: rotateY(180deg); animation: auth-doodle-flip-signup .8s cubic-bezier(.4, .2, .2, 1) both; }
+.auth-doodle-card-front,
+.auth-doodle-card-back {
+  position: absolute; inset: 0; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  backface-visibility: hidden; padding: 20px; background: var(--paper);
+  border: 2.5px solid var(--ink); border-radius: var(--r-card); box-shadow: 6px 6px 0 var(--shadow);
+}
+.auth-doodle-card-back { transform: rotateY(180deg); border-radius: var(--r-card-alt); }
+/* Đường chỉ khâu đứt phía trên thẻ */
+.auth-doodle-card-front::before,
+.auth-doodle-card-back::before { content: ''; position: absolute; left: 20px; right: 20px; top: 11px; border-top: 2px dashed var(--thread); pointer-events: none; }
+.auth-doodle-active-face { position: relative; inset: auto; height: auto; min-height: 360px; padding: 34px 28px 28px; align-items: stretch; justify-content: flex-start; }
+.auth-doodle-placeholder { gap: 12px; background: var(--tint); font-family: var(--hand); font-size: 30px; color: var(--ink); }
+.auth-doodle-placeholder img { width: 64px; height: 64px; object-fit: contain; }
+.auth-doodle-active-face > div { max-width: none; }
+
+/* Hình trang trí */
+.auth-doodle-svg { position: absolute; z-index: 1; pointer-events: none; stroke: var(--ink); }
+.auth-doodle-star { top: -24px; left: -12px; width: 44px; height: 44px; fill: var(--thread); animation: auth-float-star 4s ease-in-out infinite; }
+.auth-doodle-sparkle { bottom: -20px; right: -10px; width: 38px; height: 38px; fill: var(--tint); animation: auth-float-sparkle 4s ease-in-out infinite 1s; }
+.auth-doodle-swirl { display: none; top: 38px; right: -12px; width: 30px; height: 30px; animation: auth-float-swirl 4s ease-in-out infinite 2s; }
+@keyframes auth-float-star { 0%, 100% { transform: translateY(0) rotate(-15deg); } 50% { transform: translateY(-8px) rotate(-10deg); } }
+@keyframes auth-float-sparkle { 0%, 100% { transform: translateY(0) rotate(10deg); } 50% { transform: translateY(-8px) rotate(15deg); } }
+@keyframes auth-float-swirl { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-8px) rotate(5deg); } }
+@keyframes auth-doodle-flip-login { from { transform: rotateY(180deg); } to { transform: rotateY(0); } }
+@keyframes auth-doodle-flip-signup { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+
+/* Trang con không lật (Quên mật khẩu): cùng khung, không có công tắc */
+.auth-doodle-solo { max-width: 460px; padding: 0 12px; }
+.auth-doodle-solo .auth-doodle-card-scene { perspective: none; }
+.auth-doodle-solo .auth-doodle-card-inner { transform: none; animation: auth-doodle-pop .35s cubic-bezier(.2, .9, .3, 1.15) both; }
+.auth-doodle-solo .auth-doodle-active-face { backface-visibility: visible; min-height: 0; }
+@keyframes auth-doodle-pop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 639px) {
+  .auth-doodle-wrapper, .auth-doodle-solo { padding: 0 5px; }
+  .auth-doodle-active-face { padding: 30px 16px 22px; }
+  .auth-doodle-header { gap: 12px; }
+  .auth-doodle-mode-text { font-size: 19px; }
+  .auth-doodle-star { width: 34px; height: 34px; left: -5px; top: -20px; }
+  .auth-doodle-sparkle { right: -4px; width: 30px; height: 30px; }
+  .auth-doodle-swirl { right: -5px; width: 24px; height: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-doodle-wrapper *, .auth-doodle-wrapper *::before, .auth-doodle-wrapper *::after,
+  .auth-doodle-solo *, .auth-doodle-solo *::before, .auth-doodle-solo *::after { animation: none !important; transition: none !important; }
+}

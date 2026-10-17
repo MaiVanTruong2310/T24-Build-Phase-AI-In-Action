@@ -1,0 +1,57 @@
+/* Header-sized flip card inspired by Uiverse.io / vamsidevendrakumar. */
+.brand-flip-card {
+  width: 220px;
+  height: 52px;
+  perspective: 1000px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+  border-radius: 10px;
+}
+.brand-flip-card__inner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.999s;
+}
+.brand-flip-card[aria-pressed="true"] .brand-flip-card__inner { transform: rotateY(180deg); }
+.brand-flip-card__front,
+.brand-flip-card__back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 5px 8px;
+  border: 1px solid #d5e9df;
+  border-radius: 10px;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.brand-flip-card__front { background: #f6fcf9; color: #285c45; transform: rotateY(0deg); }
+.brand-flip-card__back { background: #edb2b1; transform: rotateY(180deg); }
+.brand-flip-card__name { font-size: 20px; font-weight: 800; line-height: 1.1; letter-spacing: -0.5px; }
+.brand-flip-card__slogan { font-size: 10px; font-weight: 500; line-height: 1.2; }
+.brand-flip-card__logo { width: 42px; height: 42px; object-fit: contain; border-radius: 8px; background: white; }
+.brand-flip-card:focus-visible { outline: 2px solid #168455; outline-offset: 3px; }
+.dark .brand-flip-card__front { background: #14291f; color: #f6fcf9; border-color: #5c9e7c; }
+.dark .brand-flip-card__back { border-color: #ba5b59; }
+@media (hover: hover) {
+  .brand-flip-card:hover .brand-flip-card__inner { transform: rotateY(180deg); }
+}
+@media (max-width: 639px) {
+  .brand-flip-card { width: clamp(96px, 28vw, 128px); }
+  .brand-flip-card__name { font-size: 17px; }
+  .brand-flip-card__slogan { font-size: 8px; }
+  .brand-flip-card__front, .brand-flip-card__back { padding-inline: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-flip-card__inner { transition: none; }
+}

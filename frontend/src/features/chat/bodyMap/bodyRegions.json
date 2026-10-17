@@ -1,0 +1,338 @@
+{
+  "_note": "Vùng cơ thể → nút → câu điền sẵn vào ô nhập. 'expect' là khoa đúng theo chuyên môn (chuỗi con của tên khoa), 'emergency_ok' cho phép cổng cấp cứu chặn. 'hint' hiện khi rê chuột, 'keywords' dùng cho ô tìm nhanh. tests/test_medical_assistant/test_body_map_routing.py kiểm tra từng câu mẫu; không sửa 'expect' cho khớp output.",
+  "onsets": [
+    { "label": "Hôm nay", "text": "mới xuất hiện hôm nay" },
+    { "label": "Từ hôm qua", "text": "từ hôm qua" },
+    { "label": "2–3 ngày", "text": "khoảng 3 ngày nay" },
+    { "label": "Khoảng 1 tuần", "text": "khoảng 1 tuần nay" },
+    { "label": "Hơn 1 tháng", "text": "hơn 1 tháng nay" }
+  ],
+  "regions": [
+    {
+      "id": "head",
+      "label": "Đầu",
+      "hint": "Trán, đỉnh đầu, thái dương, sau gáy",
+      "keywords": ["đầu", "trán", "thái dương", "gáy", "tóc", "nhức đầu"],
+      "options": [
+        { "label": "Đau đầu", "text": "Tôi bị đau đầu", "expect": ["Thần kinh"] },
+        { "label": "Chóng mặt", "text": "Tôi bị chóng mặt", "expect": ["Thần kinh"] },
+        { "label": "Đau vùng gáy", "text": "Tôi bị đau đầu vùng gáy", "expect": ["Thần kinh"] },
+        { "label": "Rụng tóc", "text": "Tôi bị rụng tóc", "expect": ["Da liễu"] }
+      ]
+    },
+    {
+      "id": "eyes",
+      "label": "Mắt",
+      "hint": "Hai mắt, mí mắt",
+      "keywords": ["mắt", "mí mắt", "nhìn mờ", "đỏ mắt"],
+      "options": [
+        { "label": "Đau, đỏ mắt", "text": "Tôi bị đau mắt, đỏ mắt", "expect": ["Mắt"] },
+        { "label": "Mờ mắt", "text": "Tôi bị mờ mắt", "expect": ["Mắt"] }
+      ]
+    },
+    {
+      "id": "ear_nose",
+      "label": "Tai – mũi",
+      "hint": "Tai, mũi, xoang",
+      "keywords": ["tai", "mũi", "xoang", "ù tai", "nghẹt mũi", "sổ mũi"],
+      "options": [
+        { "label": "Đau tai, ù tai", "text": "Tôi bị đau tai, ù tai", "expect": ["Tai - Mũi - Họng"] },
+        { "label": "Nghẹt mũi, sổ mũi", "text": "Tôi bị nghẹt mũi, sổ mũi", "expect": ["Tai - Mũi - Họng"] }
+      ]
+    },
+    {
+      "id": "mouth",
+      "label": "Miệng – răng",
+      "hint": "Răng, lợi, lưỡi, niêm mạc miệng",
+      "keywords": ["miệng", "răng", "lợi", "nướu", "nhiệt miệng", "lưỡi"],
+      "options": [
+        { "label": "Đau răng", "text": "Tôi bị đau răng", "expect": ["Răng"] },
+        { "label": "Ê buốt răng", "text": "Tôi bị ê buốt răng", "expect": ["Răng"] },
+        { "label": "Đau, sưng lợi", "text": "Tôi bị đau lợi, sưng lợi", "expect": ["Răng"] },
+        { "label": "Nhiệt miệng", "text": "Tôi bị nhiệt miệng", "expect": ["Răng", "Tai - Mũi - Họng"] }
+      ]
+    },
+    {
+      "id": "throat",
+      "label": "Cổ họng",
+      "hint": "Họng, thanh quản (phía trước cổ)",
+      "keywords": ["họng", "cổ họng", "khàn tiếng", "nuốt"],
+      "options": [
+        { "label": "Đau họng", "text": "Tôi bị đau họng", "expect": ["Tai - Mũi - Họng"] },
+        { "label": "Ho, đau họng", "text": "Tôi bị ho, đau họng", "expect": ["Tai - Mũi - Họng", "hô hấp"] },
+        { "label": "Khàn tiếng", "text": "Tôi bị khàn tiếng", "expect": ["Tai - Mũi - Họng"] }
+      ]
+    },
+    {
+      "id": "shoulder",
+      "label": "Vai",
+      "hint": "Khớp vai hai bên",
+      "keywords": ["vai", "khớp vai", "giơ tay"],
+      "options": [
+        { "label": "Đau vai", "text": "Tôi bị đau vai", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Đau vai, khó giơ tay", "text": "Tôi bị đau vai, khó giơ tay lên", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] }
+      ]
+    },
+    {
+      "id": "chest_right",
+      "label": "Ngực phải",
+      "hint": "Nửa ngực bên phải của anh/chị",
+      "keywords": ["ngực phải", "phổi", "hít thở", "ho"],
+      "options": [
+        { "label": "Đau khi hít thở sâu", "text": "Tôi bị đau ngực bên phải khi hít thở sâu", "expect": ["hô hấp", "Tim mạch"], "emergency_ok": true },
+        { "label": "Ho kéo dài", "text": "Tôi bị ho kéo dài", "expect": ["hô hấp"] },
+        { "label": "Khó thở", "text": "Tôi bị khó thở", "expect": ["hô hấp", "Tim mạch"], "emergency_ok": true }
+      ]
+    },
+    {
+      "id": "chest_left",
+      "label": "Ngực trái",
+      "hint": "Nửa ngực bên trái, vùng tim",
+      "keywords": ["ngực trái", "tim", "tức ngực", "hồi hộp", "đánh trống ngực"],
+      "options": [
+        { "label": "Đau, tức ngực", "text": "Tôi bị đau tức ngực trái", "expect": ["Tim mạch"], "emergency_ok": true },
+        { "label": "Hồi hộp, tim đập nhanh", "text": "Tôi bị hồi hộp, tim đập nhanh", "expect": ["Tim mạch"], "emergency_ok": true },
+        { "label": "Khó thở", "text": "Tôi bị khó thở", "expect": ["hô hấp", "Tim mạch"], "emergency_ok": true }
+      ]
+    },
+    {
+      "id": "ruq",
+      "label": "Hạ sườn phải",
+      "hint": "Dưới bờ sườn phải: vùng gan, túi mật",
+      "keywords": ["hạ sườn phải", "gan", "túi mật", "sườn phải"],
+      "options": [
+        { "label": "Đau", "text": "Tôi bị đau bụng hạ sườn phải", "expect": ["Tiêu hóa"] },
+        { "label": "Đau sau ăn đồ dầu mỡ", "text": "Tôi bị đau hạ sườn phải sau khi ăn đồ dầu mỡ", "expect": ["Tiêu hóa"] }
+      ]
+    },
+    {
+      "id": "epigastric",
+      "label": "Thượng vị (vùng dạ dày)",
+      "hint": "Trên rốn, dưới mũi ức",
+      "keywords": ["thượng vị", "dạ dày", "bao tử", "trên rốn", "ợ nóng", "khó tiêu"],
+      "options": [
+        { "label": "Đau", "text": "Tôi bị đau bụng vùng thượng vị (trên rốn)", "expect": ["Tiêu hóa"] },
+        { "label": "Nóng rát", "text": "Tôi bị nóng rát vùng thượng vị", "expect": ["Tiêu hóa"] },
+        { "label": "Đầy bụng, khó tiêu", "text": "Tôi bị đầy bụng, khó tiêu", "expect": ["Tiêu hóa"] },
+        { "label": "Buồn nôn", "text": "Tôi bị buồn nôn, khó chịu vùng thượng vị", "expect": ["Tiêu hóa"] }
+      ]
+    },
+    {
+      "id": "luq",
+      "label": "Hạ sườn trái",
+      "hint": "Dưới bờ sườn trái",
+      "keywords": ["hạ sườn trái", "sườn trái", "lách"],
+      "options": [
+        { "label": "Đau", "text": "Tôi bị đau bụng hạ sườn trái", "expect": ["Tiêu hóa"] }
+      ]
+    },
+    {
+      "id": "right_flank",
+      "label": "Mạn sườn phải",
+      "hint": "Bụng bên phải, ngang rốn",
+      "keywords": ["mạn sườn phải", "bụng bên phải", "hông phải"],
+      "options": [
+        { "label": "Đau", "text": "Tôi bị đau bụng bên phải", "expect": ["Tiêu hóa"] }
+      ]
+    },
+    {
+      "id": "periumbilical",
+      "label": "Quanh rốn",
+      "hint": "Vùng giữa bụng, quanh rốn",
+      "keywords": ["rốn", "quanh rốn", "giữa bụng", "tiêu chảy"],
+      "options": [
+        { "label": "Đau", "text": "Tôi bị đau bụng quanh rốn", "expect": ["Tiêu hóa"] },
+        { "label": "Đau kèm tiêu chảy", "text": "Tôi bị đau bụng quanh rốn, tiêu chảy", "expect": ["Tiêu hóa"] }
+      ]
+    },
+    {
+      "id": "left_flank",
+      "label": "Mạn sườn trái",
+      "hint": "Bụng bên trái, ngang rốn",
+      "keywords": ["mạn sườn trái", "bụng bên trái", "hông trái"],
+      "options": [
+        { "label": "Đau", "text": "Tôi bị đau bụng bên trái", "expect": ["Tiêu hóa"] }
+      ]
+    },
+    {
+      "id": "rlq",
+      "label": "Hố chậu phải",
+      "hint": "Bụng dưới bên phải (vùng ruột thừa)",
+      "keywords": ["hố chậu phải", "bụng dưới phải", "ruột thừa"],
+      "options": [
+        { "label": "Đau", "text": "Tôi bị đau bụng dưới bên phải", "expect": ["Tiêu hóa", "Ngoại"], "emergency_ok": true }
+      ]
+    },
+    {
+      "id": "pelvic",
+      "label": "Hạ vị",
+      "hint": "Bụng dưới, giữa, trên xương mu: bàng quang, tử cung",
+      "keywords": ["hạ vị", "bụng dưới", "bàng quang", "tiểu buốt", "đau bụng kinh"],
+      "options": [
+        { "label": "Tiểu buốt, tiểu rắt", "text": "Tôi bị tiểu buốt, tiểu rắt", "expect": ["Thận - Tiết niệu"] },
+        { "label": "Đau bụng dưới", "text": "Tôi bị đau bụng dưới vùng hạ vị", "expect": ["Tiêu hóa", "Sản phụ khoa", "Thận - Tiết niệu"] },
+        { "label": "Đau bụng kinh", "text": "Tôi bị đau bụng kinh nhiều", "expect": ["Sản phụ khoa"] }
+      ]
+    },
+    {
+      "id": "llq",
+      "label": "Hố chậu trái",
+      "hint": "Bụng dưới bên trái",
+      "keywords": ["hố chậu trái", "bụng dưới trái", "táo bón"],
+      "options": [
+        { "label": "Đau", "text": "Tôi bị đau bụng dưới bên trái", "expect": ["Tiêu hóa"] },
+        { "label": "Táo bón", "text": "Tôi bị táo bón", "expect": ["Tiêu hóa"] }
+      ]
+    },
+    {
+      "id": "genital",
+      "label": "Vùng kín",
+      "hint": "Cơ quan sinh dục, đường tiểu",
+      "keywords": ["vùng kín", "sinh dục", "khí hư", "tiểu ra máu"],
+      "options": [
+        { "label": "Ngứa, khí hư bất thường", "text": "Tôi bị ngứa, ra khí hư vùng kín", "expect": ["Sản phụ khoa"] },
+        { "label": "Tiểu ra máu", "text": "Tôi bị tiểu ra máu", "expect": ["Thận - Tiết niệu"], "emergency_ok": true }
+      ]
+    },
+    {
+      "id": "hip",
+      "label": "Háng – khớp háng",
+      "hint": "Khớp háng hai bên",
+      "keywords": ["háng", "khớp háng", "hông"],
+      "options": [
+        { "label": "Đau khớp háng", "text": "Tôi bị đau khớp háng", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] }
+      ]
+    },
+    {
+      "id": "arm",
+      "label": "Cánh tay – khuỷu tay",
+      "hint": "Từ vai xuống cổ tay",
+      "keywords": ["cánh tay", "khuỷu tay", "cẳng tay", "tê tay"],
+      "options": [
+        { "label": "Đau khuỷu tay", "text": "Tôi bị đau khuỷu tay", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Tê bì tay", "text": "Tôi bị tê bì tay", "expect": ["Thần kinh", "Cột sống"] }
+      ]
+    },
+    {
+      "id": "wrist_hand",
+      "label": "Cổ tay – bàn tay",
+      "hint": "Cổ tay, bàn tay, ngón tay",
+      "keywords": ["cổ tay", "bàn tay", "ngón tay", "khớp ngón"],
+      "options": [
+        { "label": "Đau cổ tay", "text": "Tôi bị đau cổ tay", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Tê bì ngón tay", "text": "Tôi bị tê bì các ngón tay", "expect": ["Thần kinh", "Cột sống", "Chấn thương chỉnh hình"] },
+        { "label": "Sưng đau khớp ngón tay", "text": "Tôi bị sưng đau các khớp ngón tay", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] }
+      ]
+    },
+    {
+      "id": "thigh",
+      "label": "Đùi",
+      "hint": "Đùi trước và sau",
+      "keywords": ["đùi", "bắp đùi"],
+      "options": [
+        { "label": "Đau đùi", "text": "Tôi bị đau đùi", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] }
+      ]
+    },
+    {
+      "id": "knee",
+      "label": "Đầu gối",
+      "hint": "Khớp gối hai bên",
+      "keywords": ["gối", "đầu gối", "khớp gối"],
+      "options": [
+        { "label": "Đau khớp gối", "text": "Tôi bị đau khớp gối", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Sưng khớp gối", "text": "Tôi bị sưng khớp gối", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] }
+      ]
+    },
+    {
+      "id": "shin",
+      "label": "Cẳng chân – bắp chân",
+      "hint": "Từ gối xuống cổ chân",
+      "keywords": ["cẳng chân", "bắp chân", "chuột rút", "tê chân"],
+      "options": [
+        { "label": "Đau bắp chân", "text": "Tôi bị đau bắp chân", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Hay chuột rút", "text": "Tôi hay bị chuột rút bắp chân", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp", "Thần kinh"] },
+        { "label": "Tê bì chân", "text": "Tôi bị tê bì chân", "expect": ["Thần kinh", "Cột sống"] }
+      ]
+    },
+    {
+      "id": "ankle_foot",
+      "label": "Cổ chân – bàn chân",
+      "hint": "Cổ chân, gót, bàn chân, ngón chân",
+      "keywords": ["cổ chân", "mắt cá", "gót chân", "bàn chân", "ngón chân", "gút"],
+      "options": [
+        { "label": "Đau, sưng cổ chân", "text": "Tôi bị đau sưng cổ chân", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Đau gót chân", "text": "Tôi bị đau gót chân", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Sưng đau ngón chân cái", "text": "Tôi bị sưng đau ngón chân cái", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] }
+      ]
+    },
+    {
+      "id": "neck_shoulder",
+      "label": "Cổ – vai gáy",
+      "hint": "Sau cổ, vùng vai gáy",
+      "keywords": ["gáy", "vai gáy", "cổ", "cứng cổ"],
+      "options": [
+        { "label": "Đau mỏi vai gáy", "text": "Tôi bị đau cổ, vai gáy", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] }
+      ]
+    },
+    {
+      "id": "upper_back",
+      "label": "Lưng trên",
+      "hint": "Giữa hai bả vai",
+      "keywords": ["lưng", "lưng trên", "bả vai"],
+      "options": [
+        { "label": "Đau lưng", "text": "Tôi bị đau lưng", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] }
+      ]
+    },
+    {
+      "id": "flank",
+      "label": "Hông lưng (vùng thận)",
+      "hint": "Hai bên cột sống, dưới xương sườn",
+      "keywords": ["hông lưng", "thận", "sỏi thận", "mạn sườn sau"],
+      "options": [
+        { "label": "Đau hông lưng", "text": "Tôi bị đau hông lưng", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp", "Thận - Tiết niệu"] },
+        { "label": "Đau kèm tiểu buốt", "text": "Tôi bị đau hông lưng, tiểu buốt", "expect": ["Thận - Tiết niệu"] }
+      ]
+    },
+    {
+      "id": "lumbar",
+      "label": "Thắt lưng",
+      "hint": "Lưng dưới, giữa",
+      "keywords": ["thắt lưng", "lưng dưới", "cột sống", "thoát vị"],
+      "options": [
+        { "label": "Đau thắt lưng", "text": "Tôi bị đau thắt lưng", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Đau lan xuống chân", "text": "Tôi bị đau thắt lưng lan xuống chân", "expect": ["Cột sống", "Thần kinh", "Chấn thương chỉnh hình"] },
+        { "label": "Đau kèm tiểu buốt", "text": "Tôi bị đau thắt lưng, tiểu buốt", "expect": ["Thận - Tiết niệu"] }
+      ]
+    },
+    {
+      "id": "buttock",
+      "label": "Mông – xương cụt",
+      "hint": "Mông, xương cụt, hậu môn",
+      "keywords": ["mông", "xương cụt", "hậu môn", "trĩ"],
+      "options": [
+        { "label": "Đau xương cụt", "text": "Tôi bị đau xương cụt", "expect": ["Chấn thương chỉnh hình", "Cơ xương khớp"] },
+        { "label": "Đau rát hậu môn", "text": "Tôi bị đau rát hậu môn khi đi ngoài", "expect": ["Tiêu hóa", "Ngoại"] }
+      ]
+    },
+    {
+      "id": "skin",
+      "label": "Da",
+      "hint": "Da ở bất kỳ đâu trên cơ thể",
+      "keywords": ["da", "ngứa", "mẩn", "nổi mẩn", "mề đay", "mụn"],
+      "options": [
+        { "label": "Ngứa, nổi mẩn đỏ", "text": "Tôi bị ngứa, nổi mẩn đỏ trên da", "expect": ["Da liễu"] }
+      ]
+    },
+    {
+      "id": "whole_body",
+      "label": "Toàn thân",
+      "hint": "Không khu trú ở một chỗ",
+      "keywords": ["toàn thân", "sốt", "mệt", "mất ngủ", "ớn lạnh"],
+      "options": [
+        { "label": "Sốt, ớn lạnh", "text": "Tôi bị sốt, ớn lạnh", "expect": ["Sức khỏe tổng quát", "Nội tổng quát", "Truyền nhiễm"] },
+        { "label": "Mệt mỏi, chóng mặt", "text": "Tôi bị mệt mỏi, chóng mặt", "expect": ["Thần kinh", "Sức khỏe tổng quát", "Nội tổng quát"] },
+        { "label": "Mất ngủ", "text": "Tôi bị mất ngủ", "expect": ["tinh thần", "Thần kinh"] }
+      ]
+    }
+  ]
+}

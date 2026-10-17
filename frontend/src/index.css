@@ -1,0 +1,672 @@
+@import "tailwindcss";
+
+.schedule-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.schedule-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+html:has(.doctor-schedule-page) {
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+html:has(.doctor-schedule-page)::-webkit-scrollbar {
+  display: none;
+}
+
+html:has(.staff-layout),
+.staff-layout,
+.staff-layout * {
+  scrollbar-width: thin;
+  scrollbar-color: #92a99a transparent;
+}
+
+html:has(.staff-layout)::-webkit-scrollbar,
+.staff-layout *::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+html:has(.staff-layout)::-webkit-scrollbar-track,
+.staff-layout *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html:has(.staff-layout)::-webkit-scrollbar-thumb,
+.staff-layout *::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-color: #92a99a;
+  background-clip: content-box;
+  transition: background-color 160ms ease;
+}
+
+html:has(.staff-layout)::-webkit-scrollbar-thumb:hover,
+.staff-layout *::-webkit-scrollbar-thumb:hover {
+  background-color: #527460;
+}
+
+html:has(.staff-layout)::-webkit-scrollbar-thumb:active,
+.staff-layout *::-webkit-scrollbar-thumb:active {
+  background-color: #285c45;
+}
+
+html:has(.staff-layout)::-webkit-scrollbar-corner,
+.staff-layout *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(html:not(.dark):not([data-theme="dark"]) *));
+
+@theme inline {
+  --color-app-page: var(--app-page);
+  --color-app-deep: var(--app-deep);
+  --color-app-surface: var(--app-surface);
+  --color-app-muted: var(--app-muted);
+  --color-app-tint: var(--app-tint);
+  --color-app-text: var(--app-text);
+  --color-app-secondary: var(--app-secondary);
+  --color-app-border: var(--app-border);
+  --color-app-primary: var(--app-primary);
+  --color-app-primary-hover: var(--app-primary-hover);
+  --color-app-primary-strong: var(--app-primary-strong);
+  --color-app-on-primary: var(--app-on-primary);
+  --color-app-accent: var(--app-accent);
+}
+
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-clinical-navy: #0B1329;
+  --color-clinical-deep: #070D1E;
+  --color-clinical-blue: #2563EB;
+  --color-clinical-cyan: #06B6D4;
+  --color-clinical-emerald: #10B981;
+  --color-clinical-crimson: #DC2626;
+  --color-clinical-slate: #94A3B8;
+  --color-clinical-text: #F1F5F9;
+}
+
+/* ─── VCARE+ BRAND PALETTE (lấy từ logo vcare-logo.png) ─────────────
+   forest = chữ "VCARE+" (xanh rừng), clay = dấu cộng vẽ tay (đỏ đất nung),
+   sage = nền bạc hà, moss = xám ánh lục thay slate xanh dương.
+   Dùng trực tiếp: bg-forest-700, text-clay-500, border-moss-200 ... */
+@theme {
+  --font-display: "Cormorant Garamond", "Georgia", serif;
+
+  --color-forest-50: #eff8f2;
+  --color-forest-100: #d9eee1;
+  --color-forest-200: #b5dcc4;
+  --color-forest-300: #86c29f;
+  --color-forest-400: #56a179;
+  --color-forest-500: #37845d;
+  --color-forest-600: #2b6d4c;
+  --color-forest-700: #285c45;
+  --color-forest-800: #214a38;
+  --color-forest-900: #1c3d2f;
+  --color-forest-950: #0e241b;
+
+  --color-sage-50: #f1f9f4;
+  --color-sage-100: #ddf1e6;
+  --color-sage-200: #bfe3cf;
+  --color-sage-300: #94ceb0;
+  --color-sage-400: #65b38c;
+  --color-sage-500: #45976f;
+  --color-sage-600: #357b5a;
+  --color-sage-700: #2e634a;
+  --color-sage-800: #28503d;
+  --color-sage-900: #234234;
+  --color-sage-950: #10261c;
+
+  --color-clay-50: #fcf4f3;
+  --color-clay-100: #f8e4e2;
+  --color-clay-200: #f0cbc7;
+  --color-clay-300: #e4a7a1;
+  --color-clay-400: #d27e76;
+  --color-clay-500: #bd5f57;
+  --color-clay-600: #a54b44;
+  --color-clay-700: #893d38;
+  --color-clay-800: #713531;
+  --color-clay-900: #5f302d;
+  --color-clay-950: #331614;
+
+  --color-moss-50: #f5f9f6;
+  --color-moss-100: #ecf3ee;
+  --color-moss-200: #dce7e0;
+  --color-moss-300: #c2d3c9;
+  --color-moss-400: #91a699;
+  --color-moss-500: #64776b;
+  --color-moss-600: #4b5d52;
+  --color-moss-700: #394a40;
+  --color-moss-800: #21312a;
+  --color-moss-900: #15221c;
+  --color-moss-950: #0b1410;
+}
+
+/* Giao diện bệnh nhân/landing: ánh xạ các thang màu "clinical" xanh dương cũ sang
+   bảng màu logo để mọi utility cũ (bg-blue-600, text-sky-500, dark:bg-slate-900…) tự
+   khớp theme. Trang staff gắn .staff-ui lên <html> nên giữ nguyên bảng màu Tailwind. */
+:root:not(.staff-ui) {
+  --color-blue-50: var(--color-forest-50);
+  --color-blue-100: var(--color-forest-100);
+  --color-blue-200: var(--color-forest-200);
+  --color-blue-300: var(--color-forest-300);
+  --color-blue-400: var(--color-forest-400);
+  --color-blue-500: var(--color-forest-500);
+  --color-blue-600: var(--color-forest-600);
+  --color-blue-700: var(--color-forest-700);
+  --color-blue-800: var(--color-forest-800);
+  --color-blue-900: var(--color-forest-900);
+  --color-blue-950: var(--color-forest-950);
+
+  --color-sky-50: var(--color-forest-50);
+  --color-sky-100: var(--color-forest-100);
+  --color-sky-200: var(--color-forest-200);
+  --color-sky-300: var(--color-forest-300);
+  --color-sky-400: var(--color-forest-400);
+  --color-sky-500: var(--color-forest-500);
+  --color-sky-600: var(--color-forest-600);
+  --color-sky-700: var(--color-forest-700);
+  --color-sky-800: var(--color-forest-800);
+  --color-sky-900: var(--color-forest-900);
+  --color-sky-950: var(--color-forest-950);
+
+  --color-indigo-50: var(--color-forest-50);
+  --color-indigo-100: var(--color-forest-100);
+  --color-indigo-200: var(--color-forest-200);
+  --color-indigo-300: var(--color-forest-300);
+  --color-indigo-400: var(--color-forest-400);
+  --color-indigo-500: var(--color-forest-500);
+  --color-indigo-600: var(--color-forest-600);
+  --color-indigo-700: var(--color-forest-700);
+  --color-indigo-800: var(--color-forest-800);
+  --color-indigo-900: var(--color-forest-900);
+  --color-indigo-950: var(--color-forest-950);
+
+  --color-cyan-50: var(--color-sage-50);
+  --color-cyan-100: var(--color-sage-100);
+  --color-cyan-200: var(--color-sage-200);
+  --color-cyan-300: var(--color-sage-300);
+  --color-cyan-400: var(--color-sage-400);
+  --color-cyan-500: var(--color-sage-500);
+  --color-cyan-600: var(--color-sage-600);
+  --color-cyan-700: var(--color-sage-700);
+  --color-cyan-800: var(--color-sage-800);
+  --color-cyan-900: var(--color-sage-900);
+  --color-cyan-950: var(--color-sage-950);
+
+  --color-teal-50: var(--color-sage-50);
+  --color-teal-100: var(--color-sage-100);
+  --color-teal-200: var(--color-sage-200);
+  --color-teal-300: var(--color-sage-300);
+  --color-teal-400: var(--color-sage-400);
+  --color-teal-500: var(--color-sage-500);
+  --color-teal-600: var(--color-sage-600);
+  --color-teal-700: var(--color-sage-700);
+  --color-teal-800: var(--color-sage-800);
+  --color-teal-900: var(--color-sage-900);
+  --color-teal-950: var(--color-sage-950);
+
+  --color-emerald-50: var(--color-sage-50);
+  --color-emerald-100: var(--color-sage-100);
+  --color-emerald-200: var(--color-sage-200);
+  --color-emerald-300: var(--color-sage-300);
+  --color-emerald-400: var(--color-sage-400);
+  --color-emerald-500: var(--color-sage-500);
+  --color-emerald-600: var(--color-sage-600);
+  --color-emerald-700: var(--color-sage-700);
+  --color-emerald-800: var(--color-sage-800);
+  --color-emerald-900: var(--color-sage-900);
+  --color-emerald-950: var(--color-sage-950);
+
+  --color-violet-50: var(--color-clay-50);
+  --color-violet-100: var(--color-clay-100);
+  --color-violet-200: var(--color-clay-200);
+  --color-violet-300: var(--color-clay-300);
+  --color-violet-400: var(--color-clay-400);
+  --color-violet-500: var(--color-clay-500);
+  --color-violet-600: var(--color-clay-600);
+  --color-violet-700: var(--color-clay-700);
+  --color-violet-800: var(--color-clay-800);
+  --color-violet-900: var(--color-clay-900);
+  --color-violet-950: var(--color-clay-950);
+
+  --color-purple-50: var(--color-clay-50);
+  --color-purple-100: var(--color-clay-100);
+  --color-purple-200: var(--color-clay-200);
+  --color-purple-300: var(--color-clay-300);
+  --color-purple-400: var(--color-clay-400);
+  --color-purple-500: var(--color-clay-500);
+  --color-purple-600: var(--color-clay-600);
+  --color-purple-700: var(--color-clay-700);
+  --color-purple-800: var(--color-clay-800);
+  --color-purple-900: var(--color-clay-900);
+  --color-purple-950: var(--color-clay-950);
+
+  --color-slate-50: var(--color-moss-50);
+  --color-slate-100: var(--color-moss-100);
+  --color-slate-200: var(--color-moss-200);
+  --color-slate-300: var(--color-moss-300);
+  --color-slate-400: var(--color-moss-400);
+  --color-slate-500: var(--color-moss-500);
+  --color-slate-600: var(--color-moss-600);
+  --color-slate-700: var(--color-moss-700);
+  --color-slate-800: var(--color-moss-800);
+  --color-slate-900: var(--color-moss-900);
+  --color-slate-950: var(--color-moss-950);
+
+  --color-gray-50: var(--color-moss-50);
+  --color-gray-100: var(--color-moss-100);
+  --color-gray-200: var(--color-moss-200);
+  --color-gray-300: var(--color-moss-300);
+  --color-gray-400: var(--color-moss-400);
+  --color-gray-500: var(--color-moss-500);
+  --color-gray-600: var(--color-moss-600);
+  --color-gray-700: var(--color-moss-700);
+  --color-gray-800: var(--color-moss-800);
+  --color-gray-900: var(--color-moss-900);
+  --color-gray-950: var(--color-moss-950);
+
+  --color-clinical-navy: var(--app-page);
+  --color-clinical-deep: var(--app-deep);
+  --color-clinical-blue: var(--color-forest-600);
+  --color-clinical-cyan: var(--color-sage-500);
+  --color-clinical-slate: var(--color-moss-400);
+  --color-clinical-text: var(--app-text);
+}
+
+:root {
+  --app-deep: #eef7f1;
+  --app-page: #f6fcf9;
+  --app-surface: #ffffff;
+  --app-muted: #eaf4ee;
+  --app-tint: #d9efe2;
+  --app-text: #243b30;
+  --app-secondary: #6b8075;
+  --app-border: #dcece3;
+  --app-primary: #285c45;
+  --app-primary-hover: #204b38;
+  --app-primary-strong: #193c2d;
+  --app-on-primary: #e4f3ea;
+  --app-accent: #bd5f57;
+  --app-border-strong: #a4c8b5;
+  --app-danger: #b42318;
+  --app-shadow-sm: 0 1px 3px rgb(36 59 48 / 6%), 0 4px 16px -4px rgb(36 59 48 / 6%);
+  --app-shadow-md: 0 12px 32px -8px rgb(40 92 69 / 16%);
+  font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+/* Light Mode Defaults */
+html {
+  overflow-y: scroll;
+  scroll-behavior: smooth;
+  background-color: var(--app-page);
+  color: var(--app-text);
+  transition: background-color 0.35s ease-out, color 0.35s ease-out;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--app-page);
+  color: var(--app-text);
+  transition: background-color 0.35s ease-out, color 0.35s ease-out;
+}
+
+/* Dark Mode Overrides */
+html.dark,
+html[data-theme="dark"],
+html.dark body {
+  background-color: var(--app-page);
+  color: var(--app-text);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes gentleFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-gentle-float {
+  animation: gentleFloat 3.8s ease-in-out infinite;
+}
+
+.animate-gentle-float:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-gentle-float,
+  .orb-clinical-blue,
+  .orb-clinical-cyan,
+  .orb-clinical-teal {
+    animation: none !important;
+  }
+}
+
+.fade-hover {
+  transition: opacity 0.3s ease-out, background-color 0.3s ease-out, border-color 0.3s ease-out, transform 0.3s ease-out;
+}
+
+/* ─── VCARE+ BRAND SURFACES (light "bạc hà" / dark "rừng đêm") ────── */
+
+/* Quầng sáng nền: lục nhạt + đất nung rất nhẹ, như màu mực trên logo */
+.medical-glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  will-change: transform;
+  opacity: 0.22;
+  pointer-events: none;
+  transition: opacity 0.4s ease-out;
+}
+
+html.dark .medical-glow-orb {
+  opacity: 0.16;
+}
+
+.orb-clinical-blue {
+  background: radial-gradient(circle, var(--color-forest-300) 0%, transparent 70%);
+  animation: floatOrbBlue 20s ease-in-out infinite alternate;
+}
+
+.orb-clinical-cyan {
+  background: radial-gradient(circle, var(--color-clay-200) 0%, transparent 70%);
+  animation: floatOrbCyan 24s ease-in-out infinite alternate;
+}
+
+.orb-clinical-teal {
+  background: radial-gradient(circle, var(--color-sage-300) 0%, transparent 70%);
+  animation: floatOrbBlue 28s ease-in-out infinite alternate-reverse;
+}
+
+html.dark .orb-clinical-blue { background: radial-gradient(circle, var(--color-forest-600) 0%, transparent 70%); }
+html.dark .orb-clinical-cyan { background: radial-gradient(circle, var(--color-clay-700) 0%, transparent 70%); }
+html.dark .orb-clinical-teal { background: radial-gradient(circle, var(--color-sage-700) 0%, transparent 70%); }
+
+@keyframes floatOrbBlue {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(50px, 60px, 0) scale(1.08); }
+}
+
+@keyframes floatOrbCyan {
+  0% { transform: translate3d(0, 0, 0) scale(1.05); }
+  100% { transform: translate3d(-60px, -40px, 0) scale(0.95); }
+}
+
+/* Tiêu đề nhấn: chuyển màu mực → xanh rừng → lục bạc hà */
+.clinical-heading-gradient {
+  background-image: linear-gradient(135deg, var(--app-text) 0%, var(--app-primary) 55%, var(--color-sage-500) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html.dark .clinical-heading-gradient {
+  background-image: linear-gradient(135deg, #ffffff 0%, var(--color-forest-200) 50%, var(--color-sage-300) 100%);
+}
+
+/* Thẻ bento có đèn rọi theo chuột */
+.clinical-bento-card {
+  position: relative;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: var(--app-shadow-sm);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.4s ease-out,
+              box-shadow 0.4s ease-out,
+              background-color 0.4s ease-out;
+}
+
+.clinical-bento-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--app-border-strong);
+  box-shadow: var(--app-shadow-md);
+}
+
+.clinical-bento-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    480px circle at var(--mouse-x, -500px) var(--mouse-y, -500px),
+    color-mix(in srgb, var(--app-primary) 12%, transparent),
+    color-mix(in srgb, var(--app-accent) 6%, transparent),
+    transparent 65%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.clinical-bento-card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 1rem;
+  border: 1px solid transparent;
+  background: radial-gradient(
+    380px circle at var(--mouse-x, -500px) var(--mouse-y, -500px),
+    color-mix(in srgb, var(--app-primary) 55%, transparent),
+    color-mix(in srgb, var(--app-accent) 30%, transparent),
+    transparent 60%
+  ) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Nút chính */
+.btn-clinical-primary {
+  background-color: var(--app-primary);
+  color: var(--app-on-primary);
+  border-radius: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--app-primary) 22%, transparent);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-clinical-primary:hover {
+  background-color: var(--app-primary-hover);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--app-primary) 30%, transparent);
+  transform: translateY(-1px);
+}
+
+.btn-clinical-primary::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 30%;
+  height: 200%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.2) 50%, transparent 100%);
+  transform: rotate(25deg);
+  animation: clinicalSweep 4.5s infinite ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes clinicalSweep {
+  0% { transform: translateX(-150%) rotate(25deg); }
+  25%, 100% { transform: translateX(500%) rotate(25deg); }
+}
+
+/* Nút phụ */
+.btn-clinical-ghost {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
+  border-radius: 0.75rem;
+  font-weight: 500;
+  transition: all 0.3s ease-out;
+}
+
+.btn-clinical-ghost:hover {
+  background: var(--app-muted);
+  border-color: var(--app-primary);
+  transform: translateY(-1px);
+}
+
+/* Wordmark "VCare+" kiểu logo: chữ serif thanh mảnh, dấu + màu đất nung */
+.brand-wordmark {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--app-primary);
+}
+.brand-wordmark .brand-plus { color: var(--app-accent); }
+
+/* Dấu cộng vẽ tay (Hero): 2 nét mực tự vẽ ~1s rồi màu đất nung loang vào, chạy một lần */
+.drawn-cross__fill {
+  fill: var(--color-clay-500);
+  opacity: 0;
+  animation: drawnCrossFill 0.5s ease-out 0.9s forwards;
+}
+.drawn-cross__ink {
+  fill: none;
+  stroke: var(--app-text);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: drawnCrossInk 1s cubic-bezier(0.65, 0, 0.35, 1) 0.15s forwards;
+}
+.drawn-cross__ink--2 { stroke-width: 1.1; opacity: 0.7; animation-delay: 0.35s; }
+@keyframes drawnCrossInk { to { stroke-dashoffset: 0; } }
+@keyframes drawnCrossFill { to { opacity: 0.92; } }
+
+/* Scroll-triggered Reveal (Smooth and Calm) */
+.reveal-item {
+  opacity: 0;
+  transform: translate3d(0, 24px, 0);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.reveal-item.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  .medical-glow-orb,
+  .btn-clinical-primary::after {
+    animation: none !important;
+  }
+  .reveal-item {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .clinical-bento-card:hover,
+  .btn-clinical-primary:hover,
+  .btn-clinical-ghost:hover {
+    transform: none !important;
+  }
+}
+
+html:not(.dark):not([data-theme="dark"]) { color-scheme: light; }
+html.dark, html[data-theme="dark"] { color-scheme: dark; }
+
+/* Dark palette dùng chung (staff giữ navy cũ) */
+html.dark, html[data-theme="dark"] {
+  --app-page: #0b1329;
+  --app-deep: #070d1e;
+  --app-surface: #151f33;
+  --app-muted: #202d43;
+  --app-tint: #173b32;
+  --app-text: #edf3f8;
+  --app-secondary: #b2bfd0;
+  --app-border: #3d4c63;
+  --app-border-strong: #56677f;
+  --app-primary: #8bd5af;
+  --app-primary-hover: #b0e7c8;
+  --app-primary-strong: #173b32;
+  --app-on-primary: #edf8f1;
+  --app-accent: #edb2b1;
+}
+
+/* Dark "rừng đêm" cho bệnh nhân/landing: nền xanh-đen ánh lục thay navy */
+html.dark:not(.staff-ui), html[data-theme="dark"]:not(.staff-ui) {
+  --app-page: #0d1813;
+  --app-deep: #08110d;
+  --app-surface: #14231c;
+  --app-muted: #1b2e25;
+  --app-tint: #1f3a2d;
+  --app-text: #e9f2ec;
+  --app-secondary: #a9bdb1;
+  --app-border: #2c4337;
+  --app-border-strong: #44634f;
+  --app-primary: #8fd1ad;
+  --app-primary-hover: #b4e4c9;
+  --app-primary-strong: #1f3a2d;
+  --app-on-primary: #0b1f15;
+  --app-accent: #e39a92;
+  --app-danger: #f08a80;
+  --app-shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  --app-shadow-md: 0 12px 32px -8px rgb(0 0 0 / 45%);
+}
+
+.patient-theme { color: var(--app-text); }
+.patient-theme :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  color: var(--app-text);
+  background-color: var(--app-surface);
+  border-color: var(--app-border);
+  accent-color: var(--app-primary);
+}
+.patient-theme :where(input, textarea)::placeholder { color: var(--app-secondary); opacity: .8; }
+.patient-theme :where(select) option { background: var(--app-surface); color: var(--app-text); }
+.patient-theme :where(input, select, textarea):disabled { background: var(--app-muted); opacity: .65; }
+.patient-theme :where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 3px;
+}
+.patient-theme :where(button):disabled { cursor: not-allowed; }
+.patient-theme :where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--app-primary); }
+@media (prefers-reduced-motion: reduce) { .patient-theme :where(button, a) { transition-duration: 0ms; } }

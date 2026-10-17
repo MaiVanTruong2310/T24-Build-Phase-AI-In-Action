@@ -1,0 +1,83 @@
+/* ===== Giao diện tối giản (html.ui-simple) — bật/tắt bằng nút "Aa" trên header =====
+   Phông chữ hệ thống dễ đọc; bỏ bóng đổ lệch, viền mực đậm, góc méo, hoạ tiết nền, sticker, đường chỉ khâu,
+   chữ xoay nghiêng và chuyển động trang trí. Đa phần đi qua biến --hd-* nên áp cho mọi trang dùng chung. */
+
+/* Nút bật/tắt (dùng ở cả hai chế độ) */
+.simple-toggle {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; min-width: 38px; padding: 0 10px; justify-content: center;
+  border: 2px solid var(--hd-ink, #1f2d26); border-radius: 10px; background: var(--hd-paper, #fff);
+  color: var(--app-primary, #285c45); font-family: var(--hd-hand, inherit); font-size: 16px; font-weight: 600;
+  white-space: nowrap; cursor: pointer;
+}
+.simple-toggle:hover { background: var(--hd-tint, #d9efe2); }
+/* Màn 1280–1439px: nút có chữ làm header chật → thu khoảng cách menu/nút thay vì bỏ chữ trên nút. */
+@media (min-width: 1280px) and (max-width: 1439px) {
+  .hd-nav { gap: 10px; padding: 0 6px; }
+  .hd-actions { gap: 8px; }
+  .simple-toggle { gap: 4px; padding: 0 8px; font-size: 14px; }
+}
+.simple-toggle:focus-visible { outline: 2px dashed var(--hd-thread, #bd5f57); outline-offset: 2px; }
+
+html.ui-simple {
+  --simple-font: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-sans: var(--simple-font);
+  --font-display: var(--simple-font);
+  --hd-hand: var(--simple-font);
+  /* --hd-ink dùng cho cả viền lẫn chữ: tông trung tính đủ tương phản để đọc, viền không còn đậm như nét mực. */
+  --hd-ink: #5d7568;
+  --hd-shadow: transparent;   /* bỏ bóng đổ lệch kiểu vẽ tay */
+  --hd-sos-shadow: transparent;
+}
+html.ui-simple.dark, html.ui-simple[data-theme="dark"] { --hd-ink: #9db3a6; }
+
+html.ui-simple body { font-family: var(--simple-font); letter-spacing: normal; }
+html.ui-simple body * { letter-spacing: normal; }
+
+/* Góc bo đều, không xoay nghiêng, không nhấc lên khi rê chuột. Không đổi border-width: preflight của Tailwind đặt
+   `border: 0 solid` cho mọi phần tử nên đổi độ dày sẽ làm hiện viền khắp nơi; viền đã mờ đi nhờ --hd-ink. */
+html.ui-simple :is([class^="hd-"], [class*=" hd-"], [class^="chat-"], [class*=" chat-"], [class^="auth-hd"], [class*=" auth-hd"],
+  [class^="body-map__"], [class*=" body-map__"], [class^="consult-progress"], [class*=" consult-progress"],
+  .simple-toggle) {
+  /* Không gồm .bd-* (phiếu đặt lịch): ngăn kéo dùng transform để trượt vào/ra. */
+  border-radius: 10px;
+  transform: none !important;
+  box-shadow: none !important;
+  font-family: var(--simple-font);
+}
+html.ui-simple :is(.chat-start__num, .consult-progress__dot, .hd-avatar, [class*="avatar"]) { border-radius: 9999px; }
+
+/* Hoạ tiết nền, sticker, đường chỉ khâu, nét gợn sóng: ẩn hẳn */
+html.ui-simple .chat-page-bg, html.ui-simple .chat-stage { background-image: none !important; }
+html.ui-simple :is(.hd-thread, .hd-knot, .hd-divider, .auth-hd__wave, .hd__wave,
+  .hero-doodle, .hero-circle__ink, .hero-step__stamp) { display: none; }
+/* Gạch chân gợn sóng → gạch chân thường */
+html.ui-simple a, html.ui-simple a:hover { text-decoration-style: solid !important; }
+/* Pseudo-element không đặt được trong :is() → liệt kê riêng. */
+html.ui-simple .hd-bubble::before,
+html.ui-simple .hd-drawer-nav::before,
+html.ui-simple .hd-drawer-nav::after,
+html.ui-simple .hd-tag[aria-current="page"]::after,
+html.ui-simple .vgreen-ai-card::before,
+html.ui-simple .vgreen-ai-card-photo::before,
+html.ui-simple .vgreen-ai-card-photo::after { display: none; }
+html.ui-simple .vgreen-ai-card { transform: none !important; box-shadow: none !important; }
+
+/* Ô nhập và nút gửi trong khung chat: phẳng, viền mảnh */
+html.ui-simple .chat-message-input {
+  border: 1px solid var(--hd-ink); border-radius: 10px; box-shadow: none; background: var(--app-surface, #fff);
+}
+html.ui-simple .chat-message-input:hover:not(:disabled) { transform: none; box-shadow: none; }
+html.ui-simple .chat-message-input:focus { border-color: var(--app-primary, #285c45); }
+html.ui-simple .chat-send-button, html.ui-simple .chat-send-button__icon { box-shadow: none; }
+
+/* Hình cơ thể: nét đứt → nét liền mảnh */
+html.ui-simple .body-map__region > * { stroke-dasharray: none; stroke-width: 1; }
+html.ui-simple .body-map__base > * { stroke-width: 1.4; }
+
+/* Chuyển động trang trí: chạy xong tức thì thay vì tắt hẳn — nhiều phần tử hiện dần từ opacity 0, tắt animation
+   sẽ kẹt ở trạng thái mờ. Giữ biểu tượng quay khi đang tải. */
+html.ui-simple *:not(.animate-spin):not(.animate-spin *),
+html.ui-simple *::before, html.ui-simple *::after {
+  animation-duration: 0.001ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
+}
+html.ui-simple .animate-ping { display: none; }
